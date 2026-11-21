@@ -1,6 +1,7 @@
 /** Healthia adaptive workspace. Never handles patient-identifiable form values. */
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import css from './HealthiaWorkspace.module.css'
+import type { AdaptiveLiveSnapshot } from './AdaptiveLiveSlots.ts'
 import {
   addAdaptiveField, removeAdaptiveField, describeAdaptiveApp, isBindingConnected,
   HEALTHIA_DOCTOR_FORM,
@@ -44,13 +45,14 @@ const CLINICAL_DESCRIPTIONS: Record<string, string> = {
 }
 
 export function HealthiaWorkspace({
-  role, section, onRoleChange, onSectionChange, onReturn,
+  role, section, onRoleChange, onSectionChange, onReturn, inspectRuntime,
 }: {
   role: HealthiaRole
   section: string
   onRoleChange: (role: HealthiaRole) => void
   onSectionChange: (section: string) => void
   onReturn: () => void
+  inspectRuntime?: (() => AdaptiveLiveSnapshot) | undefined
 }) {
   // Only field METADATA is edited in this view; never place patient values in chat/events.
   const [fieldLabel, setFieldLabel] = useState('')
@@ -92,6 +94,12 @@ export function HealthiaWorkspace({
   }
   const active = HEALTHIA_NAV[role].some(item => item.id === section) ? section : 'overview'
   const isPatient = role === 'patient'
+  const [liveStatus, setLiveStatus] = useState<AdaptiveLiveSnapshot | null>(null)
+  useEffect(() => {
+    if (active !== 'capabilities' || inspectRuntime === undefined) return
+    try { setLiveStatus(inspectRuntime()) }
+    catch { setLiveStatus(null) }
+  }, [active, inspectRuntime])
 
   return (
     <section className={css.shell} aria-label="Healthia: espacio de trabajo adaptativo">
@@ -153,6 +161,15 @@ export function HealthiaWorkspace({
         ) : active === 'capabilities' ? (
           <div className={css.capabilityList}>
             <p>Autoconocimiento declarativo: las funciones se anuncian en un catálogo limitado, sin revelar contraseñas ni considerar conectadas las API por el mero hecho de existir.</p>
+            {liveStatus && <>
+              <p><strong>Componentes observados en este PHOENIX</strong> · registro real de vistas, no autorización para usar datos o servicios.</p>
+              {liveStatus.slots.map(slot => (
+                <div className={css.fieldRow} key={slot.id}>
+                  <span><strong>{slot.id}</strong><small>Registro de interfaz · {slot.registrations} instancia(s)</small></span>
+                  <span className={css.status}>{slot.state === 'registered' ? 'Registrado' : 'No encontrado'}</span>
+                </div>
+              ))}
+            </>}
             {capabilities.map(capability => (
               <div className={css.fieldRow} key={capability.id}>
                 <span><strong>{capability.label}</strong><small>{capability.explanation}</small></span>
