@@ -152,7 +152,7 @@ export function registerHealthRoutes(ctx:Context):void {
     }
     if(path==='/health'&&method==='GET'){
       const nonce=randomBytes(16).toString('base64')
-      const content=renderHealthPage(nonce)
+      const content=renderHealthPage(nonce,process.env.PHOENIX_HEALTH_PATIENT_PORTAL_ENABLED==='1')
       res.writeHead(200,{
         'content-type':'text/html; charset=utf-8','cache-control':'no-store',
         'content-security-policy':"default-src 'none'; script-src 'self' 'nonce-"+nonce+"'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
