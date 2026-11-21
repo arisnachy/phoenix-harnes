@@ -1,7 +1,24 @@
 import { describe, expect, it, vi } from 'vitest'
-import { inspectSystemEnvironment } from '../src/system-proprioception.ts'
+import { inspectSystemEnvironment, searchLocalApps } from '../src/system-proprioception.ts'
 
 describe('System proprioception privacy and authority', () => {
+  it('searches explicitly requested installed software without enumerating all programs',()=>{
+    const runner=vi.fn((_cmd:string,_args:readonly string[],_opts:Record<string,unknown>)=>({
+      status:0,stdout:JSON.stringify({matches:['Blender 4.5','Blender Launcher']}),
+    }))
+    const result=searchLocalApps('Blender',{platform:'win32',runner})
+    expect(result.status).toBe('matches')
+    expect(result.names).toEqual(['Blender 4.5','Blender Launcher'])
+    expect(result.authorized).toBe(false)
+    expect(JSON.stringify(result)).not.toContain('AppID')
+    expect(runner).toHaveBeenCalledTimes(1)
+    const malicious=searchLocalApps("Blender'; Remove-Item C:/*",{platform:'win32',runner})
+    expect(malicious.status).toBe('invalid-query')
+    expect(runner).toHaveBeenCalledTimes(1)
+    expect(searchLocalApps('Blender',{platform:'linux'}).status).toBe('unavailable')
+  })
+
+
   const sample = {
     osCaption:'Microsoft Windows 11 Pro',build:'26100',systemType:2,
     chassis:[9],batteryPresent:true,memoryBytes:String(16*1073741824),
