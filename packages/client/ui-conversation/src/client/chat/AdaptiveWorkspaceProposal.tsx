@@ -6,12 +6,14 @@ export interface AdaptiveWorkspaceProposalSpec {
   readonly version: 1
   readonly props: {
     readonly appId: string
-    readonly operation: 'open' | 'find' | 'add-section' | 'rename-section' | 'remove-section' | 'palette' | 'rename-field' | 'remove-field' | 'set-binding'
+    readonly operation: 'open' | 'find' | 'add-section' | 'rename-section' | 'remove-section' | 'palette' | 'rename-field' | 'remove-field' | 'set-binding' | 'set-field-kind' | 'set-required'
     readonly sectionId?: string
     readonly fieldId?: string
     readonly label?: string
     readonly query?: string
     readonly palette?: 'pearl' | 'ocean' | 'sage' | 'iris' | 'amber'
+    readonly kind?: 'text' | 'number' | 'date' | 'select' | 'textarea'
+    readonly required?: boolean
     readonly destination?: 'local' | 'api' | 'chat' | 'ai'
     readonly output?: 'inline' | 'table' | 'document' | 'chat'
     readonly expectedRevision?: number
@@ -33,7 +35,7 @@ export function parseAdaptiveWorkspaceProposal(input: unknown): AdaptiveWorkspac
   const p = v.props as Record<string,unknown>
   const base = ['appId','operation']
   if (typeof p.appId !== 'string' || !['general','healthia'].includes(p.appId) && !APP.test(p.appId)) return null
-  if (!['open','find','add-section','rename-section','remove-section','palette','rename-field','remove-field','set-binding'].includes(p.operation as string)) return null
+  if (!['open','find','add-section','rename-section','remove-section','palette','rename-field','remove-field','set-binding','set-field-kind','set-required'].includes(p.operation as string)) return null
   const operation = p.operation
   const keys: Record<string,string[]> = {
     open: [...base,'sectionId'],
@@ -45,6 +47,8 @@ export function parseAdaptiveWorkspaceProposal(input: unknown): AdaptiveWorkspac
     'rename-field':[...base,'sectionId','fieldId','label','expectedRevision'],
     'remove-field':[...base,'sectionId','fieldId','expectedRevision'],
     'set-binding':[...base,'sectionId','fieldId','destination','output','expectedRevision'],
+    'set-field-kind':[...base,'sectionId','fieldId','kind','expectedRevision'],
+    'set-required':[...base,'sectionId','fieldId','required','expectedRevision'],
   }
   if (!allowed(p,keys[operation as string] ?? [])) return null
   if (!['open','find'].includes(operation as string) && !APP.test(p.appId)) return null
@@ -56,7 +60,7 @@ export function parseAdaptiveWorkspaceProposal(input: unknown): AdaptiveWorkspac
   if (['rename-section','remove-section'].includes(operation as string)
     && (typeof p.sectionId !== 'string' || !ID.test(p.sectionId))) return null
   if (operation === 'palette' && !['pearl','ocean','sage','iris','amber'].includes(p.palette as string)) return null
-  if (['rename-field','remove-field','set-binding'].includes(operation as string)
+  if (['rename-field','remove-field','set-binding','set-field-kind','set-required'].includes(operation as string)
     && (typeof p.sectionId !== 'string' || !ID.test(p.sectionId)
       || typeof p.fieldId !== 'string' || !ID.test(p.fieldId)
       || !Number.isSafeInteger(p.expectedRevision) || (p.expectedRevision as number) < 0)) return null
@@ -64,6 +68,8 @@ export function parseAdaptiveWorkspaceProposal(input: unknown): AdaptiveWorkspac
   if (operation === 'set-binding' &&
     (!['local','api','chat','ai'].includes(p.destination as string)
       || !['inline','table','document','chat'].includes(p.output as string))) return null
+  if (operation === 'set-field-kind' && !['text','number','date','select','textarea'].includes(p.kind as string)) return null
+  if (operation === 'set-required' && typeof p.required !== 'boolean') return null
   return {component:'adaptive_control',version:1,props:p as unknown as AdaptiveWorkspaceProposalSpec['props']}
 }
 const nameOf: Record<AdaptiveWorkspaceProposalSpec['props']['operation'],string> = {
@@ -73,6 +79,7 @@ const nameOf: Record<AdaptiveWorkspaceProposalSpec['props']['operation'],string>
   palette:'Cambiar paleta de colores',
   'rename-field':'Renombrar campo','remove-field':'Eliminar campo',
   'set-binding':'Configurar destino y salida de campo',
+  'set-field-kind':'Cambiar tipo de input','set-required':'Cambiar validación requerida',
 }
 
 export function AdaptiveWorkspaceProposal({spec}:{spec:AdaptiveWorkspaceProposalSpec}) {
