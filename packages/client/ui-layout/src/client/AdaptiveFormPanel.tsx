@@ -67,6 +67,15 @@ export function AdaptiveFormPanel({ appId, sectionId }: { appId: string; section
         <button className={css.action} type="button" onClick={() => window.dispatchEvent(
           new CustomEvent('phoenix:adaptive-form-mission', { detail: { appId, sectionId } }),
         )}>Configurar con Kira</button>
+        <button className={css.action} type="button" onClick={() => window.dispatchEvent(
+          new CustomEvent('phoenix:adaptive-form-inspect', { detail: {
+            appId, sectionId, revision: form.revision,
+            fields: form.fields.map(field => ({
+              id: field.id, label: field.label, kind: field.kind,
+              destination: field.binding.destination, output: field.binding.output,
+            })),
+          } }),
+        )}>Compartir estructura con Kira</button>
         <button className={css.action} type="button" disabled={!history.length} onClick={undo}>Deshacer</button>
       </div>
     </div>
