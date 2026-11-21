@@ -566,7 +566,7 @@ export class HealthClinicStore {
    * No model, chat, persistence or external connector is involved. The output
    * may be used only inside the same authenticated /health clinical session.
    */
-  suggestClinicalNote(actor:Actor,id:string):ClinicalNoteProposal & {readonly encounterId:string;readonly encounterVersion:number} {
+  suggestClinicalNote(actor:Actor,id:string):ClinicalNoteProposal & {readonly encounterId:string;readonly encounterVersion:number;readonly mayUseLocalModel:boolean} {
     if(actor.role!=='clinician'&&actor.role!=='psychologist')
       fail('Profesional clínico requerido')
     const target=this.find(actor,'encounters',str(id,'Consulta',80))
@@ -581,7 +581,8 @@ export class HealthClinicStore {
       assessment:encounter.assessment??'',
       plan:encounter.plan??'',
     })
-    return {...draft,encounterId:target.row.id,encounterVersion:target.row.version}
+    return {...draft,encounterId:target.row.id,encounterVersion:target.row.version,
+      mayUseLocalModel:encounter.confidentialPsychotherapy!==true&&actor.role==='clinician'}
   }
 
   /** Build an authorized deterministic Kira questionnaire without a model call or PHI export. */
