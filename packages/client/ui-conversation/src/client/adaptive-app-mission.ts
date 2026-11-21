@@ -86,5 +86,5 @@ export function newAdaptiveFormMission(appId: string, sectionId: string): string
     'Tipos de entrada permitidos: text, number, date, select, textarea. Destinos: local, api, chat, ai. Salidas: inline, table, document, chat. Máximo 20 campos por propuesta y 40 por formulario. No incluyas valores, rutas, scripts, URLs, secretos o datos personales.',
     'La propuesta se aplicará solo cuando yo pulse «Aplicar campos al formulario». API, chat e IA son configuraciones pendientes: no las ejecutes ni afirmes que están conectadas.',
     'Para integración real con herramientas o servicios, crea adaptadores revisables, solicita permisos, realiza pruebas y utiliza el sistema de recuperación. Healthia clínica usa exclusivamente el backend protegido.',
-  ].join('\\n\\n')
+  ].join('\n\n')
 }
