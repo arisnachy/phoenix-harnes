@@ -183,6 +183,39 @@ describe('AppFrame', () => {
     }
   })
 
+  it('applies a user-approved AI form schema only to an installed generic app', () => {
+    for (const key of [
+      'phoenix.adaptive.apps.v1', 'phoenix.adaptive.apps.last-good.v1',
+      'phoenix.adaptive.form-schemas.v1', 'phoenix.adaptive.form-schemas.last-good.v1',
+    ]) localStorage.removeItem(key)
+    try {
+      const view = mountFrame()
+      const app = { requestId: 'app-test', title: 'Inventario local', sections: ['Productos'] }
+      fireEvent(window, new CustomEvent('phoenix:adaptive-app-install', { detail: app }))
+      const responses: unknown[] = []
+      const onResult = (event: Event) => { responses.push((event as CustomEvent).detail) }
+      window.addEventListener('phoenix:adaptive-form-install-result', onResult)
+      try {
+        fireEvent(window, new CustomEvent('phoenix:adaptive-form-install', { detail: {
+          requestId: 'form-test', appId: 'app-inventario-local', sectionId: 'productos',
+          fields: [{ label: 'Existencias', kind: 'number', destination: 'local', output: 'table' }],
+        } }))
+        expect(responses).toEqual([{ requestId: 'form-test', ok: true }])
+        expect(view.getAllByText('Existencias').length).toBeGreaterThan(0)
+        fireEvent(window, new CustomEvent('phoenix:adaptive-form-install', { detail: {
+          requestId: 'blocked', appId: 'healthia', sectionId: 'patients',
+          fields: [{ label: 'Dato privado', kind: 'text', destination: 'api', output: 'chat' }],
+        } }))
+        expect(responses.at(-1)).toEqual({ requestId: 'blocked', ok: false })
+      } finally { window.removeEventListener('phoenix:adaptive-form-install-result', onResult) }
+    } finally {
+      for (const key of [
+        'phoenix.adaptive.apps.v1', 'phoenix.adaptive.apps.last-good.v1',
+        'phoenix.adaptive.form-schemas.v1', 'phoenix.adaptive.form-schemas.last-good.v1',
+      ]) localStorage.removeItem(key)
+    }
+  })
+
   it('renders three tracks from store state', () => {
     const { frame } = mountFrame()
     expect(tracks(frame)).toEqual([SIDEBAR_DEFAULT, 0])
