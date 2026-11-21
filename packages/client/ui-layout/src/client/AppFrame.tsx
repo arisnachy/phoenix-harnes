@@ -27,7 +27,7 @@ export type AppFrameProps =
   & PropsStore<ReturnType<typeof createLayoutStore>>
 
 interface SurfaceBoundaryProps {
-  readonly name: 'conversation' | 'workspace' | 'details'
+  readonly name: 'conversation' | 'workspace' | 'details' | 'adaptive'
   readonly resetKey: string
   readonly children: ReactNode
 }
@@ -362,17 +362,19 @@ export function AppFrame({
               </form>}
             </div>}
           </div>
-          {activeBlueprint && (
-            <AdaptiveAppPreview key={activeBlueprint.id} app={activeBlueprint} section={customSection}
-              onSectionChange={setCustomSection} onReturn={() => setAdaptiveApp('general')} />
-          )}
-          {adaptiveApp === 'healthia' && (
-            <HealthiaWorkspace role={healthiaRole} section={healthiaSection}
-              onRoleChange={role => { setHealthiaRole(role); setHealthiaSection('overview') }}
-              onSectionChange={setHealthiaSection}
-              onReturn={() => { setAdaptiveApp('general'); setAppMenuOpen(false) }}
-            />
-          )}
+          <SurfaceBoundary name="adaptive" resetKey={adaptiveApp}>
+            {activeBlueprint && (
+              <AdaptiveAppPreview key={activeBlueprint.id} app={activeBlueprint} section={customSection}
+                onSectionChange={setCustomSection} onReturn={() => setAdaptiveApp('general')} />
+            )}
+            {adaptiveApp === 'healthia' && (
+              <HealthiaWorkspace role={healthiaRole} section={healthiaSection}
+                onRoleChange={role => { setHealthiaRole(role); setHealthiaSection('overview') }}
+                onSectionChange={setHealthiaSection}
+                onReturn={() => { setAdaptiveApp('general'); setAppMenuOpen(false) }}
+              />
+            )}
+          </SurfaceBoundary>
           <div data-shell-overlay>{renderSlot('shell.overlay', {})}</div>
           <SurfaceBoundary name="conversation" resetKey={currentSession ?? 'none'}>
             <SurfaceRender render={() => renderSlot('conversation', {})} />
