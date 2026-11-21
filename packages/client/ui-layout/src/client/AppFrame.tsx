@@ -19,12 +19,14 @@ import css from './AppFrame.module.css'
 import { HealthiaWorkspace, HEALTHIA_NAV, type HealthiaRole } from './HealthiaWorkspace.tsx'
 import { ADAPTIVE_APP_PRESETS, type AdaptiveAppBlueprint } from './AdaptiveAppCatalog.ts'
 import { AdaptiveAppPreview } from './AdaptiveAppPreview.tsx'
+import type { AdaptiveLiveSnapshot } from './AdaptiveLiveSlots.ts'
 
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
   & PropsRuntime<'root'>
   & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'shell.overlay' | 'shell.workspace'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
+  & { readonly inspectRuntime?: (() => AdaptiveLiveSnapshot) | undefined }
 
 interface SurfaceBoundaryProps {
   readonly name: 'conversation' | 'workspace' | 'details' | 'adaptive'
@@ -159,6 +161,7 @@ export function AppFrame({
   useSessions,
   actions,
   renderSlot,
+  inspectRuntime,
 }: AppFrameProps) {
   const panels = useStore(s => s)
   const currentSession = useSessions(s => s.current)
@@ -366,7 +369,7 @@ export function AppFrame({
                 onSectionChange={setCustomSection} onReturn={() => setAdaptiveApp('general')} />
             )}
             {adaptiveApp === 'healthia' && (
-              <HealthiaWorkspace role={healthiaRole} section={healthiaSection}
+              <HealthiaWorkspace role={healthiaRole} section={healthiaSection} inspectRuntime={inspectRuntime}
                 onRoleChange={role => { setHealthiaRole(role); setHealthiaSection('overview') }}
                 onSectionChange={setHealthiaSection}
                 onReturn={() => { setAdaptiveApp('general'); setAppMenuOpen(false) }}
