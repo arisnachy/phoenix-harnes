@@ -57,6 +57,8 @@
     "adaptive:inspect": "node scripts/phoenix-adaptive-self-model.mjs --json",
     "test:adaptive:self": "node --test scripts/phoenix-adaptive-self-model.test.mjs",
     "test:adaptive:os": "node --test scripts/phoenix-adaptive-self-model.test.mjs scripts/phoenix-adaptive-change-policy.test.mjs",
+    "test:adaptive:ui": "vitest run packages/client/ui-layout/tests/adaptive-workspace-control.client.spec.ts packages/client/ui-layout/tests/adaptive-form-store.client.spec.ts packages/client/ui-layout/tests/adaptive-app-registry.client.spec.ts packages/client/ui-layout/tests/app-frame.client.spec.tsx packages/client/ui-layout/tests/healthia-workspace.client.spec.tsx packages/client/ui-sidebar/tests/sidebar-root.client.spec.tsx packages/client/ui-conversation/tests/adaptive-workspace-proposal.client.spec.tsx packages/client/ui-conversation/tests/adaptive-app-proposal.client.spec.tsx packages/client/ui-conversation/tests/adaptive-form-proposal.client.spec.tsx packages/client/ui-conversation/tests/adaptive-app-mission.client.spec.ts",
+    "test:adaptive:all": "pnpm run test:adaptive:os && pnpm run test:healthia:exchange && pnpm run test:adaptive:ui",
     "test:sandbox": "node scripts/test-sandbox.mjs",
     "quality:plan": "node scripts/phoenix-assurance.mjs plan",
     "quality:doctor": "node scripts/phoenix-assurance.mjs doctor",
