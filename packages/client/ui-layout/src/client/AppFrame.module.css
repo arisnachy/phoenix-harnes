@@ -236,3 +236,7 @@
 .appLauncherForm small {font-size:10px;line-height:1.45;color:var(--dsw-alias-label-secondary);}
 .appLauncherForm [role="alert"] {font-size:11px;color:#b54824;}
 .appLauncherMenu button:disabled {opacity:.55;cursor:not-allowed;}
+
+/* A failed session admission never silently drops the user's App Studio request. */
+.appMissionError {display:flex;align-items:center;justify-content:space-between;gap:12px;margin:52px 24px 4px;padding:11px 14px;border-radius:12px;background:var(--dsw-specific-input-major);border:1px solid #da966b;color:var(--dsw-alias-label-primary);font-size:12px;line-height:1.5;}
+.appMissionError button {cursor:pointer;border:0;background:transparent;color:inherit;font-size:18px;padding:2px 4px;}
