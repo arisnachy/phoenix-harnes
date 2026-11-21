@@ -508,8 +508,10 @@ export function apply(ctx: Context): void {
         provider=(ctx as unknown as {get(name:string):unknown}).get('userQuestions') as AdaptiveApprovalService|undefined
       } catch { return denied('HUMAN_APPROVAL_NOT_AVAILABLE') }
       const approved=await confirmAdaptiveExternalAction({
-        ask:provider,creationId:args.id,action:args.action,
-        inputJson:args.input_json,agent:exec.agent,signal:exec.signal,
+        ...(provider===undefined?{}:{ask:provider}),
+        creationId:args.id,action:args.action,inputJson:args.input_json,
+        ...(exec.agent===undefined?{}:{agent:exec.agent}),
+        ...(exec.signal===undefined?{}:{signal:exec.signal}),
       })
       if (!approved) return denied('HUMAN_APPROVAL_NOT_GIVEN')
       // Re-read live state AFTER the prompt to prevent stale/offline actions.
