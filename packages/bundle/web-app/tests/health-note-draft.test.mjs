@@ -4,7 +4,7 @@ import {mkdtempSync,rmSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {composeProtectedClinicalNote} from '../src/health-note-draft.ts'
-import {refineProtectedHistoryLocal} from '../src/health-clinical-local-ai.ts'
+import {refineProtectedHistoryLocal,discoverProtectedLocalAiModel} from '../src/health-clinical-local-ai.ts'
 import {HealthClinicStore} from '../src/health-store.ts'
 import {renderHealthPage} from '../src/health-ui.ts'
 
@@ -95,4 +95,28 @@ test('locally generated numeric hallucinations are flagged for clinician verific
   const result=await refineProtectedHistoryLocal(source,{enabled:true,model:'local-model:1',fetcher:fake})
   assert(result.numericWarnings.includes('100'))
   assert.equal(result.canAutoSign,false)
+})
+
+test('Healthia discovers already-installed text models, never a cloud or embedding model',async()=>{
+  let url
+  const local=async(input,init)=>{
+    url=input
+    assert.equal(init.method,'GET')
+    assert.equal(init.redirect,'error')
+    return new Response(JSON.stringify({models:[
+      {name:'nomic-embed-text:latest'}, {name:'ollama-cloud:latest'},
+      {name:'gemma4:e2b'}, {name:'qwen3:4b'},
+    ]}),{status:200})
+  }
+  const model=await discoverProtectedLocalAiModel(local)
+  assert.equal(url,'http://127.0.0.1:11434/api/tags')
+  assert.equal(model.available,true)
+  assert.equal(model.reason,'ready')
+  assert.equal(model.model,'gemma4:e2b')
+  const empty=await discoverProtectedLocalAiModel(async()=>new Response(JSON.stringify({
+    models:[{name:'nomic-embed-text:latest'},{name:'cloud-remote'}],
+  }),{status:200}))
+  assert.equal(empty.available,false)
+  const absent=await discoverProtectedLocalAiModel(async()=>{throw Error('not running')})
+  assert.equal(absent.reason,'no-service')
 })
