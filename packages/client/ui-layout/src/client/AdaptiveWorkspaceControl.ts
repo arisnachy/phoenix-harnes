@@ -7,6 +7,8 @@ import { createAdaptiveAppBlueprint, validateAdaptiveDraft, type AdaptiveAppBlue
   type AdaptiveFormDraft, type AdaptiveDestination, type AdaptiveOutput, type AdaptiveInputKind } from './AdaptiveAppCatalog.ts'
 import { readAdaptiveApps } from './AdaptiveAppRegistry.ts'
 import { readAdaptiveForm, saveAdaptiveForm } from './AdaptiveFormMetadataStore.ts'
+import { readVisualBoard, parseVisualCommand, preflightVisualCommand, applyVisualCommand,
+  type VisualOperation, type VisualKind, type VisualSpan, type VisualCommand } from './AdaptiveVisualKit.ts'
 
 export const ADAPTIVE_PALETTES = {
   pearl: { accent: '#bc471c', tint: '#fff1e8', ink: '#532312' },
@@ -17,7 +19,7 @@ export const ADAPTIVE_PALETTES = {
 } as const
 export type AdaptivePalette = keyof typeof ADAPTIVE_PALETTES
 export type AdaptiveControlOperation =
-  'open' | 'find' | 'add-section' | 'rename-section' | 'remove-section' | 'palette' | 'rename-field' | 'remove-field' | 'set-binding' | 'set-field-kind' | 'set-required'
+  'open' | 'find' | 'add-section' | 'rename-section' | 'remove-section' | 'palette' | 'rename-field' | 'remove-field' | 'set-binding' | 'set-field-kind' | 'set-required' | VisualOperation
 export interface AdaptiveControlCommand {
   readonly appId: string
   readonly operation: AdaptiveControlOperation
@@ -31,6 +33,10 @@ export interface AdaptiveControlCommand {
   readonly destination?: AdaptiveDestination
   readonly output?: AdaptiveOutput
   readonly expectedRevision?: number
+  readonly widgetId?: string
+  readonly widgetKind?: VisualKind
+  readonly span?: VisualSpan
+  readonly direction?: 'up' | 'down'
 }
 type StorageLike = Pick<Storage,'getItem'|'setItem'>
 const PREFS_KEY = 'phoenix.adaptive.theme.v1'
@@ -53,6 +59,9 @@ function storeOrUndefined(): StorageLike | undefined {
 export function parseAdaptiveControl(value: unknown): AdaptiveControlCommand | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const v = value as Record<string, unknown>
+  if (typeof v.operation === 'string' && v.operation.endsWith('-widget')) {
+    return parseVisualCommand(value) as AdaptiveControlCommand | null
+  }
   if (typeof v.appId !== 'string' || !['general','healthia'].includes(v.appId) && !APP.test(v.appId)
       || !['open','find','add-section','rename-section','remove-section','palette','rename-field','remove-field','set-binding','set-field-kind','set-required'].includes(v.operation as string)) return null
   const op = v.operation as AdaptiveControlOperation
@@ -91,10 +100,11 @@ export function parseAdaptiveControl(value: unknown): AdaptiveControlCommand | n
 }
 
 export interface AdaptiveDiscovery {
-  readonly kind: 'app' | 'section' | 'field'
+  readonly kind: 'app' | 'section' | 'field' | 'widget'
   readonly appId: string
   readonly sectionId?: string
   readonly fieldId?: string
+  readonly widgetId?: string
   readonly label: string
 }
 
@@ -113,6 +123,9 @@ export function findAdaptiveMetadata(query: string, apps: readonly AdaptiveAppBl
       const fields = formReader(app.id, section.id)?.fields ?? []
       for (const field of fields) if (field.label.toLocaleLowerCase('es').includes(term)) {
         results.push({ kind:'field', appId:app.id, sectionId:section.id, fieldId:field.id, label:field.label })
+      }
+      for (const widget of readVisualBoard(app.id,section.id).widgets) if (widget.title.toLocaleLowerCase('es').includes(term)) {
+        results.push({kind:'widget',appId:app.id,sectionId:section.id,widgetId:widget.id,label:widget.title})
       }
       if (results.length >= 30) return results
     }
@@ -190,6 +203,9 @@ export function preflightAdaptiveControl(command: AdaptiveControlCommand, apps: 
       ? {valid:true,reason:'HIDE_MENU_KEEP_FORM_DATA'} : {valid:false,reason:'LAST_OR_UNKNOWN_SECTION'}
   }
   if (!app.sections.some(s => s.id === command.sectionId)) return {valid:false,reason:'UNKNOWN_SECTION'}
+  if (command.operation.endsWith('-widget')) {
+    return preflightVisualCommand(command,readVisualBoard(app.id,command.sectionId!))
+  }
   const form = formReader(app.id, command.sectionId!)
   const field = form?.fields.find(item => item.id === command.fieldId)
   if (!form || !field) return {valid:false,reason:'UNKNOWN_FIELD'}
@@ -219,4 +235,10 @@ export function applyAdaptiveFieldEdit(command: AdaptiveControlCommand, store: S
   const next: AdaptiveFormDraft = {...form,revision:form.revision+1,fields}
   if (!validateAdaptiveDraft(next)) throw new Error('ADAPTIVE_PREFLIGHT_INVALID_RESULT')
   return saveAdaptiveForm(next,store)
+}
+
+/** Apply only a metadata-only widget edit, after the same two-stage chat gate. */
+export function applyAdaptiveVisualEdit(command: AdaptiveControlCommand) {
+  if (!command.operation.endsWith('-widget')) throw new Error('VISUAL_INVALID_OPERATION')
+  return applyVisualCommand(command as VisualCommand)
 }
