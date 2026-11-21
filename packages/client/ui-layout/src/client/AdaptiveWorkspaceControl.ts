@@ -7,6 +7,7 @@ import { createAdaptiveAppBlueprint, validateAdaptiveDraft, type AdaptiveAppBlue
   type AdaptiveFormDraft, type AdaptiveDestination, type AdaptiveOutput, type AdaptiveInputKind } from './AdaptiveAppCatalog.ts'
 import { readAdaptiveApps } from './AdaptiveAppRegistry.ts'
 import { readAdaptiveForm, saveAdaptiveForm } from './AdaptiveFormMetadataStore.ts'
+import { readFieldAiConfig,saveFieldAiConfig,type FieldSkill } from './AdaptiveIntelligentFields.ts'
 import { readVisualBoard, parseVisualCommand, preflightVisualCommand, applyVisualCommand, isVisualOperation,
   type VisualOperation, type VisualKind, type VisualSpan, type VisualCommand } from './AdaptiveVisualKit.ts'
 
@@ -19,7 +20,7 @@ export const ADAPTIVE_PALETTES = {
 } as const
 export type AdaptivePalette = keyof typeof ADAPTIVE_PALETTES
 export type AdaptiveControlOperation =
-  'open' | 'find' | 'add-section' | 'rename-section' | 'remove-section' | 'palette' | 'rename-field' | 'remove-field' | 'set-binding' | 'set-field-kind' | 'set-required' | VisualOperation
+  'open' | 'find' | 'add-section' | 'rename-section' | 'remove-section' | 'palette' | 'rename-field' | 'remove-field' | 'set-binding' | 'set-field-kind' | 'set-required' | 'set-field-ai' | VisualOperation
 export interface AdaptiveControlCommand {
   readonly appId: string
   readonly operation: AdaptiveControlOperation
@@ -33,6 +34,9 @@ export interface AdaptiveControlCommand {
   readonly destination?: AdaptiveDestination
   readonly output?: AdaptiveOutput
   readonly expectedRevision?: number
+  readonly enabled?: boolean
+  readonly skill?: FieldSkill
+  readonly instruction?: string
   readonly widgetId?: string
   readonly widgetKind?: VisualKind
   readonly span?: VisualSpan
@@ -63,7 +67,7 @@ export function parseAdaptiveControl(value: unknown): AdaptiveControlCommand | n
     return parseVisualCommand(value) as AdaptiveControlCommand | null
   }
   if (typeof v.appId !== 'string' || !['general','healthia'].includes(v.appId) && !APP.test(v.appId)
-      || !['open','find','add-section','rename-section','remove-section','palette','rename-field','remove-field','set-binding','set-field-kind','set-required'].includes(v.operation as string)) return null
+      || !['open','find','add-section','rename-section','remove-section','palette','rename-field','remove-field','set-binding','set-field-kind','set-required','set-field-ai'].includes(v.operation as string)) return null
   const op = v.operation as AdaptiveControlOperation
   const base = ['appId','operation']
   let keys = base
@@ -78,6 +82,7 @@ export function parseAdaptiveControl(value: unknown): AdaptiveControlCommand | n
   if (op === 'set-binding') keys = [...base,'sectionId','fieldId','destination','output','expectedRevision']
   if (op === 'set-field-kind') keys = [...base,'sectionId','fieldId','kind','expectedRevision']
   if (op === 'set-required') keys = [...base,'sectionId','fieldId','required','expectedRevision']
+  if (op === 'set-field-ai') keys = [...base,'sectionId','fieldId','enabled','skill','instruction','expectedRevision']
   if (!onlyKeys(v,keys)) return null
   if (op !== 'open' && op !== 'find' && !APP.test(v.appId)) return null
   if (op === 'open' && v.sectionId !== undefined && (typeof v.sectionId !== 'string' || !ID.test(v.sectionId))) return null
@@ -87,7 +92,7 @@ export function parseAdaptiveControl(value: unknown): AdaptiveControlCommand | n
   if (op === 'rename-section' && !validLabel(v.label)) return null
   if (['rename-section','remove-section'].includes(op)
     && (typeof v.sectionId !== 'string' || !ID.test(v.sectionId))) return null
-  if (['rename-field','remove-field','set-binding','set-field-kind','set-required'].includes(op)) {
+  if (['rename-field','remove-field','set-binding','set-field-kind','set-required','set-field-ai'].includes(op)) {
     if (typeof v.sectionId !== 'string' || !ID.test(v.sectionId)
       || typeof v.fieldId !== 'string' || !ID.test(v.fieldId)
       || !Number.isSafeInteger(v.expectedRevision) || (v.expectedRevision as number) < 0) return null
@@ -96,6 +101,10 @@ export function parseAdaptiveControl(value: unknown): AdaptiveControlCommand | n
   if (op === 'set-binding' && (!DEST.includes(v.destination as string) || !OUTPUT.includes(v.output as string))) return null
   if (op === 'set-field-kind' && !['text','number','date','select','textarea'].includes(v.kind as string)) return null
   if (op === 'set-required' && typeof v.required !== 'boolean') return null
+  if (op === 'set-field-ai' && (typeof v.enabled !== 'boolean'
+    || !['polish','summarize','structure','extract'].includes(v.skill as string)
+    || typeof v.instruction !== 'string' || v.instruction.length > 320
+    || /[<>\u0000-\u001f\u007f]/u.test(v.instruction))) return null
   return v as unknown as AdaptiveControlCommand
 }
 
@@ -206,6 +215,13 @@ export function preflightAdaptiveControl(command: AdaptiveControlCommand, apps: 
   if (isVisualOperation(command.operation)) {
     return preflightVisualCommand(command,readVisualBoard(app.id,command.sectionId!))
   }
+  if (command.operation === 'set-field-ai') {
+    const target=formReader(app.id,command.sectionId!)?.fields.find(x=>x.id===command.fieldId)
+    if (!target || target.protected || !['text','textarea'].includes(target.kind))return {valid:false,reason:'UNSUPPORTED_AI_FIELD'}
+    const config=readFieldAiConfig(app.id,command.sectionId!,command.fieldId!)
+    return config.revision===command.expectedRevision
+      ?{valid:true,reason:'FIELD_AI_METADATA_CHANGE'}:{valid:false,reason:'STALE_AI_CONFIG'}
+  }
   const form = formReader(app.id, command.sectionId!)
   const field = form?.fields.find(item => item.id === command.fieldId)
   if (!form || !field) return {valid:false,reason:'UNKNOWN_FIELD'}
@@ -241,4 +257,14 @@ export function applyAdaptiveFieldEdit(command: AdaptiveControlCommand, store: S
 export function applyAdaptiveVisualEdit(command: AdaptiveControlCommand) {
   if (!isVisualOperation(command.operation)) throw new Error('VISUAL_INVALID_OPERATION')
   return applyVisualCommand(command as VisualCommand)
+}
+
+/** Chat-controlled instructions are bounded metadata, never model execution grants. */
+export function applyAdaptiveAiFieldEdit(command:AdaptiveControlCommand) {
+  if(command.operation!=='set-field-ai')throw Error('FIELD_AI_INVALID_OPERATION')
+  const gate=preflightAdaptiveControl(command)
+  if(!gate.valid)throw Error('FIELD_AI_PREFLIGHT_'+gate.reason)
+  return saveFieldAiConfig({version:1,appId:command.appId,sectionId:command.sectionId!,
+    fieldId:command.fieldId!,revision:command.expectedRevision!+1,
+    enabled:command.enabled!,skill:command.skill!,instruction:command.instruction!})
 }
