@@ -7,6 +7,7 @@ import { validateAdaptiveDraft, type AdaptiveFormDraft } from './AdaptiveAppCata
 
 const PRIMARY = 'phoenix.adaptive.form-schemas.v1'
 const BACKUP = 'phoenix.adaptive.form-schemas.last-good.v1'
+const ROLLBACK = 'phoenix.adaptive.form-schemas.pre-change.v1'
 const MAX_FORMS = 96
 const MAX_BYTES = 180_000
 type Store = Pick<Storage, 'getItem' | 'setItem'>
@@ -62,11 +63,24 @@ export function saveAdaptiveForm(
   if (next.length > MAX_FORMS) throw new Error('ADAPTIVE_FORM_LIMIT')
   const encoded = JSON.stringify({ version: 1, forms: next })
   if (encoded.length > MAX_BYTES) throw new Error('ADAPTIVE_FORM_LIMIT')
+  store.setItem(ROLLBACK, JSON.stringify({ version: 1, forms: current }))
   store.setItem(BACKUP, JSON.stringify({ version: 1, forms: current }))
   store.setItem(PRIMARY, encoded)
   // Keep the most recently validated successful snapshot as primary fallback.
   try { store.setItem(BACKUP, encoded) } catch { /* existing backup remains */ }
   return form
+}
+
+/** Recover the most recent previous VALIDATED form definitions after an app crash.
+ * No clinical values are stored or affected. */
+export function restorePreviousAdaptiveForms(store: Store | undefined = currentStore()): readonly AdaptiveFormDraft[] {
+  if (!store) return []
+  const snapshot = parse(store.getItem(ROLLBACK))
+  if (snapshot === null) return load(store)
+  const encoded = JSON.stringify({version:1,forms:snapshot})
+  store.setItem(PRIMARY,encoded)
+  store.setItem(BACKUP,encoded)
+  return snapshot
 }
 
 type ProposedField = {
