@@ -197,7 +197,7 @@ export function isAdaptiveWorkspaceInspection(value: unknown): value is Adaptive
           ||(visual.revision as number)<0||!Number.isSafeInteger(visual.total)
           ||(visual.total as number)<0||(visual.total as number)>18
           ||!Array.isArray(visual.widgets)||visual.widgets.length>10
-          ||visual.widgets.length>visual.total)return false
+          ||visual.widgets.length>(visual.total as number))return false
         for(const item of visual.widgets){
           if(!item||typeof item!=='object'||Array.isArray(item))return false
           const widget=item as Record<string,unknown>
