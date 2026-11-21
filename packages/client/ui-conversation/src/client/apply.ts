@@ -24,7 +24,7 @@ import type { IConversation } from './service.ts'
 import { ComposerBlockRegistry } from './input/blocks.ts'
 import type { ComposerBlock } from './input/blocks.ts'
 import { InputHub } from './input/hub.ts'
-import { ADAPTIVE_MISSION_EVENT, isAdaptiveMissionEvent, isAdaptiveFormInspection, formatAdaptiveInspection, isAdaptiveWorkspaceInspection, formatAdaptiveWorkspaceInspection, isAdaptiveFormMissionEvent, newAdaptiveFormMission, startAdaptiveAppConversation } from './adaptive-app-mission.ts'
+import { ADAPTIVE_MISSION_EVENT, isAdaptiveMissionEvent, isAdaptiveFormInspection, formatAdaptiveInspection, isAdaptiveWorkspaceInspection, formatAdaptiveWorkspaceInspection, parseAdaptiveFormActionDraft, formatAdaptiveFormActionDraft, isAdaptiveFormMissionEvent, newAdaptiveFormMission, startAdaptiveAppConversation } from './adaptive-app-mission.ts'
 import { ComposerSubmissionPolicy } from './input/submission-policy.ts'
 import { InputBar } from './skeleton/InputBar.tsx'
 import { EnterBehaviorRow } from './settings/EnterBehaviorRow.tsx'
@@ -353,6 +353,26 @@ export function apply(ctx: Context): void {
         window.dispatchEvent(new Event('phoenix:adaptive-app-mission-failed'))
       }
     }
+    const onActionDraft = (event: Event): void => {
+      const draft = parseAdaptiveFormActionDraft((event as CustomEvent<unknown>).detail)
+      if (!draft) return
+      const id = sessions.list.getSnapshot().current
+      if (id === undefined) {
+        window.dispatchEvent(new Event('phoenix:adaptive-app-mission-failed'))
+        return
+      }
+      try {
+        const shell = inputHub.shell(id)
+        if (shell.snapshot.draft.trim() || shell.snapshot.imageIds.length) {
+          shell.notify('info','Hay un borrador o imagen pendiente: no se sobrescribió. Envíalo o bórralo antes de continuar.')
+          return
+        }
+        shell.actions.setDraft(formatAdaptiveFormActionDraft(draft))
+      } catch {
+        window.dispatchEvent(new Event('phoenix:adaptive-app-mission-failed'))
+      }
+    }
+    window.addEventListener('phoenix:adaptive-form-action-draft', onActionDraft)
     window.addEventListener('phoenix:adaptive-self-inspect', onInspectWorkspace)
     window.addEventListener('phoenix:adaptive-form-inspect', onInspectForm)
     window.addEventListener('phoenix:adaptive-form-mission', onForm)
@@ -362,6 +382,7 @@ export function apply(ctx: Context): void {
       window.removeEventListener('phoenix:adaptive-form-mission', onForm)
       window.removeEventListener('phoenix:adaptive-form-inspect', onInspectForm)
       window.removeEventListener('phoenix:adaptive-self-inspect', onInspectWorkspace)
+      window.removeEventListener('phoenix:adaptive-form-action-draft', onActionDraft)
     }
   }, 'ui-conversation: adaptive app and form chat missions')
 
