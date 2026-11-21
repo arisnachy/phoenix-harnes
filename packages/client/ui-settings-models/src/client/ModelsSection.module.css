@@ -809,3 +809,260 @@ select.input {
   font-size: 13px;
   overflow-wrap: anywhere;
 }
+/* Provider catalog: compact, theme-aware surfaces with a deliberate edit state. */
+.section {
+  max-width: 940px;
+}
+
+.catalogToolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.catalogSearch {
+  box-sizing: border-box;
+  flex: 1 1 250px;
+  min-width: 0;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 19px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.catalogSearch::placeholder {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.catalogSearch:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 2px;
+}
+
+.catalogHeading {
+  margin: 4px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.rows {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 12px;
+  margin-top: 0;
+}
+
+.rowCard {
+  min-width: 0;
+  min-height: 110px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--dsw-alias-bg-layer-1);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.rowCard:hover,
+.rowCard:focus-within {
+  border-color: var(--dsw-alias-border-l3);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent);
+}
+
+.rowExpanded,
+.setupCard {
+  grid-column: 1 / -1;
+}
+
+.rowHead {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.rowIdentity {
+  flex: 1 1 170px;
+  flex-wrap: wrap;
+}
+
+.rowName {
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.providerStatus {
+  width: 100%;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.rowActions {
+  flex: 1 1 100%;
+  justify-content: flex-end;
+}
+
+.orderGhost {
+  opacity: 0.22;
+  transition: opacity 150ms ease;
+}
+
+.rowCard:hover .orderGhost,
+.rowCard:focus-within .orderGhost {
+  opacity: 1;
+}
+
+/* Guided connection setup: all accents inherit Phoenix theme variables. */
+.wizardSteps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  list-style: none;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+}
+
+.wizardStep,
+.wizardStepActive {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.wizardStepActive {
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+  border-color: var(--dsw-alias-border-l3);
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.wizardStepNumber {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--dsw-alias-bg-layer-1);
+  border: 1px solid var(--dsw-alias-border-l3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.wizardMethods {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.wizardHeading {
+  margin-bottom: 12px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.wizardMethodCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-1);
+  cursor: pointer;
+}
+
+.wizardMethodCard:has(input:checked) {
+  border-color: var(--dsw-alias-brand-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.wizardMethodCard:focus-within {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 2px;
+}
+
+.wizardMethodCard input {
+  accent-color: var(--dsw-alias-brand-primary);
+}
+
+.wizardMethodCard span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.wizardMethodCard strong {
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.wizardMethodCard small {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.wizardNav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.wizardReview {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.wizardReviewSummary {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-1);
+  padding: 14px;
+  font-size: 13px;
+}
+
+.wizardReviewSummary span {
+  color: var(--dsw-alias-label-secondary);
+}
+
+@media (max-width: 720px) {
+  .rows {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .wizardStep,
+  .wizardStepActive {
+    gap: 4px;
+    padding: 7px 5px;
+    font-size: 11px;
+  }
+
+  .rowCard {
+    min-height: 0;
+  }
+}
