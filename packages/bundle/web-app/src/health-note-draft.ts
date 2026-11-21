@@ -61,6 +61,7 @@ export function composeProtectedClinicalNote(input:ClinicalNoteProposalInput):Cl
     ...(lines.length?['Relato registrado durante la entrevista:',...lines]:['Entrevista clínica no documentada todavía.']),
     'Borrador asistido: completar y verificar secuencia temporal, síntomas pertinentes y hallazgos antes de firmar.',
   ].join('\n')
+  if(proposed.length>3900)throw Error('CLINICAL_DRAFT_LIMIT: demasiada información; seleccione respuestas pertinentes')
   return {
     source:'local-recorded-facts',reviewed:false,canAutoSign:false,
     suggestedComplaint:complaint,suggestedHistory:proposed,originalHistory,
