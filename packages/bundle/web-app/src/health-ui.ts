@@ -1126,24 +1126,55 @@ async function execute(action,id){
   if(result.status==="sent")notice("Kira confirmó el envío del recordatorio con Gmail.");
   return;
  }
+async function refreshClinicalModelChoices(){
+ const field=document.getElementById("healthia-clinical-model");
+ const statusEl=document.getElementById("healthia-clinical-model-status");
+ if(!field)return;
+ try{
+  const catalog=await api("clinical-note-ai-status");
+  if(field!==document.getElementById("healthia-clinical-model"))return;
+  field.replaceChildren(new Option("Selecciona un modelo...", ""));
+  for(const entry of catalog.models||[]){
+   field.add(new Option(entry.label+(entry.location==="local"?" · local":" · OAuth/API externa"),entry.id));
+  }
+  field.value=catalog.defaultId||"";
+  if(statusEl)statusEl.textContent=catalog.models?.length
+   ?(catalog.models.length+" modelos registrados/detectados. Local primero; un proveedor externo requiere aprobación explícita.")
+   :"Sin modelo disponible. La preparación local de HEA sigue funcionando.";
+ }catch{
+  if(statusEl)statusEl.textContent="No se pudo consultar el catálogo del Host. La preparación local de HEA sigue funcionando.";
+ }
+}
  if(action==="prepareClinicalNote"||action==="prepareClinicalAi"){
   const useModel=action==="prepareClinicalAi";
   const encounter=data.encounters?.find(x=>x.id===id);
   if(!encounter||current?.kind!=="soap"||current.encounterId!==id||encounter.status==="signed")
     throw Error("Consulta protegida no disponible");
+  let chosen=null;
   if(useModel){
+    const requestedId=document.getElementById("healthia-clinical-model")?.value;
     const status=await api("clinical-note-ai-status");
-    if(!status.available||!status.model){
-      notice("No hay modelo local de Ollama disponible. Usa Proponer HEA desde entrevista; no necesitas activar nada por PowerShell.");
+    chosen=(status.models||[]).find(x=>x.id===requestedId)||null;
+    if(!chosen){
+      notice("Selecciona un modelo en el campo IA. Los modelos locales disponibles se seleccionan automáticamente.");
+      await refreshClinicalModelChoices();
       return;
     }
-    if(!confirm("Modelo local detectado: "+status.model+". La IA puede cometer errores. Confirmas el procesamiento de esta propuesta clínica en Ollama local para esta solicitud, según los permisos y el consentimiento aplicables?"))return;
+    const remote=chosen.location==="external";
+    const text=remote
+      ?"Este proveedor está configurado mediante el Host, pero el envío sale del equipo. El contenido clínico documentado se transmitirá al proveedor "+chosen.provider+". Verifica el contrato de datos y el consentimiento del paciente. ¿Autorizas ESTA solicitud?"
+      :"El borrador clínico será procesado mediante "+chosen.label+" dentro del entorno local. Revisa permisos, privacidad y el resultado. ¿Autorizas ESTA solicitud?";
+    if(!confirm(text))return;
   }
   const response=useModel
-    ?await api("clinical-note-ai/"+encodeURIComponent(id),"POST",{action:"refine",confirmLocalProcessing:true})
+    ?await api("clinical-note-ai/"+encodeURIComponent(id),"POST",{
+      action:"refine",routeId:chosen.id,
+      confirmLocalProcessing:chosen.location==="local",
+      confirmExternalProcessing:chosen.location==="external",
+    })
     :await api("clinical-note-proposal/"+encodeURIComponent(id),"POST",{});
   const proposal=response.proposal;
-  if(!proposal||(useModel?proposal.source!=="ollama-local-unverified":proposal.source!=="local-recorded-facts")
+  if(!proposal||proposal.source!=="local-recorded-facts"
     ||proposal.encounterVersion!==encounter.version||proposal.encounterId!==id)
     throw Error("La revisión del episodio cambió; vuelve a abrir la consulta");
   clinicalNoteProposal=proposal;
@@ -1151,8 +1182,8 @@ async function execute(action,id){
   const missing=(proposal.missingInformation||[]).map(x=>"<li>"+safe(x)+"</li>").join("");
   const numeric=(proposal.numericWarnings||[]).map(x=>"<li>"+safe(x)+"</li>").join("");
   document.getElementById("view").insertAdjacentHTML("beforeend",
-    '<div id="clinical-note-proposal-preview">'+box(useModel?"Propuesta IA local · pendiente de validación":"Propuesta local · enfermedad actual",
-      (useModel?'<p class="notice"><strong>Texto generado por modelo local '+safe(proposal.model||"")+" (sin verificar):</strong> puede contener errores, omisiones o información inventada. Contrasta cada hecho con el expediente antes de aceptar.</p>':
+    '<div id="clinical-note-proposal-preview">'+box(useModel?"Propuesta IA · pendiente de validación":"Propuesta local · enfermedad actual",
+      (useModel?'<p class="notice"><strong>Propuesta del modelo '+safe(proposal.provider||"")+' · '+safe(proposal.model||"")+' ('+safe(proposal.location||"")+', sin verificar):</strong> puede contener errores, omisiones o información inventada. Contrasta cada hecho con el expediente antes de aceptar.</p>':
       '<p class="notice"><strong>Sin modelo IA:</strong> redacción estructurada desde respuestas registradas, sin diagnósticos ni hallazgos inventados. Verifica todo antes de conservarla.</p>')+
       '<label>Motivo registrado</label><p>'+safe(proposal.suggestedComplaint)+'</p>'+
       '<label>HEA propuesta para revisión</label><textarea readonly rows="9">'+safe(proposal.suggestedHistory)+'</textarea>'+
@@ -1202,9 +1233,12 @@ async function execute(action,id){
     section("assessment","A · Evaluación y razonamiento clínico",encounter.assessment)+
     section("plan","P · Plan diagnóstico y terapéutico",encounter.plan)+
     '<button class="secondary" data-act="prepareClinicalNote" data-id="'+safe(id)+'">Proponer HEA desde entrevista</button> '+
-    '<button class="secondary" data-act="prepareClinicalAi" data-id="'+safe(id)+'">Mejorar con IA local (opcional)</button> '+
+    '<div class="ws-model-choice"><label for="healthia-clinical-model">Modelo de IA disponible en PHOENIX</label>'+
+    '<select id="healthia-clinical-model"><option value="">Buscando modelos autorizados...</option></select>'+
+    '<p id="healthia-clinical-model-status" class="muted" role="status">El Host detectará modelos locales y proveedores registrados por OAuth/API.</p></div>'+
+    '<button class="secondary" data-act="prepareClinicalAi" data-id="'+safe(id)+'">Mejorar HEA con IA</button> '+
     '<button class="primary" data-act="saveDocument" data-id="'+safe(id)+'">Guardar borrador cifrado</button>'));
-  restoreView();return;
+  restoreView();void refreshClinicalModelChoices();return;
  }
  if(action==="saveDocument"){
   const encounter=data.encounters?.find(x=>x.id===id);
