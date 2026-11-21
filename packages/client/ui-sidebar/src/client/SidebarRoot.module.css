@@ -710,3 +710,17 @@
 .healthiaRoles button {border:1px solid var(--phoenix-side-outline);border-radius:9px;background:transparent;color:inherit;padding:7px 10px;cursor:pointer;}
 .healthiaRoles button[aria-pressed="true"] {background:var(--phoenix-side-peach);color:var(--phoenix-side-ember);font-weight:650;}
 .healthiaRegion p {line-height:1.6;}
+
+/* Keep PHOENIX General and Healthia unchanged. App palettes affect only the
+ * active contextual workspace; no injected model CSS reaches system chrome. */
+.root[data-app-palette='pearl'] {--adaptive-side-accent:#bc471c;--adaptive-side-tint:#fff1e8;--adaptive-side-ink:#532312;}
+.root[data-app-palette='ocean'] {--adaptive-side-accent:#16658a;--adaptive-side-tint:#e6f4fb;--adaptive-side-ink:#123d59;}
+.root[data-app-palette='sage'] {--adaptive-side-accent:#316c4c;--adaptive-side-tint:#eaf5ec;--adaptive-side-ink:#1b472f;}
+.root[data-app-palette='iris'] {--adaptive-side-accent:#6941a3;--adaptive-side-tint:#f1ecfb;--adaptive-side-ink:#412665;}
+.root[data-app-palette='amber'] {--adaptive-side-accent:#89510d;--adaptive-side-tint:#fff4dc;--adaptive-side-ink:#55340e;}
+.root[data-app-palette] .healthiaNavigation .navLink[aria-current='page'] {
+  background:var(--adaptive-side-tint)!important;color:var(--adaptive-side-ink)!important;
+  border-left:3px solid var(--adaptive-side-accent);
+}
+.root[data-app-palette] .healthiaRegion strong {color:var(--adaptive-side-accent);}
+.root[data-app-palette] .healthiaRoles button[aria-pressed='true'] {background:var(--adaptive-side-tint);color:var(--adaptive-side-ink);}
