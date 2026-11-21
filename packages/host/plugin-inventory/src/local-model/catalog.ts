@@ -113,20 +113,22 @@ export function validOllamaTag(tag: string): boolean {
 export function registerOllamaCandidate(tag: string, metadata?: OllamaDiscoveredModel): LocalModelCatalogEntry {
   if (!validOllamaTag(tag)) throw new Error('Invalid local Ollama model tag')
   const existing = LOCAL_MODEL_CATALOG.find(entry => entry.backend === 'ollama' && entry.ollamaModel === tag)
-  if (existing !== undefined) return existing
-  const id = `ollama:${tag}`
+  const id = existing?.id ?? `ollama:${tag}`
   const previous = ollamaDiscovered.get(id)
-  const capacity = metadata?.contextWindow ?? previous?.contextWindow ?? 4_096
+  const capacity = metadata?.contextWindow ?? previous?.contextWindow ?? existing?.contextWindow ?? 4_096
   const entry: LocalModelCatalogEntry = {
-    id, displayName: `${tag} · Ollama`, backend: 'ollama', ollamaModel: tag,
-    sizeBytes: metadata?.sizeBytes ?? previous?.sizeBytes ?? 0,
-    estimatedRamBytes: metadata?.estimatedRamBytes ?? previous?.estimatedRamBytes ?? 0,
+    id, displayName: existing?.displayName ?? `${tag} · Ollama`,
+    backend: 'ollama', ollamaModel: tag,
+    sizeBytes: metadata?.sizeBytes ?? previous?.sizeBytes ?? existing?.sizeBytes ?? 0,
+    estimatedRamBytes: metadata?.estimatedRamBytes ?? previous?.estimatedRamBytes ?? existing?.estimatedRamBytes ?? 0,
     contextWindow: capacity,
     ...(metadata?.nativeContextWindow === undefined
-      ? previous?.nativeContextWindow === undefined ? {} : { nativeContextWindow: previous.nativeContextWindow }
+      ? previous?.nativeContextWindow === undefined
+        ? existing?.nativeContextWindow === undefined ? {} : { nativeContextWindow: existing.nativeContextWindow }
+        : { nativeContextWindow: previous.nativeContextWindow }
       : { nativeContextWindow: metadata.nativeContextWindow }),
-    maxTokens: metadata?.maxTokens ?? previous?.maxTokens ?? 512,
-    recommended: false,
+    maxTokens: metadata?.maxTokens ?? previous?.maxTokens ?? existing?.maxTokens ?? 512,
+    recommended: existing?.recommended ?? false,
   }
   ollamaDiscovered.set(id, entry)
   return entry
@@ -160,7 +162,8 @@ export const DEFAULT_LOCAL_MODEL_ID = QWEN_35_2B_OLLAMA.id
  * @returns The supported Phoenix Local model catalog.
  */
 export function getLocalModelCatalog(): readonly LocalModelCatalogEntry[] {
-  return [...LOCAL_MODEL_CATALOG, ...ollamaDiscovered.values()]
+  return [...LOCAL_MODEL_CATALOG.map(model => ollamaDiscovered.get(model.id) ?? model),
+    ...[...ollamaDiscovered.values()].filter(model => !LOCAL_MODEL_CATALOG.some(staticModel => staticModel.id === model.id))]
 }
 
 /**
@@ -169,7 +172,7 @@ export function getLocalModelCatalog(): readonly LocalModelCatalogEntry[] {
  * @returns The matching catalog entry, when supported.
  */
 export function getLocalModel(modelId: string): LocalModelCatalogEntry | undefined {
-  return LOCAL_MODEL_CATALOG.find(entry => entry.id === modelId) ?? ollamaDiscovered.get(modelId)
+  return ollamaDiscovered.get(modelId) ?? LOCAL_MODEL_CATALOG.find(entry => entry.id === modelId)
 }
 
 /**
