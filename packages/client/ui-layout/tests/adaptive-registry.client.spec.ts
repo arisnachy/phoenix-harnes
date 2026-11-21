@@ -34,7 +34,7 @@ describe('Adaptive App Studio registry', () => {
     const app = createAdaptiveAppBlueprint('Agenda', ['Inicio'])
     installAdaptiveApp(app, store)
     store.setItem('phoenix.adaptive.apps.v1', '{broken')
-    expect(readAdaptiveApps(store)).toEqual([])
+    expect(readAdaptiveApps(store)).toEqual([app])
   })
 
   it('removes only the selected declaration', () => {
