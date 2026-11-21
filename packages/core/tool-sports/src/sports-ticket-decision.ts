@@ -136,7 +136,7 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
   })
   // Diagnostic subsets preserve event order. Neither market share nor historical
   // win rate is allowed to select, sort or boost a particular team.
-  const candidates=legs.filter(leg=>leg.verdict==='candidate'||leg.verdict==='caution')
+  const candidates=legs.filter(leg=>leg.verdict==='candidate')
     .filter(leg=>leg.bookmakerBreakEvenPct!==null)
   const scenarios:DecisionScenario[]=[3,4,5].map(value=>{
     const count=value as 3|4|5
@@ -153,18 +153,20 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
     warning:'La comparación deportiva corresponde a Kira tras leer rosters, '+
       'estadísticas y fuentes de ambos equipos. Cuotas y porcentajes implícitos '+
       'son datos comerciales, no selección, probabilidad calibrada ni EV. '+
-      'Los escenarios son subconjuntos del borrador, no recomendaciones puntuadas.',
+      'Los escenarios incluyen solo expedientes completos y cotizados; las patas con advertencias siguen visibles fuera de ellos. No son recomendaciones puntuadas.',
     recommendation:heldEvents.length?
       'Reinvestigar las patas retenidas y comparar reemplazos por criterio del modelo.':
       'Kira debe elegir por análisis bilateral razonado; ningún ranking aprueba apuestas.'}
 }
 
-/** A fully quoted ticket may be reviewed only if no selection is held or excluded.
+/** Only fully researched, priced candidates without unresolved review flags may be reviewed.
  * Warnings on research candidates remain visible; readiness never means bet approval.
  * @param audit - Individual, post-quote ticket decision findings.
  * @returns Whether every shown leg is reviewable, not whether it is safe to wager.
  */
 export function ticketIsReadyForReview(audit:TicketDecisionAudit):boolean{
   return audit.legs.length>0&&audit.legs.every(leg=>
-    leg.verdict!=='hold'&&leg.verdict!=='exclude')
+    leg.verdict==='candidate'&&leg.criticalPending.length===0&&
+    leg.specialistStatus==='researched'&&leg.bookmakerBreakEvenPct!==null&&
+    !leg.alternativeReviewRequired)
 }
