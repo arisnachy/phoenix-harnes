@@ -1131,7 +1131,14 @@ async function execute(action,id){
   const encounter=data.encounters?.find(x=>x.id===id);
   if(!encounter||current?.kind!=="soap"||current.encounterId!==id||encounter.status==="signed")
     throw Error("Consulta protegida no disponible");
-  if(useModel&&!confirm("La redacción será procesada por el modelo configurado en Ollama, en este equipo. El servicio de modelos es distinto del expediente clínico. Verifica consentimiento, modelo instalado y políticas de privacidad antes de continuar. ¿Autorizar esta solicitud concreta?"))return;
+  if(useModel){
+    const status=await api("clinical-note-ai-status");
+    if(!status.available||!status.model){
+      notice("No hay modelo local de Ollama disponible. Usa Proponer HEA desde entrevista; no necesitas activar nada por PowerShell.");
+      return;
+    }
+    if(!confirm("Modelo local detectado: "+status.model+". La IA puede cometer errores. Confirmas el procesamiento de esta propuesta clínica en Ollama local para esta solicitud, según los permisos y el consentimiento aplicables?"))return;
+  }
   const response=useModel
     ?await api("clinical-note-ai/"+encodeURIComponent(id),"POST",{action:"refine",confirmLocalProcessing:true})
     :await api("clinical-note-proposal/"+encodeURIComponent(id),"POST",{});
