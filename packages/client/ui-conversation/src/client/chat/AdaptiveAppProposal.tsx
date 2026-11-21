@@ -54,7 +54,9 @@ export function AdaptiveAppProposal({ spec, onAction }: {
     return () => window.removeEventListener('phoenix:adaptive-app-install-result', onResult)
   }, [])
   const install = (): void => {
-    const requestId = crypto.randomUUID()
+    // The ID correlates UI acknowledgement only; it is not an auth token.
+    const requestId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID() : `app-${Date.now()}-${Math.random().toString(36).slice(2)}`
     request.current = requestId
     setResult('pending')
     window.dispatchEvent(new CustomEvent('phoenix:adaptive-app-install', {
