@@ -342,7 +342,7 @@ export function AppFrame({
         <CenterColumn>
           <div className={css.appLauncher}>
             <button type="button" className={css.appLauncherButton} aria-label="Aplicaciones PHOENIX" aria-expanded={appMenuOpen} onClick={() => setAppMenuOpen(open => !open)}>
-              <span aria-hidden="true">▦</span> {adaptiveApp === 'healthia' ? 'Healthia' : 'Apps'}
+              <span aria-hidden="true">▦</span> {adaptiveApp === 'general' ? 'Apps / Espacios' : adaptiveApp === 'healthia' ? 'Healthia / Apps' : 'Apps / Espacios'}
             </button>
             {appMenuOpen && <div className={css.appLauncherMenu} role="menu" aria-label="Aplicaciones instaladas">
               <button type="button" role="menuitem" onClick={() => { setAdaptiveApp('general'); setAppMenuOpen(false) }}>PHOENIX · General</button>
