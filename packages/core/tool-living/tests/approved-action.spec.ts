@@ -30,6 +30,7 @@ describe('one-time external tool approval', () => {
     expect(await confirmAdaptiveExternalAction({...sample,ask:{ask}})).toBe(true)
     expect(ask).toHaveBeenCalledOnce()
     const sent=ask.mock.calls[0]?.[0]
+    if(sent===undefined)throw new Error('Se esperaba una pregunta de autorización')
     expect(sent.questions[0]?.sensitive).toBe(true)
     expect(sent.questions[0]?.detail).toContain('{"quantity":2}')
     expect(sent.questions[0]?.options[0]?.recommended).toBe(true)
