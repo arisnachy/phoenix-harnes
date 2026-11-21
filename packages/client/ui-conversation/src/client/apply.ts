@@ -24,7 +24,7 @@ import type { IConversation } from './service.ts'
 import { ComposerBlockRegistry } from './input/blocks.ts'
 import type { ComposerBlock } from './input/blocks.ts'
 import { InputHub } from './input/hub.ts'
-import { ADAPTIVE_MISSION_EVENT, isAdaptiveMissionEvent, isAdaptiveFormMissionEvent, newAdaptiveFormMission, startAdaptiveAppConversation } from './adaptive-app-mission.ts'
+import { ADAPTIVE_MISSION_EVENT, isAdaptiveMissionEvent, isAdaptiveFormInspection, formatAdaptiveInspection, isAdaptiveFormMissionEvent, newAdaptiveFormMission, startAdaptiveAppConversation } from './adaptive-app-mission.ts'
 import { ComposerSubmissionPolicy } from './input/submission-policy.ts'
 import { InputBar } from './skeleton/InputBar.tsx'
 import { EnterBehaviorRow } from './settings/EnterBehaviorRow.tsx'
@@ -314,11 +314,33 @@ export function apply(ctx: Context): void {
       launch(newAdaptiveFormMission(detail.appId, detail.sectionId))
     }
     window.addEventListener(ADAPTIVE_MISSION_EVENT, onNewApp)
+    const onInspectForm = (event: Event): void => {
+      const detail = (event as CustomEvent<unknown>).detail
+      if (!isAdaptiveFormInspection(detail)) return
+      const id = sessions.list.getSnapshot().current
+      if (id === undefined) {
+        // Without a selected chat there is no safe composer to overwrite.
+        window.dispatchEvent(new Event('phoenix:adaptive-app-mission-failed'))
+        return
+      }
+      try {
+        const shell = inputHub.shell(id)
+        if (shell.snapshot.draft.trim() || shell.snapshot.imageIds.length) {
+          shell.notify('info', 'Tu mensaje sin enviar permanece intacto. Envía o borra el borrador antes de compartir la estructura.')
+          return
+        }
+        shell.actions.setDraft(formatAdaptiveInspection(detail))
+      } catch {
+        window.dispatchEvent(new Event('phoenix:adaptive-app-mission-failed'))
+      }
+    }
+    window.addEventListener('phoenix:adaptive-form-inspect', onInspectForm)
     window.addEventListener('phoenix:adaptive-form-mission', onForm)
     return () => {
       disposed = true
       window.removeEventListener(ADAPTIVE_MISSION_EVENT, onNewApp)
       window.removeEventListener('phoenix:adaptive-form-mission', onForm)
+      window.removeEventListener('phoenix:adaptive-form-inspect', onInspectForm)
     }
   }, 'ui-conversation: adaptive app and form chat missions')
 
