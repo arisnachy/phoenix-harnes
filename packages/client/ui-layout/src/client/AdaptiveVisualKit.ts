@@ -25,6 +25,10 @@ export interface VisualBoard {
   readonly widgets: readonly VisualWidget[]
 }
 export type VisualOperation = 'add-widget'|'remove-widget'|'rename-widget'|'move-widget'|'set-widget-span'
+export function isVisualOperation(value:unknown):value is VisualOperation {
+  return value==='add-widget'||value==='remove-widget'||value==='rename-widget'
+    ||value==='move-widget'||value==='set-widget-span'
+}
 export interface VisualCommand {
   readonly appId: string
   readonly sectionId: string
