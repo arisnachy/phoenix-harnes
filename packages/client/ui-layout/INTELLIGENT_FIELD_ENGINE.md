@@ -23,14 +23,9 @@ The authenticated clinical console /health uses its existing encrypted record st
 - The returned model text is UNVERIFIED, with warnings for numerical values absent from its input. The professional verifies the before/after and either discards the suggestion or copies it into the local SOAP editor. The existing save, review and signature workflow remains mandatory. A signed note cannot be changed by this feature.
 - Loopback is not a guarantee against an Ollama model delegating to cloud. The operator is responsible for vetting the local model, prompts/log retention and clinic policies; cloud-tagged model names are rejected.
 
-PowerShell session running the PHOENIX Host:
+No PowerShell or environment-variable activation is required. Within the signed-in Healthia SOAP editor, PHOENIX checks http://127.0.0.1:11434/api/tags for a **pre-installed local text model**. If one is available, the clinician can authorize that single processing request from the interface. Without a model, the protected deterministic HEA proposal remains available. PHOENIX must never silently install a model, upload patient data, or sign the clinical note.
 
-    ollama list
-    $env:PHOENIX_HEALTH_LOCAL_AI_ENABLED="1"
-    $env:PHOENIX_HEALTH_LOCAL_AI_MODEL="<exact-local-model-name>"
-    pnpm phoenix
-
-Replace the placeholder with an actual locally installed and approved Ollama model. These variables are opt-in. To disable, unset PHOENIX_HEALTH_LOCAL_AI_ENABLED or set it to 0. Never use real patient data without adequate authorization, privacy impact review and clinical validation.
+Patient portal invitations, confidential data exchange, and privileged Windows recovery remain governed by their existing permission rules; eliminating a command-line toggle does not remove clinical consent or operating-system authorization.
 
 ## Validation and safeguards
 
