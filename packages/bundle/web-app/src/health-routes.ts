@@ -131,11 +131,11 @@ export function registerHealthRoutes(ctx:Context):void {
   let clinicStore:HealthClinicStore|undefined
   const getStore=():HealthClinicStore=>clinicStore??=new HealthClinicStore(dshHomePath('health','clinic.sqlite'))
   const failures=new Map<string,{ count:number;until:number }>()
-  const patientPortal=createPatientPortalHandler(store)
   const route=ctx.webServer.register({ kind:'prefix',path:'/health',handler:async(req,res)=>{
     if(!peer(req)){reply(res,403,{ error:'Acceso local requerido' });return}
     // Authenticated clinical methods still require login, session and CSRF.
     const store=getStore()
+    const patientPortal=createPatientPortalHandler(store)
     // On a shared browser, opening the patient portal invalidates any
     // professional login token. Patient mode must never inherit clinician rights.
     const pathForIsolation=new URL(req.url??'/','http://127.0.0.1').pathname
