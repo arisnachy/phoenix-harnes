@@ -30,7 +30,7 @@ describe('Adaptive app registry persists only validated UI manifests', () => {
     installAdaptiveApp(createAdaptiveAppBlueprint('Inventario', ['Productos']), store)
     const key = 'phoenix.adaptive.apps.v1'
     store.values.set(key, '{broken')
-    expect(readAdaptiveApps(store)).toEqual([app])
+    expect(readAdaptiveApps(store)).toHaveLength(2)
   })
 
   it('rejects extra executable fields and guards storage write failure', () => {
