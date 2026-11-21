@@ -31,6 +31,22 @@ App Studio's creation entry is a real conversation mission: the UI emits only `{
 
 The `reviewAdaptiveChangePlan` function classifies candidate paths as isolated extension, elevated harness review or blocked secret/clinical content. It returns `authorized:false` and `mayApply:false` for every plan. The policy is *preflight only*, not an approval verifier or rollback runner. Real self-modification requires a dedicated privileged supervisor with verified immutable starting commit, isolated worktree, clinical boundary checks, synthetics, required CI, explicit promotion, durable checkpoint and tested rollback. A broken adaptive UI remains isolated behind a React error boundary; returning to General leaves the conversation mounted.
 
+## Operational second slice (unmerged until CI passes)
+
+- `adaptive_app` proposals are validated inside the existing generative UI renderer. A human button starts local-only manifest installation; browser storage preserves bounded application names and sections plus a last-good snapshot. No executable code, URLs or credentials are stored.
+- `adaptive_form` proposals declare fields, types, destinations and output styles. The user approves an atomic, versioned schema-only change to a previously installed generic app section. Unknown keys, medical-app IDs, uninstalled targets and over-limit fields are rejected.
+- Local generic form values are view-only and discarded on unmount. Do not use this preliminary store for patient data, billing, account secrets or regulated records. Healthia clinical forms and patient records remain under `/health` authentication.
+- App Studio's chat mission runs in a normal Host session with Kira and existing selected model, using actual tools rather than a second assistant.
+- The core harness is never self-modified by these client events. `reviewAdaptiveChangePlan` is fail-closed and cannot authorize or apply code changes. A future supervisor must enforce authenticated approval, isolated staging, test gates and rollback.
+
+### Verification commands
+
+`node --test scripts/phoenix-healthia-exchange-contract.test.mjs scripts/phoenix-adaptive-self-model.test.mjs scripts/phoenix-adaptive-change-policy.test.mjs`
+
+`pnpm exec vitest run packages/client/ui-layout/tests/adaptive-form-store.client.spec.ts packages/client/ui-layout/tests/adaptive-app-registry.client.spec.ts packages/client/ui-layout/tests/app-frame.client.spec.tsx packages/client/ui-conversation/tests/adaptive-app-proposal.client.spec.tsx packages/client/ui-conversation/tests/adaptive-form-proposal.client.spec.tsx packages/client/ui-conversation/tests/adaptive-app-mission.client.spec.ts`
+
+Client typecheck, package purity gate, Windows build and secret scanning are required before any merge.
+
 ## Next operational integration
 
 The next phase must connect the live self-model to a host-controlled capability registry that reports health, version, permission scope and actual runtime availability; add an approved manifest-driven persistent app registry, a signed action dispatcher, and an isolated change transaction. Clinical Healthia form publishing must use its protected backend and never mirror patient values into the ordinary chat. Images generated during visual planning are proposals, not verified implementation.
