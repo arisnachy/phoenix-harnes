@@ -17,7 +17,8 @@ import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAU
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
 import { HealthiaWorkspace, HEALTHIA_NAV, type HealthiaRole } from './HealthiaWorkspace.tsx'
-import { ADAPTIVE_APP_PRESETS, type AdaptiveAppBlueprint } from './AdaptiveAppCatalog.ts'
+import { ADAPTIVE_APP_PRESETS, createAdaptiveAppBlueprint, type AdaptiveAppBlueprint } from './AdaptiveAppCatalog.ts'
+import { installAdaptiveApp, readAdaptiveApps } from './AdaptiveAppRegistry.ts'
 import { AdaptiveAppPreview } from './AdaptiveAppPreview.tsx'
 import type { AdaptiveLiveSnapshot } from './AdaptiveLiveSlots.ts'
 
@@ -172,7 +173,7 @@ export function AppFrame({
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState(() => window.innerWidth)
   const [adaptiveApp, setAdaptiveApp] = useState<string>('general')
-  const [customApps, setCustomApps] = useState<readonly AdaptiveAppBlueprint[]>([])
+  const [customApps, setCustomApps] = useState<readonly AdaptiveAppBlueprint[]>(readAdaptiveApps)
   const [customSection, setCustomSection] = useState('overview')
   const activeBlueprint = customApps.find(app => app.id === adaptiveApp)
   const launchAppMission = (): void => {
@@ -188,6 +189,37 @@ export function AppFrame({
   const [healthiaSection, setHealthiaSection] = useState('overview')
   const [appMenuOpen, setAppMenuOpen] = useState(false)
   const [missionError, setMissionError] = useState(false)
+  // The model may propose a structure; only a user-clicked, bounded app
+  // proposal can reach this configuration-only installation handler.
+  useEffect(() => {
+    const onInstall = (event: Event): void => {
+      const detail = (event as CustomEvent<unknown>).detail
+      if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return
+      const proposal = detail as Record<string, unknown>
+      if (Object.keys(proposal).some(key => !['requestId','title','sections'].includes(key))
+        || typeof proposal.requestId !== 'string' || proposal.requestId.length > 80
+        || typeof proposal.title !== 'string' || !Array.isArray(proposal.sections)
+        || proposal.sections.some(section => typeof section !== 'string')) return
+      let ok = false
+      try {
+        const blueprint = createAdaptiveAppBlueprint(proposal.title, proposal.sections)
+        const installed = installAdaptiveApp(blueprint)
+        setCustomApps(installed)
+        setAdaptiveApp(blueprint.id)
+        setCustomSection(blueprint.sections[0].id)
+        setAppMenuOpen(false)
+        ok = true
+      } catch {
+        // Storage unavailable, duplicate, malicious manifest or invalid name.
+        // Never modify the active workspace on failure.
+      }
+      window.dispatchEvent(new CustomEvent('phoenix:adaptive-app-install-result', {
+        detail: { requestId: proposal.requestId, ok },
+      }))
+    }
+    window.addEventListener('phoenix:adaptive-app-install', onInstall)
+    return () => window.removeEventListener('phoenix:adaptive-app-install', onInstall)
+  }, [])
   useEffect(() => {
     const onFailure = (): void => { setMissionError(true) }
     window.addEventListener('phoenix:adaptive-app-mission-failed', onFailure)
