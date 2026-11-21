@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { addBrowserCards, groupActiveBrowserFlow, isAtActivityTail, isBrowserPrompt, isEmbeddedNavigationTool, visibleResearchSourceUrl, isSecureAskDismissed, setSecureAskDismissed } from '../src/client/chat/ToolActivityFlow.tsx'
+import { describe, expect, it, vi } from 'vitest'
+import { addBrowserCards, releaseMiniBrowserSession, groupActiveBrowserFlow, isAtActivityTail, isBrowserPrompt, isEmbeddedNavigationTool, visibleResearchSourceUrl, isSecureAskDismissed, setSecureAskDismissed } from '../src/client/chat/ToolActivityFlow.tsx'
 
 type BrowserFlowNode = { key: string; kind: string; data: unknown }
 const user = (key: string, text: string): BrowserFlowNode => ({
@@ -225,5 +225,23 @@ describe('Secure Ask dismissal persists per conversation and website', () => {
     expect(isSecureAskDismissed(session + '-other', origin)).toBe(false)
     setSecureAskDismissed(session, origin, false)
     expect(isSecureAskDismissed(session, origin)).toBe(false)
+  })
+})
+
+describe('Smart Browser lifecycle and cleanup',()=>{
+  it('ends only the specified conversation-owned Chromium session after completion',async()=>{
+    const calls:Array<{url:string;type:string;sessionId:string}>=[]
+    const original=globalThis.fetch
+    try{
+      vi.stubGlobal('fetch',vi.fn(async(input:string,init?:RequestInit)=>{
+        const body=JSON.parse(String(init?.body)) as {type:string;sessionId:string}
+        calls.push({url:String(input),...body})
+        return new Response(JSON.stringify({available:false,tabs:[]}),{status:200})
+      }))
+      expect(await releaseMiniBrowserSession('conversation-1')).toBe(true)
+      expect(calls).toEqual([{url:'/phoenix-mini-browser/action',type:'release-session',sessionId:'conversation-1'}])
+      expect(await releaseMiniBrowserSession('../../../foreign')).toBe(false)
+      expect(calls).toHaveLength(1)
+    }finally{vi.stubGlobal('fetch',original);vi.unstubAllGlobals()}
   })
 })
