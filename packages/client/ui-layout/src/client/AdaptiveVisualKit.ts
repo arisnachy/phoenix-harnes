@@ -1,12 +1,12 @@
 /** PHOENIX App Studio visual contracts: metadata only; no executable UI or patient data. */
 export const VISUAL_KINDS = {
   metric: { label: 'Indicador', description: 'KPI y estado', icon: 'activity' },
-  card: { label: 'Tarjeta', description: 'Resumen y acciones', icon: 'layout-dashboard' },
-  avatar: { label: 'Avatar', description: 'Identidad de perfil', icon: 'user-round' },
-  table: { label: 'Tabla', description: 'Registros y filtros', icon: 'table-2' },
-  chart: { label: 'Gráfica', description: 'Visualización analítica', icon: 'chart-column' },
-  calendar: { label: 'Calendario', description: 'Agenda y fechas', icon: 'calendar-days' },
-  timeline: { label: 'Secuencia', description: 'Flujo y etapas', icon: 'git-commit-horizontal' },
+  card: { label: 'Tarjeta', description: 'Resumen y acciones', icon: 'file' },
+  avatar: { label: 'Avatar', description: 'Identidad de perfil', icon: 'user' },
+  table: { label: 'Tabla', description: 'Registros y filtros', icon: 'table' },
+  chart: { label: 'Gráfica', description: 'Visualización analítica', icon: 'chart' },
+  calendar: { label: 'Calendario', description: 'Agenda y fechas', icon: 'calendar' },
+  timeline: { label: 'Secuencia', description: 'Flujo y etapas', icon: 'clock' },
   alert: { label: 'Aviso', description: 'Estados y mensajes', icon: 'info' },
 } as const
 export type VisualKind = keyof typeof VISUAL_KINDS
