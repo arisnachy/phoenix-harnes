@@ -82,10 +82,9 @@ export function describeAdaptiveApp(id: string): AdaptiveAppPreset | undefined {
 
 /** No dynamic execution: a binding is metadata until an authorized adapter exists. */
 export function isBindingConnected(binding: AdaptiveFieldBinding, capabilities: readonly AdaptiveCapability[]): boolean {
-  return binding.destination === 'local' || (
-    binding.capabilityId !== undefined
-    && capabilities.some(cap => cap.id === binding.capabilityId && cap.state === 'ui-ready' && !cap.sensitive)
-    && false // No remote/API/chat/AI executor is installed by this first slice.
+  return binding.destination === 'local' && (
+    binding.capabilityId === undefined
+    || capabilities.some(cap => cap.id === binding.capabilityId && cap.state === 'ui-ready' && !cap.sensitive)
   )
 }
 
