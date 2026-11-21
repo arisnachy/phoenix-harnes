@@ -54,6 +54,8 @@
     "duplication": "jscpd --config .jscpd.json packages scripts",
     "test": "vitest run",
     "test:healthia:exchange": "node --test scripts/phoenix-healthia-exchange-contract.test.mjs",
+    "adaptive:inspect": "node scripts/phoenix-adaptive-self-model.mjs --json",
+    "test:adaptive:self": "node --test scripts/phoenix-adaptive-self-model.test.mjs",
     "test:sandbox": "node scripts/test-sandbox.mjs",
     "quality:plan": "node scripts/phoenix-assurance.mjs plan",
     "quality:doctor": "node scripts/phoenix-assurance.mjs doctor",
