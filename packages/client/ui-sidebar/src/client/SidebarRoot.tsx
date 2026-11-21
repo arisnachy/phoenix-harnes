@@ -24,8 +24,8 @@ import { TaskCenter } from './TaskCenter.tsx'
 import css from './SidebarRoot.module.css'
 // Keep runtime navigation local to the sidebar plugin (client bundle purity).
 const HEALTHIA_NAV = {
-  doctor: [{id:'overview',label:'Inicio clínico'},{id:'patients',label:'Pacientes'},{id:'encounters',label:'Consultas'},{id:'records',label:'Historia clínica'},{id:'prescriptions',label:'Recetas e informes'},{id:'forms',label:'Formularios'},{id:'exchange',label:'Intercambios'}],
-  patient: [{id:'overview',label:'Mi espacio'},{id:'appointments',label:'Citas'},{id:'records',label:'Mi expediente'},{id:'documents',label:'Documentos'},{id:'consent',label:'Autorizaciones'},{id:'exchange',label:'Compartir con mi médico'}],
+  doctor: [{id:'overview',label:'Inicio clínico'},{id:'patients',label:'Pacientes'},{id:'encounters',label:'Consultas'},{id:'records',label:'Historia clínica'},{id:'prescriptions',label:'Recetas e informes'},{id:'forms',label:'Formularios'},{id:'capabilities',label:'Capacidades'},{id:'exchange',label:'Intercambios'}],
+  patient: [{id:'overview',label:'Mi espacio'},{id:'appointments',label:'Citas'},{id:'records',label:'Mi expediente'},{id:'documents',label:'Documentos'},{id:'consent',label:'Autorizaciones'},{id:'capabilities',label:'Capacidades'},{id:'exchange',label:'Compartir con mi médico'}],
 } as const
 
 /**
