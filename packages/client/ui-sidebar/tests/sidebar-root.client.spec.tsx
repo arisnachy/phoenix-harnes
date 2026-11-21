@@ -237,4 +237,29 @@ describe('SidebarRoot shell', () => {
     expect(b.regionOwner().wide).toBe(false)
     expect(screen.getByRole('button', { name: 'Open sidebar' })).toBeTruthy()
   })
+  it('keeps custom adaptive app identity when selecting a section and returns to General', () => {
+    mountShell()
+    const navigations: Array<{ app: string; role: string; section: string }> = []
+    const onNavigate = (event: Event) => {
+      navigations.push((event as CustomEvent<{ app: string; role: string; section: string }>).detail)
+    }
+    window.addEventListener('phoenix:adaptive-workspace', onNavigate)
+    try {
+      act(() => window.dispatchEvent(new CustomEvent('phoenix:adaptive-workspace-state', {
+        detail: {
+          app: 'inventory',
+          role: 'doctor',
+          section: 'overview',
+          sections: [{ id: 'stock', label: 'Stock' }],
+        },
+      })))
+      fireEvent.click(screen.getByRole('button', { name: 'Stock' }))
+      expect(navigations.at(-1)).toEqual({ app: 'inventory', role: 'doctor', section: 'stock' })
+      fireEvent.click(screen.getByRole('button', { name: 'Volver a PHOENIX General' }))
+      expect(navigations.at(-1)?.app).toBe('general')
+    } finally {
+      window.removeEventListener('phoenix:adaptive-workspace', onNavigate)
+    }
+  })
+
 })
