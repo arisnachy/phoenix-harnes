@@ -493,7 +493,10 @@ export function apply(ctx: Context): void {
       let input
       try {input=parseInput(args.input_json)}
       catch {return denied('INVALID_JSON')}
-      const provider=(ctx as unknown as {get(name:string):unknown}).get('userQuestions') as AdaptiveApprovalService|undefined
+      let provider:AdaptiveApprovalService|undefined
+      try {
+        provider=(ctx as unknown as {get(name:string):unknown}).get('userQuestions') as AdaptiveApprovalService|undefined
+      } catch { return denied('HUMAN_APPROVAL_NOT_AVAILABLE') }
       const approved=await confirmAdaptiveExternalAction({
         ask:provider,creationId:args.id,action:args.action,
         inputJson:args.input_json,agent:exec.agent,signal:exec.signal,
