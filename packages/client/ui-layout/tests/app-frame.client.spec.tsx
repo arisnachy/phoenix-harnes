@@ -216,6 +216,60 @@ describe('AppFrame', () => {
     }
   })
 
+  it('checks and applies chat-controlled palette, menu and metadata search without touching General', () => {
+    const keys = [
+      'phoenix.adaptive.apps.v1','phoenix.adaptive.apps.last-good.v1',
+      'phoenix.adaptive.theme.v1',
+    ]
+    keys.forEach(key => localStorage.removeItem(key))
+    const responses: Array<{requestId:string;phase:string;ok:boolean}> = []
+    const onReply = (event:Event) => { responses.push((event as CustomEvent).detail) }
+    window.addEventListener('phoenix:adaptive-control-result',onReply)
+    try {
+      const view = mountFrame()
+      fireEvent(window,new CustomEvent('phoenix:adaptive-app-install',{detail:{
+        requestId:'created',title:'Mi inventario',sections:['Productos'],
+      }}))
+      expect(view.getByRole('region',{name:'Aplicación adaptable: Mi inventario'})).toBeTruthy()
+      const command = {appId:'app-mi-inventario',operation:'palette',palette:'ocean'}
+      fireEvent(window,new CustomEvent('phoenix:adaptive-control-request',{detail:{
+        requestId:'check-color',phase:'preflight',command,
+      }}))
+      expect(responses.at(-1)).toMatchObject({requestId:'check-color',phase:'preflight',ok:true})
+      expect(view.container.querySelector('[data-app-palette="pearl"]')).toBeTruthy()
+      fireEvent(window,new CustomEvent('phoenix:adaptive-control-request',{detail:{
+        requestId:'change-color',phase:'apply',command,
+      }}))
+      expect(responses.at(-1)).toMatchObject({requestId:'change-color',phase:'apply',ok:true})
+      expect(view.container.querySelector('[data-app-palette="ocean"]')).toBeTruthy()
+      fireEvent(window,new CustomEvent('phoenix:adaptive-control-request',{detail:{
+        requestId:'add-menu',phase:'apply',command:{
+          appId:'app-mi-inventario',operation:'add-section',label:'Proveedores',
+        },
+      }}))
+      expect(responses.at(-1)).toMatchObject({requestId:'add-menu',ok:true})
+      expect(view.getByRole('button',{name:'Proveedores'})).toBeTruthy()
+      fireEvent(window,new CustomEvent('phoenix:adaptive-control-request',{detail:{
+        requestId:'search-menu',phase:'apply',command:{
+          appId:'general',operation:'find',query:'Proveedores',
+        },
+      }}))
+      expect(responses.at(-1)).toMatchObject({requestId:'search-menu',ok:true})
+      expect(view.getByLabelText('Búsqueda en aplicaciones')).toBeTruthy()
+      fireEvent(window,new CustomEvent('phoenix:adaptive-control-request',{detail:{
+        requestId:'back-general',phase:'apply',command:{
+          appId:'general',operation:'open',
+        },
+      }}))
+      expect(responses.at(-1)).toMatchObject({requestId:'back-general',ok:true})
+      expect(view.queryByRole('region',{name:'Aplicación adaptable: Mi inventario'})).toBeNull()
+      expect(view.getByTestId('center-content')).toBeTruthy()
+    } finally {
+      window.removeEventListener('phoenix:adaptive-control-result',onReply)
+      keys.forEach(key => localStorage.removeItem(key))
+    }
+  })
+
   it('renders three tracks from store state', () => {
     const { frame } = mountFrame()
     expect(tracks(frame)).toEqual([SIDEBAR_DEFAULT, 0])
