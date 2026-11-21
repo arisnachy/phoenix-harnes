@@ -699,3 +699,14 @@
 @media (prefers-reduced-motion: reduce) {
   .collapsed .navLink { transition: none; }
 }
+
+/* Mode-aware clinical navigation: no global sidebar changes when Healthia closes. */
+.healthiaNavigation .navLink:first-child {background:transparent!important;color:var(--dsw-alias-label-primary)!important;font-weight:450!important;}
+.healthiaNavigation .navLink[aria-current="page"] {background:var(--phoenix-side-peach)!important;color:var(--phoenix-side-ember)!important;font-weight:650!important;}
+.healthiaNavigation .navLink[aria-current="page"] svg {color:var(--phoenix-side-ember)!important;}
+.healthiaRegion {padding:14px 8px; color:var(--dsw-alias-label-secondary); font-size:12px;line-height:1.5;}
+.healthiaRegion strong {display:block;margin-bottom:9px;font-size:11px;letter-spacing:.08em;}
+.healthiaRoles {display:flex;gap:8px;}
+.healthiaRoles button {border:1px solid var(--phoenix-side-outline);border-radius:9px;background:transparent;color:inherit;padding:7px 10px;cursor:pointer;}
+.healthiaRoles button[aria-pressed="true"] {background:var(--phoenix-side-peach);color:var(--phoenix-side-ember);font-weight:650;}
+.healthiaRegion p {line-height:1.6;}
