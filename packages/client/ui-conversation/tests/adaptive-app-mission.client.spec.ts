@@ -51,7 +51,7 @@ describe('App Studio conversation mission', () => {
       apps:[{id:'app-farmacia',title:'Farmacia',sections:[{id:'productos',label:'Productos'}]}],
       declared:[{id:'general',label:'PHOENIX · General',readiness:'shell-ready' as const},
         {id:'inventory',label:'Inventario · Plantilla',readiness:'preview-only' as const}],
-      slots:[{id:'conversation',state:'registered'},{id:'sidebar',state:'registered'}],
+      slots:[{id:'conversation',state:'registered' as const},{id:'sidebar',state:'registered' as const}],
     }
     expect(isAdaptiveWorkspaceInspection(inventory)).toBe(true)
     expect(isAdaptiveWorkspaceInspection({...inventory,authToken:'SECRET'})).toBe(false)
