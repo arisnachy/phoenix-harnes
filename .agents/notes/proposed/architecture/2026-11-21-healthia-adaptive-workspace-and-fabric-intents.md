@@ -47,6 +47,14 @@ The `reviewAdaptiveChangePlan` function classifies candidate paths as isolated e
 
 Client typecheck, package purity gate, Windows build and secret scanning are required before any merge.
 
+## Conversational own-state controls and recovery
+
+App Studio now has a validated `adaptive_control` chat-card contract. The supported actions are deliberately bounded to opening generic app sections, querying non-sensitive app metadata, adding/renaming/hiding sections, changing schema-only field bindings and labels, and applying one of five hand-authored palettes. Search does not index clinical records or user-entered form values. Every mutation is revalidated at the layout plugin against current installed app and form revision after the user reviews preflight and explicitly clicks Apply. These UI events never confer external API/clinical permissions.
+
+A generic form offers «Compartir estructura con Kira» as an explicit action: it creates a draft in the active conversation containing the installed app ID, section ID, form revision, and bounded field metadata, never response values. Existing unsent drafts are not overwritten. The user can send it to enable accurate grounded change proposals.
+
+The browser registry now preserves a validated pre-change configuration snapshot as well as its last-good snapshot. If the adaptive surface repeatedly crashes, it attempts restoring previous app/structural-form snapshots and returns to General without touching Host/runtime files, PHI, credentials or conversation content. This is **UI-level recovery only**: detection/restart of a dead PHOENIX Host, ACID file/DB migrations, health probes, canary rollout and rollback of actual installed code remain pending for the privileged supervisor.
+
 ## Next operational integration
 
 The next phase must connect the live self-model to a host-controlled capability registry that reports health, version, permission scope and actual runtime availability; add an approved manifest-driven persistent app registry, a signed action dispatcher, and an isolated change transaction. Clinical Healthia form publishing must use its protected backend and never mirror patient values into the ordinary chat. Images generated during visual planning are proposals, not verified implementation.
