@@ -53,21 +53,33 @@ export function SidebarRoot({
   // The old 150ms settle timer blocked the rail and retained costly wide rows.
   const wide = !collapsed
   const [tasksOpen, setTasksOpen] = useState(false)
-  const [adaptive, setAdaptive] = useState<{ app: 'general' | 'healthia'; role: 'doctor' | 'patient'; section: string }>({ app: 'general', role: 'doctor', section: 'overview' })
+  const [adaptive, setAdaptive] = useState<{
+    app: string; role: 'doctor' | 'patient'; section: string
+    title?: string; sections: readonly { id: string; label: string }[]
+  }>({ app: 'general', role: 'doctor', section: 'overview', sections: [] })
   useEffect(() => {
     const onState = (event: Event): void => {
-      const detail = (event as CustomEvent<{ app?: string; role?: string; section?: string }>).detail
-      if (!detail || (detail.app !== 'general' && detail.app !== 'healthia')) return
+      const detail = (event as CustomEvent<{ app?: string; role?: string; section?: string; title?: string; sections?: unknown }>).detail
+      if (!detail || typeof detail.app !== 'string' || !/^[a-z][a-z0-9-]{0,47}$/u.test(detail.app)) return
+      const sections = Array.isArray(detail.sections) && detail.sections.length <= 12
+        && detail.sections.every((v: unknown) => v && typeof v === 'object'
+          && typeof (v as { id?: unknown }).id === 'string'
+          && typeof (v as { label?: unknown }).label === 'string'
+          && (v as { label: string }).label.length <= 60)
+        ? detail.sections as { id: string; label: string }[]
+        : []
       setAdaptive({
         app: detail.app,
         role: detail.role === 'patient' ? 'patient' : 'doctor',
         section: typeof detail.section === 'string' ? detail.section : 'overview',
+        title: typeof detail.title === 'string' ? detail.title.slice(0, 60) : undefined,
+        sections,
       })
     }
     window.addEventListener('phoenix:adaptive-workspace-state', onState)
     return () => window.removeEventListener('phoenix:adaptive-workspace-state', onState)
   }, [])
-  const navigateAdaptive = (app: 'general' | 'healthia', role = adaptive.role, section = 'overview'): void => {
+  const navigateAdaptive = (app: string, role = adaptive.role, section = 'overview'): void => {
     window.dispatchEvent(new CustomEvent('phoenix:adaptive-workspace', { detail: { app, role, section } }))
   }
   // Navigation destinations open an actionable, focused surface — never the Settings menu.
@@ -212,12 +224,12 @@ export function SidebarRoot({
       </Tooltip>
 
       {/* Healthia replaces only the contextual menu; core actions remain in General. */}
-      {adaptive.app === 'healthia' ? (
+      {adaptive.app !== 'general' ? (
         <nav className={clsx(css.primaryNavigation, css.healthiaNavigation)} aria-label="Navegación Healthia">
           <button type="button" className={css.navLink} onClick={() => navigateAdaptive('general')} aria-label="Volver a PHOENIX General" title={!wide ? 'PHOENIX General' : undefined}>
             <IconPanelLeftOutline16 size={19} />{wide && <span>PHOENIX · General</span>}
           </button>
-          {HEALTHIA_NAV[adaptive.role].map(item => (
+          {(adaptive.app === 'healthia' ? HEALTHIA_NAV[adaptive.role] : adaptive.sections).map(item => (
             <button key={item.id} type="button" className={css.navLink} aria-current={item.id === adaptive.section ? 'page' : undefined} title={!wide ? item.label : undefined} onClick={() => navigateAdaptive('healthia', adaptive.role, item.id)}>
               <IconFolderOpenOutline16 size={19}/>{wide && <span>{item.label}</span>}
             </button>
@@ -252,14 +264,14 @@ export function SidebarRoot({
       {/* The browsing region fills the column between the controls and the
           foot in both states; its rail icon column rides the same slot. */}
       <div className={css.regionArea}>
-        {adaptive.app === 'healthia' ? (
+        {adaptive.app !== 'general' ? (
           <div className={css.healthiaRegion}>
-            {wide && <><strong>PERFIL HEALTHIA</strong>
-              <div className={css.healthiaRoles}>
+            {wide && <><strong>{adaptive.app === 'healthia' ? 'PERFIL HEALTHIA' : (adaptive.title ?? 'APP ADAPTATIVA')}</strong>
+              {adaptive.app === 'healthia' && <div className={css.healthiaRoles}>
                 <button type="button" aria-pressed={adaptive.role === 'doctor'} onClick={() => navigateAdaptive('healthia', 'doctor')}>Médico</button>
                 <button type="button" aria-pressed={adaptive.role === 'patient'} onClick={() => navigateAdaptive('healthia', 'patient')}>Paciente</button>
-              </div>
-              <p>Chat con Kira disponible. Los datos clínicos se manejan en el servicio protegido.</p>
+              </div>}
+              <p>{adaptive.app === 'healthia' ? 'Chat con Kira disponible. Los datos clínicos se manejan en el servicio protegido.' : 'Vista temporal de la aplicación. No tiene conectores ni almacenamiento habilitados.'}</p>
             </>}
           </div>
         ) : renderSlot('sidebar.workspaces', {
