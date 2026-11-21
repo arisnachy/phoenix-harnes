@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest'
+import { createElement } from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { AdaptiveFormPanel } from '../src/client/AdaptiveFormPanel.tsx'
 import { addAdaptiveField, type AdaptiveFormDraft } from '../src/client/AdaptiveAppCatalog.ts'
@@ -55,7 +56,7 @@ describe('App Studio generic form schema persistence', () => {
   })
 
   it('retains form design across remount, but never persists user-entered values', () => {
-    render(<AdaptiveFormPanel appId="app-inventario" sectionId="productos"/>)
+    render(createElement(AdaptiveFormPanel,{appId:'app-inventario',sectionId:'productos'}))
     fireEvent.change(screen.getByRole('textbox', { name: 'Nombre del nuevo campo' }), { target: { value: 'Existencias' } })
     fireEvent.change(screen.getByRole('combobox', { name: 'Tipo de entrada' }), { target: { value: 'number' } })
     fireEvent.click(screen.getByRole('button', { name: 'Añadir campo' }))
