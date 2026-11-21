@@ -4,6 +4,7 @@ import {mkdtempSync,rmSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {composeProtectedClinicalNote} from '../src/health-note-draft.ts'
+import {refineProtectedHistoryLocal} from '../src/health-clinical-local-ai.ts'
 import {HealthClinicStore} from '../src/health-store.ts'
 import {renderHealthPage} from '../src/health-ui.ts'
 
@@ -58,4 +59,40 @@ test('clinical UI keeps AI suggestions in authenticated SOAP editing flow',()=>{
   assert(html.includes('acceptClinicalNote'))
   assert(html.includes('discardClinicalNote'))
   assert(html.includes('Sin modelo IA'))
+})
+
+test('local AI refinement is opt-in, loopback-only, and cannot sign clinical records',async()=>{
+  const source=composeProtectedClinicalNote({complaint:'Seguimiento TA 138/84',answers:{onset:'Control desde 2025'},
+    history:'',exam:'',assessment:'',plan:''})
+  let calls=0
+  const mock=async(url,init)=>{
+    calls++
+    assert.equal(url,'http://127.0.0.1:11434/api/generate')
+    assert.equal(init.method,'POST')
+    assert.equal(init.redirect,'error')
+    const body=JSON.parse(init.body)
+    assert.equal(body.model,'gemma4:e2b')
+    assert.equal(body.stream,false)
+    assert.equal(body.options.temperature,0)
+    assert(!body.prompt.includes('patientId'))
+    return new Response(JSON.stringify({response:JSON.stringify({history:'Seguimiento TA 138/84. Control desde 2025.'})}),{status:200,headers:{'content-type':'application/json'}})
+  }
+  await assert.rejects(refineProtectedHistoryLocal(source,{enabled:false,model:'gemma4:e2b',fetcher:mock}),/DISABLED/)
+  assert.equal(calls,0)
+  await assert.rejects(refineProtectedHistoryLocal(source,{enabled:true,model:'https://remote.example.com',fetcher:mock}),/MODEL_NOT_CONFIGURED/)
+  assert.equal(calls,0)
+  const proposal=await refineProtectedHistoryLocal(source,{enabled:true,model:'gemma4:e2b',fetcher:mock})
+  assert.equal(calls,1)
+  assert.equal(proposal.source,'ollama-local-unverified')
+  assert.equal(proposal.reviewed,false)
+  assert.equal(proposal.canAutoSign,false)
+  assert.equal(proposal.requiresClinicianReview,true)
+  assert.deepEqual(proposal.numericWarnings,[])
+})
+test('locally generated numeric hallucinations are flagged for clinician verification',async()=>{
+  const source=composeProtectedClinicalNote({complaint:'Control 138/84',answers:{},history:'',exam:'',assessment:'',plan:''})
+  const fake=async()=>new Response(JSON.stringify({response:JSON.stringify({history:'Control 138/84. Dosis 100 mg.'})}),{status:200})
+  const result=await refineProtectedHistoryLocal(source,{enabled:true,model:'local-model:1',fetcher:fake})
+  assert(result.numericWarnings.includes('100'))
+  assert.equal(result.canAutoSign,false)
 })
