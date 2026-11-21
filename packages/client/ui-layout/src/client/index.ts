@@ -80,7 +80,13 @@ export function apply(ctx: ClientContext): void {
       inject: (actions: PanelActions) => {
         layout.attachPanels(actions)
         return {
-          inspectRuntime: () => inspectAdaptiveLiveSlots(name => ctx.slots.entries(name).length),
+          inspectRuntime: () => inspectAdaptiveLiveSlots(name => {
+            // Root layout has a narrower SlotMap. Conversation-owned child slots
+            // cannot be read through this parent registration. Report unknown
+            // as zero instead of inventing an active registration.
+            if (name === 'conversation.composer.bar' || name === 'conversation.view') return 0
+            return ctx.slots.entries(name).length
+          }),
         }
       },
     }, AppFrame)
