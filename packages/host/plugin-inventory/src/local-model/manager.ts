@@ -89,6 +89,8 @@ class RuntimeManager implements LocalModelRuntimeManager {
   private current: LocalModelRuntimeSnapshot
   private server: LocalServerHandle | undefined
   private ensureRunningPromise: Promise<string> | undefined
+  private lastOllamaCatalogRead = 0
+  private ollamaCatalogInflight: Promise<LocalModelRuntimeSnapshot> | undefined
 
   constructor(
     private readonly dependencies: LocalModelRuntimeManagerDependencies,
@@ -105,17 +107,28 @@ class RuntimeManager implements LocalModelRuntimeManager {
     return cloneSnapshot(this.current)
   }
 
-  /** Live inventory and operational capacities, not an invented static list. */
+  /** Rate-limited live inventory: avoid flooding the daemon during a model pull. */
   async refreshCatalog(): Promise<LocalModelRuntimeSnapshot> {
     if (this.dependencies.listOllamaModels === undefined) return this.snapshot()
+    if (this.ollamaCatalogInflight !== undefined) return this.ollamaCatalogInflight
+    if (Date.now() - this.lastOllamaCatalogRead < 15_000) return this.snapshot()
+    this.ollamaCatalogInflight = (async () => {
+      try {
+        const models = await this.dependencies.listOllamaModels!()
+        const ollamaInstalledModelIds = synchronizeOllamaCatalog(models)
+        this.publish({ ...this.current, ollamaInstalledModelIds })
+      } catch {
+        // Ollama may be stopped; preserve last known model configuration.
+      } finally {
+        this.lastOllamaCatalogRead = Date.now()
+      }
+      return this.snapshot()
+    })()
     try {
-      const models = await this.dependencies.listOllamaModels()
-      const ollamaInstalledModelIds = synchronizeOllamaCatalog(models)
-      this.publish({ ...this.current, ollamaInstalledModelIds })
-    } catch {
-      // Ollama may be stopped. Preserve last-known configuration and allow a retry.
+      return await this.ollamaCatalogInflight
+    } finally {
+      this.ollamaCatalogInflight = undefined
     }
-    return this.snapshot()
   }
 
   /** Probe only Ollama's local /api/show metadata, never assume named thinking levels. */
@@ -230,6 +243,7 @@ class RuntimeManager implements LocalModelRuntimeManager {
           })
           await this.dependencies.probeOllamaModel(model.ollamaModel)
         }
+        this.lastOllamaCatalogRead = 0
         await this.refreshCatalog()
         const installedModelIds = [...new Set([...this.persistent.installedModelIds, modelId])]
         await this.savePersistent({ ...this.persistent, selectedModelId: modelId, installedModelIds })
@@ -442,6 +456,7 @@ class RuntimeManager implements LocalModelRuntimeManager {
     const installedModelIds = this.persistent.installedModelIds.filter(id => id !== modelId)
     await this.savePersistent({ ...this.persistent, installedModelIds })
     forgetOllamaCandidate(modelId)
+    this.lastOllamaCatalogRead = 0
     await this.refreshCatalog()
     const phase = installedModelIds.includes(this.persistent.selectedModelId) ? 'ready' : 'not-installed'
     this.publish({ ...this.current, phase })

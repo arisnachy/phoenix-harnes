@@ -165,9 +165,16 @@ export function toNativeOllamaChat(
   // This prevents both a wasteful full 256K CPU KV cache and a silent 4K clip.
   const promptChars = JSON.stringify(messages).length
     + (Array.isArray(request['tools']) ? JSON.stringify(request['tools']).length : 0)
-  const requiredTokens = Math.ceil(promptChars / 3.5) + outputTokens + 4_608
+  const framingReserve = Math.min(4_096, Math.floor(model.contextWindow / 8))
+  const requiredTokens = Math.ceil(promptChars / 3.5) + outputTokens + framingReserve
+  if (requiredTokens > model.contextWindow) {
+    throw new NativeOllamaChatError(
+      `El turno necesita aproximadamente ${requiredTokens} tokens pero ${model.ollamaModel} tiene ${model.contextWindow} asignados. Reduce historial/herramientas o selecciona un modelo con más contexto.`,
+      413, 'local_context_exceeded',
+    )
+  }
   const adaptiveContext = Math.min(model.contextWindow, Math.max(
-    4_096, Math.ceil(requiredTokens / 4_096) * 4_096,
+    Math.min(4_096, model.contextWindow), Math.ceil(requiredTokens / 4_096) * 4_096,
   ))
   const options: Record<string, unknown> = {
     num_ctx: adaptiveContext,
