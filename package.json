@@ -201,7 +201,7 @@
     "postinstall": "node scripts/phoenix-windows-shortcut.mjs --install && node scripts/install-lefthook.mjs",
     "business:mission": "node scripts/phoenix-business-mission.mjs",
     "test:business:mission": "node --test scripts/phoenix-business-mission.test.mjs",
-    "test:healthia:note": "node --test packages/bundle/web-app/tests/health-note-draft.test.mjs"
+    "test:healthia:note": "node --test packages/bundle/web-app/tests/health-note-draft.test.mjs packages/bundle/web-app/tests/health-clinical-models.test.mjs"
   },
   "devDependencies": {
     "@agentclientprotocol/sdk": "0.25.1",
