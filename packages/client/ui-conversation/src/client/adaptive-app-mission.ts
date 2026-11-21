@@ -177,7 +177,7 @@ export function isAdaptiveWorkspaceInspection(value: unknown): value is Adaptive
   for (const raw of v.declared) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false
     const x = raw as Record<string,unknown>
-    if (!only(x,['id','label','readiness']) || !appId(x.id)
+    if (!only(x,['id','label','readiness']) || !(appId(x.id) || x.id === 'inventory')
       || !label(x.label) || !['shell-ready','preview-only'].includes(x.readiness as string)) return false
   }
   for (const raw of v.slots) {
