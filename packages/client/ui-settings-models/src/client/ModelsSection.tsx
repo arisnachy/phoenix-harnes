@@ -1,15 +1,7 @@
 /**
- * Models settings section: the provider rows joined from the configurable
- * directory, settings namespaces, and credential states, with one editor
- * card at a time. Rows expose only confirmed API-key state through accessible
- * solid configured or missing dots. A whole-section provider without a
- * configured key renders as its open setup card instead of a row, but only in
- * the first-run posture — no provider on the page can serve requests yet — and
- * only until the user closes that card; the add flow is a card carrying the
- * dormant-provider select. Each card kind owns its own open state, so closing
- * one never discards a draft in another. Every mutation writes through the
- * wire, while a provider removal first requires confirmation; the page
- * re-renders from pushed invalidations or the post-apply reload.
+ * Theme-aware Models provider catalog. Only registered account flows expose
+ * OAuth; all edits and additions use a single keyboard-accessible wizard modal.
+ * Host credential writes and runtime-managed local models remain separate.
  */
 
 import { useEffect, useState } from 'react'
@@ -104,6 +96,7 @@ function accountFlowConnected(flow: AccountFlow): boolean {
 function renderProviderEditor({ target, ...props }: ProviderEditorRenderProps): ReactNode {
   return (
     <ProviderEditor
+      key={target.provider}
       provider={target.provider}
       displayName={target.displayName}
       settingsPath={target.settingsPath}
@@ -329,8 +322,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
     ? savedTarget
     : { provider: savedRow.entry.provider, displayName: savedRow.entry.displayName }
 
-  // One fact decides both first-run postures on this page and the onboarding
-  // step: whether the user already has a provider to talk to.
+  // Configured providers remain visible in the grid; setup is opened in the wizard.
   const configured = state.rows.filter(row => row.configured)
   const filteredConfigured = configured.filter(row =>
     `${row.entry.displayName} ${row.entry.provider}`.toLocaleLowerCase()
