@@ -293,7 +293,12 @@ export function apply(ctx: Context): void {
           await startAdaptiveAppConversation({
             current: () => sessions.list.getSnapshot().current,
             workspaces: () => workspaces.list.getSnapshot(),
-            create: options => sessions.create(options),
+            create: options => {
+              const current = workspaces.list.getSnapshot()
+              const target = options.workspaceId ?? current.recentWorkspaceId ?? current.items[0]?.workspaceId
+              if (target === undefined) throw new Error('ADAPTIVE_NO_WORKSPACE_AVAILABLE')
+              return workspaces.connectWorkspace(target)
+            },
             open: id => { if (!disposed) sessions.open(id) },
             input: id => {
               if (disposed) throw new Error('ADAPTIVE_MISSION_DISPOSED')
