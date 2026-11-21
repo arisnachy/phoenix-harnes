@@ -278,6 +278,36 @@ function assertTargetReached(snapshot: LivingCreationSnapshot): void {
 export function apply(ctx: Context): void {
   ctx.systemPrompt.section({ name: 'tool:living', order: 115, text: LIVING_CREATION_POLICY })
   ctx.tools.register(defineTool({
+    name: 'system_runtime_inspect',
+    description: 'Read active PHOENIX tool registration names, available nonclinical Living connectors and declared actions (metadata only). This is live Host proprioception, not evidence of authorization, successful execution, login or system health. No manifest resources, bearer tokens, records, file paths or secret settings.',
+    parameters:{},
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    execute(){
+      const names=ctx.tools.schemas().map(schema=>schema.name)
+        .filter(name=>/^[a-z][a-z0-9_.-]{0,90}$/u.test(name)).slice(0,160)
+      const connected=ctx.living.list()
+        .filter(item=>!/(?:clinical|patient|health|medic|pacient|expediente|historia)/iu.test(item.manifest.kind))
+        .slice(0,40).map(item=>({
+          id:String(item.manifest.id),kind:item.manifest.kind.slice(0,40),
+          connected:item.connected,achieved:item.achievedLevel,
+          declaredActions:item.manifest.actions
+            .filter(name=>/^[a-z][a-z0-9_.-]{0,80}$/u.test(name)).slice(0,30),
+        }))
+      return Promise.resolve(JSON.stringify({
+        schema:'phoenix.runtime-self.v1',registeredToolNames:names,
+        livingConnectors:connected,
+        authority:'registration-only',
+        permissions:'must-check-current-tool-policy-and-user-approval',
+        authentication:'not-inspected',
+        externalExecution:'not-attempted',
+        clinicalBoundary:'never-export-patient-information-to-ordinary-chat',
+      }))
+    },
+    presentCall:()=>({card:'generic',title:'PHOENIX · Herramientas y conectores activos',kind:'read' as const}),
+  }))
+
+  ctx.tools.register(defineTool({
     name: 'system_environment_inspect',
     description: 'Read current PHOENIX Host, Windows/macOS/Linux identification, aggregate CPU/RAM/GPU, PC/laptop classification and allowlisted software/tool presence. Use only for user-requested device/OS/tool availability questions or app capability planning. Read-only; detected does NOT mean authorized, usable, healthy, or installed. No paths, secrets, serials, process lists or patient data.',
     parameters: {},
