@@ -22,9 +22,10 @@ import { appendAdaptiveSection, renameAdaptiveSection, removeAdaptiveSection, re
 import { applyAdaptiveFormFields, restorePreviousAdaptiveForms } from './AdaptiveFormMetadataStore.ts'
 import {
   parseAdaptiveControl, preflightAdaptiveControl, findAdaptiveMetadata,
-  saveAdaptivePalette, readAdaptivePalette, applyAdaptiveFieldEdit,
+  saveAdaptivePalette, readAdaptivePalette, applyAdaptiveFieldEdit, applyAdaptiveVisualEdit,
   type AdaptiveDiscovery,
 } from './AdaptiveWorkspaceControl.ts'
+import { isVisualOperation, restoreVisualBoard } from './AdaptiveVisualKit.ts'
 import { AdaptiveAppPreview } from './AdaptiveAppPreview.tsx'
 import type { AdaptiveLiveSnapshot } from './AdaptiveLiveSlots.ts'
 
@@ -260,6 +261,13 @@ export function AppFrame({
               setAdaptiveApp(app.id)
               setCustomSection(command.operation === 'remove-section' ? app.sections[0].id : command.sectionId!)
               setSearch(null)
+            } else if (isVisualOperation(command.operation)) {
+              applyAdaptiveVisualEdit(command)
+              setAdaptiveApp(command.appId)
+              setCustomSection(command.sectionId!)
+              window.dispatchEvent(new CustomEvent('phoenix:adaptive-visual-refreshed', {
+                detail:{appId:command.appId,sectionId:command.sectionId},
+              }))
             } else {
               applyAdaptiveFieldEdit(command)
               setAdaptiveApp(command.appId)
@@ -566,6 +574,7 @@ export function AppFrame({
               // credentials, model settings and PHOENIX Core are never touched.
               try { restorePreviousAdaptiveApps() } catch { /* General remains available */ }
               try { restorePreviousAdaptiveForms() } catch { /* Schema is quarantined */ }
+              if (activeBlueprint) try { restoreVisualBoard(activeBlueprint.id, customSection) } catch { /* Optional UI metadata */ }
               setCustomApps(readAdaptiveApps())
               setAdaptiveApp('general')
               setSearch(null)
