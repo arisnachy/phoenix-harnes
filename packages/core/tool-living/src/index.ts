@@ -451,8 +451,8 @@ export function apply(ctx: Context): void {
       const denied=(reason:string)=>JSON.stringify({
         status:'denied',reason,executed:false,createdNewAuthorization:false,
       })
-      if (args.input_json.length > 2000 || !/^[\\w.-]{1,80}$/u.test(args.action)
-        || !/^[\\w.-]{1,80}$/u.test(args.id)) return denied('INVALID_REQUEST')
+      if (args.input_json.length > 2000 || !/^[\w.-]{1,80}$/u.test(args.action)
+        || !/^[\w.-]{1,80}$/u.test(args.id)) return denied('INVALID_REQUEST')
       let snapshot
       try {snapshot=ctx.living.inspect(LivingCreationId(args.id))}
       catch {return denied('UNKNOWN_CREATION')}
@@ -479,7 +479,7 @@ export function apply(ctx: Context): void {
         return JSON.stringify({status:'executed',executed:true,creationId:args.id,
           action:args.action,result_json:JSON.stringify(result)})
       } catch {
-        return JSON.stringify({status:'error',executed:false,reason:'CONNECTOR_EXECUTION_FAILED'})
+        return JSON.stringify({status:'unknown-outcome',executed:'unconfirmed',reason:'CONNECTOR_EXECUTION_FAILED_CHECK_PROVIDER_BEFORE_RETRY'})
       }
     },
     presentCall:args=>({card:'generic',title:`PHOENIX · Acción aprobada: ${args.action}`,kind:'execute' as const}),
