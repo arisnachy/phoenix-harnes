@@ -30,6 +30,16 @@ describe('chat-proposed UI self-change', () => {
     expect(parseAdaptiveWorkspaceProposal({...command,props:{...command.props,appId:'healthia'}})).toBeNull()
     expect(parseAdaptiveWorkspaceProposal({...command,props:{...command.props,expectedRevision:-1}})).toBeNull()
   })
+  it('validates versioned field AI configuration separately from actual execution',()=>{
+    const proposal={component:'adaptive_control',version:1,props:{
+      appId:'app-inventario',sectionId:'inicio',fieldId:'field-1',operation:'set-field-ai',
+      expectedRevision:0,enabled:true,skill:'polish',instruction:'Conservar cifras.'
+    }}
+    expect(parseAdaptiveWorkspaceProposal(proposal)?.props.operation).toBe('set-field-ai')
+    expect(parseAdaptiveWorkspaceProposal({...proposal,props:{...proposal.props,skill:'execute-code'}})).toBeNull()
+    expect(parseAdaptiveWorkspaceProposal({...proposal,props:{...proposal.props,appId:'healthia'}})).toBeNull()
+    expect(parseAdaptiveWorkspaceProposal({...proposal,props:{...proposal.props,instruction:'<iframe>'}})).toBeNull()
+  })
   it('requires a successful preflight and another explicit click before applying', () => {
     const spec = parseAdaptiveWorkspaceProposal(valid())!
     const events: unknown[] = []
