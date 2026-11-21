@@ -62,3 +62,35 @@ export async function refineProtectedHistoryLocal(
     suggestedHistory:output.history,numericWarnings,requiresClinicianReview:true,
     reviewed:false,canAutoSign:false}
 }
+
+/** Discover one already-installed loopback model without CLI or setup flags.
+ * This is *not* permission to process an encounter; confirmation is separate.
+ */
+export async function discoverProtectedLocalAiModel(
+  fetcher:Fetcher=fetch,
+):Promise<{available:boolean;model:string|null;reason:'ready'|'no-service'|'no-local-model'}>{
+  let response:Response
+  try{
+    response=await fetcher('http://127.0.0.1:11434/api/tags',{
+      method:'GET',headers:{accept:'application/json'},
+      signal:AbortSignal.timeout(3500),redirect:'error',
+    })
+  }catch{return {available:false,model:null,reason:'no-service'}}
+  if(!response.ok)return {available:false,model:null,reason:'no-service'}
+  let value:unknown
+  try{value=await response.json()}catch{return {available:false,model:null,reason:'no-service'}}
+  if(!value||typeof value!=='object'||Array.isArray(value))return {available:false,model:null,reason:'no-service'}
+  const models=(value as {models?:unknown}).models
+  if(!Array.isArray(models))return {available:false,model:null,reason:'no-local-model'}
+  const eligible=models.slice(0,80).flatMap(item=>{
+    if(!item||typeof item!=='object'||Array.isArray(item))return []
+    const row=item as {name?:unknown;model?:unknown;details?:{family?:unknown}}
+    const name=row.name??row.model
+    return typeof name==='string'&&name.length<=100
+      &&/^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/u.test(name)
+      &&!/(?:^|[/:.-])cloud(?:$|[/:.-])/iu.test(name)
+      ?[{name,score:/(gemma|qwen|llama|mistral|phi)/iu.test(name)?0:1}]:[]
+  }).sort((a,b)=>a.score-b.score||a.name.localeCompare(b.name))
+  return eligible.length?{available:true,model:eligible[0]!.name,reason:'ready'}:
+    {available:false,model:null,reason:'no-local-model'}
+}
