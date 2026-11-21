@@ -22,7 +22,11 @@ import {
 import type { SidebarRootComponentProps } from './contract/slots.ts'
 import { TaskCenter } from './TaskCenter.tsx'
 import css from './SidebarRoot.module.css'
-import { HEALTHIA_NAV } from '@phoenix-ai/dsh-client-ui-layout/client'
+// Keep runtime navigation local to the sidebar plugin (client bundle purity).
+const HEALTHIA_NAV = {
+  doctor: [{id:'overview',label:'Inicio clínico'},{id:'patients',label:'Pacientes'},{id:'encounters',label:'Consultas'},{id:'records',label:'Historia clínica'},{id:'prescriptions',label:'Recetas e informes'},{id:'forms',label:'Formularios'},{id:'exchange',label:'Intercambios'}],
+  patient: [{id:'overview',label:'Mi espacio'},{id:'appointments',label:'Citas'},{id:'records',label:'Mi expediente'},{id:'documents',label:'Documentos'},{id:'consent',label:'Autorizaciones'},{id:'exchange',label:'Compartir con mi médico'}],
+} as const
 
 /**
  * How long the column's scrollbars stay drawn after the pointer leaves it.
