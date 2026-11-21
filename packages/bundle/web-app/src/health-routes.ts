@@ -124,7 +124,8 @@ export function registerHealthRoutes(ctx:Context):void {
     // On a shared browser, opening the patient portal invalidates any
     // professional login token. Patient mode must never inherit clinician rights.
     const pathForIsolation=new URL(req.url??'/','http://127.0.0.1').pathname
-    if(pathForIsolation==='/health/patient'||pathForIsolation.startsWith('/health/patient/api/')) {
+    if(process.env.PHOENIX_HEALTH_PATIENT_PORTAL_ENABLED==='1'
+      && (pathForIsolation==='/health/patient'||pathForIsolation.startsWith('/health/patient/api/'))) {
       store.logout(cookie(req))
     }
     if(await patientPortal(req,res))return
