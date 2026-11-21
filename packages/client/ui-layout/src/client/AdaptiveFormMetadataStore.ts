@@ -64,6 +64,8 @@ export function saveAdaptiveForm(
   if (encoded.length > MAX_BYTES) throw new Error('ADAPTIVE_FORM_LIMIT')
   store.setItem(BACKUP, JSON.stringify({ version: 1, forms: current }))
   store.setItem(PRIMARY, encoded)
+  // Keep the most recently validated successful snapshot as primary fallback.
+  try { store.setItem(BACKUP, encoded) } catch { /* existing backup remains */ }
   return form
 }
 
