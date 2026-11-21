@@ -1,4 +1,4 @@
-import { useEffect,useState } from 'react'
+import { useEffect,useRef,useState } from 'react'
 import { PhoenixUiIcon } from '@phoenix-ai/dsh-client-ui-primitives'
 import { FIELD_SKILLS, readFieldAiConfig, saveFieldAiConfig, matchesFieldRequest,
   buildFieldAiMission, validateFieldResult, type FieldSkill, type FieldAiConfig,
@@ -15,13 +15,14 @@ export function AdaptiveAiFieldControl({appId,sectionId,fieldId,formRevision,val
   const [instruction,setInstruction]=useState(config.instruction)
   const [expanded,setExpanded]=useState(false)
   const [pending,setPending]=useState<PendingFieldRequest|null>(null)
+  const pendingRef=useRef<PendingFieldRequest|null>(null)
   const [proposal,setProposal]=useState<FieldResult|null>(null)
   const [error,setError]=useState('')
   const [notice,setNotice]=useState('')
   useEffect(()=>{
     const current=readFieldAiConfig(appId,sectionId,fieldId)
     setConfig(current);setSkill(current.skill);setInstruction(current.instruction)
-    setPending(null);setProposal(null);setNotice('');setError('')
+    pendingRef.current=null;setPending(null);setProposal(null);setNotice('');setError('')
   },[appId,sectionId,fieldId])
   useEffect(()=>{
     const onChange=(event:Event)=>{
@@ -29,7 +30,7 @@ export function AdaptiveAiFieldControl({appId,sectionId,fieldId,formRevision,val
       if(d?.appId!==appId||d.sectionId!==sectionId||d.fieldId!==fieldId)return
       const latest=readFieldAiConfig(appId,sectionId,fieldId)
       setConfig(latest);setSkill(latest.skill);setInstruction(latest.instruction)
-      setPending(null);setProposal(null);setError('');setNotice('Configuración actualizada por Kira con tu aprobación.')
+      pendingRef.current=null;setPending(null);setProposal(null);setError('');setNotice('Configuración actualizada por Kira con tu aprobación.')
     }
     window.addEventListener('phoenix:adaptive-ai-field-config-refreshed',onChange)
     return ()=>window.removeEventListener('phoenix:adaptive-ai-field-config-refreshed',onChange)
@@ -37,13 +38,13 @@ export function AdaptiveAiFieldControl({appId,sectionId,fieldId,formRevision,val
   useEffect(()=>{
     const handleAck=(event:Event)=>{
       const detail=(event as CustomEvent<{requestId?:string;ok?:boolean}>).detail
-      if(!pending||detail?.requestId!==pending.requestId)return
+      if(!pendingRef.current||detail?.requestId!==pendingRef.current.requestId)return
       setNotice(detail.ok?'Solicitud preparada. Revisa el borrador del chat y envíalo.':'No se pudo preparar: hay un mensaje pendiente o no existe una sesión activa.')
-      if(!detail.ok)setPending(null)
+      if(!detail.ok){pendingRef.current=null;setPending(null)}
     }
     window.addEventListener('phoenix:adaptive-ai-field-draft-ack',handleAck)
     return ()=>window.removeEventListener('phoenix:adaptive-ai-field-draft-ack',handleAck)
-  },[pending])
+  },[])
   useEffect(()=>{
     const handle=(event:Event)=>{
       const detail=(event as CustomEvent<unknown>).detail
@@ -72,7 +73,7 @@ export function AdaptiveAiFieldControl({appId,sectionId,fieldId,formRevision,val
     try{
       const next=saveFieldAiConfig({...config,enabled,skill,instruction:instruction.trim(),revision:config.revision+1})
       setConfig(next);setError('');setNotice(enabled?'Instrucciones guardadas para este campo.':'IA desactivada para este campo.')
-      setProposal(null);setPending(null)
+      setProposal(null);pendingRef.current=null;setPending(null)
     }catch{setError('No se pudieron guardar las instrucciones. Revisa longitud y caracteres permitidos.')}
   }
   const prepare=()=>{
@@ -83,7 +84,7 @@ export function AdaptiveAiFieldControl({appId,sectionId,fieldId,formRevision,val
         ?crypto.randomUUID():'field-'+Date.now()+'-'+Math.random().toString(36).slice(2)
       const task:PendingFieldRequest={appId,sectionId,fieldId,requestId,expectedRevision:formRevision,original:value}
       const prompt=buildFieldAiMission(config,task)
-      setPending(task);setProposal(null);setError('')
+      pendingRef.current=task;setPending(task);setProposal(null);setError('')
       setNotice('Preparando solicitud para el chat…')
       window.dispatchEvent(new CustomEvent('phoenix:adaptive-ai-field-draft',{detail:{
         appId,sectionId,fieldId,requestId,prompt,
