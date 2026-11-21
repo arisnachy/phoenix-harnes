@@ -22,6 +22,7 @@ import {
 import type { SidebarRootComponentProps } from './contract/slots.ts'
 import { TaskCenter } from './TaskCenter.tsx'
 import css from './SidebarRoot.module.css'
+import { HEALTHIA_NAV } from '@phoenix-ai/dsh-client-ui-layout/client'
 
 /**
  * How long the column's scrollbars stay drawn after the pointer leaves it.
@@ -48,6 +49,23 @@ export function SidebarRoot({
   // The old 150ms settle timer blocked the rail and retained costly wide rows.
   const wide = !collapsed
   const [tasksOpen, setTasksOpen] = useState(false)
+  const [adaptive, setAdaptive] = useState<{ app: 'general' | 'healthia'; role: 'doctor' | 'patient'; section: string }>({ app: 'general', role: 'doctor', section: 'overview' })
+  useEffect(() => {
+    const onState = (event: Event): void => {
+      const detail = (event as CustomEvent<{ app?: string; role?: string; section?: string }>).detail
+      if (!detail || (detail.app !== 'general' && detail.app !== 'healthia')) return
+      setAdaptive({
+        app: detail.app,
+        role: detail.role === 'patient' ? 'patient' : 'doctor',
+        section: typeof detail.section === 'string' ? detail.section : 'overview',
+      })
+    }
+    window.addEventListener('phoenix:adaptive-workspace-state', onState)
+    return () => window.removeEventListener('phoenix:adaptive-workspace-state', onState)
+  }, [])
+  const navigateAdaptive = (app: 'general' | 'healthia', role = adaptive.role, section = 'overview'): void => {
+    window.dispatchEvent(new CustomEvent('phoenix:adaptive-workspace', { detail: { app, role, section } }))
+  }
   // Navigation destinations open an actionable, focused surface — never the Settings menu.
   const openFeature = (destination: 'connectors' | 'team', label: string): void => {
     window.dispatchEvent(new CustomEvent('phoenix:open-feature', { detail: { destination, label } }))
@@ -189,7 +207,19 @@ export function SidebarRoot({
         </button>
       </Tooltip>
 
-      {/* Preserve exactly the existing navigation actions on the collapsed rail. */}
+      {/* Healthia replaces only the contextual menu; core actions remain in General. */}
+      {adaptive.app === 'healthia' ? (
+        <nav className={clsx(css.primaryNavigation, css.healthiaNavigation)} aria-label="Navegación Healthia">
+          <button type="button" className={css.navLink} onClick={() => navigateAdaptive('general')} aria-label="Volver a PHOENIX General" title={!wide ? 'PHOENIX General' : undefined}>
+            <IconPanelLeftOutline16 size={19} />{wide && <span>PHOENIX · General</span>}
+          </button>
+          {HEALTHIA_NAV[adaptive.role].map(item => (
+            <button key={item.id} type="button" className={css.navLink} aria-current={item.id === adaptive.section ? 'page' : undefined} title={!wide ? item.label : undefined} onClick={() => navigateAdaptive('healthia', adaptive.role, item.id)}>
+              <IconFolderOpenOutline16 size={19}/>{wide && <span>{item.label}</span>}
+            </button>
+          ))}
+        </nav>
+      ) : (
       <nav className={css.primaryNavigation} aria-label="Navegación principal">
         <button type="button" className={css.navLink} aria-label={t('nav.home')} title={wide ? undefined : t('nav.home')} onClick={() => { startSession() }}>
           <svg viewBox="0 0 24 24" width={wide ? 19 : 18} height={wide ? 19 : 18}
@@ -213,11 +243,22 @@ export function SidebarRoot({
           <IconFolderOpenOutline16 size={wide ? 19 : 18} />{wide && <span>{t('nav.library')}</span>}
         </button>
       </nav>
+      )}
 
       {/* The browsing region fills the column between the controls and the
           foot in both states; its rail icon column rides the same slot. */}
       <div className={css.regionArea}>
-        {renderSlot('sidebar.workspaces', {
+        {adaptive.app === 'healthia' ? (
+          <div className={css.healthiaRegion}>
+            {wide && <><strong>PERFIL HEALTHIA</strong>
+              <div className={css.healthiaRoles}>
+                <button type="button" aria-pressed={adaptive.role === 'doctor'} onClick={() => navigateAdaptive('healthia', 'doctor')}>Médico</button>
+                <button type="button" aria-pressed={adaptive.role === 'patient'} onClick={() => navigateAdaptive('healthia', 'patient')}>Paciente</button>
+              </div>
+              <p>Chat con Kira disponible. Los datos clínicos se manejan en el servicio protegido.</p>
+            </>}
+          </div>
+        ) : renderSlot('sidebar.workspaces', {
           wide,
           expandSidebar: () => { if (collapsed) toggleSidebar() },
         })}
