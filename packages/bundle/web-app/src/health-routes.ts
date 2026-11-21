@@ -121,6 +121,12 @@ export function registerHealthRoutes(ctx:Context):void {
   const patientPortal=createPatientPortalHandler(store)
   const route=ctx.webServer.register({ kind:'prefix',path:'/health',handler:async(req,res)=>{
     if(!peer(req)){reply(res,403,{ error:'Acceso local requerido' });return}
+    // On a shared browser, opening the patient portal invalidates any
+    // professional login token. Patient mode must never inherit clinician rights.
+    const pathForIsolation=new URL(req.url??'/','http://127.0.0.1').pathname
+    if(pathForIsolation==='/health/patient'||pathForIsolation.startsWith('/health/patient/api/')) {
+      store.logout(cookie(req))
+    }
     if(await patientPortal(req,res))return
     const path=new URL(req.url??'/','http://127.0.0.1').pathname
     const method=req.method??'GET'
