@@ -36,7 +36,7 @@ describe('Adaptive app registry persists only validated UI manifests', () => {
   it('rejects extra executable fields and guards storage write failure', () => {
     const store = fakeStore()
     const app = createAdaptiveAppBlueprint('Gestión', ['Inicio'])
-    expect(() => installAdaptiveApp({ ...app, execute: 'stealData()' } as never, store)).not.toThrow()
+    expect(() => installAdaptiveApp({ ...app, execute: 'stealData()' } as never, store)).toThrow('ADAPTIVE_INVALID_BLUEPRINT')
     // The stored snapshot is reconstructed from a safe allowlist.
     const raw = JSON.stringify([...store.values.values()])
     expect(raw).not.toContain('stealData')
