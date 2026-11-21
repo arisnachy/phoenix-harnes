@@ -224,6 +224,12 @@ export function registerHealthRoutes(ctx:Context):void {
         reply(res,200,{revoked:true});return
       }
 
+      // Authenticated same-origin POST + session CSRF. The draft is calculated
+      // from the authorized encrypted episode and stays in the clinical realm.
+      if(operation==='clinical-note-proposal'&&id!==undefined&&method==='POST'){
+        const proposal=store.suggestClinicalNote(actor,id)
+        reply(res,200,{proposal});return
+      }
       // Persist only authorized per-user UI drafts in the encrypted clinical store.
       if(operation==='clinical-draft'&&id!==undefined){
         if(method==='GET'){reply(res,200,{draft:store.getClinicalDraft(actor,id)});return}
