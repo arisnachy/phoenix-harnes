@@ -11,7 +11,7 @@
  * resizes are driven through the ResizeObserver stub.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { useSyncExternalStore } from 'react'
 import { AppFrame } from '@phoenix-ai/dsh-client-ui-layout/src/client/AppFrame.tsx'
 import type { AppFrameProps } from '@phoenix-ai/dsh-client-ui-layout/src/client/AppFrame.tsx'
@@ -137,6 +137,26 @@ afterEach(() => {
 })
 
 describe('AppFrame', () => {
+
+  it('creates a generic adaptive app preview, retains the chat and restores General', () => {
+    const view = mountFrame()
+    fireEvent.click(view.getByRole('button', { name: 'Aplicaciones PHOENIX' }))
+    fireEvent.click(view.getByRole('menuitem', { name: '+ Crear aplicación' }))
+    fireEvent.change(view.getByRole('textbox', { name: 'Nombre de nueva aplicación' }), {
+      target: { value: 'Inventario de prueba' },
+    })
+    fireEvent.change(view.getByRole('textbox', { name: 'Secciones de nueva aplicación' }), {
+      target: { value: 'Inicio, Productos, Reportes' },
+    })
+    fireEvent.click(view.getByRole('button', { name: 'Crear vista adaptable' }))
+    expect(view.getByRole('region', { name: 'Aplicación adaptable: Inventario de prueba' })).toBeTruthy()
+    expect(view.getByTestId('center-content')).toBeTruthy()
+    fireEvent.click(view.getByRole('button', { name: 'Volver a PHOENIX' }))
+    expect(view.queryByRole('region', { name: 'Aplicación adaptable: Inventario de prueba' })).toBeNull()
+    expect(view.getByTestId('center-content')).toBeTruthy()
+  })
+
+
   it('renders three tracks from store state', () => {
     const { frame } = mountFrame()
     expect(tracks(frame)).toEqual([SIDEBAR_DEFAULT, 0])
