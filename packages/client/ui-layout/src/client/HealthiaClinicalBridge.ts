@@ -13,10 +13,12 @@ const ROLES = [
   'radiology','pharmacy','billing',
 ] as const
 /** Probe existing authority; never infer authentication from the UI role selector. */
-export async function probeClinicalSession(fetcher:typeof fetch = fetch):Promise<ClinicalRouteStatus> {
+export async function probeClinicalSession(fetcher?:typeof fetch):Promise<ClinicalRouteStatus> {
   const locked: ClinicalRouteStatus = {status:'locked',role:null,patientPortal:'not-enabled'}
   try {
-    const response = await fetcher('/health/api/session',{
+    const request = fetcher ?? (typeof fetch === 'function' ? fetch : undefined)
+    if (!request) return {status:'unavailable',role:null,patientPortal:'not-enabled'}
+    const response = await request('/health/api/session',{
       method:'GET',cache:'no-store',credentials:'same-origin',
       headers:{accept:'application/json'},
       signal:AbortSignal.timeout(3000),
