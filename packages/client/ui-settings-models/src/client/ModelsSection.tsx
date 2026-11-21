@@ -599,6 +599,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
             ? (
               <div className={styles['addCard']}>
                 <CustomProviderCard
+                  guided
                   taken={state.rows.map(row => row.entry.provider)}
                   protocols={protocols}
                   /* v8 ignore next -- the card only opens from a button disabled without this namespace */
