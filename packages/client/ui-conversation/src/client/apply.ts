@@ -353,6 +353,33 @@ export function apply(ctx: Context): void {
         window.dispatchEvent(new Event('phoenix:adaptive-app-mission-failed'))
       }
     }
+    const onAiFieldDraft = (event: Event): void => {
+      const detail:unknown=(event as CustomEvent<unknown>).detail
+      if(!detail||typeof detail!=='object'||Array.isArray(detail))return
+      const value=detail as Record<string,unknown>
+      if(Object.keys(value).some(key=>!['appId','sectionId','fieldId','requestId','prompt'].includes(key))
+        ||typeof value.appId!=='string'||!/^app-[a-z0-9-]{1,45}$/u.test(value.appId)
+        ||typeof value.sectionId!=='string'||!/^[a-z][a-z0-9-]{0,47}$/u.test(value.sectionId)
+        ||typeof value.fieldId!=='string'||!/^[a-z][a-z0-9-]{0,47}$/u.test(value.fieldId)
+        ||typeof value.requestId!=='string'||!/^[a-z0-9-]{12,90}$/iu.test(value.requestId)
+        ||typeof value.prompt!=='string'||value.prompt.length>6000||!value.prompt.trim())return
+      let ok=false
+      try{
+        const id=sessions.list.getSnapshot().current
+        if(id!==undefined){
+          const shell=inputHub.shell(id)
+          if(shell.snapshot.draft.trim()||shell.snapshot.imageIds.length){
+            shell.notify('info','Hay un mensaje pendiente. Consérvalo o envíalo antes de generar desde el campo.')
+          }else{
+            shell.actions.setDraft(value.prompt)
+            ok=true
+          }
+        }
+      }catch{/* No draft change on failed admission. */}
+      window.dispatchEvent(new CustomEvent('phoenix:adaptive-ai-field-draft-ack',{
+        detail:{requestId:value.requestId,ok},
+      }))
+    }
     const onActionDraft = (event: Event): void => {
       const draft = parseAdaptiveFormActionDraft((event as CustomEvent<unknown>).detail)
       if (!draft) return
@@ -373,6 +400,7 @@ export function apply(ctx: Context): void {
       }
     }
     window.addEventListener('phoenix:adaptive-form-action-draft', onActionDraft)
+    window.addEventListener('phoenix:adaptive-ai-field-draft', onAiFieldDraft)
     window.addEventListener('phoenix:adaptive-self-inspect', onInspectWorkspace)
     window.addEventListener('phoenix:adaptive-form-inspect', onInspectForm)
     window.addEventListener('phoenix:adaptive-form-mission', onForm)
@@ -383,6 +411,7 @@ export function apply(ctx: Context): void {
       window.removeEventListener('phoenix:adaptive-form-inspect', onInspectForm)
       window.removeEventListener('phoenix:adaptive-self-inspect', onInspectWorkspace)
       window.removeEventListener('phoenix:adaptive-form-action-draft', onActionDraft)
+      window.removeEventListener('phoenix:adaptive-ai-field-draft', onAiFieldDraft)
     }
   }, 'ui-conversation: adaptive app and form chat missions')
 
