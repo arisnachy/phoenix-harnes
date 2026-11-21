@@ -16,7 +16,7 @@ type Store = Pick<Storage, 'getItem' | 'setItem'>
 function validMenuLabel(value: unknown): value is string {
   return typeof value === 'string' && value.trim() === value
     && value.length > 0 && value.length <= 60
-    && !/[\\u0000-\\u001f\\u007f]/u.test(value)
+    && !/[\u0000-\u001f\u007f]/u.test(value)
 }
 
 
