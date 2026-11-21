@@ -23,6 +23,9 @@
 .builder button {background:#e76020;color:white;}
 .builder button:disabled {opacity:.5;cursor:not-allowed;}
 .exchange {border-left:3px solid #e76020;padding-left:12px;}
+.tabs {display:flex;gap:7px;flex-wrap:wrap;margin:8px 0 13px;}
+.tab,.activeTab {font:inherit;font-size:11px;border-radius:9px;padding:6px 8px;border:1px solid var(--dsw-alias-border-l2);cursor:pointer;color:var(--dsw-alias-label-primary);background:transparent;}
+.activeTab {background:#fff0e7;color:#c24c16;border-color:#f3bd98;}
 .footer { margin-top:16px;gap:10px;flex-wrap:wrap; }
 .chatHint,.notice {font-size:11px;color:var(--dsw-alias-label-secondary);}
 @media (max-width:760px) { .shell {margin:54px 10px 0; padding:12px; max-height:42vh;} .header,.footer {align-items:flex-start;} }
