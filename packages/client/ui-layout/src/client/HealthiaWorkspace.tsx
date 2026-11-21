@@ -69,6 +69,9 @@ export function HealthiaWorkspace({
           <div><span className={css.eyebrow}>PHOENIX / HEALTHIA</span><h2>{HEALTHIA_NAV[role].find(item => item.id === active)?.label}</h2></div>
           <span className={css.status}>{isPatient ? 'Portal no activado' : 'Backend clínico separado'}</span>
         </div>
+        <nav className={css.tabs} aria-label="Secciones Healthia">
+          {HEALTHIA_NAV[role].map(item => <button key={item.id} type="button" aria-current={item.id === active ? 'page' : undefined} className={item.id === active ? css.activeTab : css.tab} onClick={() => onSectionChange(item.id)}>{item.label}</button>)}
+        </nav>
         {active === 'forms' && !isPatient ? (
           <div className={css.formPreview}>
             <p>Editor preliminar de estructura de formularios. No introducir información de pacientes: estos campos no se publican ni almacenan todavía.</p>
