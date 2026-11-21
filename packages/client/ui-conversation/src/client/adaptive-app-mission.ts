@@ -28,3 +28,36 @@ export function newAdaptiveAppMission(): string {
     'Comienza preguntándome qué aplicación quiero construir y qué problema debe resolver; luego planifica conmigo paso a paso.',
   ].join('\n\n')
 }
+
+/**
+ * Reuse the real session/input service with a narrow testable choreography.
+ * This is an explicit user gesture, not a model permission grant.
+ */
+export interface AdaptiveMissionTransport<Session extends string, Workspace extends string> {
+  readonly current: () => Session | undefined
+  readonly workspaces: () => {
+    readonly items: readonly { readonly workspaceId: Workspace; readonly sessionIds: readonly Session[] }[]
+    readonly recentWorkspaceId?: Workspace
+  }
+  readonly create: (options: { workspaceId?: Workspace }) => Promise<Session>
+  readonly open: (id: Session) => void
+  readonly input: (id: Session) => {
+    readonly setDraft: (text: string) => void
+    readonly submit: () => void
+  }
+}
+export async function startAdaptiveAppConversation<Session extends string, Workspace extends string>(
+  transport: AdaptiveMissionTransport<Session, Workspace>,
+): Promise<Session> {
+  const active = transport.current()
+  const workspace = transport.workspaces()
+  const target = (active === undefined ? undefined : workspace.items.find(
+    item => item.sessionIds.includes(active),
+  )?.workspaceId) ?? workspace.recentWorkspaceId
+  const sessionId = await transport.create(target === undefined ? {} : { workspaceId: target })
+  transport.open(sessionId)
+  const input = transport.input(sessionId)
+  input.setDraft(newAdaptiveAppMission())
+  input.submit()
+  return sessionId
+}
