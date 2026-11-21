@@ -254,6 +254,7 @@ type PluginInventoryLocalRemote = {
   startLocalModel(): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
   stopLocalModel(): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
   uninstallLocalModel(request: { modelId: string }): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
+  deleteInstalledOllamaModel(request: { modelId: string }): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
   setLocalModelMode(request: { mode: PhoenixLocalModelMode }): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
   setDefaultLocalModel(request: { modelId: string }): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
   setLocalModelThinking(request: { thinking: boolean | string | null }): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
@@ -373,6 +374,9 @@ function localModelClient(ctx: ClientContext): PhoenixLocalModelClient {
     start: async () => unwrapPluginInventory('startLocalModel', await remote().startLocalModel()),
     stop: async () => unwrapPluginInventory('stopLocalModel', await remote().stopLocalModel()),
     uninstall: async modelId => unwrapPluginInventory('uninstallLocalModel', await remote().uninstallLocalModel({ modelId })),
+    removeFromOllama: async modelId => unwrapPluginInventory(
+      'deleteInstalledOllamaModel', await remote().deleteInstalledOllamaModel({ modelId }),
+    ),
     setMode: async mode => unwrapPluginInventory('setLocalModelMode', await remote().setLocalModelMode({ mode })),
     setThinking: async thinking => unwrapPluginInventory('setLocalModelThinking', await remote().setLocalModelThinking({ thinking })),
     setDefaultModel: async modelId => unwrapPluginInventory(

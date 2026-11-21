@@ -1,15 +1,7 @@
 /**
- * Models settings section: the provider rows joined from the configurable
- * directory, settings namespaces, and credential states, with one editor
- * card at a time. Rows expose only confirmed API-key state through accessible
- * solid configured or missing dots. A whole-section provider without a
- * configured key renders as its open setup card instead of a row, but only in
- * the first-run posture — no provider on the page can serve requests yet — and
- * only until the user closes that card; the add flow is a card carrying the
- * dormant-provider select. Each card kind owns its own open state, so closing
- * one never discards a draft in another. Every mutation writes through the
- * wire, while a provider removal first requires confirmation; the page
- * re-renders from pushed invalidations or the post-apply reload.
+ * Theme-aware Models provider catalog. Only registered account flows expose
+ * OAuth; all edits and additions use a single keyboard-accessible wizard modal.
+ * Host credential writes and runtime-managed local models remain separate.
  */
 
 import { useEffect, useState } from 'react'
@@ -18,7 +10,7 @@ import type { IApiClient } from '@phoenix-ai/dsh-api-remotes/client'
 import { Button, IconPlusOutline16, Modal } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { InjectFace } from '@phoenix-ai/dsh-client-ui-slots'
 import { CustomProviderCard } from './CustomProviderCard.tsx'
-import { deriveKeyRef, messageOf, protocolChoices, providerUsable } from './store.ts'
+import { deriveKeyRef, messageOf, protocolChoices } from './store.ts'
 import type { ModelsSettingsStore, ProviderRow } from './store.ts'
 import type { SettingsSchemaOperations } from './schema-operations.ts'
 import { ProviderEditor, type ProviderEditorProps } from './ProviderEditor.tsx'
@@ -104,6 +96,7 @@ function accountFlowConnected(flow: AccountFlow): boolean {
 function renderProviderEditor({ target, ...props }: ProviderEditorRenderProps): ReactNode {
   return (
     <ProviderEditor
+      key={target.provider}
       provider={target.provider}
       displayName={target.displayName}
       settingsPath={target.settingsPath}
@@ -220,7 +213,6 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
   const [deleteFailure, setDeleteFailure] = useState<string | undefined>(undefined)
   const [savedTarget, setSavedTarget] = useState<ProviderIdentity | undefined>(undefined)
   const [declaring, setDeclaring] = useState(false)
-  const [dismissedSetup, setDismissedSetup] = useState<ReadonlySet<string>>(() => new Set())
   // Registered account flows, keyed by the provider id after the scope slash
   // (`llm-pi-ai/openai-codex` → `openai-codex`): the same join the cards use.
   const [accountFlows, setAccountFlows] = useState<ReadonlyMap<string, AccountFlow>>(() => new Map())
@@ -283,18 +275,6 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
     if (changed) announceSaved(target)
   }
 
-  /**
-   * Close a setup card, which owns none of the state above: the row-editor,
-   * add, and declare cards each own one of those, so clearing them here would
-   * discard a draft the user opened beside this card. Dismissal is this card's
-   * own — the provider falls back to an ordinary row for the rest of the
-   * session, and reopens through Edit.
-   */
-  const closeSetup = (changed: boolean, target: ProviderIdentity): void => {
-    setDismissedSetup(previous => new Set([...previous, target.provider]))
-    if (changed) announceSaved(target)
-  }
-
   const closeDelete = (): void => {
     if (deleting) return
     setDeleteTarget(undefined)
@@ -342,9 +322,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
     ? savedTarget
     : { provider: savedRow.entry.provider, displayName: savedRow.entry.displayName }
 
-  // One fact decides both first-run postures on this page and the onboarding
-  // step: whether the user already has a provider to talk to.
-  const anyUsable = state.rows.some(providerUsable)
+  // Configured providers remain visible in the grid; setup is opened in the wizard.
   const configured = state.rows.filter(row => row.configured)
   const filteredConfigured = configured.filter(row =>
     `${row.entry.displayName} ${row.entry.provider}`.toLocaleLowerCase()
@@ -404,29 +382,10 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
           const namespace = state.namespaces.get(target.settingsNs)
           /* v8 ignore next -- the join marks a row configured only when its namespace resolved */
           if (namespace === undefined) return null
-          if (needsSetup(row, anyUsable) && !dismissedSetup.has(row.entry.provider)) {
-            // First-run posture: the provider exists but has no key — the
-            // setup card IS its presence on the page, until the user closes it.
-            return (
-              <li key={row.entry.provider} className={styles['setupCard']}>
-                {renderProviderEditor({
-                  target,
-                  namespace,
-                  schema,
-                  api,
-                  t,
-                  readOnly: !state.writable,
-                  oauth: accountFlowFor(target.provider),
-                  onAuthorized: () => { setAuthRefresh(value => value + 1); void controller.load() },
-                  onClose: (changed) => { closeSetup(changed, target) },
-                })}
-              </li>
-            )
-          }
           const open = !adding && editing?.provider === row.entry.provider
           const isCodex = row.entry.provider === CODEX_PROVIDER
           const accountConnected = accountFlowFor(row.entry.provider)?.connected === true
-          const credentialConfigured = !isCodex && row.credential?.configured === true
+          const credentialConfigured = row.credential?.configured === true
           const credentialMissing = !credentialConfigured
             && row.apiKeyEnv !== undefined
             && row.credential?.configured === false
@@ -538,123 +497,79 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                     : null}
                 </span>
               </div>
-              {open
-                ? renderProviderEditor({
-                  target,
-                  namespace,
-                  schema,
-                  api,
-                  t,
-                  readOnly: !state.writable,
-                  oauth: accountFlowFor(target.provider),
-                  onAuthorized: () => { setAuthRefresh(value => value + 1); void controller.load() },
-                  onClose: (changed) => { closeEditor(changed, target) },
-                })
-                : null}
             </li>
           )
         })}
       </ul>
-      <div className={styles['addBlock']}>
-        {addTarget !== undefined && addNamespace !== undefined
-          ? (
-            <div className={styles['addCard']}>
-              <div className={styles['field']}>
-                <span className={styles['fieldLabel']}>{t('provider')}</span>
-                <select
-                  className={`${styles['input']} ${styles['selectInput']}`}
-                  value={addTarget.provider}
-                  aria-label={t('provider')}
-                  onChange={(event) => {
-                    const row = addable.find(candidate => candidate.entry.provider === event.target.value)
-                    /* v8 ignore next -- the select only lists addable rows */
-                    if (row === undefined) return
-                    setEditing(targetOf(row))
-                  }}
-                >
-                  {addable.map(row => (
-                    <option key={row.entry.provider} value={row.entry.provider}>{row.entry.displayName}</option>
-                  ))}
-                </select>
-              </div>
-              <ProviderEditor
-                key={addTarget.provider}
-                provider={addTarget.provider}
-                displayName={addTarget.displayName}
-                hideTitle
-                guided
-                namespace={addNamespace}
-                schema={schema}
-                settingsPath={addTarget.settingsPath}
-                api={api}
-                t={t}
-                readOnly={!state.writable}
-                oauth={accountFlowFor(addTarget.provider)}
-                onAuthorized={() => { setAuthRefresh(value => value + 1); void controller.load() }}
-                onClose={(changed) => { closeEditor(changed, addTarget) }}
-              />
-            </div>
-          )
-          : declaring
-            ? (
-              <div className={styles['addCard']}>
-                <CustomProviderCard
-                  guided
-                  taken={state.rows.map(row => row.entry.provider)}
-                  protocols={protocols}
-                  /* v8 ignore next -- the card only opens from a button disabled without this namespace */
-                  revision={state.namespaces.get('llm-pi-ai')?.revision ?? 0}
-                  api={api}
-                  t={t}
-                  readOnly={!state.writable}
-                  onClose={(changed) => {
-                    setDeclaring(false)
-                    if (changed) void controller.load()
-                  }}
-                />
-              </div>
-            )
-            : (
-              // One row for the two ways to gain a provider: adopt one the
-              // adapter already knows, or declare one it does not. Side by side
-              // and equal-width so they read as siblings and line up with the
-              // rows above, rather than two pills of different lengths.
-              <div className={styles['addActions']}>
-                <button
-                  type="button"
-                  className={styles['addButton']}
-                  disabled={addable.length === 0 || !state.writable}
-                  onClick={() => {
-                    const first = addable[0]
-                    /* v8 ignore next -- the button is disabled while nothing is addable */
-                    if (first === undefined) return
-                    setSavedTarget(undefined)
-                    setDeclaring(false)
-                    setAdding(true)
-                    setEditing(targetOf(first))
-                  }}
-                >
-                  {/* Same glyph as the composer's attach button. */}
-                  <IconPlusOutline16 size={14} />
-                  {t('add')}
-                </button>
-                <button
-                  type="button"
-                  className={styles['addButton']}
-                  disabled={protocols.length === 0 || !state.writable}
-                  onClick={() => {
-                    setSavedTarget(undefined)
-                    setAdding(false)
-                    setEditing(undefined)
-                    setDeclaring(true)
-                  }}
-                >
-                  <IconPlusOutline16 size={14} />
-                  {t('customAdd')}
-                </button>
-              </div>
-            )}
+      <div className={styles['addActions']}>
+        <button type="button" className={styles['addButton']}
+          disabled={addable.length === 0 || !state.writable}
+          onClick={() => {
+            const first = addable[0]
+            if (first === undefined) return
+            setSavedTarget(undefined)
+            setDeclaring(false)
+            setAdding(true)
+            setEditing(targetOf(first))
+          }}>
+          <IconPlusOutline16 size={14} />{t('add')}
+        </button>
+        <button type="button" className={styles['addButton']}
+          disabled={protocols.length === 0 || !state.writable}
+          onClick={() => {
+            setSavedTarget(undefined)
+            setAdding(false)
+            setEditing(undefined)
+            setDeclaring(true)
+          }}>
+          <IconPlusOutline16 size={14} />{t('customAdd')}
+        </button>
       </div>
+      <Modal
+        open={editing !== undefined || declaring}
+        onClose={() => { setEditing(undefined); setAdding(false); setDeclaring(false) }}
+        title={declaring ? t('customTitle') : editing?.displayName ?? ''}
+        closeLabel={t('close')}
+        className={styles['modelWizardDialog'] as string}
+      >
+        {adding && addTarget !== undefined && addNamespace !== undefined ? (
+          <label className={styles['field']}>
+            <span className={styles['fieldLabel']}>{t('provider')}</span>
+            <select className={styles['input']} value={addTarget.provider}
+              aria-label={t('provider')}
+              onChange={event => {
+                const row = addable.find(candidate => candidate.entry.provider === event.currentTarget.value)
+                if (row !== undefined) setEditing(targetOf(row))
+              }}>
+              {addable.map(row => <option key={row.entry.provider}
+                value={row.entry.provider}>{row.entry.displayName}</option>)}
+            </select>
+          </label>
+        ) : null}
+        {editing !== undefined && !declaring ? (() => {
+          const namespace = state.namespaces.get(editing.settingsNs)
+          return namespace === undefined ? <p className={styles['error']}>{t('loadFailed')}</p>
+            : renderProviderEditor({
+              target: editing, namespace, schema, api, t,
+              readOnly: !state.writable,
+              oauth: accountFlowFor(editing.provider),
+              onAuthorized: () => { setAuthRefresh(value => value + 1); void controller.load() },
+              onClose: changed => { closeEditor(changed, editing) },
+            })
+        })() : null}
+        {declaring ? (
+          <CustomProviderCard guided
+            taken={state.rows.map(row => row.entry.provider)}
+            protocols={protocols}
+            revision={state.namespaces.get('llm-pi-ai')?.revision ?? 0}
+            api={api} t={t} readOnly={!state.writable}
+            onClose={changed => {
+              setDeclaring(false)
+              if (changed) void controller.load()
+            }}
+          />
+        ) : null}
+      </Modal>
       <Modal
         open={deleteTarget !== undefined}
         onClose={closeDelete}

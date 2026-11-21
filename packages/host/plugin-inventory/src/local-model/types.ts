@@ -88,4 +88,6 @@ export interface LocalModelRuntimeSnapshot extends LocalModelPersistentState {
   baseUrl?: string
   error?: LocalModelRuntimeError
   thinkingCapabilities?: LocalThinkingCapabilities
+  /** Models physically present in Ollama, independent of PHOENIX linkage. */
+  ollamaInstalledModelIds?: string[]
 }
