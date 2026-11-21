@@ -60,6 +60,9 @@ export function readAdaptiveApps(store: Store | undefined = browserStore()): rea
 /** Explicit user-click installation of configuration ONLY, with last-good recovery. */
 export function installAdaptiveApp(app: AdaptiveAppBlueprint, store: Store | undefined = browserStore()): readonly AdaptiveAppBlueprint[] {
   if (!store) throw new Error('ADAPTIVE_STORAGE_UNAVAILABLE')
+  if (Object.keys(app).some(key => !['version', 'id', 'title', 'status', 'sections'].includes(key))
+    || app.sections.some(section => Object.keys(section).some(key => !['id', 'label'].includes(key))))
+    throw new Error('ADAPTIVE_INVALID_BLUEPRINT')
   const rebuilt = createAdaptiveAppBlueprint(app.title, app.sections.map(section => section.label))
   if (rebuilt.id !== app.id || rebuilt.sections.some((s, i) => s.id !== app.sections[i]?.id)
     || app.version !== 1 || app.status !== 'preview-only') throw new Error('ADAPTIVE_INVALID_BLUEPRINT')
