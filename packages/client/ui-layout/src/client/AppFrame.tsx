@@ -19,6 +19,7 @@ import css from './AppFrame.module.css'
 import { HealthiaWorkspace, HEALTHIA_NAV, type HealthiaRole } from './HealthiaWorkspace.tsx'
 import { ADAPTIVE_APP_PRESETS, createAdaptiveAppBlueprint, type AdaptiveAppBlueprint } from './AdaptiveAppCatalog.ts'
 import { installAdaptiveApp, readAdaptiveApps } from './AdaptiveAppRegistry.ts'
+import { applyAdaptiveFormFields } from './AdaptiveFormMetadataStore.ts'
 import { AdaptiveAppPreview } from './AdaptiveAppPreview.tsx'
 import type { AdaptiveLiveSnapshot } from './AdaptiveLiveSlots.ts'
 
@@ -189,6 +190,39 @@ export function AppFrame({
   const [healthiaSection, setHealthiaSection] = useState('overview')
   const [appMenuOpen, setAppMenuOpen] = useState(false)
   const [missionError, setMissionError] = useState(false)
+  // A chat-authored form diff is inert until the user explicitly applies it.
+  // The target must be a locally installed generic app, never Healthia EHR.
+  useEffect(() => {
+    const onFormInstall = (event: Event): void => {
+      const value = (event as CustomEvent<unknown>).detail
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return
+      const request = value as Record<string, unknown>
+      if (typeof request.requestId !== 'string' || request.requestId.length > 80) return
+      let ok = false
+      try {
+        if (Object.keys(request).some(k => !['requestId','appId','sectionId','fields'].includes(k))
+          || typeof request.appId !== 'string' || typeof request.sectionId !== 'string') throw new Error('INVALID_REQUEST')
+        const installed = readAdaptiveApps().find(app => app.id === request.appId)
+        if (!installed || !installed.sections.some(item => item.id === request.sectionId)) throw new Error('UNKNOWN_APP')
+        applyAdaptiveFormFields(installed.id, request.sectionId, request.fields)
+        setCustomApps(readAdaptiveApps())
+        setAdaptiveApp(installed.id)
+        setCustomSection(request.sectionId)
+        window.dispatchEvent(new CustomEvent('phoenix:adaptive-form-refreshed', {
+          detail: { appId: installed.id, sectionId: request.sectionId },
+        }))
+        ok = true
+      } catch {
+        // Invalid, stale or unauthenticated proposals never mutate app views.
+      }
+      window.dispatchEvent(new CustomEvent('phoenix:adaptive-form-install-result', {
+        detail: { requestId: request.requestId, ok },
+      }))
+    }
+    window.addEventListener('phoenix:adaptive-form-install', onFormInstall)
+    return () => window.removeEventListener('phoenix:adaptive-form-install', onFormInstall)
+  }, [])
+
   // The model may propose a structure; only a user-clicked, bounded app
   // proposal can reach this configuration-only installation handler.
   useEffect(() => {
