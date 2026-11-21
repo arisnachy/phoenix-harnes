@@ -7,7 +7,7 @@ import { createAdaptiveAppBlueprint, validateAdaptiveDraft, type AdaptiveAppBlue
   type AdaptiveFormDraft, type AdaptiveDestination, type AdaptiveOutput, type AdaptiveInputKind } from './AdaptiveAppCatalog.ts'
 import { readAdaptiveApps } from './AdaptiveAppRegistry.ts'
 import { readAdaptiveForm, saveAdaptiveForm } from './AdaptiveFormMetadataStore.ts'
-import { readVisualBoard, parseVisualCommand, preflightVisualCommand, applyVisualCommand,
+import { readVisualBoard, parseVisualCommand, preflightVisualCommand, applyVisualCommand, isVisualOperation,
   type VisualOperation, type VisualKind, type VisualSpan, type VisualCommand } from './AdaptiveVisualKit.ts'
 
 export const ADAPTIVE_PALETTES = {
@@ -59,7 +59,7 @@ function storeOrUndefined(): StorageLike | undefined {
 export function parseAdaptiveControl(value: unknown): AdaptiveControlCommand | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const v = value as Record<string, unknown>
-  if (typeof v.operation === 'string' && v.operation.endsWith('-widget')) {
+  if (isVisualOperation(v.operation)) {
     return parseVisualCommand(value) as AdaptiveControlCommand | null
   }
   if (typeof v.appId !== 'string' || !['general','healthia'].includes(v.appId) && !APP.test(v.appId)
@@ -203,7 +203,7 @@ export function preflightAdaptiveControl(command: AdaptiveControlCommand, apps: 
       ? {valid:true,reason:'HIDE_MENU_KEEP_FORM_DATA'} : {valid:false,reason:'LAST_OR_UNKNOWN_SECTION'}
   }
   if (!app.sections.some(s => s.id === command.sectionId)) return {valid:false,reason:'UNKNOWN_SECTION'}
-  if (command.operation.endsWith('-widget')) {
+  if (isVisualOperation(command.operation)) {
     return preflightVisualCommand(command,readVisualBoard(app.id,command.sectionId!))
   }
   const form = formReader(app.id, command.sectionId!)
@@ -239,6 +239,6 @@ export function applyAdaptiveFieldEdit(command: AdaptiveControlCommand, store: S
 
 /** Apply only a metadata-only widget edit, after the same two-stage chat gate. */
 export function applyAdaptiveVisualEdit(command: AdaptiveControlCommand) {
-  if (!command.operation.endsWith('-widget')) throw new Error('VISUAL_INVALID_OPERATION')
+  if (!isVisualOperation(command.operation)) throw new Error('VISUAL_INVALID_OPERATION')
   return applyVisualCommand(command as VisualCommand)
 }
