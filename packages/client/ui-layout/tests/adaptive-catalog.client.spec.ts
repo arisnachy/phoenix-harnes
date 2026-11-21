@@ -23,11 +23,12 @@ describe('Adaptive Harness declarative safety', () => {
   })
 
   it('refuses unknown props, arbitrary URLs, script execution and invalid shapes', () => {
-    const withScript = structuredClone(HEALTHIA_DOCTOR_FORM) as Record<string, unknown>
-    withScript.execute = 'networkCall()'
+    const withScript = { ...HEALTHIA_DOCTOR_FORM, execute: 'networkCall()' }
     expect(validateAdaptiveDraft(withScript)).toBe(false)
-    const withUrl = structuredClone(HEALTHIA_DOCTOR_FORM) as { fields: Record<string, unknown>[] }
-    withUrl.fields[0].href = 'https://unknown.example'
+    const withUrl = { ...HEALTHIA_DOCTOR_FORM, fields: [
+      { ...HEALTHIA_DOCTOR_FORM.fields[0], href: 'https://unknown.example' },
+      ...HEALTHIA_DOCTOR_FORM.fields.slice(1),
+    ] }
     expect(validateAdaptiveDraft(withUrl)).toBe(false)
     expect(() => addAdaptiveField(HEALTHIA_DOCTOR_FORM, {
       label: 'x', kind: 'text', destination: 'api', output: 'inline', url: 'https://unknown.example',
