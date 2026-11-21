@@ -204,7 +204,7 @@ export function AppFrame({
   const [appMenuOpen, setAppMenuOpen] = useState(false)
   const [missionError, setMissionError] = useState(false)
   const [search, setSearch] = useState<{ term: string; results: readonly AdaptiveDiscovery[] } | null>(null)
-  const [, setPaletteRevision] = useState(0)
+  const [paletteRevision, setPaletteRevision] = useState(0)
   // Explicit two-stage chat request. The client can only alter local UI
   // metadata; events do not constitute permission for clinical/API actions.
   useEffect(() => {
@@ -373,9 +373,10 @@ export function AppFrame({
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('phoenix:adaptive-workspace-state', {
       detail: { app: adaptiveApp, role: healthiaRole, section: activeBlueprint ? customSection : healthiaSection,
-        sections: activeBlueprint?.sections ?? undefined, title: activeBlueprint?.title ?? undefined },
+        sections: activeBlueprint?.sections ?? undefined, title: activeBlueprint?.title ?? undefined,
+        palette: activeBlueprint ? readAdaptivePalette(activeBlueprint.id) : 'pearl' },
     }))
-  }, [adaptiveApp, healthiaRole, healthiaSection, customSection, activeBlueprint])
+  }, [adaptiveApp, healthiaRole, healthiaSection, customSection, activeBlueprint, paletteRevision])
 
 
   const lastSession = useRef(detailsSession)
