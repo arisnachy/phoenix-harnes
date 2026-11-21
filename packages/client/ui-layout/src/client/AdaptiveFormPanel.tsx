@@ -21,6 +21,7 @@ export function AdaptiveFormPanel({ appId, sectionId }: { appId: string; section
   const [destination, setDestination] = useState<AdaptiveDestination>('local')
   const [output, setOutput] = useState<AdaptiveOutput>('inline')
   const [values, setValues] = useState<Record<string, string>>({})
+  const [reviewFieldId, setReviewFieldId] = useState<string | null>(null)
   const [error, setError] = useState('')
   // Refresh only metadata after an explicit chat-card approval.
   useEffect(() => {
@@ -32,6 +33,7 @@ export function AdaptiveFormPanel({ appId, sectionId }: { appId: string; section
       setForm(revised)
       setHistory([])
       setValues({})
+      setReviewFieldId(null)
       setError('')
     }
     window.addEventListener('phoenix:adaptive-form-refreshed', onRefresh)
@@ -139,7 +141,38 @@ export function AdaptiveFormPanel({ appId, sectionId }: { appId: string; section
             <strong>{field.label}</strong><span>{values[field.id]}</span>
           </div>)}
       </div>
-      <p className={css.notice}>Vista temporal para pruebas con datos ficticios; nunca se envía al chat, a una API ni se incorpora a la historia clínica.</p>
+      <div className={css.fieldList} aria-label="Revisar acciones configuradas">
+        {form.fields.filter(field => field.binding.destination !== 'local' && Boolean(values[field.id])).map(field => (
+          <div key={field.id} className={css.fieldRow}>
+            <span><strong>{field.label}</strong><small>{field.binding.destination.toUpperCase()} · acción pendiente de autorización y confirmación</small></span>
+            <button type="button" className={css.action} onClick={() => setReviewFieldId(field.id)}>
+              Revisar con Kira
+            </button>
+          </div>
+        ))}
+      </div>
+      {reviewFieldId && (() => {
+        const field = form.fields.find(item => item.id === reviewFieldId)
+        if (!field || field.binding.destination === 'local' || !values[field.id]) return null
+        return <div className={css.exchange} aria-label="Confirmación antes de compartir entrada">
+          <p><strong>Antes de compartir:</strong> revisa este valor. No incluyas datos de pacientes, contraseñas ni información confidencial: se copiará al borrador del chat y podrás decidir si enviarlo.</p>
+          <p><strong>{field.label}:</strong> {values[field.id]}</p>
+          <div className={css.actions}>
+            <button type="button" className={css.action} onClick={() => setReviewFieldId(null)}>Cancelar</button>
+            <button type="button" className={css.action} onClick={() => {
+              window.dispatchEvent(new CustomEvent('phoenix:adaptive-form-action-draft', {
+                detail: {
+                  appId, sectionId, fieldId:field.id, fieldLabel:field.label,
+                  destination:field.binding.destination, output:field.binding.output,
+                  value:values[field.id],
+                },
+              }))
+              setReviewFieldId(null)
+            }}>Copiar al borrador de Kira</button>
+          </div>
+        </div>
+      })()}
+      <p className={css.notice}>Los valores de prueba son temporales. Solo al confirmar se copia un valor concreto al borrador del chat; PHOENIX no lo envía automáticamente ni ejecuta conectores.</p>
     </div>}
   </div>
 }
