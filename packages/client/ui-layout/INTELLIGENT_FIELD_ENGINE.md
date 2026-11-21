@@ -14,18 +14,19 @@ Example configuration command:
 Example response (the exact requestId and form revision must match a request created on screen):
     {"component":"adaptive_field_result","version":1,"props":{"appId":"app-inventario","sectionId":"inicio","fieldId":"field-1","requestId":"field-1234567890000","expectedRevision":1,"text":"Texto propuesto","missingInformation":[]}}
 
-## Healthia (protected clinical console)
+## Healthia (authenticated clinical console)
 
-The authenticated clinical console /health uses its existing encrypted record store, clinician assignment and authorship rules, same-origin POST and CSRF. This is independent of generic App Studio and its chat.
+Healthia is registered **automatically on the loopback-only Host**, with its encrypted store initialized lazily when /health is visited. No PowerShell or environment-variable enablement is required; explicit PHOENIX_HEALTH_ENABLED=0 remains an operator opt-out. No default clinical account or password is created. Existing administrator setup, clinician login, ownership, CSRF, review and signing rules remain in force. Patient portal invitations remain a separately authorized operation.
 
-- "Proponer HEA desde entrevista" structures only recorded complaint/answers. It is deterministic local software, NOT a model. It lists omissions, does not generate clinical negatives and does not save or sign anything.
-- "Mejorar con IA local (opcional)" is disabled by default. When an operator enables it, it sends the currently documented clinical draft to only http://127.0.0.1:11434/api/generate, never to an arbitrary URL or to the general Kira chat. The operator specifies an installed model, and each clinician request requires an explicit confirmation.
-- The returned model text is UNVERIFIED, with warnings for numerical values absent from its input. The professional verifies the before/after and either discards the suggestion or copies it into the local SOAP editor. The existing save, review and signature workflow remains mandatory. A signed note cannot be changed by this feature.
-- Loopback is not a guarantee against an Ollama model delegating to cloud. The operator is responsible for vetting the local model, prompts/log retention and clinic policies; cloud-tagged model names are rejected.
+- **Proponer HEA desde entrevista** always works without a model. It structures only recorded facts, without inventing negative findings, and never saves or signs automatically.
+- **Modelo de IA disponible en PHOENIX** enumerates real loopback Ollama text models and provider/model routes already registered in PHOENIX's LLM service, including local Phoenix, OAuth (e.g., Codex), and API-key-backed providers. No API keys, OAuth bearer tokens or user-configured endpoint URLs are returned to the clinical frontend.
+- The default selection is **a local route only** (Ollama preferred, then the registered Phoenix Local route). Registered remote providers are visible but never selected or invoked as a fallback without the clinician explicitly choosing one.
+- At invocation time the server re-checks the registered model route, the owning clinician/unsigned encounter, and consent for this exact request. A local model requires confirmation; any external model displays an explicit outbound clinical-data disclosure and requires a separate external-processing acknowledgement.
+- The LLM request uses PHOENIX's **existing authenticated model adapter**, not a second credential store. An auth failure is reported as a failure; no provider fallback is attempted.
+- The returned data is **phoenix-model-unverified**. The clinical UI verifies encounter version and unchanged source; it presents a proposal plus numeric discrepancy warnings. The professional must explicitly accept, edit, save and later review/sign within the protected clinical system.
+- When a model is unavailable, Healthia retains the deterministic HEA builder. The Host does not silently download models, turn on external transmission or invent a usable provider.
 
-No PowerShell or environment-variable activation is required. Within the signed-in Healthia SOAP editor, PHOENIX checks http://127.0.0.1:11434/api/tags for a **pre-installed local text model**. If one is available, the clinician can authorize that single processing request from the interface. Without a model, the protected deterministic HEA proposal remains available. PHOENIX must never silently install a model, upload patient data, or sign the clinical note.
-
-Patient portal invitations, confidential data exchange, and privileged Windows recovery remain governed by their existing permission rules; eliminating a command-line toggle does not remove clinical consent or operating-system authorization.
+**Important:** Registering a model does not prove that its credentials are currently valid, that it is capable of the requested clinical text task, or that its provider has approved data handling for clinical records. Local model processes must be vetted for privacy and hardware suitability before real-patient use.
 
 ## Validation and safeguards
 
