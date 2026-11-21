@@ -24,6 +24,7 @@ import type { IConversation } from './service.ts'
 import { ComposerBlockRegistry } from './input/blocks.ts'
 import type { ComposerBlock } from './input/blocks.ts'
 import { InputHub } from './input/hub.ts'
+import { ADAPTIVE_MISSION_EVENT, isAdaptiveMissionEvent, newAdaptiveAppMission } from './adaptive-app-mission.ts'
 import { ComposerSubmissionPolicy } from './input/submission-policy.ts'
 import { InputBar } from './skeleton/InputBar.tsx'
 import { EnterBehaviorRow } from './settings/EnterBehaviorRow.tsx'
@@ -278,6 +279,44 @@ export function apply(ctx: Context): void {
   // The per-session input machine registry (SessionInputResolver face; published as
   // ctx.conversation.input by the service below sharing this one instance).
   const inputHub = new InputHub(ctx, t)
+
+  // Application creation is a first-class chat turn, NOT an in-shell generator.
+  // The originating UI emits only a fixed, non-PHI intent. This plugin uses
+  // the normal session provider, input admission and model/tool routing.
+  ctx.effect(() => {
+    let disposed = false
+    let launching = false
+    const onNewAppMission = (event: Event): void => {
+      if (!isAdaptiveMissionEvent((event as CustomEvent<unknown>).detail) || launching) return
+      launching = true
+      void (async () => {
+        try {
+          const active = sessions.list.getSnapshot().current
+          const workspace = workspaces.list.getSnapshot()
+          const target = (active === undefined ? undefined : workspace.items.find(
+            item => item.sessionIds.includes(active),
+          )?.workspaceId) ?? workspace.recentWorkspaceId
+          const sessionId = await sessions.create(target === undefined ? {} : { workspaceId: target })
+          if (disposed) return
+          sessions.open(sessionId)
+          const input = inputHub.shell(sessionId)
+          input.actions.setDraft(newAdaptiveAppMission())
+          // Submit through the same input path as the user's Enter key.
+          // Host model availability and failure recovery remain authoritative.
+          input.actions.submit()
+        } catch {
+          if (!disposed) window.dispatchEvent(new Event('phoenix:adaptive-app-mission-failed'))
+        } finally {
+          launching = false
+        }
+      })()
+    }
+    window.addEventListener(ADAPTIVE_MISSION_EVENT, onNewAppMission)
+    return () => {
+      disposed = true
+      window.removeEventListener(ADAPTIVE_MISSION_EVENT, onNewAppMission)
+    }
+  }, 'ui-conversation: adaptive app chat mission')
 
   // The composer-block registry: a plugin that knows a session cannot send —
   // ui-model-selection, when no adapter serves the session's route — raises a block
