@@ -5,7 +5,8 @@
  * connector, medical service, model or permission is currently available.
  * Clinical records are never held in these manifests or form drafts.
  */
-export type AdaptiveAppId = 'general' | 'healthia' | 'inventory'
+/** String ID allows safe, user-defined draft blueprints without modifying the harness. */
+export type AdaptiveAppId = string
 export type AdaptiveAppReadiness = 'shell-ready' | 'preview-only'
 export type AdaptiveCapabilityState = 'ui-ready' | 'requires-authentication' | 'not-connected' | 'disabled'
 export type AdaptiveInputKind = 'text' | 'number' | 'date' | 'select' | 'textarea'
@@ -118,7 +119,7 @@ function validField(field: unknown): field is AdaptiveFormField {
 export function validateAdaptiveDraft(value: unknown): value is AdaptiveFormDraft {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const d = value as Partial<AdaptiveFormDraft>
-  if (!onlyKeys(value, FORM_KEYS) || d.version !== 1 || d.state !== 'local-draft' || !describeAdaptiveApp(d.appId ?? '')
+  if (!onlyKeys(value, FORM_KEYS) || d.version !== 1 || d.state !== 'local-draft' || !validId(d.appId)
     || !validId(d.templateId) || !Number.isSafeInteger(d.revision) || (d.revision ?? -1) < 0
     || !Array.isArray(d.fields) || d.fields.length > 40 || !d.fields.every(validField)) return false
   return new Set(d.fields.map(field => field.id)).size === d.fields.length
@@ -175,4 +176,30 @@ export const HEALTHIA_DOCTOR_FORM: AdaptiveFormDraft = {
     { id: 'history', label: 'Antecedentes', kind: 'textarea', required: false, protected: false, binding: { destination: 'local', output: 'inline' } },
     { id: 'vitals', label: 'Signos vitales', kind: 'text', required: false, protected: false, binding: { destination: 'local', output: 'inline' } },
   ],
+}
+
+/** Create a non-executable local app blueprint. No filesystem writes or network calls. */
+export interface AdaptiveAppBlueprint {
+  readonly version: 1
+  readonly id: string
+  readonly title: string
+  readonly status: 'preview-only'
+  readonly sections: readonly { readonly id: string; readonly label: string }[]
+}
+export function createAdaptiveAppBlueprint(title: string, sections: readonly string[]): AdaptiveAppBlueprint {
+  if (!validLabel(title) || !Array.isArray(sections) || sections.length < 1 || sections.length > 12
+    || sections.some(label => !validLabel(label))) throw new Error('ADAPTIVE_INVALID_APP')
+  const slug = (text: string): string => text.toLowerCase().normalize('NFKD')
+    .replace(/[\u0300-\u036f]/gu, '').replace(/[^a-z0-9]+/gu, '-')
+    .replace(/^-|-$/gu, '').slice(0, 38).replace(/-$/u, '')
+  const id = `app-${slug(title)}`
+  if (!validId(id) || id === 'app-' || describeAdaptiveApp(id)) throw new Error('ADAPTIVE_INVALID_APP_ID')
+  const ids = new Set<string>()
+  const safeSections = sections.map(label => {
+    const sectionId = slug(label)
+    if (!validId(sectionId) || ids.has(sectionId)) throw new Error('ADAPTIVE_DUPLICATE_SECTION')
+    ids.add(sectionId)
+    return { id: sectionId, label }
+  })
+  return { version: 1, id, title, status: 'preview-only', sections: safeSections }
 }
