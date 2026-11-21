@@ -55,11 +55,12 @@ export function SidebarRoot({
   const [tasksOpen, setTasksOpen] = useState(false)
   const [adaptive, setAdaptive] = useState<{
     app: string; role: 'doctor' | 'patient'; section: string
-    title?: string; sections: readonly { id: string; label: string }[]
+    title?: string; palette?: 'pearl'|'ocean'|'sage'|'iris'|'amber'
+    sections: readonly { id: string; label: string }[]
   }>({ app: 'general', role: 'doctor', section: 'overview', sections: [] })
   useEffect(() => {
     const onState = (event: Event): void => {
-      const detail = (event as CustomEvent<{ app?: string; role?: string; section?: string; title?: string; sections?: unknown }>).detail
+      const detail = (event as CustomEvent<{ app?: string; role?: string; section?: string; title?: string; sections?: unknown; palette?: string }>).detail
       if (!detail || typeof detail.app !== 'string' || !/^[a-z][a-z0-9-]{0,47}$/u.test(detail.app)) return
       const sections = Array.isArray(detail.sections) && detail.sections.length <= 12
         && detail.sections.every((v: unknown) => v && typeof v === 'object'
@@ -73,6 +74,8 @@ export function SidebarRoot({
         role: detail.role === 'patient' ? 'patient' : 'doctor',
         section: typeof detail.section === 'string' ? detail.section : 'overview',
         title: typeof detail.title === 'string' ? detail.title.slice(0, 60) : undefined,
+        palette: ['pearl','ocean','sage','iris','amber'].includes(detail.palette ?? '')
+          ? detail.palette as 'pearl'|'ocean'|'sage'|'iris'|'amber' : 'pearl',
         sections,
       })
     }
@@ -151,6 +154,7 @@ export function SidebarRoot({
   return (
     <div
       ref={column}
+      data-app-palette={adaptive.app.startsWith('app-') ? adaptive.palette : undefined}
       className={clsx(
         css.root, collapsed && css.collapsed, collapsed && everWide.current && css.railIn,
         !pointerInside && css.quietBars,
