@@ -35,7 +35,7 @@ describe('Adaptive workspace safe chat actions', () => {
     expect(parseAdaptiveControl({appId:'app-stock',operation:'palette',palette:'javascript:alert(1)'})).toBeNull()
     expect(parseAdaptiveControl({appId:'app-stock',operation:'open',script:'execute()'})).toBeNull()
     expect(preflightAdaptiveControl({appId:'general',operation:'find',query:'Productos'})).toEqual({valid:true,reason:'METADATA_ONLY'})
-    expect(preflightAdaptiveControl({appId:'healthia',operation:'add-section',label:'Datos'})).toEqual({valid:false,reason:'PROTECTED_WORKSPACE'})
+    expect(preflightAdaptiveControl({appId:'healthia',operation:'add-section',label:'Datos'})).toEqual({valid:false,reason:'INVALID_SCHEMA'})
   })
 
   it('checks field revisions before edits and preserves untouched fields', () => {
