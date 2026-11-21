@@ -514,6 +514,26 @@ export function AppFrame({
                 setAdaptiveApp(app.id); setCustomSection(app.sections[0].id); setAppMenuOpen(false)
               }}>{app.title} · Borrador</button>)}
               <button type="button" role="menuitem" onClick={launchAppMission}>+ Crear nueva aplicación con Kira</button>
+              <button type="button" role="menuitem" onClick={() => {
+                // Explicit user action, bounded UI metadata only. Slots describe
+                // registrations, not authentication or connector readiness.
+                const slots = (() => {
+                  try { return inspectRuntime?.().slots.map(slot => ({id:slot.id,state:slot.state})) ?? [] }
+                  catch { return [] }
+                })()
+                window.dispatchEvent(new CustomEvent('phoenix:adaptive-self-inspect', {detail:{
+                  activeApp:adaptiveApp,
+                  apps:customApps.slice(0,12).map(app => ({
+                    id:app.id,title:app.title,
+                    sections:app.sections.slice(0,8).map(item => ({id:item.id,label:item.label})),
+                  })),
+                  declared:ADAPTIVE_APP_PRESETS.map(app => ({
+                    id:app.id,label:app.label,readiness:app.readiness,
+                  })),
+                  slots,
+                }}))
+                setAppMenuOpen(false)
+              }}>Inspeccionar capacidades con Kira</button>
             </div>}
           </div>
           {search && (
