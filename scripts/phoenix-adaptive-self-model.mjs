@@ -10,13 +10,13 @@
  */
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import { basename, dirname, join, relative, resolve, sep } from 'node:path'
+import { dirname, join, resolve, sep } from 'node:path'
 
 const MAX_MANIFEST_BYTES = 256 * 1024
 const MAX_PACKAGES = 400
 const PARTS = ['packages', 'apps']
 const SAFE_PACKAGE = /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+$/u
-const SAFE_SERVICE = /^[a-z][a-z0-9._-]{0,90}$/u
+const SAFE_SERVICE = /^(?:@[a-z0-9._-]+\\/)?[a-z][a-z0-9._-]{0,90}$/u
 const QUALITY_GATES = new Set([
   'build', 'typecheck', 'lint', 'test', 'test:unit', 'test:healthia:exchange',
   'verify', 'check', 'check:types', 'verify:security',
