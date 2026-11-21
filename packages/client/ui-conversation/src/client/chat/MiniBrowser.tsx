@@ -782,17 +782,20 @@ export function MiniBrowser({
   }, [expanded])
 
   const click = (event: MouseEvent<HTMLImageElement>) => {
+    onPinChange?.(true)
     if (!active) { onActivate?.(); return }
     const position = point(event.currentTarget, event.clientX, event.clientY)
     event.currentTarget.focus()
     if (position) void run({ type: 'click', ...position })
   }
   const wheel = (event: WheelEvent<HTMLImageElement>) => {
+    onPinChange?.(true)
     if (!active) { onActivate?.(); return }
     const position = point(event.currentTarget, event.clientX, event.clientY)
     if (position) void run({ type: 'scroll', ...position, deltaY: event.deltaY })
   }
   const keyboard = (event: KeyboardEvent<HTMLImageElement>) => {
+    onPinChange?.(true)
     if (!active) { onActivate?.(); return }
     if (event.key === 'F5') { event.preventDefault(); void run({ type: 'reload' }); return }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v') {
@@ -903,7 +906,7 @@ export function MiniBrowser({
         {!active && !compact && <button type="button" onClick={() => onActivate?.()}>↻ Reactivar</button>}
         <span className={css.grow} />
         {compact && <button type="button" title="Herramientas de navegación" aria-label="Más herramientas del navegador"
-          aria-expanded={advanced} onClick={() => setAdvanced(value => !value)}>⋯</button>}
+          aria-expanded={advanced} onClick={() => { onPinChange?.(true); setAdvanced(value => !value) }}>⋯</button>}
         {onPinChange && <button type="button" title={pinned ? 'Soltar navegador' : 'Fijar navegador'}
           aria-pressed={pinned} onClick={() => onPinChange(!pinned)}>
           {pinned ? 'Fijado' : 'Fijar'}
@@ -1002,7 +1005,7 @@ export function MiniBrowser({
           🔐 Solicitar acceso seguro
         </button>}
         {advanced && <form className={css.typeRow} onSubmit={(event) => { event.preventDefault(); if (typed) { void run({ type: 'text', text: typed }); setTyped(''); focusRef.current?.focus() } }}>
-          <input aria-label="Escribir en la página" placeholder="Escribe en el campo seleccionado…" value={typed} onChange={(event) => { setTyped(event.currentTarget.value) }} />
+          <input aria-label="Escribir en la página" placeholder="Escribe en el campo seleccionado…" value={typed} onChange={(event) => { onPinChange?.(true); setTyped(event.currentTarget.value) }} />
           <button type="submit" disabled={!snapshot.available || !typed}>Escribir</button>
           <button type="button" disabled={!snapshot.available} title="Pegar texto en el campo enfocado (no contraseñas)" onClick={() => { void pasteIntoPage() }}>Pegar</button>
           <button type="button" disabled={!snapshot.available} onClick={() => { void run({ type: 'key', key: 'Enter' }) }}>Enter</button>
