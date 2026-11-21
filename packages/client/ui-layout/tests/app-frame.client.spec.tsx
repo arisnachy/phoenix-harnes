@@ -138,24 +138,22 @@ afterEach(() => {
 
 describe('AppFrame', () => {
 
-  it('creates a generic adaptive app preview, retains the chat and restores General', () => {
-    const view = mountFrame()
-    fireEvent.click(view.getByRole('button', { name: 'Aplicaciones PHOENIX' }))
-    fireEvent.click(view.getByRole('menuitem', { name: '+ Crear aplicación' }))
-    fireEvent.change(view.getByRole('textbox', { name: 'Nombre de nueva aplicación' }), {
-      target: { value: 'Inventario de prueba' },
-    })
-    fireEvent.change(view.getByRole('textbox', { name: 'Secciones de nueva aplicación' }), {
-      target: { value: 'Inicio, Productos, Reportes' },
-    })
-    fireEvent.click(view.getByRole('button', { name: 'Crear vista adaptable' }))
-    expect(view.getByRole('region', { name: 'Aplicación adaptable: Inventario de prueba' })).toBeTruthy()
-    expect(view.getByTestId('center-content')).toBeTruthy()
-    fireEvent.click(view.getByRole('button', { name: 'Volver a PHOENIX' }))
-    expect(view.queryByRole('region', { name: 'Aplicación adaptable: Inventario de prueba' })).toBeNull()
-    expect(view.getByTestId('center-content')).toBeTruthy()
+  it('starts a real App Studio chat mission instead of a local wizard', () => {
+    const intents: unknown[] = []
+    const onMission = (event: Event) => intents.push((event as CustomEvent<unknown>).detail)
+    window.addEventListener('phoenix:adaptive-app-mission', onMission)
+    try {
+      const view = mountFrame()
+      fireEvent.click(view.getByRole('button', { name: 'Aplicaciones PHOENIX' }))
+      fireEvent.click(view.getByRole('menuitem', { name: '+ Crear nueva aplicación con Kira' }))
+      expect(intents).toEqual([{ intent: 'new-app' }])
+      expect(view.getByTestId('center-content')).toBeTruthy()
+      expect(view.queryByRole('textbox', { name: 'Nombre de nueva aplicación' })).toBeNull()
+      expect(view.queryByRole('menu')).toBeNull()
+    } finally {
+      window.removeEventListener('phoenix:adaptive-app-mission', onMission)
+    }
   })
-
 
   it('renders three tracks from store state', () => {
     const { frame } = mountFrame()
