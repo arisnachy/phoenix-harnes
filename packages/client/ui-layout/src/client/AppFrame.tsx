@@ -11,7 +11,7 @@
  * zero self-made hooks.
  */
 import { Component, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { CSSProperties, ErrorInfo, ReactNode } from 'react'
+import type { CSSProperties, ErrorInfo, ReactNode, FormEvent } from 'react'
 import type { PropsRenderSlots, PropsRuntime, PropsStore } from '@phoenix-ai/dsh-client-ui-slots'
 import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAULT } from './columns.ts'
 import type { createLayoutStore } from './stores.ts'
@@ -170,7 +170,7 @@ export function AppFrame({
   const [appError, setAppError] = useState('')
   const [customSection, setCustomSection] = useState('overview')
   const activeBlueprint = customApps.find(app => app.id === adaptiveApp)
-  const createApp = (event: React.FormEvent<HTMLFormElement>): void => {
+  const createApp = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
     try {
       const sections = appSectionsText.split(',').map(value => value.trim())
