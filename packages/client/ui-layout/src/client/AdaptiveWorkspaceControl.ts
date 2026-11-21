@@ -144,6 +144,7 @@ export function preflightAdaptiveControl(command: AdaptiveControlCommand, apps: 
   formReader: typeof readAdaptiveForm = readAdaptiveForm): { readonly valid: boolean; readonly reason: string } {
   if (!parseAdaptiveControl(command)) return { valid:false,reason:'INVALID_SCHEMA' }
   if (command.appId === 'general' || command.appId === 'healthia') {
+    if (command.operation === 'find') return {valid:true,reason:'METADATA_ONLY'}
     return command.operation === 'open' ? { valid:true, reason:'READ_ONLY_ROUTE' }
       : { valid:false, reason:'PROTECTED_WORKSPACE' }
   }
