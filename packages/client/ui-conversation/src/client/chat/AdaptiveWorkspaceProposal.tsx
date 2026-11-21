@@ -6,7 +6,7 @@ export interface AdaptiveWorkspaceProposalSpec {
   readonly version: 1
   readonly props: {
     readonly appId: string
-    readonly operation: 'open' | 'find' | 'add-section' | 'rename-section' | 'remove-section' | 'palette' | 'rename-field' | 'remove-field' | 'set-binding' | 'set-field-kind' | 'set-required' | 'add-widget' | 'remove-widget' | 'rename-widget' | 'move-widget' | 'set-widget-span'
+    readonly operation: 'open' | 'find' | 'add-section' | 'rename-section' | 'remove-section' | 'palette' | 'rename-field' | 'remove-field' | 'set-binding' | 'set-field-kind' | 'set-required' | 'set-field-ai' | 'add-widget' | 'remove-widget' | 'rename-widget' | 'move-widget' | 'set-widget-span'
     readonly sectionId?: string
     readonly fieldId?: string
     readonly label?: string
@@ -17,6 +17,9 @@ export interface AdaptiveWorkspaceProposalSpec {
     readonly destination?: 'local' | 'api' | 'chat' | 'ai'
     readonly output?: 'inline' | 'table' | 'document' | 'chat'
     readonly expectedRevision?: number
+    readonly enabled?: boolean
+    readonly skill?: 'polish'|'summarize'|'structure'|'extract'
+    readonly instruction?: string
     readonly widgetId?: string
     readonly widgetKind?: 'metric'|'card'|'avatar'|'table'|'chart'|'calendar'|'timeline'|'alert'
     readonly span?: 'half'|'full'
@@ -39,7 +42,7 @@ export function parseAdaptiveWorkspaceProposal(input: unknown): AdaptiveWorkspac
   const p = v.props as Record<string,unknown>
   const base = ['appId','operation']
   if (typeof p.appId !== 'string' || !['general','healthia'].includes(p.appId) && !APP.test(p.appId)) return null
-  if (!['open','find','add-section','rename-section','remove-section','palette','rename-field','remove-field','set-binding','set-field-kind','set-required','add-widget','remove-widget','rename-widget','move-widget','set-widget-span'].includes(p.operation as string)) return null
+  if (!['open','find','add-section','rename-section','remove-section','palette','rename-field','remove-field','set-binding','set-field-kind','set-required','set-field-ai','add-widget','remove-widget','rename-widget','move-widget','set-widget-span'].includes(p.operation as string)) return null
   const operation = p.operation
   const keys: Record<string,string[]> = {
     open: [...base,'sectionId'],
@@ -53,6 +56,7 @@ export function parseAdaptiveWorkspaceProposal(input: unknown): AdaptiveWorkspac
     'set-binding':[...base,'sectionId','fieldId','destination','output','expectedRevision'],
     'set-field-kind':[...base,'sectionId','fieldId','kind','expectedRevision'],
     'set-required':[...base,'sectionId','fieldId','required','expectedRevision'],
+    'set-field-ai':[...base,'sectionId','fieldId','enabled','skill','instruction','expectedRevision'],
     'add-widget':[...base,'sectionId','expectedRevision','widgetKind','label','span'],
     'remove-widget':[...base,'sectionId','expectedRevision','widgetId'],
     'rename-widget':[...base,'sectionId','expectedRevision','widgetId','label'],
@@ -69,7 +73,7 @@ export function parseAdaptiveWorkspaceProposal(input: unknown): AdaptiveWorkspac
   if (['rename-section','remove-section'].includes(operation as string)
     && (typeof p.sectionId !== 'string' || !ID.test(p.sectionId))) return null
   if (operation === 'palette' && !['pearl','ocean','sage','iris','amber'].includes(p.palette as string)) return null
-  if (['rename-field','remove-field','set-binding','set-field-kind','set-required'].includes(operation as string)
+  if (['rename-field','remove-field','set-binding','set-field-kind','set-required','set-field-ai'].includes(operation as string)
     && (typeof p.sectionId !== 'string' || !ID.test(p.sectionId)
       || typeof p.fieldId !== 'string' || !ID.test(p.fieldId)
       || !Number.isSafeInteger(p.expectedRevision) || (p.expectedRevision as number) < 0)) return null
@@ -79,6 +83,10 @@ export function parseAdaptiveWorkspaceProposal(input: unknown): AdaptiveWorkspac
       || !['inline','table','document','chat'].includes(p.output as string))) return null
   if (operation === 'set-field-kind' && !['text','number','date','select','textarea'].includes(p.kind as string)) return null
   if (operation === 'set-required' && typeof p.required !== 'boolean') return null
+  if (operation === 'set-field-ai' && (typeof p.enabled !== 'boolean'
+    || !['polish','summarize','structure','extract'].includes(p.skill as string)
+    || typeof p.instruction !== 'string' || p.instruction.length>320
+    || /[<>\u0000-\u001f\u007f]/u.test(p.instruction)))return null
   if (['add-widget','remove-widget','rename-widget','move-widget','set-widget-span'].includes(operation as string)) {
     if(typeof p.sectionId!=='string'||!ID.test(p.sectionId)||!Number.isSafeInteger(p.expectedRevision)
       ||(p.expectedRevision as number)<0)return null
@@ -99,6 +107,7 @@ const nameOf: Record<AdaptiveWorkspaceProposalSpec['props']['operation'],string>
   'rename-field':'Renombrar campo','remove-field':'Eliminar campo',
   'set-binding':'Configurar destino y salida de campo',
   'set-field-kind':'Cambiar tipo de input','set-required':'Cambiar validación requerida',
+  'set-field-ai':'Configurar instrucciones inteligentes de campo',
   'add-widget':'Añadir componente visual','remove-widget':'Quitar componente visual',
   'rename-widget':'Renombrar componente visual','move-widget':'Reordenar componente visual',
   'set-widget-span':'Cambiar ancho del componente',
