@@ -270,6 +270,26 @@ describe('AppFrame', () => {
     }
   })
 
+  it('shares only an allowlisted live capability inventory after user click', () => {
+    const events: unknown[] = []
+    const onInspect = (event: Event) => { events.push((event as CustomEvent).detail) }
+    window.addEventListener('phoenix:adaptive-self-inspect',onInspect)
+    try {
+      const view = mountFrame()
+      expect(events).toHaveLength(0)
+      fireEvent.click(view.getByRole('button',{name:'Aplicaciones PHOENIX'}))
+      fireEvent.click(view.getByRole('menuitem',{name:'Inspeccionar capacidades con Kira'}))
+      expect(events).toHaveLength(1)
+      const payload = events[0] as {
+        activeApp:string;apps:unknown[];declared:{id:string}[];slots:unknown[]
+      }
+      expect(payload.activeApp).toBe('general')
+      expect(payload.declared.map(x => x.id)).toContain('healthia')
+      expect(payload.slots).toEqual([])
+      expect(JSON.stringify(payload)).not.toMatch(/apiKey|password|patientName/u)
+    } finally { window.removeEventListener('phoenix:adaptive-self-inspect',onInspect) }
+  })
+
   it('renders three tracks from store state', () => {
     const { frame } = mountFrame()
     expect(tracks(frame)).toEqual([SIDEBAR_DEFAULT, 0])
