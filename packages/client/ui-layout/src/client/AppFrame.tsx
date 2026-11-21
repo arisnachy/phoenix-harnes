@@ -25,7 +25,7 @@ import {
   saveAdaptivePalette, readAdaptivePalette, applyAdaptiveFieldEdit, applyAdaptiveVisualEdit,
   type AdaptiveDiscovery,
 } from './AdaptiveWorkspaceControl.ts'
-import { isVisualOperation, restoreVisualBoard } from './AdaptiveVisualKit.ts'
+import { isVisualOperation, restoreVisualBoard, readVisualBoard } from './AdaptiveVisualKit.ts'
 import { AdaptiveAppPreview } from './AdaptiveAppPreview.tsx'
 import type { AdaptiveLiveSnapshot } from './AdaptiveLiveSlots.ts'
 
@@ -533,7 +533,13 @@ export function AppFrame({
                   activeApp:adaptiveApp,
                   apps:customApps.slice(0,12).map(app => ({
                     id:app.id,title:app.title,
-                    sections:app.sections.slice(0,8).map(item => ({id:item.id,label:item.label})),
+                    sections:app.sections.slice(0,8).map(item => {
+                      const board=readVisualBoard(app.id,item.id)
+                      return {id:item.id,label:item.label,visual:{revision:board.revision,total:board.widgets.length,
+                        widgets:board.widgets.slice(0,10).map(widget=>({
+                          id:widget.id,kind:widget.kind,title:widget.title,span:widget.span,
+                        }))}}
+                    }),
                   })),
                   declared:ADAPTIVE_APP_PRESETS.map(app => ({
                     id:app.id,label:app.label,readiness:app.readiness,
