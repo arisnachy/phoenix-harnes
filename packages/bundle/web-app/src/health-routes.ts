@@ -13,7 +13,7 @@ import { HealthClinicStore, healthKinds, type ClinicActor } from './health-store
 import { renderHealthPage } from './health-ui.ts'
 import { createPatientPortalHandler } from './health-patient-routes.ts'
 import { HEALTH_CLINICAL_TOOLS, runHealthClinicalTool } from './health-clinical-tools.ts'
-import { refineProtectedHistoryLocal, discoverProtectedLocalAiModel } from './health-clinical-local-ai.ts'
+import { discoverClinicalModels, runClinicalModel, type HostClinicalLlm } from './health-clinical-models.ts'
 
 type Kind = Parameters<HealthClinicStore['list']>[1]
 const jsonHeaders:Record<string,string> = {
@@ -67,6 +67,14 @@ function statusError(error:unknown):number{
 
 type GoogleMailClient = { request(input:{ service:'gmail';path:string;method?:string;headers?:Record<string,string>;body?:string }):
 Promise<{ ok:boolean;body:string;status:number }> }
+/** The live PHOENIX model registry is authoritative; credentials remain with its adapters. */
+function clinicalModelRuntime(ctx:Context):HostClinicalLlm|undefined {
+  const runtime=(ctx.get as (key:string)=>unknown)('llm')
+  if(!runtime||typeof runtime!=='object')return undefined
+  const service=runtime as Partial<HostClinicalLlm>
+  return typeof service.listProviders==='function'&&typeof service.listModels==='function'
+    &&typeof service.stream==='function'?service as HostClinicalLlm:undefined
+}
 function mailClient(ctx:Context):GoogleMailClient|undefined {
   return (ctx.get as (key:string)=>unknown)('googleApi') as GoogleMailClient|undefined
 }
@@ -233,24 +241,24 @@ export function registerHealthRoutes(ctx:Context):void {
       }
       if(operation==='clinical-note-ai-status'&&id===undefined&&method==='GET'){
         if(actor.role!=='clinician')throw Error('Permiso clínico insuficiente')
-        reply(res,200,await discoverProtectedLocalAiModel());return
+        const catalog=await discoverClinicalModels(clinicalModelRuntime(ctx))
+        reply(res,200,catalog);return
       }
       if(operation==='clinical-note-ai'&&id!==undefined&&method==='POST'){
-        // Clinic session + CSRF/origin are already enforced above. The operator
-        // must confirm each use; no PowerShell flag or credential is required.
         const body=await readBody(req,1024)
-        if(body.action!=='refine'||body.confirmLocalProcessing!==true)
-          throw Error('Confirmación clínica requerida')
-        const proposal=store.suggestClinicalNote(actor,id)
-        if(!proposal.mayUseLocalModel)throw Error('Documento clínico reservado: IA local no autorizada')
-        const detected=await discoverProtectedLocalAiModel()
-        if(!detected.available||!detected.model)
-          throw Error('No se encontró un modelo local de Ollama; se mantiene disponible la propuesta sin IA.')
-        const refined=await refineProtectedHistoryLocal(proposal,{
-          enabled:true,
-          model:detected.model,
-        })
-        reply(res,200,{proposal:{...refined,encounterId:id,encounterVersion:proposal.encounterVersion}})
+        if(body.action!=='refine'||typeof body.routeId!=='string')
+          throw Error('Solicitud IA clínica inválida')
+        const recorded=store.suggestClinicalNote(actor,id)
+        if(!recorded.mayUseLocalModel)
+          throw Error('Documento clínico reservado: envío a modelos no autorizado')
+        const runtime=clinicalModelRuntime(ctx)
+        const catalog=await discoverClinicalModels(runtime)
+        const refined=await runClinicalModel(recorded,{
+          requestedId:body.routeId,
+          acknowledgeLocal:body.confirmLocalProcessing===true,
+          acknowledgeExternal:body.confirmExternalProcessing===true,
+        },catalog,runtime)
+        reply(res,200,{proposal:{...refined,encounterId:id,encounterVersion:recorded.encounterVersion}})
         return
       }
       // Persist only authorized per-user UI drafts in the encrypted clinical store.
