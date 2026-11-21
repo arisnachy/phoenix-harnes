@@ -29,3 +29,17 @@
 .footer { margin-top:16px;gap:10px;flex-wrap:wrap; }
 .chatHint,.notice {font-size:11px;color:var(--dsw-alias-label-secondary);}
 @media (max-width:760px) { .shell {margin:54px 10px 0; padding:12px; max-height:42vh;} .header,.footer {align-items:flex-start;} }
+
+/* Healthia declarative forms: labels/actions only, not clinical PHI values. */
+.fieldList,.capabilityList {display:grid;gap:7px;margin:10px 0;}
+.fieldRow {display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--dsw-alias-border-l2);border-radius:11px;padding:8px 10px;min-width:0;}
+.fieldRow span:first-child {min-width:0;}
+.fieldRow strong {display:block;font-size:12px;font-weight:620;line-height:1.3;}
+.fieldRow small {display:block;color:var(--dsw-alias-label-secondary);font-size:11px;margin-top:3px;line-height:1.45;}
+.draftHeader {display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:12px;font-weight:600;}
+.locked {font-size:10px;color:var(--dsw-alias-label-secondary);flex:none;}
+.removeField {border:0;background:transparent;cursor:pointer;color:var(--dsw-alias-label-secondary);font-size:20px;padding:4px 8px;}
+.formSelect {display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--dsw-alias-label-secondary);}
+.formSelect select {max-width:170px;border:1px solid var(--dsw-alias-border-l2);border-radius:9px;background:var(--dsw-specific-input-major);color:var(--dsw-alias-label-primary);padding:8px;font:inherit;font-size:12px;}
+.capabilityList p {margin:0 0 8px;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-secondary);}
+.capabilityList .status {flex:none;}
