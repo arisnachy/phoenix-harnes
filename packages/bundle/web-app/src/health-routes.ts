@@ -264,6 +264,11 @@ export function registerHealthRoutes(ctx:Context):void {
           acknowledgeLocal:body.confirmLocalProcessing===true,
           acknowledgeExternal:body.confirmExternalProcessing===true,
         },catalog,runtime)
+        // A separate clinical session may have modified or signed the encounter
+        // while the model was running. Never return a stale AI proposal.
+        const latest=store.suggestClinicalNote(actor,id)
+        if(latest.encounterVersion!==recorded.encounterVersion)
+          throw Error('Consulta modificada durante la generación; solicitud IA caducada')
         reply(res,200,{proposal:{...refined,encounterId:id,encounterVersion:recorded.encounterVersion}})
         return
       }
