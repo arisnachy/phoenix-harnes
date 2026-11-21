@@ -29,6 +29,29 @@ async function bench() {
 }
 
 describe('tool-living', () => {
+  it('legacy living_act is unable to execute without an interactive approval', async()=>{
+    const root=await bench()
+    const id=LivingCreationId('generic-installed-app')
+    await root.living.remember({
+      id,title:'Inventory app',kind:'inventory',targetLevel:'controllable',
+      state:[],actions:['adjust-stock'],events:[],resources:[],actors:[],
+    })
+    let calls=0
+    const release=root.living.attach(id,{
+      act:()=>{calls+=1;return {ok:true}},
+      readState:()=>({}),subscribe:()=>()=>undefined,
+    })
+    const result=await root.tools.get('living_act')!.execute({
+      id:'generic-installed-app',action:'adjust-stock',input_json:'{"count":2}',
+    },{} as never) as {result_json:string}
+    const payload=JSON.parse(result.result_json) as {status:string;executed:boolean}
+    expect(payload.status).toBe('denied')
+    expect(payload.executed).toBe(false)
+    expect(calls).toBe(0)
+    release()
+  })
+
+
   it('exposes live tool registration without Living resource secrets or clinical records', async()=>{
     const root=await bench()
     await root.living.remember({
