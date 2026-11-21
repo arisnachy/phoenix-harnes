@@ -11,13 +11,13 @@
  * zero self-made hooks.
  */
 import { Component, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { CSSProperties, ErrorInfo, ReactNode, FormEvent } from 'react'
+import type { CSSProperties, ErrorInfo, ReactNode } from 'react'
 import type { PropsRenderSlots, PropsRuntime, PropsStore } from '@phoenix-ai/dsh-client-ui-slots'
 import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAULT } from './columns.ts'
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
 import { HealthiaWorkspace, HEALTHIA_NAV, type HealthiaRole } from './HealthiaWorkspace.tsx'
-import { ADAPTIVE_APP_PRESETS, createAdaptiveAppBlueprint, type AdaptiveAppBlueprint } from './AdaptiveAppCatalog.ts'
+import { ADAPTIVE_APP_PRESETS, type AdaptiveAppBlueprint } from './AdaptiveAppCatalog.ts'
 import { AdaptiveAppPreview } from './AdaptiveAppPreview.tsx'
 
 /** Full composed props: runtime share + child-slot render share + store share. */
@@ -170,29 +170,15 @@ export function AppFrame({
   const [viewport, setViewport] = useState(() => window.innerWidth)
   const [adaptiveApp, setAdaptiveApp] = useState<string>('general')
   const [customApps, setCustomApps] = useState<readonly AdaptiveAppBlueprint[]>([])
-  const [appTitle, setAppTitle] = useState('')
-  const [appSectionsText, setAppSectionsText] = useState('')
-  const [appBuilderOpen, setAppBuilderOpen] = useState(false)
-  const [appError, setAppError] = useState('')
   const [customSection, setCustomSection] = useState('overview')
   const activeBlueprint = customApps.find(app => app.id === adaptiveApp)
-  const createApp = (event: FormEvent<HTMLFormElement>): void => {
-    event.preventDefault()
-    try {
-      const sections = appSectionsText.split(',').map(value => value.trim())
-      const blueprint = createAdaptiveAppBlueprint(appTitle.trim(), sections)
-      if (customApps.some(app => app.id === blueprint.id)) throw new Error('DUPLICATE_APP')
-      setCustomApps(apps => [...apps, blueprint])
-      setAdaptiveApp(blueprint.id)
-      setCustomSection(blueprint.sections[0].id)
-      setAppTitle('')
-      setAppSectionsText('')
-      setAppBuilderOpen(false)
-      setAppMenuOpen(false)
-      setAppError('')
-    } catch {
-      setAppError('Utiliza un nombre único y de 1 a 12 secciones separadas por comas.')
-    }
+  const launchAppMission = (): void => {
+    // UI intent only. The conversation plugin owns session creation and submission.
+    setAdaptiveApp('general')
+    setAppMenuOpen(false)
+    window.dispatchEvent(new CustomEvent('phoenix:adaptive-app-mission', {
+      detail: { intent: 'new-app' },
+    }))
   }
   const [healthiaRole, setHealthiaRole] = useState<HealthiaRole>('doctor')
   const [healthiaSection, setHealthiaSection] = useState('overview')
@@ -358,14 +344,7 @@ export function AppFrame({
               {customApps.map(app => <button key={app.id} type="button" role="menuitem" onClick={() => {
                 setAdaptiveApp(app.id); setCustomSection(app.sections[0].id); setAppMenuOpen(false)
               }}>{app.title} · Borrador</button>)}
-              <button type="button" role="menuitem" onClick={() => { setAppBuilderOpen(value => !value); setAppError('') }}>+ Crear aplicación</button>
-              {appBuilderOpen && <form className={css.appLauncherForm} onSubmit={createApp}>
-                <input aria-label="Nombre de nueva aplicación" value={appTitle} onChange={event => setAppTitle(event.currentTarget.value)} maxLength={60} placeholder="Nombre de la aplicación"/>
-                <input aria-label="Secciones de nueva aplicación" value={appSectionsText} onChange={event => setAppSectionsText(event.currentTarget.value)} placeholder="Inicio, Productos, Reportes"/>
-                <button type="submit">Crear vista adaptable</button>
-                <small>Vista temporal sin permisos, almacenamiento ni conectores.</small>
-                {appError && <span role="alert">{appError}</span>}
-              </form>}
+              <button type="button" role="menuitem" onClick={launchAppMission}>+ Crear nueva aplicación con Kira</button>}
             </div>}
           </div>
           <SurfaceBoundary name="adaptive" resetKey={adaptiveApp}>
