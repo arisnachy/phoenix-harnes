@@ -405,6 +405,7 @@ function renderWorkspace(){
       (allowed.length?allowed.map(x=>'<div class="ws-item"><strong>'+safe(x.title)+'</strong> '+
         '<button class="secondary" data-act="portalPublish" data-id="'+safe(x.kind+":"+x.id)+'">Publicar al paciente</button></div>').join(""):
        '<p class="muted">No hay citas/recetas propias aptas para publicar.</p>')+
+      '<p class="muted">Por seguridad, abrir el portal paciente en el mismo navegador cerrará la sesión profesional. Se recomienda una ventana o perfil de navegador independiente.</p>'+
       '<p><a href="/health/patient" target="_blank" rel="noopener noreferrer">Abrir portal paciente (acceso separado)</a></p>');
   }
   panel+='<div id="ws-current-visit">';
