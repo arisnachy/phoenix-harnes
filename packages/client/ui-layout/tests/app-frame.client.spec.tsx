@@ -155,6 +155,34 @@ describe('AppFrame', () => {
     }
   })
 
+  it('accepts an approved app card, persists it, and restores its context after remount', () => {
+    localStorage.removeItem('phoenix.adaptive.apps.v1')
+    localStorage.removeItem('phoenix.adaptive.apps.last-good.v1')
+    try {
+      const view = mountFrame()
+      const acknowledgments: unknown[] = []
+      const onAck = (event: Event) => acknowledgments.push((event as CustomEvent).detail)
+      window.addEventListener('phoenix:adaptive-app-install-result', onAck)
+      try {
+        fireEvent(window, new CustomEvent('phoenix:adaptive-app-install', {
+          detail: { requestId: 'test-install', title: 'Inventario clinico', sections: ['Inicio', 'Productos', 'Reportes'] },
+        }))
+        expect(acknowledgments).toEqual([{ requestId: 'test-install', ok: true }])
+        expect(view.getByRole('region', { name: 'Aplicación adaptable: Inventario clinico' })).toBeTruthy()
+        expect(view.getByTestId('center-content')).toBeTruthy()
+        view.unmount()
+        const restored = mountFrame()
+        fireEvent.click(restored.getByRole('button', { name: 'Aplicaciones PHOENIX' }))
+        expect(restored.getByRole('menuitem', { name: 'Inventario clinico · Borrador' })).toBeTruthy()
+      } finally {
+        window.removeEventListener('phoenix:adaptive-app-install-result', onAck)
+      }
+    } finally {
+      localStorage.removeItem('phoenix.adaptive.apps.v1')
+      localStorage.removeItem('phoenix.adaptive.apps.last-good.v1')
+    }
+  })
+
   it('renders three tracks from store state', () => {
     const { frame } = mountFrame()
     expect(tracks(frame)).toEqual([SIDEBAR_DEFAULT, 0])
