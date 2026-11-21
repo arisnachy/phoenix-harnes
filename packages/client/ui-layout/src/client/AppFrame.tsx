@@ -38,6 +38,7 @@ export type AppFrameProps =
 interface SurfaceBoundaryProps {
   readonly name: 'conversation' | 'workspace' | 'details' | 'adaptive'
   readonly resetKey: string
+  readonly onRestore?: () => void
   readonly children: ReactNode
 }
 
@@ -67,6 +68,11 @@ class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoundarySta
     } else {
       console.error(`PHOENIX ${this.props.name} surface render failed:`, error, info.componentStack)
     }
+    if (this.props.name === 'adaptive' && this.state.autoRetried) {
+      // Two consecutive crashes: leave the compromised optional app and
+      // restore PHOENIX General. Core conversation stays mounted.
+      this.props.onRestore?.()
+    }
     this.setState(state => state.autoRetried
       ? null
       : { failed: false, autoRetried: true })
@@ -88,6 +94,8 @@ class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoundarySta
       <div className={css.surfaceRecovery} role="alert" data-surface-recovery={this.props.name}>
         <span>PHOENIX isolated a rendering error in this view.</span>
         <button type="button" onClick={this.retry}>Retry view</button>
+        {this.props.name === 'adaptive' && this.props.onRestore &&
+          <button type="button" onClick={this.props.onRestore}>Volver a PHOENIX General</button>}
       </div>
     )
   }
@@ -523,7 +531,8 @@ export function AppFrame({
               <button type="button" onClick={() => setMissionError(false)} aria-label="Cerrar aviso de App Studio">×</button>
             </div>
           )}
-          <SurfaceBoundary name="adaptive" resetKey={adaptiveApp}>
+          <SurfaceBoundary name="adaptive" resetKey={adaptiveApp}
+            onRestore={() => { setAdaptiveApp('general'); setSearch(null); setAppMenuOpen(false) }}>
             {activeBlueprint && (
               <AdaptiveAppPreview key={activeBlueprint.id} app={activeBlueprint} section={customSection}
                 palette={readAdaptivePalette(activeBlueprint.id)}
