@@ -14,6 +14,9 @@ import {
 import type { HeroMissionStarter } from './EmptyHero.tsx'
 import css from './ConversationRoot.module.css'
 
+interface AppMenuEntry { readonly id: string; readonly title: string }
+interface AppMenuPreset { readonly id: string; readonly label: string; readonly readiness: 'shell-ready' | 'preview-only' }
+
 /** Full props composed from the slot contract. */
 export type ConversationRootProps = ConversationSlotProps
 
@@ -67,6 +70,82 @@ export function ConversationRoot({
   const [pendingWorkspaceId, setPendingWorkspaceId] = useState<WorkspaceId | undefined>()
   const pickerAnchor = useRef<HTMLButtonElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  const [appMenuOpen, setAppMenuOpen] = useState(false)
+  const [appFilter, setAppFilter] = useState('')
+  const [activeApplication, setActiveApplication] = useState('general')
+  const [activeHealthiaRole, setActiveHealthiaRole] = useState<'doctor' | 'patient'>('doctor')
+  const [availableApps, setAvailableApps] = useState<readonly AppMenuEntry[]>([])
+  const [catalogApps, setCatalogApps] = useState<readonly AppMenuPreset[]>([])
+  const appMenuRef = useRef<HTMLDivElement>(null)
+  const appSearchRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const onState = (event: Event): void => {
+      const state = (event as CustomEvent<{
+        app?: unknown; role?: unknown; apps?: unknown; presets?: unknown
+      }>).detail
+      if (!state || typeof state.app !== 'string') return
+      if (!/^(?:general|healthia|app-[a-z0-9-]{1,45})$/u.test(state.app)) return
+      setActiveApplication(state.app)
+      setActiveHealthiaRole(state.role === 'patient' ? 'patient' : 'doctor')
+      if (Array.isArray(state.apps)) {
+        setAvailableApps(state.apps.slice(0,20).filter((value: unknown): value is AppMenuEntry => {
+          if (!value || typeof value !== 'object') return false
+          const item = value as Record<string,unknown>
+          return typeof item.id === 'string' && /^app-[a-z0-9-]{1,45}$/u.test(item.id)
+            && typeof item.title === 'string' && item.title.length <= 80
+        }))
+      }
+      if (Array.isArray(state.presets)) {
+        setCatalogApps(state.presets.slice(0,20).filter((value: unknown): value is AppMenuPreset => {
+          if (!value || typeof value !== 'object') return false
+          const item = value as Record<string,unknown>
+          return typeof item.id === 'string' && /^[a-z][a-z0-9-]{0,47}$/u.test(item.id)
+            && typeof item.label === 'string' && item.label.length <= 80
+            && (item.readiness === 'shell-ready' || item.readiness === 'preview-only')
+        }))
+      }
+    }
+    window.addEventListener('phoenix:adaptive-workspace-state', onState)
+    window.dispatchEvent(new Event('phoenix:adaptive-workspace-state-request'))
+    return () => window.removeEventListener('phoenix:adaptive-workspace-state', onState)
+  }, [])
+
+  useEffect(() => {
+    if (!appMenuOpen) return
+    appSearchRef.current?.focus()
+    const closeOutside = (event: PointerEvent): void => {
+      if (event.target instanceof Node && !appMenuRef.current?.contains(event.target)) setAppMenuOpen(false)
+    }
+    const closeEscape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setAppMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOutside)
+    document.addEventListener('keydown', closeEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside)
+      document.removeEventListener('keydown', closeEscape)
+    }
+  }, [appMenuOpen])
+
+  const navigateApp = (app: string, role?: 'doctor' | 'patient'): void => {
+    window.dispatchEvent(new CustomEvent('phoenix:adaptive-workspace', {
+      detail: {app, ...(role ? {role,section:'overview'} : {})},
+    }))
+    setAppMenuOpen(false)
+    setAppFilter('')
+  }
+  const startAppStudio = (): void => {
+    navigateApp('general')
+    window.dispatchEvent(new CustomEvent('phoenix:adaptive-app-mission', {
+      detail: {intent:'new-app'},
+    }))
+  }
+  const inspectApps = (): void => {
+    window.dispatchEvent(new Event('phoenix:adaptive-self-inspect-request'))
+    setAppMenuOpen(false)
+  }
+  const matchesAppFilter = (label: string): boolean => label.toLocaleLowerCase().includes(appFilter.trim().toLocaleLowerCase())
   const [visualActive, setVisualActive] = useState(false)
   // Collapsing on the FIRST keystroke blocks the input's first paint.
   // Only a first locally admitted submission in a blank session can arm focus.
@@ -228,8 +307,8 @@ export function ConversationRoot({
   // after one fails (`error`) for the same reason — there is no history.
   const settling = sessionId !== undefined && composerPhase === 'blank' && openState === 'loading'
     && summaryBlank !== true
-  const hero = sessionId === undefined
-    || (composerPhase === 'blank' && (openState === 'open' || summaryBlank === true))
+  const hero = activeApplication === 'general' && (sessionId === undefined
+    || (composerPhase === 'blank' && (openState === 'open' || summaryBlank === true)))
   const zone: InputZone | undefined =
     session === undefined || inputState === undefined ? undefined : { session, input: inputState }
 
@@ -390,13 +469,75 @@ export function ConversationRoot({
           <button type="button" className={css.heroTopIcon} aria-label="Buscar sesiones" onClick={openWorkspaceSearch}>
             <IconSearchOutline16 size={19} />
           </button>
-          <button type="button" className={css.heroTopIcon} aria-label="Descubrir herramientas" onClick={() => { openSettingsSection('plugins') }}>
-            <svg viewBox="0 0 20 20" width="19" height="19" fill="currentColor" aria-hidden="true">
-              {Array.from({ length: 9 }, (_, index) => (
-                <circle key={index} cx={4 + (index % 3) * 6} cy={4 + Math.floor(index / 3) * 6} r="1.45" />
-              ))}
-            </svg>
-          </button>
+          <div ref={appMenuRef} className={css.appPicker}>
+            <button type="button" className={css.heroTopIcon} aria-label="Aplicaciones PHOENIX"
+              aria-haspopup="dialog" aria-controls="phoenix-applications-menu" aria-expanded={appMenuOpen}
+              title="Abrir aplicaciones" onClick={() => { setAppMenuOpen(open => !open) }}>
+              <svg viewBox="0 0 20 20" width="19" height="19" fill="currentColor" aria-hidden="true">
+                {Array.from({ length: 9 }, (_, index) => (
+                  <circle key={index} cx={4 + (index % 3) * 6} cy={4 + Math.floor(index / 3) * 6} r="1.45" />
+                ))}
+              </svg>
+            </button>
+            {appMenuOpen && (
+              <div id="phoenix-applications-menu" className={css.appMenu} role="dialog" aria-label="Espacios de trabajo PHOENIX">
+                <div className={css.appMenuTitle}><strong>Espacios de trabajo</strong><span>PHOENIX</span></div>
+                <label className={css.appMenuSearch}>
+                  <IconSearchOutline16 size={17}/>
+                  <input ref={appSearchRef} type="search" maxLength={60} value={appFilter}
+                    onChange={event => setAppFilter(event.currentTarget.value)}
+                    placeholder="Buscar aplicaciones" aria-label="Buscar aplicaciones" />
+                </label>
+                <div className={css.appMenuItems}>
+                  {matchesAppFilter('PHOENIX General') && (
+                    <button type="button" className={css.appMenuItem} aria-current={activeApplication === 'general' ? 'page' : undefined}
+                      onClick={() => navigateApp('general')}>
+                      <span className={css.appMenuSymbol} aria-hidden="true">✦</span>
+                      <span><strong>PHOENIX</strong><small>Chat y herramientas generales</small></span>
+                      {activeApplication === 'general' && <span className={css.appMenuActive} aria-hidden="true">✓</span>}
+                    </button>
+                  )}
+                  {matchesAppFilter('Healthia Médico consultas pacientes historia clínica') && (
+                    <button type="button" className={css.appMenuItem}
+                      aria-current={activeApplication === 'healthia' && activeHealthiaRole === 'doctor' ? 'page' : undefined}
+                      onClick={() => navigateApp('healthia','doctor')}>
+                      <span className={css.appMenuSymbol} aria-hidden="true">✚</span>
+                      <span><strong>Healthia · Médico</strong><small>Consultas, formularios e historia clínica</small></span>
+                      {activeApplication === 'healthia' && activeHealthiaRole === 'doctor' && <span className={css.appMenuActive} aria-hidden="true">✓</span>}
+                    </button>
+                  )}
+                  {matchesAppFilter('Healthia Paciente') && (
+                    <button type="button" className={css.appMenuItem}
+                      aria-current={activeApplication === 'healthia' && activeHealthiaRole === 'patient' ? 'page' : undefined}
+                      onClick={() => navigateApp('healthia','patient')}>
+                      <span className={css.appMenuSymbol} aria-hidden="true">♡</span>
+                      <span><strong>Healthia · Paciente</strong><small>Vista preliminar, acceso protegido</small></span>
+                      {activeApplication === 'healthia' && activeHealthiaRole === 'patient' && <span className={css.appMenuActive} aria-hidden="true">✓</span>}
+                    </button>
+                  )}
+                  {availableApps.filter(app => matchesAppFilter(app.title)).map(app => (
+                    <button type="button" key={app.id} className={css.appMenuItem}
+                      aria-current={activeApplication === app.id ? 'page' : undefined} onClick={() => navigateApp(app.id)}>
+                      <span className={css.appMenuSymbol} aria-hidden="true">▤</span>
+                      <span><strong>{app.title}</strong><small>Aplicación local adaptable</small></span>
+                      {activeApplication === app.id && <span className={css.appMenuActive} aria-hidden="true">✓</span>}
+                    </button>
+                  ))}
+                  {catalogApps.filter(app => app.readiness === 'preview-only' && matchesAppFilter(app.label)).map(app => (
+                    <div key={app.id} className={css.appMenuItemDisabled} aria-label={app.label + ' sin conectar'}>
+                      <span className={css.appMenuSymbol} aria-hidden="true">▤</span>
+                      <span><strong>{app.label}</strong><small>Plantilla · Sin conector</small></span>
+                    </div>
+                  ))}
+                </div>
+                <div className={css.appMenuFooter}>
+                  <button type="button" onClick={startAppStudio}><span aria-hidden="true">＋</span> Crear aplicación con Kira</button>
+                  <button type="button" onClick={inspectApps}>Inspeccionar capacidades con Kira</button>
+                  <button type="button" onClick={() => {setAppMenuOpen(false);openSettingsSection('plugins')}}>Conectores y extensiones</button>
+                </div>
+              </div>
+            )}
+          </div>
           <button type="button" className={css.heroTopProfile} aria-label="Abrir perfil" onClick={() => { openSettingsSection('profile') }}>
             {profileInitials}
           </button>
@@ -407,6 +548,8 @@ export function ConversationRoot({
           <div className={css.recoveryStatus} role="status">{t('chat.loadingHistory')}</div>
         )}
         <SessionBodyOutlet sessionId={sessionId} renderSlot={renderSlot} />
+        {/* Native in-flow mount for the shell's adaptable UI, before composer. */}
+        <div className={css.adaptiveChatHost} data-adaptive-chat-host="" />
         {composerSeat}
       </div>
     </div>

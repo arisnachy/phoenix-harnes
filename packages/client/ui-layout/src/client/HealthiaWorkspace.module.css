@@ -1,4 +1,4 @@
-.shell { flex: 0 1 auto; max-height: min(48vh, 390px); min-height: 0; overflow: auto; margin: 54px 26px 0; padding: 18px 20px 16px; border-radius: 20px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-specific-input-major); box-shadow: 0 12px 34px rgba(64, 49, 36, .05); color: var(--dsw-alias-label-primary); }
+.shell { flex: 0 0 auto; width:100%; box-sizing:border-box; max-height:none; min-height:0; overflow:visible; margin:0; padding:8px 0 12px; border:0; border-radius:0; background:transparent; box-shadow:none; color:var(--dsw-alias-label-primary); }
 .header,.titleRow,.footer,.identity,.actions,.chips,.builder { display:flex; align-items:center; gap:10px; }
 .header,.titleRow,.footer { justify-content:space-between; }
 .header { padding-bottom:12px; border-bottom:1px solid var(--dsw-alias-border-l2); flex-wrap:wrap; }
@@ -28,7 +28,7 @@
 .activeTab {background:#fff0e7;color:#c24c16;border-color:#f3bd98;}
 .footer { margin-top:16px;gap:10px;flex-wrap:wrap; }
 .chatHint,.notice {font-size:11px;color:var(--dsw-alias-label-secondary);}
-@media (max-width:760px) { .shell {margin:54px 10px 0; padding:12px; max-height:42vh;} .header,.footer {align-items:flex-start;} }
+@media (max-width:760px) { .shell {margin:0; padding:6px 0 12px; max-height:none;} .header,.footer {align-items:flex-start;} }
 
 /* Healthia declarative forms: labels/actions only, not clinical PHI values. */
 .fieldList,.capabilityList {display:grid;gap:7px;margin:10px 0;}
@@ -51,10 +51,13 @@
 .shell[data-app-palette='sage'] { --adaptive-accent:#316c4c;--adaptive-tint:#eaf5ec;--adaptive-ink:#1b472f; }
 .shell[data-app-palette='iris'] { --adaptive-accent:#6941a3;--adaptive-tint:#f1ecfb;--adaptive-ink:#412665; }
 .shell[data-app-palette='amber'] { --adaptive-accent:#89510d;--adaptive-tint:#fff4dc;--adaptive-ink:#55340e; }
-.shell[data-app-palette] { border-color:var(--adaptive-accent);box-shadow:0 8px 32px rgba(24,27,31,.07); }
+.shell[data-app-palette] { border-color:transparent;box-shadow:none; }
 .shell[data-app-palette] .symbol {background:var(--adaptive-tint);color:var(--adaptive-accent);}
 .shell[data-app-palette] .activeTab {background:var(--adaptive-tint);color:var(--adaptive-ink);border-color:var(--adaptive-accent);}
 .shell[data-app-palette] .builder button {background:var(--adaptive-accent);color:white;border-color:var(--adaptive-accent);}
 .shell[data-app-palette] .eyebrow {color:var(--adaptive-accent);}
 .shell[data-app-palette] .formPreview :is(input,select,textarea):focus-visible {outline:2px solid var(--adaptive-accent);outline-offset:2px;}
 @media (prefers-reduced-motion:reduce) {.shell[data-app-palette] *{transition:none!important;}}
+
+/* The contextual sidebar already owns desktop section navigation. */
+@media (min-width:761px){.tabs{display:none;}}
