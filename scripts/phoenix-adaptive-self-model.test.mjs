@@ -10,14 +10,14 @@ async function fixture(callback) {
   try {
     await mkdir(join(root, 'packages', 'client', 'demo'), { recursive: true })
     await writeFile(join(root, 'package.json'), JSON.stringify({
-      scripts: { test: 'node test.mjs --secret FAKE_PRIVATE_KEY', deploy: 'echo DO_NOT_EXPOSE' },
-      credentials: { token: 'FAKE_PRIVATE_KEY' },
+      scripts: { test: 'node test.mjs --secret SENSITIVE_SENTINEL', deploy: 'echo DO_NOT_EXPOSE' },
+      credentials: { token: 'SENSITIVE_SENTINEL' },
     }))
     await writeFile(join(root, 'packages', 'client', 'demo', 'package.json'), JSON.stringify({
       name: '@phoenix-ai/demo',
       dsh: { client: { inject: ['@phoenix-ai/dsh-runtime', 'window.location.href', 'https://example.com'] } },
-      auth: { apiKey: 'FAKE_PRIVATE_KEY' },
-      scripts: { unauthorized: 'echo FAKE_PRIVATE_KEY' },
+      auth: { apiKey: 'SENSITIVE_SENTINEL' },
+      scripts: { unauthorized: 'echo SENSITIVE_SENTINEL' },
     }))
     return await callback(root)
   } finally { await rm(root, { recursive: true, force: true }) }
@@ -34,7 +34,7 @@ test('introspects only bounded source metadata, never credentials or command bod
   assert.deepEqual(model.packages[0].dependencies.client, ['@phoenix-ai/dsh-runtime'])
   assert.deepEqual(model.availableGateNames, ['test'])
   const serialized = JSON.stringify(model)
-  assert.ok(!serialized.includes('FAKE_PRIVATE_KEY'))
+  assert.ok(!serialized.includes('SENSITIVE_SENTINEL'))
   assert.ok(!serialized.includes('DO_NOT_EXPOSE'))
   assert.ok(!serialized.includes('unauthorized'))
 }))
