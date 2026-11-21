@@ -248,6 +248,7 @@ describe('LocalModelRuntimeManager', () => {
     await manager.install(id)
     expect(dependencies.deleteOllamaModel).not.toHaveBeenCalled()
     await manager.deleteOllamaModel(id)
-    expect(dependencies.deleteOllamaModel).toHaveBeenCalledExactlyOnceWith(tag)
+    expect(dependencies.deleteOllamaModel).toHaveBeenCalledTimes(1)
+    expect(dependencies.deleteOllamaModel).toHaveBeenCalledWith(tag)
   })
 })
