@@ -107,6 +107,7 @@ function renderProviderEditor({ target, ...props }: ProviderEditorRenderProps): 
       provider={target.provider}
       displayName={target.displayName}
       settingsPath={target.settingsPath}
+      guided
       {...target.declared === true ? { declared: true } : {}}
       {...props}
     />
@@ -235,6 +236,8 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
     void controller.load()
   })
   const [reordering, setReordering] = useState(false)
+  const [organizing, setOrganizing] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   const [orderFailure, setOrderFailure] = useState<string | undefined>(undefined)
 
   useEffect(() => {
@@ -343,6 +346,9 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
   // step: whether the user already has a provider to talk to.
   const anyUsable = state.rows.some(providerUsable)
   const configured = state.rows.filter(row => row.configured)
+  const filteredConfigured = configured.filter(row =>
+    `${row.entry.displayName} ${row.entry.provider}`.toLocaleLowerCase()
+      .includes(searchQuery.trim().toLocaleLowerCase()))
   const addable = state.rows.filter(row => !row.configured && row.entry.settingsNs !== '')
   const addTarget = adding ? editing : undefined
   const addNamespace = addTarget === undefined ? undefined : state.namespaces.get(addTarget.settingsNs)
@@ -363,7 +369,17 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
     <div className={styles['section']}>
       <h2 className={styles['title']}>{t('title')}</h2>
       <p className={styles['intro']}>{t('intro')}</p>
-      <p className={styles['intro']}>{t('providerOrder')}</p>
+      <div className={styles['catalogToolbar']}>
+        <input className={styles['catalogSearch']} type="search" value={searchQuery}
+          aria-label={t('searchProviders')} placeholder={t('searchProviders')}
+          onChange={(event) => { setSearchQuery(event.target.value) }} />
+        <button type="button" className={styles['secondaryButton']}
+          onClick={() => { setOrganizing(current => !current); setSearchQuery('') }}>
+          {organizing ? t('finishOrder') : t('manageOrder')}
+        </button>
+      </div>
+      {organizing ? <p className={styles['intro']}>{t('providerOrder')}</p> : null}
+      <h3 className={styles['catalogHeading']}>{t('catalogTitle')}</h3>
       {!state.writable && state.status === 'ready' ? <p className={styles['notice']}>{t('readOnly')}</p> : null}
       {savedIdentity === undefined
         ? null
@@ -383,7 +399,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
       )}
       {codexAuthFailure === undefined ? null : <p role="alert" className={styles['error']}>{codexAuthFailure}</p>}
       <ul className={styles['rows']}>
-        {configured.map((row, index) => {
+        {filteredConfigured.map((row, index) => {
           const target = targetOf(row)
           const namespace = state.namespaces.get(target.settingsNs)
           /* v8 ignore next -- the join marks a row configured only when its namespace resolved */
@@ -415,7 +431,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
             && row.apiKeyEnv !== undefined
             && row.credential?.configured === false
           return (
-            <li key={row.entry.provider} className={styles['rowCard']}>
+            <li key={row.entry.provider} className={open ? `${styles['rowCard']} ${styles['rowExpanded']}` : styles['rowCard']}>
               <div className={styles['rowHead']}>
                 <span className={styles['rowIdentity']}>
                   <span className={styles['rowName']}>{isCodex && row.entry.displayName === CODEX_PROVIDER ? 'OpenAI Codex' : row.entry.displayName}</span>
@@ -451,6 +467,10 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                         />
                       )
                       : null}
+                  <span className={styles['providerStatus']}>
+                    {accountConnected ? t('statusConnected') : credentialConfigured ? t('statusConnected')
+                      : credentialMissing ? t('statusUnconfigured') : isCodex ? t('statusAccount') : t('statusUnconfigured')}
+                  </span>
                 </span>
                 <span className={styles['rowActions']}>
                   {isCodex ? (
@@ -469,7 +489,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                   ) : null}
                   <button
                     type="button"
-                    className={styles['iconButton']}
+                    className={organizing ? styles['iconButton'] : `${styles['iconButton']} ${styles['orderGhost']}`}
                     aria-label={`${t('moveUp')}: ${row.entry.displayName}`}
                     title={t('moveUp')}
                     disabled={!state.writable || reordering || index === 0}
@@ -477,7 +497,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                   >↑</button>
                   <button
                     type="button"
-                    className={styles['iconButton']}
+                    className={organizing ? styles['iconButton'] : `${styles['iconButton']} ${styles['orderGhost']}`}
                     aria-label={`${t('moveDown')}: ${row.entry.displayName}`}
                     title={t('moveDown')}
                     disabled={!state.writable || reordering || index === configured.length - 1}
@@ -562,6 +582,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                 provider={addTarget.provider}
                 displayName={addTarget.displayName}
                 hideTitle
+                guided
                 namespace={addNamespace}
                 schema={schema}
                 settingsPath={addTarget.settingsPath}
@@ -578,6 +599,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
             ? (
               <div className={styles['addCard']}>
                 <CustomProviderCard
+                  guided
                   taken={state.rows.map(row => row.entry.provider)}
                   protocols={protocols}
                   /* v8 ignore next -- the card only opens from a button disabled without this namespace */
