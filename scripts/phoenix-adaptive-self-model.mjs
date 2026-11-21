@@ -23,7 +23,8 @@ const QUALITY_GATES = new Set([
 ])
 
 function stringsOnly(value, max = 30) {
-  return Array.isArray(value) ? value.filter(v => typeof v === 'string' && SAFE_SERVICE.test(v)).slice(0, max) : []
+  return Array.isArray(value) ? value.filter(v => typeof v === 'string' && SAFE_SERVICE.test(v)
+    && !/^(?:window|document|globalThis|process|navigator|location)(?:\\.|$)/u.test(v)).slice(0, max) : []
 }
 function summary(manifest, path) {
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) return null
