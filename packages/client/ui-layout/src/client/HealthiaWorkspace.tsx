@@ -64,7 +64,7 @@ export function HealthiaWorkspace({
   const [output, setOutput] = useState<AdaptiveOutput>('inline')
   const [draftError, setDraftError] = useState('')
   const [clinical, setClinical] = useState<ClinicalRouteStatus>({
-    status:'unavailable',role:null,patientPortal:'not-enabled',
+    status:'unavailable',role:null,patientPortal:'not-verified',
   })
   const [clinicalRefresh, setClinicalRefresh] = useState(0)
   useEffect(() => {
@@ -139,7 +139,7 @@ export function HealthiaWorkspace({
         </div>
         <div className={css.titleRow}>
           <div><span className={css.eyebrow}>PHOENIX / HEALTHIA</span><h2>{HEALTHIA_NAV[role].find(item => item.id === active)?.label}</h2></div>
-          <span className={css.status}>{isPatient ? 'Portal de pacientes no activado'
+          <span className={css.status}>{isPatient ? 'Portal sujeto a autenticación y habilitación'
             : clinical.status === 'authenticated' ? 'Sesión clínica autenticada'
             : clinical.status === 'locked' ? 'Inicio de sesión requerido'
             : 'Servicio clínico no disponible'}</span>
