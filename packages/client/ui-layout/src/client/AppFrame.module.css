@@ -219,24 +219,6 @@
   border-color: var(--dsw-alias-border-l3);
 }
 
-/* Adaptive app switcher: centered left of the existing upper-right account controls. */
-.appLauncher { position:absolute; z-index:7; top:14px; left:22px; pointer-events:auto; }
-.appLauncherButton { display:flex; align-items:center; gap:6px; height:34px; padding:0 12px; font:inherit;font-size:12px;font-weight:600; color:var(--dsw-alias-label-primary);background:var(--dsw-specific-input-major);border:1px solid var(--dsw-alias-border-l2); border-radius:12px;cursor:pointer; }
-.appLauncherButton:hover,.appLauncherButton:focus-visible {background:var(--dsw-alias-interactive-bg-hover);}
-.appLauncherButton span {font-size:18px;color:#e76020;}
-.appLauncherMenu { position:absolute; top:42px; left:0; width:278px; max-height:min(70vh,560px); overflow-y:auto; overscroll-behavior:contain; padding:8px; border-radius:14px; border:1px solid var(--dsw-alias-border-l2); background:var(--dsw-specific-input-major);box-shadow:0 12px 34px rgba(30,30,30,.12); }
-.appLauncherMenu button { display:block;width:100%;font:inherit;font-size:13px;padding:10px;border:0;border-radius:8px;text-align:left;color:var(--dsw-alias-label-primary);background:transparent;cursor:pointer; }
-.appLauncherMenu button:hover,.appLauncherMenu button:focus-visible {background:var(--dsw-alias-interactive-bg-hover);}
-@media (max-width:760px) { .appLauncher {left:12px; top:58px;} .appLauncherMenu {left:0; width:min(278px,80vw);} }
-
-/* User app blueprints are temporary safe previews, never installed executables. */
-.appLauncherForm { display:flex; flex-direction:column; gap:7px; padding:9px 4px 4px; border-top:1px solid var(--dsw-alias-border-l2); }
-.appLauncherForm input { width:100%;box-sizing:border-box;min-width:0;border:1px solid var(--dsw-alias-border-l2);border-radius:9px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;padding:8px; }
-.appLauncherForm button {background:#e76020;color:#fff;font-weight:650;text-align:center;}
-.appLauncherForm small {font-size:10px;line-height:1.45;color:var(--dsw-alias-label-secondary);}
-.appLauncherForm [role="alert"] {font-size:11px;color:#b54824;}
-.appLauncherMenu button:disabled {opacity:.55;cursor:not-allowed;}
-
 /* A failed session admission never silently drops the user's App Studio request. */
 .appMissionError {display:flex;align-items:center;justify-content:space-between;gap:12px;margin:52px 24px 4px;padding:11px 14px;border-radius:12px;background:var(--dsw-specific-input-major);border:1px solid #da966b;color:var(--dsw-alias-label-primary);font-size:12px;line-height:1.5;}
 .appMissionError button {cursor:pointer;border:0;background:transparent;color:inherit;font-size:18px;padding:2px 4px;}
@@ -250,3 +232,19 @@
 .adaptiveSearchItem span {font-size:10px;color:var(--dsw-alias-label-secondary);}
 .adaptiveSearch p {font-size:12px;color:var(--dsw-alias-label-secondary);}
 @media(max-width:760px){.adaptiveSearch{margin:54px 10px 0;padding:9px;}}
+
+/* Native in-chat adaptive card. The portal's host owns scrolling, never this card. */
+.adaptiveChatCard {
+  box-sizing:border-box; min-width:0; width:100%; padding:14px 18px 18px;
+  border:1px solid var(--dsw-alias-border-l2); border-radius:20px;
+  background:var(--dsw-alias-bg-layer-1);
+  color:var(--dsw-alias-label-primary);
+  box-shadow:0 5px 22px rgba(64,49,36,.065);
+}
+.adaptiveChatChrome {display:flex;flex-wrap:wrap;align-items:center;gap:9px;padding:0 0 11px;border-bottom:1px solid var(--dsw-alias-border-l2);font-size:12px;}
+.adaptiveChatChrome strong {font-size:13px;font-weight:650;}
+.adaptiveChatSpark {display:grid;place-items:center;width:27px;height:27px;border-radius:50%;background:#fff0e8;color:#d85420;font-size:16px;}
+.adaptiveChatBadge {margin-left:auto;padding:5px 9px;border-radius:9px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary);font-size:11px;}
+.adaptiveChatChrome button {border:0;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;font:inherit;font-size:11px;padding:6px;}
+.adaptiveChatChrome button:hover {color:var(--dsw-alias-label-primary);}
+@media (max-width:760px) {.adaptiveChatCard{padding:12px;border-radius:16px;}}
