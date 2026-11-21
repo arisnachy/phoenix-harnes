@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { AdaptiveFormPanel } from '../src/client/AdaptiveFormPanel.tsx'
 import { addAdaptiveField, type AdaptiveFormDraft } from '../src/client/AdaptiveAppCatalog.ts'
-import { readAdaptiveForm, saveAdaptiveForm } from '../src/client/AdaptiveFormMetadataStore.ts'
+import { readAdaptiveForm, saveAdaptiveForm, restorePreviousAdaptiveForms } from '../src/client/AdaptiveFormMetadataStore.ts'
 
 function fakeStore() {
   const items = new Map<string, string>()
@@ -21,9 +21,21 @@ afterEach(() => {
   cleanup()
   localStorage.removeItem('phoenix.adaptive.form-schemas.v1')
   localStorage.removeItem('phoenix.adaptive.form-schemas.last-good.v1')
+  localStorage.removeItem('phoenix.adaptive.form-schemas.pre-change.v1')
 })
 
 describe('App Studio generic form schema persistence', () => {
+  it('restores previous validated schema revision after a simulated UI crash', () => {
+    const store = fakeStore()
+    saveAdaptiveForm(initial,store)
+    const next = addAdaptiveField(initial,{label:'Cantidad',kind:'number',destination:'local',output:'table'})
+    saveAdaptiveForm(next,store)
+    expect(readAdaptiveForm(initial.appId,initial.templateId,store)?.revision).toBe(1)
+    restorePreviousAdaptiveForms(store)
+    expect(readAdaptiveForm(initial.appId,initial.templateId,store)).toEqual(initial)
+  })
+
+
   it('persists only typed metadata, preserves revisions and can restore last-good data', () => {
     const store = fakeStore()
     saveAdaptiveForm(initial, store)
