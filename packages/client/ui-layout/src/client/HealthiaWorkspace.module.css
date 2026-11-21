@@ -43,3 +43,18 @@
 .formSelect select {max-width:170px;border:1px solid var(--dsw-alias-border-l2);border-radius:9px;background:var(--dsw-specific-input-major);color:var(--dsw-alias-label-primary);padding:8px;font:inherit;font-size:12px;}
 .capabilityList p {margin:0 0 8px;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-secondary);}
 .capabilityList .status {flex:none;}
+
+/* PHOENIX palettes: isolated per generic app, never global/clinical. Every
+ * accent stays dark on a pale tint to preserve legibility in Pearl Light. */
+.shell[data-app-palette='pearl'] { --adaptive-accent:#bc471c;--adaptive-tint:#fff1e8;--adaptive-ink:#532312; }
+.shell[data-app-palette='ocean'] { --adaptive-accent:#16658a;--adaptive-tint:#e6f4fb;--adaptive-ink:#123d59; }
+.shell[data-app-palette='sage'] { --adaptive-accent:#316c4c;--adaptive-tint:#eaf5ec;--adaptive-ink:#1b472f; }
+.shell[data-app-palette='iris'] { --adaptive-accent:#6941a3;--adaptive-tint:#f1ecfb;--adaptive-ink:#412665; }
+.shell[data-app-palette='amber'] { --adaptive-accent:#89510d;--adaptive-tint:#fff4dc;--adaptive-ink:#55340e; }
+.shell[data-app-palette] { border-color:var(--adaptive-accent);box-shadow:0 8px 32px rgba(24,27,31,.07); }
+.shell[data-app-palette] .symbol {background:var(--adaptive-tint);color:var(--adaptive-accent);}
+.shell[data-app-palette] .activeTab {background:var(--adaptive-tint);color:var(--adaptive-ink);border-color:var(--adaptive-accent);}
+.shell[data-app-palette] .builder button {background:var(--adaptive-accent);color:white;border-color:var(--adaptive-accent);}
+.shell[data-app-palette] .eyebrow {color:var(--adaptive-accent);}
+.shell[data-app-palette] .formPreview :is(input,select,textarea):focus-visible {outline:2px solid var(--adaptive-accent);outline-offset:2px;}
+@media (prefers-reduced-motion:reduce) {.shell[data-app-palette] *{transition:none!important;}}
