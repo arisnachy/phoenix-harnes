@@ -27,3 +27,7 @@ Connection choices are derived from the account authorization flows registered b
 ## Consequences
 
 Users can choose a provider before dealing with keys and advanced configuration, and the same steps guide edits. Credential values remain outside settings snapshots. The final review offers a non-destructive connection probe, but saving alone is not presented as proof that inference works. The focused UI regression test checks navigation without writes.
+
+## Follow-up: real OAuth and local Ollama management
+
+Settings Models now opens theme-aware responsive modal wizards, not inline editor cards. Its authentication choices are obtained from actual Host authorization methods. Codex remains account-based; API-only and browser session routes remain separate. The Ollama Host enumerates installed tags through localhost /api/tags and probes /api/show for model-native context metadata. RAM-conservative operational limits, input and output budgets, and separately confirmed permanent deletion are exposed through sanitized Host Remote contracts. Explicit user installation calls /api/pull with progress; unlinking never deletes shared Ollama files. Oversized local prompts fail explicitly instead of silent truncation. No secrets or personal model inventories are stored in this public repository. Publication requires actual passing CI.
