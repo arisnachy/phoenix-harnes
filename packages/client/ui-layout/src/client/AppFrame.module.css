@@ -228,3 +228,11 @@
 .appLauncherMenu button { display:block;width:100%;font:inherit;font-size:13px;padding:10px;border:0;border-radius:8px;text-align:left;color:var(--dsw-alias-label-primary);background:transparent;cursor:pointer; }
 .appLauncherMenu button:hover,.appLauncherMenu button:focus-visible {background:var(--dsw-alias-interactive-bg-hover);}
 @media (max-width:760px) { .appLauncher {right:12px; top:58px;} .appLauncherMenu {right:0; width:min(250px,80vw);} }
+
+/* User app blueprints are temporary safe previews, never installed executables. */
+.appLauncherForm { display:flex; flex-direction:column; gap:7px; padding:9px 4px 4px; border-top:1px solid var(--dsw-alias-border-l2); }
+.appLauncherForm input { width:100%;box-sizing:border-box;min-width:0;border:1px solid var(--dsw-alias-border-l2);border-radius:9px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;padding:8px; }
+.appLauncherForm button {background:#e76020;color:#fff;font-weight:650;text-align:center;}
+.appLauncherForm small {font-size:10px;line-height:1.45;color:var(--dsw-alias-label-secondary);}
+.appLauncherForm [role="alert"] {font-size:11px;color:#b54824;}
+.appLauncherMenu button:disabled {opacity:.55;cursor:not-allowed;}
