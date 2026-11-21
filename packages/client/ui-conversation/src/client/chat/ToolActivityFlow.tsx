@@ -1012,9 +1012,23 @@ export function setSecureAskDismissed(sessionId: string, origin: string, dismiss
   } catch { /* In-memory fallback still prevents reopening during this chat. */ }
 }
 
+/** Release only the Chromium child belonging to this chat, not other conversations. */
+export async function releaseMiniBrowserSession(sessionId: string): Promise<boolean> {
+  if (!/^[A-Za-z0-9._:-]{1,256}$/u.test(sessionId)) return false
+  try {
+    const response = await fetch('/phoenix-mini-browser/action', {
+      method: 'POST', cache: 'no-store', keepalive: true,
+      headers: { 'content-type': 'application/json', 'x-phoenix-mini-browser': '1' },
+      body: JSON.stringify({type: 'release-session', sessionId}),
+    })
+    return response.ok
+  } catch { return false }
+}
+
 /** Same real transcript seats as the ordinary chat, inside the temporary sidecar. */
 function BrowserWorkspace({
   items, live, selected, onActivate, seatProps, turnStatus, tabId, sourceUrl, sessionId, inputActions,
+  pinned, onPinChange, onClose,
 }: {
   readonly items: readonly FlowItem[]
   readonly sessionId: string
@@ -1024,6 +1038,9 @@ function BrowserWorkspace({
   readonly tabId?: string
   readonly sourceUrl?: string
   readonly onActivate: () => void
+  readonly pinned: boolean
+  readonly onPinChange: (value: boolean) => void
+  readonly onClose: () => void
   readonly seatProps: SeatProps
   readonly turnStatus: ToolActivityFlowProps['turnStatus']
 }) {
@@ -1040,11 +1057,11 @@ function BrowserWorkspace({
       setSecureRequest(null)
       return
     }
-    if (request.explicit) setSecureAskDismissed(sessionId, request.origin, false)
+    if (request.explicit) { setSecureAskDismissed(sessionId, request.origin, false); onPinChange(true) }
     else if (isSecureAskDismissed(sessionId, request.origin)) return
     secureRequestRef.current = request
     setSecureRequest(request)
-  }, [sessionId])
+  }, [sessionId,onPinChange])
   const dismissSecureRequest = useCallback(() => {
     const current = secureRequestRef.current
     if (current !== null) {
@@ -1112,10 +1129,11 @@ function BrowserWorkspace({
   }
 
   return (
-    <div className={css.browserWorkspace} data-browser-workspace={live ? '' : undefined}
+    <div className={css.browserWorkspace} data-browser-floating="true" data-browser-workspace={live ? '' : undefined}
       data-activity-open={showSidecar ? 'true' : undefined} data-chat-flow-kind="browser-workspace">
       <div className={css.browserPane}>
         <MiniBrowser key={sessionId} sessionId={sessionId} requested active={selected}
+          pinned={pinned} onPinChange={onPinChange} onClose={onClose}
           {...sourceUrl === undefined ? {} : { sourceUrl }}
           {...tabId === undefined ? {} : { initialTabId: tabId }}
           onActivate={onActivate} autoScroll={false} onPageChange={setPage}
@@ -1223,8 +1241,35 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
   const activeBrowserKey = selectedBrowserKey ?? newestBrowserKey
   const latestDesktopKey = ordinaryFlow.filter(item => item.kind === 'desktop').at(-1)?.key
   const browserTurnRunning = browserTurnOpen ?? (turnStatus?.progress != null)
+  // A later unrelated question must not resurrect a browser opened by an old turn.
+  const newestRequestKey = ordinaryFlow.filter(item => item.kind === 'optimistic'
+    || item.kind === 'node' && nodes.some(node => node.key === item.key
+      && (node.kind === 'user' || node.kind === 'steering'))).at(-1)?.key
+  const activeBrowserTurn = browserTurnRunning && newestBrowserKey !== undefined
+    && newestBrowserKey === newestRequestKey
+  const [pinnedBrowserKey, setPinnedBrowserKey] = useState<string | undefined>()
+  const [manualBrowserKey, setManualBrowserKey] = useState<string | undefined>()
+  const [dismissedBrowserKey, setDismissedBrowserKey] = useState<string | undefined>()
+  const previouslyActiveBrowser = useRef<string | undefined>(undefined)
+  const visibleBrowserKey = pinnedBrowserKey ?? manualBrowserKey
+    ?? (activeBrowserTurn && dismissedBrowserKey !== newestBrowserKey ? newestBrowserKey : undefined)
+  useEffect(() => {
+    if (activeBrowserTurn) previouslyActiveBrowser.current = newestBrowserKey
+    else if (!browserTurnRunning && previouslyActiveBrowser.current !== undefined) {
+      // A genuine completed browser turn: the host frees this conversation's
+      // process unless the person pinned or manually reopened the navigator.
+      if (pinnedBrowserKey === undefined && manualBrowserKey === undefined)
+        void releaseMiniBrowserSession(sessionId)
+      previouslyActiveBrowser.current = undefined
+    }
+  }, [activeBrowserTurn, browserTurnRunning, newestBrowserKey, pinnedBrowserKey, manualBrowserKey, sessionId])
+  useEffect(() => {
+    setPinnedBrowserKey(undefined); setManualBrowserKey(undefined)
+    setDismissedBrowserKey(undefined)
+    previouslyActiveBrowser.current = undefined
+  }, [sessionId])
   const flow = useMemo(() => {
-    const grouped = browserTurnRunning && newestBrowserKey !== undefined
+    const grouped = activeBrowserTurn && newestBrowserKey !== undefined
       ? groupActiveBrowserFlow(ordinaryFlow, newestBrowserKey, nodes)
       : ordinaryFlow
     // Keep every browser mounted under the SAME React key as the sidecar opens
@@ -1234,7 +1279,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
         userKey: item.userKey, ...(item.tabId === undefined ? {} : { tabId: item.tabId }),
         ...(item.sourceUrl === undefined ? {} : { sourceUrl: item.sourceUrl }), live: false, items: [] }
       : item)
-  }, [ordinaryFlow, newestBrowserKey, nodes, browserTurnRunning])
+  }, [ordinaryFlow, newestBrowserKey, nodes, activeBrowserTurn])
   const hasBrowserWorkspace = flow.some(item => item.kind === 'browser-workspace' && item.live)
   // The screenshot-like centered preparation state is confined to a blank
   // conversation's first pending answer, never to a continuing transcript.
@@ -1276,18 +1321,39 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
             : item.kind === 'desktop'
             ? <DesktopLive sessionId={sessionId} active={item.key === latestDesktopKey} />
             : item.kind === 'browser-workspace'
-            ? <BrowserWorkspace
-              sessionId={sessionId}
-              inputActions={inputActions}
-              live={item.live}
-              items={item.items}
-              {...item.tabId === undefined ? {} : { tabId: item.tabId }}
-              {...item.sourceUrl === undefined ? {} : { sourceUrl: item.sourceUrl }}
-              selected={item.userKey === activeBrowserKey}
-              onActivate={() => { setSelectedBrowserKey(item.userKey) }}
-              seatProps={seatProps}
-              turnStatus={turnStatus}
-            />
+            ? item.userKey === visibleBrowserKey
+              ? <BrowserWorkspace
+                sessionId={sessionId}
+                inputActions={inputActions}
+                live={item.live}
+                items={item.items}
+                {...item.tabId === undefined || !activeBrowserTurn ? {} : { tabId: item.tabId }}
+                {...item.sourceUrl === undefined ? {} : { sourceUrl: item.sourceUrl }}
+                selected={item.userKey === (pinnedBrowserKey ?? manualBrowserKey ?? activeBrowserKey)}
+                onActivate={() => { setSelectedBrowserKey(item.userKey) }}
+                pinned={pinnedBrowserKey === item.userKey}
+                onPinChange={value => {
+                  setPinnedBrowserKey(value ? item.userKey : undefined)
+                  if (!value) setManualBrowserKey(undefined)
+                }}
+                onClose={() => {
+                  setPinnedBrowserKey(undefined)
+                  setManualBrowserKey(undefined)
+                  setDismissedBrowserKey(item.userKey)
+                  void releaseMiniBrowserSession(sessionId)
+                }}
+                seatProps={seatProps}
+                turnStatus={turnStatus}
+              />
+              : <div className={css.browserReceipt} data-browser-receipt="true">
+                <span>Fuente web consultada</span>
+                <button type="button" onClick={() => {
+                  setManualBrowserKey(item.userKey)
+                  setPinnedBrowserKey(item.userKey)
+                  setSelectedBrowserKey(item.userKey)
+                  setDismissedBrowserKey(undefined)
+                }}>Abrir navegador</button>
+              </div>
             : item.kind === 'node'
               ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
               : item.kind === 'optimistic'
