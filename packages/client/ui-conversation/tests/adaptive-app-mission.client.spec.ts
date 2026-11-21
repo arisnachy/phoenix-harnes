@@ -33,7 +33,7 @@ describe('App Studio conversation mission', () => {
   it('shares only validated form structure with Kira after explicit user action', () => {
     const structure = {
       appId:'app-farmacia',sectionId:'productos',revision:2,
-      fields:[{id:'field-1',label:'Lote',kind:'text',destination:'local',output:'table'}],
+      fields:[{id:'field-1',label:'Lote',kind:'text' as const,destination:'local' as const,output:'table' as const}],
     }
     expect(isAdaptiveFormInspection(structure)).toBe(true)
     expect(isAdaptiveFormInspection({...structure,patientValues:{name:'PRIVATE'}})).toBe(false)
@@ -49,8 +49,8 @@ describe('App Studio conversation mission', () => {
     const inventory = {
       activeApp:'app-farmacia',
       apps:[{id:'app-farmacia',title:'Farmacia',sections:[{id:'productos',label:'Productos'}]}],
-      declared:[{id:'general',label:'PHOENIX · General',readiness:'shell-ready'},
-        {id:'inventory',label:'Inventario · Plantilla',readiness:'preview-only'}],
+      declared:[{id:'general',label:'PHOENIX · General',readiness:'shell-ready' as const},
+        {id:'inventory',label:'Inventario · Plantilla',readiness:'preview-only' as const}],
       slots:[{id:'conversation',state:'registered'},{id:'sidebar',state:'registered'}],
     }
     expect(isAdaptiveWorkspaceInspection(inventory)).toBe(true)
