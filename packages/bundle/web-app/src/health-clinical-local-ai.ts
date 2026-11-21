@@ -95,3 +95,37 @@ export async function discoverProtectedLocalAiModel(
   return eligible.length?{available:true,model:eligible[0]!.name,reason:'ready'}:
     {available:false,model:null,reason:'no-local-model'}
 }
+
+/** Enumerate all actual text models currently installed on the loopback Ollama service.
+ * Never regard an unverified URL, cloud model, or image/embedding model as local text.
+ */
+export async function listProtectedLocalAiModels(fetcher:Fetcher=fetch):Promise<string[]>{
+  let response:Response
+  try{
+    response=await fetcher('http://127.0.0.1:11434/api/tags',{
+      method:'GET',headers:{accept:'application/json'},
+      signal:AbortSignal.timeout(3500),redirect:'error',
+    })
+  }catch{return []}
+  if(!response.ok)return []
+  let data:unknown
+  try{data=await response.json()}catch{return []}
+  if(!data||typeof data!=='object'||Array.isArray(data))return []
+  const rows=(data as {models?:unknown}).models
+  if(!Array.isArray(rows))return []
+  const names:string[]=[]
+  for(const row of rows.slice(0,100)){
+    if(!row||typeof row!=='object'||Array.isArray(row))continue
+    const entry=row as {name?:unknown;model?:unknown}
+    const name=entry.name??entry.model
+    if(typeof name!=='string'||name.length>100
+      ||!/^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/u.test(name)
+      ||/(?:^|[/:.-])cloud(?:$|[/:.-])/iu.test(name)
+      ||/(?:embed|embedding|clip|whisper|tts|rerank|bert|diffusion|image-gen)/iu.test(name))continue
+    if(!names.includes(name))names.push(name)
+  }
+  return names.sort((a,b)=>{
+    const rank=(v:string)=>/(gemma|qwen|llama|mistral|phi)/iu.test(v)?0:1
+    return rank(a)-rank(b)||a.localeCompare(b)
+  })
+}
