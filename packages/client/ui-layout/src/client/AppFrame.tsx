@@ -19,7 +19,7 @@ import css from './AppFrame.module.css'
 import { HealthiaWorkspace, HEALTHIA_NAV, type HealthiaRole } from './HealthiaWorkspace.tsx'
 import { ADAPTIVE_APP_PRESETS, createAdaptiveAppBlueprint, type AdaptiveAppBlueprint } from './AdaptiveAppCatalog.ts'
 import { appendAdaptiveSection, renameAdaptiveSection, removeAdaptiveSection, restorePreviousAdaptiveApps, installAdaptiveApp, readAdaptiveApps } from './AdaptiveAppRegistry.ts'
-import { applyAdaptiveFormFields } from './AdaptiveFormMetadataStore.ts'
+import { applyAdaptiveFormFields, restorePreviousAdaptiveForms } from './AdaptiveFormMetadataStore.ts'
 import {
   parseAdaptiveControl, preflightAdaptiveControl, findAdaptiveMetadata,
   saveAdaptivePalette, readAdaptivePalette, applyAdaptiveFieldEdit,
@@ -541,7 +541,16 @@ export function AppFrame({
             </div>
           )}
           <SurfaceBoundary name="adaptive" resetKey={adaptiveApp}
-            onRestore={() => { setAdaptiveApp('general'); setSearch(null); setAppMenuOpen(false) }}>
+            onRestore={() => {
+              // Only restore local structural manifests. Clinical stores, chat,
+              // credentials, model settings and PHOENIX Core are never touched.
+              try { restorePreviousAdaptiveApps() } catch { /* General remains available */ }
+              try { restorePreviousAdaptiveForms() } catch { /* Schema is quarantined */ }
+              setCustomApps(readAdaptiveApps())
+              setAdaptiveApp('general')
+              setSearch(null)
+              setAppMenuOpen(false)
+            }}>
             {activeBlueprint && (
               <AdaptiveAppPreview key={activeBlueprint.id} app={activeBlueprint} section={customSection}
                 palette={readAdaptivePalette(activeBlueprint.id)}
