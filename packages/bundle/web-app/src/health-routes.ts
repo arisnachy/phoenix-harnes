@@ -13,7 +13,7 @@ import { HealthClinicStore, healthKinds, type ClinicActor } from './health-store
 import { renderHealthPage } from './health-ui.ts'
 import { createPatientPortalHandler } from './health-patient-routes.ts'
 import { HEALTH_CLINICAL_TOOLS, runHealthClinicalTool } from './health-clinical-tools.ts'
-import { refineProtectedHistoryLocal } from './health-clinical-local-ai.ts'
+import { refineProtectedHistoryLocal, discoverProtectedLocalAiModel } from './health-clinical-local-ai.ts'
 
 type Kind = Parameters<HealthClinicStore['list']>[1]
 const jsonHeaders:Record<string,string> = {
@@ -231,17 +231,24 @@ export function registerHealthRoutes(ctx:Context):void {
         const proposal=store.suggestClinicalNote(actor,id)
         reply(res,200,{proposal});return
       }
+      if(operation==='clinical-note-ai-status'&&id===undefined&&method==='GET'){
+        if(actor.role!=='clinician')throw Error('Permiso clínico insuficiente')
+        reply(res,200,await discoverProtectedLocalAiModel());return
+      }
       if(operation==='clinical-note-ai'&&id!==undefined&&method==='POST'){
         // Clinic session + CSRF/origin are already enforced above. The operator
-        // must opt in independently and the clinician must click/confirm.
+        // must confirm each use; no PowerShell flag or credential is required.
         const body=await readBody(req,1024)
         if(body.action!=='refine'||body.confirmLocalProcessing!==true)
           throw Error('Confirmación clínica requerida')
         const proposal=store.suggestClinicalNote(actor,id)
         if(!proposal.mayUseLocalModel)throw Error('Documento clínico reservado: IA local no autorizada')
+        const detected=await discoverProtectedLocalAiModel()
+        if(!detected.available||!detected.model)
+          throw Error('No se encontró un modelo local de Ollama; se mantiene disponible la propuesta sin IA.')
         const refined=await refineProtectedHistoryLocal(proposal,{
-          enabled:process.env.PHOENIX_HEALTH_LOCAL_AI_ENABLED==='1',
-          model:process.env.PHOENIX_HEALTH_LOCAL_AI_MODEL,
+          enabled:true,
+          model:detected.model,
         })
         reply(res,200,{proposal:{...refined,encounterId:id,encounterVersion:proposal.encounterVersion}})
         return
