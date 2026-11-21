@@ -17,7 +17,8 @@ import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAU
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
 import { HealthiaWorkspace, HEALTHIA_NAV, type HealthiaRole } from './HealthiaWorkspace.tsx'
-import { ADAPTIVE_APP_PRESETS } from './AdaptiveAppCatalog.ts'
+import { ADAPTIVE_APP_PRESETS, createAdaptiveAppBlueprint, type AdaptiveAppBlueprint } from './AdaptiveAppCatalog.ts'
+import { AdaptiveAppPreview } from './AdaptiveAppPreview.tsx'
 
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
@@ -161,7 +162,32 @@ export function AppFrame({
   })
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState(() => window.innerWidth)
-  const [adaptiveApp, setAdaptiveApp] = useState<'general' | 'healthia'>('general')
+  const [adaptiveApp, setAdaptiveApp] = useState<string>('general')
+  const [customApps, setCustomApps] = useState<readonly AdaptiveAppBlueprint[]>([])
+  const [appTitle, setAppTitle] = useState('')
+  const [appSectionsText, setAppSectionsText] = useState('')
+  const [appBuilderOpen, setAppBuilderOpen] = useState(false)
+  const [appError, setAppError] = useState('')
+  const [customSection, setCustomSection] = useState('overview')
+  const activeBlueprint = customApps.find(app => app.id === adaptiveApp)
+  const createApp = (event: React.FormEvent<HTMLFormElement>): void => {
+    event.preventDefault()
+    try {
+      const sections = appSectionsText.split(',').map(value => value.trim())
+      const blueprint = createAdaptiveAppBlueprint(appTitle.trim(), sections)
+      if (customApps.some(app => app.id === blueprint.id)) throw new Error('DUPLICATE_APP')
+      setCustomApps(apps => [...apps, blueprint])
+      setAdaptiveApp(blueprint.id)
+      setCustomSection(blueprint.sections[0].id)
+      setAppTitle('')
+      setAppSectionsText('')
+      setAppBuilderOpen(false)
+      setAppMenuOpen(false)
+      setAppError('')
+    } catch {
+      setAppError('Utiliza un nombre único y de 1 a 12 secciones separadas por comas.')
+    }
+  }
   const [healthiaRole, setHealthiaRole] = useState<HealthiaRole>('doctor')
   const [healthiaSection, setHealthiaSection] = useState('overview')
   const [appMenuOpen, setAppMenuOpen] = useState(false)
@@ -172,7 +198,14 @@ export function AppFrame({
       const request = (event as CustomEvent<{ app?: string; role?: string; section?: string }>).detail
       if (!request) return
       if (request.app === 'general') { setAdaptiveApp('general'); setAppMenuOpen(false); return }
-      if (request.app !== 'healthia') return
+      if (request.app !== 'healthia') {
+        const custom = customApps.find(app => app.id === request.app)
+        if (!custom) return
+        setAdaptiveApp(custom.id)
+        setCustomSection(custom.sections.some(item => item.id === request.section) ? request.section! : custom.sections[0].id)
+        setAppMenuOpen(false)
+        return
+      }
       setAdaptiveApp('healthia')
       setAppMenuOpen(false)
       if (request.role === 'doctor' || request.role === 'patient') {
@@ -184,12 +217,13 @@ export function AppFrame({
     }
     window.addEventListener('phoenix:adaptive-workspace', onWorkspace)
     return () => window.removeEventListener('phoenix:adaptive-workspace', onWorkspace)
-  }, [healthiaRole])
+  }, [healthiaRole, customApps])
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('phoenix:adaptive-workspace-state', {
-      detail: { app: adaptiveApp, role: healthiaRole, section: healthiaSection },
+      detail: { app: adaptiveApp, role: healthiaRole, section: activeBlueprint ? customSection : healthiaSection,
+        sections: activeBlueprint?.sections ?? undefined, title: activeBlueprint?.title ?? undefined },
     }))
-  }, [adaptiveApp, healthiaRole, healthiaSection])
+  }, [adaptiveApp, healthiaRole, healthiaSection, customSection, activeBlueprint])
 
 
   const lastSession = useRef(detailsSession)
@@ -315,8 +349,23 @@ export function AppFrame({
               {ADAPTIVE_APP_PRESETS.filter(app => app.readiness === 'preview-only').map(app => (
                 <button key={app.id} type="button" role="menuitem" disabled title="Plantilla disponible en el catálogo; no es una aplicación conectada">{app.label} · Sin conectar</button>
               ))}
+              {customApps.map(app => <button key={app.id} type="button" role="menuitem" onClick={() => {
+                setAdaptiveApp(app.id); setCustomSection(app.sections[0].id); setAppMenuOpen(false)
+              }}>{app.title} · Borrador</button>)}
+              <button type="button" role="menuitem" onClick={() => { setAppBuilderOpen(value => !value); setAppError('') }}>+ Crear aplicación</button>
+              {appBuilderOpen && <form className={css.appLauncherForm} onSubmit={createApp}>
+                <input aria-label="Nombre de nueva aplicación" value={appTitle} onChange={event => setAppTitle(event.currentTarget.value)} maxLength={60} placeholder="Nombre de la aplicación"/>
+                <input aria-label="Secciones de nueva aplicación" value={appSectionsText} onChange={event => setAppSectionsText(event.currentTarget.value)} placeholder="Inicio, Productos, Reportes"/>
+                <button type="submit">Crear vista adaptable</button>
+                <small>Vista temporal sin permisos, almacenamiento ni conectores.</small>
+                {appError && <span role="alert">{appError}</span>}
+              </form>}
             </div>}
           </div>
+          {activeBlueprint && (
+            <AdaptiveAppPreview key={activeBlueprint.id} app={activeBlueprint} section={customSection}
+              onSectionChange={setCustomSection} onReturn={() => setAdaptiveApp('general')} />
+          )}
           {adaptiveApp === 'healthia' && (
             <HealthiaWorkspace role={healthiaRole} section={healthiaSection}
               onRoleChange={role => { setHealthiaRole(role); setHealthiaSection('overview') }}
