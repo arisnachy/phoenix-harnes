@@ -236,7 +236,7 @@ export function AppFrame({
                 const app = readAdaptiveApps().find(item => item.id === command.appId)
                 if (!app) throw new Error('UNKNOWN_APP')
                 setAdaptiveApp(app.id)
-                setCustomSection(command.sectionId ?? app.sections[0].id)
+                setCustomSection(command.sectionId ?? app.sections[0]?.id ?? 'inicio')
               }
               setSearch(null)
             } else if (command.operation === 'find') {
@@ -251,7 +251,7 @@ export function AppFrame({
               const app = appendAdaptiveSection(command.appId,command.label!)
               setCustomApps(readAdaptiveApps())
               setAdaptiveApp(app.id)
-              setCustomSection(app.sections[app.sections.length - 1].id)
+              setCustomSection(app.sections[app.sections.length - 1]?.id ?? 'inicio')
               setSearch(null)
             } else if (command.operation === 'rename-section' || command.operation === 'remove-section') {
               const app = command.operation === 'rename-section'
@@ -259,7 +259,7 @@ export function AppFrame({
                 : removeAdaptiveSection(command.appId,command.sectionId!)
               setCustomApps(readAdaptiveApps())
               setAdaptiveApp(app.id)
-              setCustomSection(command.operation === 'remove-section' ? app.sections[0].id : command.sectionId!)
+              setCustomSection(command.operation === 'remove-section' ? app.sections[0]?.id ?? 'inicio' : command.sectionId!)
               setSearch(null)
             } else if (command.operation === 'set-field-ai') {
               applyAdaptiveAiFieldEdit(command)
@@ -347,7 +347,7 @@ export function AppFrame({
         const installed = installAdaptiveApp(blueprint)
         setCustomApps(installed)
         setAdaptiveApp(blueprint.id)
-        setCustomSection(blueprint.sections[0].id)
+        setCustomSection(blueprint.sections[0]?.id ?? 'inicio')
         setAppMenuOpen(false)
         ok = true
       } catch {
@@ -377,7 +377,7 @@ export function AppFrame({
         const custom = customApps.find(app => app.id === request.app)
         if (!custom) return
         setAdaptiveApp(custom.id)
-        setCustomSection(custom.sections.some(item => item.id === request.section) ? request.section! : custom.sections[0].id)
+        setCustomSection(custom.sections.some(item => item.id === request.section) ? request.section! : custom.sections[0]?.id ?? 'inicio')
         setAppMenuOpen(false)
         return
       }
@@ -526,7 +526,7 @@ export function AppFrame({
                 <button key={app.id} type="button" role="menuitem" disabled title="Plantilla disponible en el catálogo; no es una aplicación conectada">{app.label} · Sin conectar</button>
               ))}
               {customApps.map(app => <button key={app.id} type="button" role="menuitem" onClick={() => {
-                setAdaptiveApp(app.id); setCustomSection(app.sections[0].id); setAppMenuOpen(false)
+                setAdaptiveApp(app.id); setCustomSection(app.sections[0]?.id ?? 'inicio'); setAppMenuOpen(false)
               }}>{app.title} · Borrador</button>)}
               <button type="button" role="menuitem" onClick={launchAppMission}>+ Crear nueva aplicación con Kira</button>
               <button type="button" role="menuitem" onClick={() => {
