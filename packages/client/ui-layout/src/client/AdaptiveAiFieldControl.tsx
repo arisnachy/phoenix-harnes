@@ -24,6 +24,17 @@ export function AdaptiveAiFieldControl({appId,sectionId,fieldId,formRevision,val
     setPending(null);setProposal(null);setNotice('');setError('')
   },[appId,sectionId,fieldId])
   useEffect(()=>{
+    const onChange=(event:Event)=>{
+      const d=(event as CustomEvent<{appId?:string;sectionId?:string;fieldId?:string}>).detail
+      if(d?.appId!==appId||d.sectionId!==sectionId||d.fieldId!==fieldId)return
+      const latest=readFieldAiConfig(appId,sectionId,fieldId)
+      setConfig(latest);setSkill(latest.skill);setInstruction(latest.instruction)
+      setPending(null);setProposal(null);setError('');setNotice('Configuración actualizada por Kira con tu aprobación.')
+    }
+    window.addEventListener('phoenix:adaptive-ai-field-config-refreshed',onChange)
+    return ()=>window.removeEventListener('phoenix:adaptive-ai-field-config-refreshed',onChange)
+  },[appId,sectionId,fieldId])
+  useEffect(()=>{
     const handleAck=(event:Event)=>{
       const detail=(event as CustomEvent<{requestId?:string;ok?:boolean}>).detail
       if(!pending||detail?.requestId!==pending.requestId)return
