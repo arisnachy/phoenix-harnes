@@ -65,11 +65,16 @@ export async function discoverClinicalModels(
     const groups=await Promise.all(providers.map(async p=>{
       if(!ID.test(p.id)||p.id==='ollama-local')return []
       try{
-        const rows=await Promise.race([
-          llm.listModels(p.id),
-          new Promise<Array<{id:string;name:string;inputModalities?:readonly string[]}>>((_,reject)=>
-            setTimeout(()=>reject(Error('MODEL_CATALOG_TIMEOUT')),4_000)),
-        ])
+        let timer:ReturnType<typeof setTimeout>|undefined
+        let rows:Array<{id:string;name:string;inputModalities?:readonly string[]}>
+        try{
+          rows=await Promise.race([
+            llm.listModels(p.id),
+            new Promise<Array<{id:string;name:string;inputModalities?:readonly string[]}>>((_,reject)=>{
+              timer=setTimeout(()=>reject(Error('MODEL_CATALOG_TIMEOUT')),4_000)
+            }),
+          ])
+        }finally{if(timer!==undefined)clearTimeout(timer)}
         return rows.slice(0,36).filter(x=>textModel(x.id,x.inputModalities)).map(x=>({
           id:'phoenix/'+p.id+'/'+x.id,provider:p.id,model:x.id,
           label:(p.name||p.id).slice(0,80)+' · '+x.name.slice(0,120),
@@ -82,7 +87,7 @@ export async function discoverClinicalModels(
   }
   // Local models come first. Do not pick a remote model by default.
   models.sort((a,b)=>Number(a.location==='external')-Number(b.location==='external')
-    ||(a.origin==='ollama'?-1:b.origin==='ollama'?1:0)||a.label.localeCompare(b.label))
+    ||Number(a.origin!=='ollama')-Number(b.origin!=='ollama')||a.label.localeCompare(b.label))
   return {models,defaultId:models.find(x=>x.location==='local')?.id??null,
     available:models.length>0,partial}
 }
@@ -91,8 +96,8 @@ export interface ClinicalModelRun {
   readonly acknowledgeExternal:boolean
   readonly acknowledgeLocal:boolean
 }
-export interface ClinicalProviderSuggestion extends ClinicalNoteProposal {
-  readonly source:'local-recorded-facts'
+export interface ClinicalProviderSuggestion extends Omit<ClinicalNoteProposal,'source'> {
+  readonly source:'phoenix-model-unverified'
   readonly provider:string
   readonly model:string
   readonly origin:'ollama'|'phoenix'
@@ -111,7 +116,7 @@ function fromModelText(source:ClinicalNoteProposal,text:string,route:ClinicalMod
     throw Error('CLINICAL_MODEL_INVALID_OUTPUT')
   const prior=new Set(source.suggestedHistory.match(/\b\d+(?:[.,]\d+)?\b/gu)??[])
   const after=new Set(raw.history.match(/\b\d+(?:[.,]\d+)?\b/gu)??[])
-  return {...source,provider:route.provider,model:route.model,origin:route.origin,
+  return {...source,source:'phoenix-model-unverified',provider:route.provider,model:route.model,origin:route.origin,
     location:route.location,generatedByModel:true,
     suggestedHistory:raw.history,numericWarnings:[...after].filter(x=>!prior.has(x)),
     requiresClinicianReview:true,reviewed:false,canAutoSign:false}
@@ -133,7 +138,7 @@ export async function runClinicalModel(
     throw Error('CLINICAL_MODEL_CONSENT_REQUIRED')
   if(route.origin==='ollama'){
     const proposal=await refineOllama(source,{enabled:true,model:route.model})
-    return {...proposal,source:'local-recorded-facts',provider:route.provider,origin:route.origin,
+    return {...proposal,source:'phoenix-model-unverified',provider:route.provider,origin:route.origin,
       location:route.location,generatedByModel:true}
   }
   if(!llm)throw Error('CLINICAL_MODEL_HOST_UNAVAILABLE')
