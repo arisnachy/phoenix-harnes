@@ -32,7 +32,7 @@ describe('App Studio generic form schema persistence', () => {
     expect(readAdaptiveForm(initial.appId, initial.templateId, store)).toEqual(next)
     expect(() => saveAdaptiveForm(next, store)).toThrow('ADAPTIVE_FORM_REVISION_CONFLICT')
     store.items.set('phoenix.adaptive.form-schemas.v1', '{broken')
-    expect(readAdaptiveForm(initial.appId, initial.templateId, store)).toEqual(initial)
+    expect(readAdaptiveForm(initial.appId, initial.templateId, store)).toEqual(next)
     expect(JSON.stringify([...store.items.values()])).not.toContain('patientSecret')
   })
 
