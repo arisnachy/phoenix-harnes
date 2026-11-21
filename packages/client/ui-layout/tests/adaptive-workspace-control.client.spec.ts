@@ -29,6 +29,27 @@ function seeded() {
 }
 
 describe('Adaptive workspace safe chat actions', () => {
+  it('reconfigures input type and required validation with immutable revisions', () => {
+    const {memory,blueprint} = seeded()
+    const typeChange = applyAdaptiveFieldEdit({
+      appId:blueprint.id,operation:'set-field-kind',sectionId:'productos',
+      fieldId:'field-1',kind:'number',expectedRevision:1,
+    },memory)
+    expect(typeChange.fields[0]?.kind).toBe('number')
+    const validationChange = applyAdaptiveFieldEdit({
+      appId:blueprint.id,operation:'set-required',sectionId:'productos',
+      fieldId:'field-1',required:true,expectedRevision:2,
+    },memory)
+    expect(validationChange.fields[0]?.required).toBe(true)
+    expect(validationChange.revision).toBe(3)
+    expect(readAdaptiveForm(blueprint.id,'productos',memory)?.revision).toBe(3)
+    expect(parseAdaptiveControl({
+      appId:blueprint.id,operation:'set-field-kind',sectionId:'productos',
+      fieldId:'field-1',kind:'script',expectedRevision:3,
+    })).toBeNull()
+  })
+
+
   it('denies code/URL fields and actions against protected General or Healthia', () => {
     expect(parseAdaptiveControl({appId:'general',operation:'open'})).toBeTruthy()
     expect(parseAdaptiveControl({appId:'healthia',operation:'palette',palette:'iris'})).toBeNull()
