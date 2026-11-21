@@ -203,3 +203,51 @@ export function inspectSystemEnvironment(options: {
     ],
   }
 }
+
+/**
+ * On-demand search for a USER-SPECIFIED application name in Windows StartApps.
+ * Never enumerate the full installed-program catalog, paths, AppIDs or processes
+ * in a model context. Presence is NOT permission or launch readiness.
+ */
+export function searchLocalApps(query:string, options:{
+  platform?:string;runner?:ProbeRunner
+} = {}):{
+  schema:'phoenix.app-discovery.v1';query:string
+  status:'matches'|'no-match'|'unavailable'|'invalid-query'
+  names:readonly string[];authorized:false
+} {
+  if(typeof query!=='string'||!/^[\\p{L}\\p{N} ._-]{2,48}$/u.test(query)||query.trim()!==query) {
+    return {schema:'phoenix.app-discovery.v1',query:'',status:'invalid-query',names:[],authorized:false}
+  }
+  if((options.platform??osPlatform())!=='win32') {
+    return {schema:'phoenix.app-discovery.v1',query,status:'unavailable',names:[],authorized:false}
+  }
+  // No shell interpolation: the user query enters PowerShell only as UTF-8
+  // base64 data inside a fixed, bounded script and never becomes code.
+  const encoded=Buffer.from(query,'utf8').toString('base64')
+  const ps=`$ErrorActionPreference='SilentlyContinue'
+$term=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encoded}'))
+$found=@(Get-StartApps -ErrorAction SilentlyContinue |
+  Where-Object { $_.Name.IndexOf($term,[System.StringComparison]::OrdinalIgnoreCase) -ge 0 } |
+  Select-Object -First 16 -ExpandProperty Name)
+@{matches=$found} | ConvertTo-Json -Depth 3 -Compress`
+  try {
+    const run:ProbeRunner=options.runner??((cmd,args)=>spawnSync(cmd,[...args],{
+      encoding:'utf8',windowsHide:true,timeout:6000,maxBuffer:16384,
+      stdio:['ignore','pipe','ignore'],
+    }))
+    const output=run('powershell.exe',[
+      '-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',
+      Buffer.from(ps,'utf16le').toString('base64'),
+    ],{encoding:'utf8',windowsHide:true,timeout:6000,maxBuffer:16384})
+    if(output.error||output.status!==0||typeof output.stdout!=='string'||output.stdout.length>16384)
+      throw Error('unavailable')
+    const raw:unknown=JSON.parse(output.stdout)
+    if(!isRecord(raw)||!Array.isArray(raw.matches))throw Error('invalid')
+    const names=raw.matches.map(safeName).filter((x):x is string=>x!==null).slice(0,16)
+    return {schema:'phoenix.app-discovery.v1',query,
+      status:names.length?'matches':'no-match',names,authorized:false}
+  } catch {
+    return {schema:'phoenix.app-discovery.v1',query,status:'unavailable',names:[],authorized:false}
+  }
+}
