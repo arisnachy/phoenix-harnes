@@ -131,7 +131,7 @@ const GUIDANCE = [
   'JUANCITO SPORT: utiliza como fuente PRIMARIA su reglamento oficial https://www.juancitosport.com.do/reglas/ y términos https://www.juancitosport.com.do/banca/terminos/. Las reglas verificadas incluyen 3/5/9 innings, run line, ponches, hits, medio tiempo, props, 90 minutos fútbol y overtime diferenciado. Una apuesta solo es válida al mostrar el sistema «Apuesta Confirmada» (8.4); el mínimo publicado es RD$100 (7.10). Su condición 6.6 PROHÍBE usar robots o scripts para realizar apuestas: Kira NO debe automatizar clicks ni apuestas en esa web. Puede investigar fuentes, calcular y entregar el ticket; el usuario realiza la confirmación legalmente en la banca. El sitio juancitosports.com es informativo independiente: NO atribuirle reglamentos oficiales. ',
   'SEGUIMIENTO DE ACUMULADAS POR BOLETO: si el usuario entrega uno o más comprobantes de apuestas o pide dar seguimiento a esos tickets, usa PRIMERO sports_chat_follow_receipts cuando haya varias confirmaciones y sports_chat_register_receipt para una sola. Muestra las 5/6 patas POR CADA BOLETO en una tarjeta nativa, junto al equipo marcado, total de puntos o hándicap y estado de todas sus selecciones. NO devuelvas una cartelera global ajena a esas selecciones. Los partidos repetidos entre boletos deben aparecer en ambos tickets. Los marcadores se refrescan desde ESPN mediante la interfaz, sin que el usuario vuelva a completar formularios. No sustituir este panel por sports_chat_games de toda una liga. Si falta un dato del recibo, explica qué falta y evita adivinar IDs o cuota. ',
   'OBJETIVOS DE BOLETOS AUTOMÁTICOS: si el usuario adjunta una captura/recibo de una apuesta real o pregunta por el progreso de una apuesta de su ticket, Kira debe EXTRAEER las selecciones, referencia, fechas, equipos, mercados, signos de hándicap, líneas y casa desde la evidencia aportada y llamar sports_chat_register_receipt por cada boleto, sin obligar al usuario a rellenar formularios por partido. El motor coteja eventos reales ESPN y vincula cada pata con su cartelera; muestra automáticamente las metas al reabrirla en el mismo navegador. Si la imagen no permite leer con precisión una selección, NO adivinar ni atribuir un partido de otro día: indicar solo el dato faltante. No confundir un recibo aportado con aceptación o pago confirmados por el operador. Para seguir cada juego no repitas capturas, pregunta a sports_chat_games. ',
-  'TICKETS: para un ticket del día usa sports_chat_ticket_evidence_priced_auto una vez, con 5 patas por defecto. Entrega su tarjeta si hay tamaño completo y cuotas cotejadas de la misma casa, aunque sea condicional. Para decisiones explícitas de Kira cotiza los ID al cierre mediante sports_chat_ticket_model_chosen. Reserva sports_chat_research_stage para ampliar los expedientes o resolver una duda decisiva. ',
+  'TICKETS DE APUESTAS: el flujo preferido de análisis visible es sports_chat_daily_scan y luego sports_chat_research_stage en secuencia por cada partido NBA/WNBA/MLB/NHL/NFL/NCAA/fútbol, con preguntas autónomas donde falten hechos. No responder con un boleto definitivo sin mostrar primero las comparaciones; después llamar sports_chat_ticket_model_chosen con ID, selección y razón individual. Este cotiza exclusivamente lo que Kira decidió en ESPN y exige coincidencia de casa para combinada. No colocar apuestas ni prometer ganar; si el usuario aporta un recibo real, seguirlo por sus IDs y mercado. ',
   'RUTAS ESPN PROFUNDAS: primero sports_chat_games/scoreboard para resolver fecha local, sport, league y eventId; obtener competitionId, teamId, athleteId y providerId exclusivamente de respuestas. Para rosters/splits/gamelogs/lesiones/noticias/rankings/árbitros/estadísticas/eventos usa sports_chat_espn_extended_catalog y después sports_chat_espn_extended por modo. Para cuotas sigue Scoreboard → Core odds (resolver $ref) → Summary/PickCenter; mira proveedor, selección, línea, mercado y observedAt ANTES de incorporar el precio ESPN al ticket; updatedAt es opcional y no condición de descarte. Para CDN público usa cdn_* solo como respaldo por ligas admitidas; Fantasy pública es contexto de jugadores y NO evidencia de alineación, lesión, mercado o porcentaje propio; search_entities requiere query. Cuando un modo devuelva empty, ref_only o unavailable no lo conviertas en dato comprobado: pasa al siguiente respaldo sin inventar. sports_chat_espn_route_audit es diagnóstico explícito y no debe ejecutarse para cada pregunta (puede lanzar muchas consultas). ESPN no oficial, por liga no hay garantía de disponibilidad. ',
   'FUENTES ESPN EXTENDIDAS: además de los 11 modos Core, sports_chat_espn_extended_catalog muestra rutas validadas para equipos, temporadas, jugadores, lesions, jugadas y estadísticas. Usa sports_chat_espn_extended SOLO con IDs reales de ESPN (competitionId no se deduce siempre de eventId). La presencia del endpoint en el catálogo no garantiza datos ni derechos de redistribución; informe unavailable/empty sin inventar.',
   'INTENCIÓN DEPORTIVA NATURAL: interpreta preguntas como quién gana, quién es favorito, pronostica, investiga el primero, dame los mejores cinco o compara el partido sin exigir que el usuario mencione sports_chat_* ni redacte una orden técnica. Orquesta sports_chat_daily_scan, sports_chat_games, sports_chat_matchup_factors, sports_chat_predict y sports_chat_odds conforme a la evidencia. Usa como pantalla principal una ficha compacta que muestre equipos, forma, estadísticas, cuotas y pronósticos observados; los nombres de los motores o portales que producen predicciones de referencia no deben dominar la tarjeta, aunque sus fuentes y fechas sigan trazables en el informe. No rellenar vacíos con cifras ficticias ni mostrar como ganador un borrador incompleto.',
@@ -153,7 +153,7 @@ const GUIDANCE = [
   'CHECKLIST VISIBLE POR PATA: al recibir chatNarrative, reproduce researchSteps por deporte: estado verificado/parcial/no obtenido, detalle observado, fuentes principales y respaldos, nombre de lesionados y situación propia y rival. Cada paso debe exhibir los números efectivamente recolectados, no solo una frase genérica. Si la ruta principal falla o es vacía, ejecuta las rutas de respaldo del plan antes de concluir que la data no existe, sin usar endpoints ficticios. El ticket visual muestra el mismo checklist para que el usuario pueda auditarlo. ',
   'TICKET NARRADO CON EVIDENCIA POR PATA: tras sports_chat_ticket_evidence_priced_auto o sports_chat_ticket_evidence_auto, reproduce en el chat los campos chatNarrative en orden y con explicación INDIVIDUAL de por qué se escogió, datos a favor, en contra, noticias fechadas con enlace, contexto del estadio, clima y oficiales. Las fotos solo se ofrecen con URL del medio y atribución; una noticia no confirma titularidad ni consenso experto. No decir que un árbitro favorece a un equipo por tasas brutas o anécdotas. La probabilidad de mercado sin margen no es pronóstico propio y la exploratoria no está calibrada.',
   'TICKET DIARIO DE 5 A 6 PATAS: entrega exactamente el número pedido cuando haya evidencia suficiente. Compara ambas plantillas y estadísticas de cada jugador publicadas, titulares y bajas, forma local y visitante, descansos, H2H, estadio y clima relevante. Explica la mejor razón por la que el seleccionado podría perder y qué condición cambiaría el pick. ',
-  'Para explorar la cartelera sin pedir ticket, usa sports_chat_daily_scan o sports_chat_daily_market_shortlist. Para un ticket cotizado usa el acopio automático una vez. Si corresponde recotizar o cambiar una selección, usa sports_chat_ticket_model_chosen con requestedCount y razones por pata. ',
+  'Para explorar una cartelera o mercados sin pedir ticket, usa sports_chat_daily_scan o sports_chat_daily_market_shortlist. Solo cuando la persona pida un borrador rápido usa sports_chat_ticket_evidence_priced_auto una vez. Después de investigar ganadores directos, usa sports_chat_ticket_model_chosen con requestedCount y razones por pata. ',
   'NO abras pantallas independientes ni crees entradas de menú. Para una cartelera sola llama sports_chat_games. Para tickets sigue la ruta que corresponda al pedido. Phoenix dibuja de manera nativa las tarjetas verificadas de los resultados. NO copies el JSON de los resultados en la respuesta, NO escribas fences generative-ui ni bloques de código, aunque una herramienta los incluya en sus datos. No dibujes tickets con caracteres ASCII, bordes de texto ni bloques de código etiquetados text: para eventos y selecciones reales usa exclusivamente los contratos nativos, conservando la presentación original de Phoenix. Si el usuario quiere solo una demostración, descríbela explícitamente como ficticia y no introduzcas cuotas o equipos inventados como hechos. Explica los hallazgos y las fuentes con un texto humano breve.',
   'INVESTIGACIÓN NBA: el expediente NBA del ticket automático consulta fuentes y devuelve verificaciones y pendientes por partido; no lo dupliques con sports_chat_nba_research dentro de la misma solicitud. Usa sports_chat_nba_research cuando el usuario pida un análisis NBA independiente. Contrasta marcadores finales, márgenes, descanso, lesión oficial, rotaciones y métricas avanzadas que sí se hayan publicado. Lo ausente permanece SIN VERIFICAR; la forma no es probabilidad calibrada.',
   'INVESTIGAR OTROS DEPORTES: para un análisis sin ticket, usa sports_chat_research con el deporte y liga pedidos; añade pitchers/bullpen en MLB, goles y bajas en fútbol, superficie y fatiga en tenis, o portero y métricas defensivas en hockey. El ticket automático ya integra los chequeos pertinentes y debe ejecutarse una sola vez. Los históricos SportsbookReview sirven para backtest, no como cuotas actuales; las opiniones públicas son una fuente secundaria separada.',
@@ -190,7 +190,7 @@ export function apply(ctx: Context): void {
     if(requestIndex<0)return undefined
     const existing=ticketTurnResearch.get(session)
     if(existing?.requestIndex===requestIndex)return existing
-    const state={requestIndex,scans:new Set<string>(),dossiers:new Map<string,DirectedResearchEntry>()}
+    const state={ requestIndex,scans:new Set<string>(),dossiers:new Map<string,DirectedResearchEntry>() }
     ticketTurnResearch.set(session,state)
     return state
   }
@@ -2159,7 +2159,7 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket_evidence_priced_auto',
-    description:'Herramienta de ACOPIO de datos para 1-6 patas: descubre candidatos, recoge expedientes bilaterales de rosters y estadísticas y coteja cuotas. La lista automática es PROVISIONAL; Kira compara los datos y determina su propia elección, sin puntuar o sumar factores. Deja modelComparisonBriefs y selectedBilateralDossiers para su juicio; valida las selecciones finales de un ticket cotizado con sports_chat_ticket_model_chosen; usa sports_chat_ticket_research para un pronóstico sin cuotas. Nunca constituye apuesta aceptada.',
+    description:'BORRADOR RÁPIDO solicitado explícitamente, para 1-6 patas: descubre candidatos, recoge expedientes bilaterales de rosters y estadísticas y coteja cuotas. La lista automática es PROVISIONAL; Kira compara los datos y determina su propia elección, sin puntuar o sumar factores. Deja modelComparisonBriefs y selectedBilateralDossiers para su juicio; valida las selecciones finales de un ticket cotizado con sports_chat_ticket_model_chosen; usa sports_chat_ticket_research para un pronóstico sin cuotas. Nunca constituye apuesta aceptada.',
     parameters:{
       count:{ type:'integer',required:true,description:'Número exacto solicitado: 5 o 6 en un ticket diario, o 1 a 4 si el usuario pide un borrador corto.' },
       date:{ type:'string',description:'Fecha AAAA-MM-DD; por defecto hoy.' },
@@ -2249,11 +2249,11 @@ export function apply(ctx: Context): void {
         multisportSatisfied:result.multisportSatisfied,researchedLegs:result.researchedLegs,
         modelSelectionRequired:true,explicitModelSelectionPending:true,
         instruction:[
-          'Entrega ya la tarjeta de este resultado. quoted-conditional significa ticket completo en patas y cuotas con investigación pendiente.',
+          'Muestra la tarjeta como borrador rápido. quoted-conditional significa que las cuotas están completas y la investigación sigue pendiente.',
           'approvedLegs=0 describe aprobación de apuesta. Usa quotedLegs y ticketStatus para describir el ticket.',
           'Da por pata evidencia favorable, principal objeción, fuente, cuota, umbral de equilibrio y pendientes.',
           'Si cambias una selección o las cuotas vencen, cotiza los eventos exactos al cierre con sports_chat_ticket_model_chosen para ganadores directos.',
-          'Incluso con alertas, si hay 5/5 cuotas vigentes da el ticket completo condicional. Evita volver a listar la cartelera.',
+          'Si el usuario pide ahora un ticket investigado, utiliza la cartelera ya obtenida, revisa las etapas y cotiza las selecciones que el modelo decida.',
           'Conserva 1X/X2 auténticos como observaciones condicionales y deja la aceptación de la casa sin confirmar.',
         ].join(' ') })
     },
@@ -2291,7 +2291,7 @@ export function apply(ctx: Context): void {
       // concurrently so a slow provider cannot delay the rest of the slate.
       const session=exec.agent?.session
       const cached=session?researchForRequest(session)?.dossiers:undefined
-      const canonicalFixtures=await Promise.all(args.fixtures.map(async fixture=>{
+      const canonicalFixtures=await Promise.all(args.fixtures.map(async (fixture)=>{
         if(fixture.sport!=='basketball'||(fixture.league!=='nba'&&fixture.league!=='wnba'))return fixture
         const slate=await basketballSlate(fixture.league,fixture.date,feed,now,env).catch(()=>null)
         const verified=slate?.games.find(game=>game.eventId===fixture.eventId)
@@ -2299,7 +2299,7 @@ export function apply(ctx: Context): void {
         const key=(name:string)=>teamKey(name).replace(/^la(?=lakers|clippers)/u,'losangeles')
         const pair=[key(fixture.home),key(fixture.away)].sort()
         if(pair.join('|')!==[key(verified.home.name),key(verified.away.name)].sort().join('|'))return fixture
-        return {...fixture,home:verified.home.name,away:verified.away.name}
+        return { ...fixture,home:verified.home.name,away:verified.away.name }
       }))
       const attempts=await Promise.allSettled(canonicalFixtures.map(async (fixture)=>{
         if(!Number.isFinite(Date.parse(fixture.kickoff))||
@@ -2316,7 +2316,7 @@ export function apply(ctx: Context): void {
         if(previous)return previous.result
         const result=boundedDailyTool(investigateTicketSpecialists(
           [fixture],feed,now,env,[],dossierBudget),dossierBudget+12_000).then(([found])=>found)
-        if(cached&&cached.size<48)cached.set(key,{result})
+        if(cached&&cached.size<48)cached.set(key,{ result })
         return result
       }))
       const uiBlocks:Array<ReturnType<typeof projectDirectedTicketResearch>['uiBlock']>=[]
@@ -2332,7 +2332,7 @@ export function apply(ctx: Context): void {
           reason:String(attempt.status==='rejected'?attempt.reason:
             'El investigador no devolvió un informe').slice(0,240),
         }
-        const {uiBlock,...report}=projectDirectedTicketResearch(fixture,attempt.value)
+        const { uiBlock,...report }=projectDirectedTicketResearch(fixture,attempt.value)
         uiBlocks.push(uiBlock)
         return report
       })
@@ -2435,7 +2435,7 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket',
-    description:'COTIZADOR MANUAL de selecciones ya dadas por el usuario, NO generador de pronósticos: verifica 1-10 precios auténticos y una sola casa, pero NO investiga equipos, bajas, quarterbacks ni modelos. Para pedir ticket ganador usa sports_chat_ticket_evidence_priced_auto o sports_chat_daily_market_shortlist(deep=true), nunca esta vía de cotización.',
+    description:'COTIZADOR MANUAL de selecciones ya dadas por el usuario, NO generador de pronósticos: verifica 1-10 precios auténticos y una sola casa, pero NO investiga equipos, bajas, quarterbacks ni modelos. Para un ticket investigado, sigue sports_chat_daily_scan y sports_chat_research_stage antes de elegir y cotizar.',
     parameters:{
       sportKey:{ type:'string',description:'Clave deportiva de The Odds API. Para varios deportes utiliza sportKeys.' },
       sportKeys:{ type:'array',description:'Claves deportivas para boleto multideporte, máximo seis: NBA, WNBA, MLB, NHL, NFL y Soccer.',items:{ type:'string' } },
