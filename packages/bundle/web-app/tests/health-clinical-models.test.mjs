@@ -31,15 +31,16 @@ function fakeHost(){
 }
 test('Healthia lists exact registered local, OAuth and API routes, no keys, no invented readiness',async()=>{
   const {host}=fakeHost()
-  const catalog=await discoverClinicalModels(host,async()=>({available:true,model:'gemma4:e2b',reason:'ready'}))
-  assert.equal(catalog.models.length,4)
+  const catalog=await discoverClinicalModels(host,async()=>['gemma4:e2b','qwen3:4b'])
+  assert.equal(catalog.models.length,5)
   assert.deepEqual(new Set(catalog.models.map(x=>x.id)),new Set([
     'ollama/gemma4:e2b',
+    'ollama/qwen3:4b',
     'phoenix/phoenix-local/phoenix-local',
     'phoenix/openai-codex/gpt-6-luna',
     'phoenix/openai/gpt-test',
   ]))
-  assert(catalog.models.slice(0,2).every(x=>x.location==='local'))
+  assert(catalog.models.slice(0,3).every(x=>x.location==='local'))
   assert.equal(catalog.defaultId,'ollama/gemma4:e2b')
   assert(catalog.models.find(x=>x.provider==='openai-codex').location==='external')
   assert(!JSON.stringify(catalog).includes('apiKey'))
@@ -47,7 +48,7 @@ test('Healthia lists exact registered local, OAuth and API routes, no keys, no i
 })
 test('external provider NEVER receives clinical data without per-call consent',async()=>{
   const {host,calls}=fakeHost()
-  const catalog=await discoverClinicalModels(host,async()=>({available:false,model:null,reason:'no-service'}))
+  const catalog=await discoverClinicalModels(host,async()=>[])
   const requestedId='phoenix/openai-codex/gpt-6-luna'
   await assert.rejects(runClinicalModel(original,{
     requestedId,acknowledgeExternal:false,acknowledgeLocal:true,
@@ -77,7 +78,7 @@ test('numeric inventions from Phoenix provider are flagged for the professional'
   host.stream=async function*(){yield {type:'text-delta',index:0,
     text:JSON.stringify({history:'Control TA 138/84. Nueva dosis 250 mg.'})}
     yield {type:'finish',reason:{kind:'stop'}}}
-  const catalog=await discoverClinicalModels(host,async()=>({available:false,model:null,reason:'no-service'}))
+  const catalog=await discoverClinicalModels(host,async()=>[])
   const result=await runClinicalModel(original,{
     requestedId:'phoenix/openai/gpt-test',acknowledgeExternal:true,acknowledgeLocal:false,
   },catalog,host)
@@ -86,7 +87,7 @@ test('numeric inventions from Phoenix provider are flagged for the professional'
 })
 test('local installed model is preferred and never uses an external fallback',async()=>{
   const {host,calls}=fakeHost()
-  const catalog=await discoverClinicalModels(host,async()=>({available:false,model:null,reason:'no-service'}))
+  const catalog=await discoverClinicalModels(host,async()=>[])
   assert.equal(catalog.defaultId,'phoenix/phoenix-local/phoenix-local')
   const result=await runClinicalModel(original,{
     requestedId:catalog.defaultId,acknowledgeExternal:false,acknowledgeLocal:true,
@@ -99,7 +100,7 @@ test('a missing local model cannot silently route a clinical request to the clou
   const {host,calls}=fakeHost()
   const catalog=await discoverClinicalModels({
     ...host,listProviders:()=>[{id:'openai',name:'API'}],
-  },async()=>({available:false,model:null,reason:'no-service'}))
+  },async()=>[])
   assert.equal(catalog.defaultId,null)
   await assert.rejects(runClinicalModel(original,{
     requestedId:'',acknowledgeLocal:true,acknowledgeExternal:true,
