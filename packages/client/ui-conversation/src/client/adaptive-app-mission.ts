@@ -50,6 +50,7 @@ export interface AdaptiveMissionTransport<Session extends string, Workspace exte
 }
 export async function startAdaptiveAppConversation<Session extends string, Workspace extends string>(
   transport: AdaptiveMissionTransport<Session, Workspace>,
+  prompt = newAdaptiveAppMission(),
 ): Promise<Session> {
   const active = transport.current()
   const workspace = transport.workspaces()
@@ -59,7 +60,31 @@ export async function startAdaptiveAppConversation<Session extends string, Works
   const sessionId = await transport.create(target === undefined ? {} : { workspaceId: target })
   transport.open(sessionId)
   const input = transport.input(sessionId)
-  input.setDraft(newAdaptiveAppMission())
+  input.setDraft(prompt)
   input.submit()
   return sessionId
+}
+
+/** The form mission carries app/section identifiers, never input values. */
+export function isAdaptiveFormMissionEvent(value: unknown): value is {
+  readonly appId: string; readonly sectionId: string
+} {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const request = value as Record<string, unknown>
+  return Object.keys(request).length === 2
+    && typeof request.appId === 'string' && /^app-[a-z0-9-]{1,45}$/u.test(request.appId)
+    && typeof request.sectionId === 'string' && /^[a-z][a-z0-9-]{0,47}$/u.test(request.sectionId)
+}
+export function newAdaptiveFormMission(appId: string, sectionId: string): string {
+  if (!isAdaptiveFormMissionEvent({ appId, sectionId })) throw new Error('ADAPTIVE_INVALID_FORM_MISSION')
+  return [
+    `Quiero configurar por chat el formulario de la aplicación ${appId}, sección ${sectionId} en PHOENIX.`,
+    'Pregunta qué campos y comportamientos necesito; planifica primero, no inventes datos, herramientas ni permisos.',
+    'Cuando acordemos la estructura, genera un bloque ```generative-ui con un JSON completo de la forma: {"component":"adaptive_form","version":1,"props":{"appId":"'
+      + appId + '","sectionId":"' + sectionId
+      + '","fields":[{"label":"Cantidad","kind":"number","destination":"local","output":"table"}]}}.',
+    'Tipos de entrada permitidos: text, number, date, select, textarea. Destinos: local, api, chat, ai. Salidas: inline, table, document, chat. Máximo 20 campos por propuesta y 40 por formulario. No incluyas valores, rutas, scripts, URLs, secretos o datos personales.',
+    'La propuesta se aplicará solo cuando yo pulse «Aplicar campos al formulario». API, chat e IA son configuraciones pendientes: no las ejecutes ni afirmes que están conectadas.',
+    'Para integración real con herramientas o servicios, crea adaptadores revisables, solicita permisos, realiza pruebas y utiliza el sistema de recuperación. Healthia clínica usa exclusivamente el backend protegido.',
+  ].join('\\n\\n')
 }
