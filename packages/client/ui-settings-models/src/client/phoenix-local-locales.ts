@@ -42,6 +42,16 @@ export const localEn = {
   recommended: 'Recommended',
   progress: 'Download progress',
   unavailable: 'Phoenix Local is temporarily unavailable.',
+  ollamaTag: "Ollama model name",
+  ollamaTagHint: "Installed models are detected automatically. Enter an official Ollama tag to download another one, without commands.",
+  ollamaPull: "Download with Ollama",
+  ollamaRefresh: "Refresh installed models",
+  ollamaNotDownloaded: "Not downloaded in Ollama",
+  ollamaDelete: "Delete from Ollama",
+  ollamaDeleteQuestion: "Permanently delete {model} from Ollama? Other applications using it will also be affected.",
+  ollamaDeleteConfirm: "Permanently delete",
+  inputBudget: "Safe input",
+  outputBudget: "Maximum output",
 } as const
 
 /** Translation key shared by the dedicated Phoenix Local settings copy. */
@@ -91,6 +101,16 @@ export const localEs: { [Key in PhoenixLocalKey]: string } = {
   recommended: 'Recomendado',
   progress: 'Progreso de descarga',
   unavailable: 'Phoenix Local no está disponible temporalmente.',
+  ollamaTag: "Nombre del modelo Ollama",
+  ollamaTagHint: "Los modelos instalados se detectan automáticamente. Escribe el nombre oficial de otro modelo para descargarlo sin PowerShell.",
+  ollamaPull: "Descargar con Ollama",
+  ollamaRefresh: "Actualizar modelos instalados",
+  ollamaNotDownloaded: "No descargado en Ollama",
+  ollamaDelete: "Eliminar de Ollama",
+  ollamaDeleteQuestion: "¿Eliminar definitivamente {model} de Ollama? También afectará a otras aplicaciones que lo utilizan.",
+  ollamaDeleteConfirm: "Eliminar definitivamente",
+  inputBudget: "Entrada segura",
+  outputBudget: "Salida máxima",
 }
 
 /** Simplified Chinese copy for Phoenix Local settings. */
@@ -137,4 +157,14 @@ export const localZh: { [Key in PhoenixLocalKey]: string } = {
   recommended: '推荐',
   progress: '下载进度',
   unavailable: 'Phoenix Local 暂时不可用。',
+  ollamaTag: "Ollama 模型名称",
+  ollamaTagHint: "自动检测本机模型。输入官方 Ollama 标签即可下载其他模型，无需命令。",
+  ollamaPull: "通过 Ollama 下载",
+  ollamaRefresh: "刷新已安装模型",
+  ollamaNotDownloaded: "尚未在 Ollama 下载",
+  ollamaDelete: "从 Ollama 删除",
+  ollamaDeleteQuestion: "永久从 Ollama 删除 {model}？其他应用也会受到影响。",
+  ollamaDeleteConfirm: "永久删除",
+  inputBudget: "安全输入",
+  outputBudget: "最大输出",
 }
