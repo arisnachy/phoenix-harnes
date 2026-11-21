@@ -77,7 +77,8 @@
     "@phoenix-ai/dsh-plan-mode": "workspace:^",
     "@phoenix-ai/dsh-tool-todo": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^",
-    "@phoenix-ai/dsh-user-approval": "workspace:^"
+    "@phoenix-ai/dsh-user-approval": "workspace:^",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "@phoenix-ai/cordis": "workspace:^",
@@ -111,7 +112,9 @@
     "react": "^18.2.0",
     "@phoenix-ai/dsh-settings": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^",
-    "@phoenix-ai/dsh-user-approval": "workspace:^"
+    "@phoenix-ai/dsh-user-approval": "workspace:^",
+    "react-dom": "^18.2.0",
+    "@types/react-dom": "~18.3.0"
   },
   "files": [
     "lib/index.js",
