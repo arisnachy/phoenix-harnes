@@ -29,7 +29,10 @@ test('mounted sports guidance covers evidence and ESPN odds only for sports requ
   assert.match(sportsGuidance, /número exacto pedido, 5 si no se especifica/u)
   assert.match(sportsGuidance, /no elijas por fórmula, puntos, cuota/u)
   assert.match(sportsGuidance, /borrador rápido usa sports_chat_ticket_evidence_priced_auto una vez/u)
-  assert.doesNotMatch(sportsGuidance, /solo cuando se solicite un atajo rápido/u)
+  assert.match(sportsGuidance, /ticket normal.*sports_chat_daily_scan.*sports_chat_research_stage.*teams, rosters, availability, context, news y odds/u)
+  assert.match(sportsGuidance, /en rosters sigue nextPlayerOffset/iu)
+  assert.doesNotMatch(sportsGuidance, /(?:para un ticket del día|TICKET DIARIO:) usa sports_chat_ticket_evidence_priced_auto/iu)
+  assert.doesNotMatch(sportsGuidance, /reserva (?:sports_chat_research_stage|las tablas por etapa)/iu)
   assert.match(sportsGuidance, /no permite garantizar un ganador/u)
 
   assert.equal(section.text({
