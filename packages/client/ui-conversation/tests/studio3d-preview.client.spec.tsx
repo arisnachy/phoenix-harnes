@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
-import { cleanup,render,screen } from '@testing-library/react'
-import { afterEach,describe,expect,it } from 'vitest'
+import { cleanup,fireEvent,render,screen } from '@testing-library/react'
+import { afterEach,describe,expect,it,vi } from 'vitest'
 import { Studio3DPreview,parseStudio3DArtifact } from '../src/client/chat/Studio3DPreview.tsx'
 import { HardnessArtifactBody } from '../src/client/chat/HardnessArtifactBody.tsx'
 import { normalizeHardnessArtifact } from '../src/client/artifact.ts'
+
+vi.mock('../src/client/chat/Studio3DGLBViewer.tsx',()=>({
+  Studio3DGLBViewer: ({ modelUrl }:{ modelUrl:string }) => <canvas data-model-url={modelUrl}/>,
+}))
 
 const token='b'.repeat(48)
 const root='/phoenix-studio3d/assets/'+token+'/'
@@ -34,10 +38,23 @@ describe('Blender Studio chat artifact',()=>{
     expect(document.querySelector('canvas')).toBeNull()
   })
   it('rejects rogue external URLs, mismatched tokens and non-Blender payload',()=>{
-    expect(parseStudio3DArtifact({...artifact,renderUrl:'https://remote.invalid/evil.png'})).toBeUndefined()
-    expect(parseStudio3DArtifact({...artifact,modelUrl:'/phoenix-studio3d/assets/'+ 'a'.repeat(48)+'/scene.glb'})).toBeUndefined()
-    expect(parseStudio3DArtifact({...artifact,modelUrl:'javascript:alert(1)'})).toBeUndefined()
-    render(<Studio3DPreview value={{...artifact,renderUrl:'data:image/png;base64,AAAA'}} title="Error"/>)
+    expect(parseStudio3DArtifact({ ...artifact,renderUrl:'https://remote.invalid/evil.png' })).toBeUndefined()
+    expect(parseStudio3DArtifact({ ...artifact,modelUrl:'/phoenix-studio3d/assets/'+ 'a'.repeat(48)+'/scene.glb' })).toBeUndefined()
+    expect(parseStudio3DArtifact({ ...artifact,modelUrl:'javascript:alert(1)' })).toBeUndefined()
+    render(<Studio3DPreview value={{ ...artifact,renderUrl:'data:image/png;base64,AAAA' }} title="Error"/>)
     expect(screen.getByRole('alert')).toBeTruthy()
+  })
+  it('opens the interactive viewer with the published GLB and restores the PNG on close',()=>{
+    render(<Studio3DPreview value={artifact} title="Modelo de producción"/>)
+    const open=screen.getByRole('button',{ name:'Ver modelo 3D' })
+    expect(open.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(open)
+    expect(document.querySelector('canvas')?.getAttribute('data-model-url')).toBe(artifact.modelUrl)
+    const close=screen.getByRole('button',{ name:'Cerrar visor 3D' })
+    expect(close.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(close)
+    expect(document.querySelector('canvas')).toBeNull()
+    expect(screen.getByAltText('Render real de Blender: Modelo de producción').getAttribute('src'))
+      .toBe(artifact.renderUrl)
   })
 })
