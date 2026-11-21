@@ -131,7 +131,7 @@ export function parseVisualCommand(value:unknown):VisualCommand|null {
     'move-widget':['widgetId','direction'],
     'set-widget-span':['widgetId','span'],
   }
-  if(typeof op!=='string'||!(op in additional)||!keys(v,[...base,...additional[op as VisualOperation]])) return null
+  if(!isVisualOperation(op)||!Object.hasOwn(additional,op)||!keys(v,[...base,...additional[op]])) return null
   if(op==='add-widget'&&(!isKind(v.widgetKind)||!validTitle(v.label)
     ||(v.span!==undefined&&!validSpan(v.span)))) return null
   if(op==='rename-widget'&&!validTitle(v.label)) return null
