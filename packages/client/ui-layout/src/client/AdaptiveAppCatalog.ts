@@ -95,10 +95,19 @@ function validLabel(label: unknown): label is string {
 function validId(id: unknown): id is string {
   return typeof id === 'string' && /^[a-z][a-z0-9-]{0,47}$/u.test(id)
 }
+const FORM_KEYS = new Set(['version', 'appId', 'templateId', 'revision', 'state', 'fields'])
+const FIELD_KEYS = new Set(['id', 'label', 'kind', 'required', 'protected', 'binding'])
+const BINDING_KEYS = new Set(['destination', 'output', 'capabilityId'])
+const INPUT_KEYS = new Set(['label', 'kind', 'destination', 'output'])
+function onlyKeys(value: object, keys: ReadonlySet<string>): boolean {
+  return Object.keys(value).every(key => keys.has(key))
+}
 function validField(field: unknown): field is AdaptiveFormField {
   if (!field || typeof field !== 'object' || Array.isArray(field)) return false
   const item = field as Partial<AdaptiveFormField>
   const b = item.binding
+  if (!onlyKeys(field, FIELD_KEYS) || !b || typeof b !== 'object' || Array.isArray(b)
+    || !onlyKeys(b, BINDING_KEYS)) return false
   return validId(item.id) && validLabel(item.label)
     && (['text', 'number', 'date', 'select', 'textarea'] as unknown[]).includes(item.kind)
     && typeof item.required === 'boolean' && typeof item.protected === 'boolean'
@@ -109,7 +118,7 @@ function validField(field: unknown): field is AdaptiveFormField {
 export function validateAdaptiveDraft(value: unknown): value is AdaptiveFormDraft {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const d = value as Partial<AdaptiveFormDraft>
-  if (d.version !== 1 || d.state !== 'local-draft' || !describeAdaptiveApp(d.appId ?? '')
+  if (!onlyKeys(value, FORM_KEYS) || d.version !== 1 || d.state !== 'local-draft' || !describeAdaptiveApp(d.appId ?? '')
     || !validId(d.templateId) || !Number.isSafeInteger(d.revision) || (d.revision ?? -1) < 0
     || !Array.isArray(d.fields) || d.fields.length > 40 || !d.fields.every(validField)) return false
   return new Set(d.fields.map(field => field.id)).size === d.fields.length
@@ -122,7 +131,7 @@ export function addAdaptiveField(
 ): AdaptiveFormDraft {
   if (!validateAdaptiveDraft(draft)) throw new Error('ADAPTIVE_INVALID_DRAFT')
   if (expectedRevision !== draft.revision) throw new Error('ADAPTIVE_REVISION_CONFLICT')
-  if (!validLabel(input.label) || !(['text','number','date','select','textarea'] as unknown[]).includes(input.kind)
+  if (!onlyKeys(input, INPUT_KEYS) || !validLabel(input.label) || !(['text','number','date','select','textarea'] as unknown[]).includes(input.kind)
     || !(['local','api','chat','ai'] as unknown[]).includes(input.destination)
     || !(['inline','table','document','chat'] as unknown[]).includes(input.output)) throw new Error('ADAPTIVE_INVALID_FIELD')
   if (draft.fields.some(field => field.label.toLowerCase() === input.label.toLowerCase())) throw new Error('ADAPTIVE_DUPLICATE_LABEL')
