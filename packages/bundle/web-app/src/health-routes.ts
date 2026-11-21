@@ -11,6 +11,7 @@ import type {} from '@phoenix-ai/dsh-host-webserver'
 import { dshHomePath } from '@phoenix-ai/dsh-home-paths'
 import { HealthClinicStore, healthKinds, type ClinicActor } from './health-store.ts'
 import { renderHealthPage } from './health-ui.ts'
+import { createPatientPortalHandler } from './health-patient-routes.ts'
 import { HEALTH_CLINICAL_TOOLS, runHealthClinicalTool } from './health-clinical-tools.ts'
 
 type Kind = Parameters<HealthClinicStore['list']>[1]
@@ -117,8 +118,10 @@ export function registerHealthRoutes(ctx:Context):void {
   }
   const store=new HealthClinicStore(dshHomePath('health','clinic.sqlite'))
   const failures=new Map<string,{ count:number;until:number }>()
+  const patientPortal=createPatientPortalHandler(store)
   const route=ctx.webServer.register({ kind:'prefix',path:'/health',handler:async(req,res)=>{
     if(!peer(req)){reply(res,403,{ error:'Acceso local requerido' });return}
+    if(await patientPortal(req,res))return
     const path=new URL(req.url??'/','http://127.0.0.1').pathname
     const method=req.method??'GET'
     // Authenticated, exact-allowlist local JavaScript modules. Only the signed-in
@@ -193,6 +196,27 @@ export function registerHealthRoutes(ctx:Context):void {
       const valid=store.session(cookie(req),typeof req.headers['x-phoenix-csrf']==='string'?req.headers['x-phoenix-csrf']:undefined,method!=='GET')
       const actor:ClinicActor=valid.actor
       if(operation==='session'&&method==='GET'){reply(res,200,{ actor,csrf:valid.csrf });return}
+      if(operation==='patient-portal-invite'&&method==='POST'&&id===undefined){
+        if(process.env.PHOENIX_HEALTH_PATIENT_PORTAL_ENABLED!=='1')throw Error('Portal no habilitado')
+        const body=await readBody(req,2048)
+        if(typeof body.patientId!=='string')throw Error('Paciente requerido')
+        reply(res,200,store.issuePatientPortalInvite(actor,body.patientId));return
+      }
+      if(operation==='patient-portal-publish'&&method==='POST'&&id===undefined){
+        if(process.env.PHOENIX_HEALTH_PATIENT_PORTAL_ENABLED!=='1')throw Error('Portal no habilitado')
+        const body=await readBody(req,2048)
+        if(typeof body.kind!=='string'||typeof body.recordId!=='string')throw Error('Publicación inválida')
+        store.publishPatientPortalItem(actor,body.kind,body.recordId)
+        reply(res,200,{published:true});return
+      }
+      if(operation==='patient-portal-revoke'&&method==='POST'&&id===undefined){
+        if(process.env.PHOENIX_HEALTH_PATIENT_PORTAL_ENABLED!=='1')throw Error('Portal no habilitado')
+        const body=await readBody(req,2048)
+        if(typeof body.patientId!=='string')throw Error('Paciente requerido')
+        store.revokePatientPortalAccess(actor,body.patientId)
+        reply(res,200,{revoked:true});return
+      }
+
       // Persist only authorized per-user UI drafts in the encrypted clinical store.
       if(operation==='clinical-draft'&&id!==undefined){
         if(method==='GET'){reply(res,200,{draft:store.getClinicalDraft(actor,id)});return}
