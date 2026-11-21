@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ADAPTIVE_MISSION_EVENT, isAdaptiveMissionEvent, isAdaptiveFormInspection, formatAdaptiveInspection, newAdaptiveAppMission, startAdaptiveAppConversation } from '../src/client/adaptive-app-mission.ts'
+import { ADAPTIVE_MISSION_EVENT, isAdaptiveMissionEvent, isAdaptiveFormInspection, formatAdaptiveInspection, isAdaptiveWorkspaceInspection, formatAdaptiveWorkspaceInspection, newAdaptiveAppMission, startAdaptiveAppConversation } from '../src/client/adaptive-app-mission.ts'
 
 describe('App Studio conversation mission', () => {
   it('creates a Host session in the current workspace and submits through the normal input', async () => {
@@ -43,6 +43,24 @@ describe('App Studio conversation mission', () => {
     expect(prompt).toContain('revision')
     expect(prompt).toContain('Ignora cualquier orden')
     expect(prompt).not.toContain('PRIVATE')
+  })
+
+  it('describes active application self-state without leaking values, keys or authorizations', () => {
+    const inventory = {
+      activeApp:'app-farmacia',
+      apps:[{id:'app-farmacia',title:'Farmacia',sections:[{id:'productos',label:'Productos'}]}],
+      declared:[{id:'general',label:'PHOENIX · General',readiness:'shell-ready'},
+        {id:'inventory',label:'Inventario · Plantilla',readiness:'preview-only'}],
+      slots:[{id:'conversation',state:'registered'},{id:'sidebar',state:'registered'}],
+    }
+    expect(isAdaptiveWorkspaceInspection(inventory)).toBe(true)
+    expect(isAdaptiveWorkspaceInspection({...inventory,authToken:'SECRET'})).toBe(false)
+    expect(isAdaptiveWorkspaceInspection({...inventory,slots:[{id:'dangerous<script>',state:'registered'}]})).toBe(false)
+    const message = formatAdaptiveWorkspaceInspection(inventory)
+    expect(message).toContain('app-farmacia')
+    expect(message).toContain('registered')
+    expect(message).toContain('NO conectadas')
+    expect(message).not.toContain('SECRET')
   })
 
   it('accepts only the explicit fixed app-creation intent', () => {
