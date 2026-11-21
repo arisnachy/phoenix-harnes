@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { PhoenixUiIcon } from '@phoenix-ai/dsh-client-ui-primitives'
 import { applyVisualCommand, readVisualBoard, VISUAL_KINDS,
   type VisualBoard, type VisualKind, type VisualWidget, type VisualCommand } from './AdaptiveVisualKit.ts'
 import css from './AdaptiveVisualStudio.module.css'
@@ -68,17 +69,17 @@ export function AdaptiveVisualStudio({appId,sectionId}:{appId:string;sectionId:s
       {board.widgets.map((widget,index)=><article key={widget.id}
         className={css.widget} data-visual-kind={widget.kind} data-span={widget.span}>
         <div className={css.widgetHeading}>
-          <div className={css.widgetIdentity}><span className={css.icon} aria-hidden="true">{VISUAL_KINDS[widget.kind].label.slice(0,1)}</span>
+          <div className={css.widgetIdentity}><span className={css.icon} aria-hidden="true"><PhoenixUiIcon name={VISUAL_KINDS[widget.kind].icon} size={17}/></span>
             <div><strong>{widget.title}</strong><small>{VISUAL_KINDS[widget.kind].description}</small></div></div>
           {editing&&<div className={css.tools}>
             <button type="button" aria-label={'Mover arriba '+widget.title} disabled={index===0}
-              onClick={()=>change({operation:'move-widget',widgetId:widget.id,direction:'up'})}>↑</button>
+              onClick={()=>change({operation:'move-widget',widgetId:widget.id,direction:'up'})}><PhoenixUiIcon name="arrow-up" size={14}/></button>
             <button type="button" aria-label={'Mover abajo '+widget.title} disabled={index===board.widgets.length-1}
-              onClick={()=>change({operation:'move-widget',widgetId:widget.id,direction:'down'})}>↓</button>
+              onClick={()=>change({operation:'move-widget',widgetId:widget.id,direction:'down'})}><PhoenixUiIcon name="arrow-down" size={14}/></button>
             <button type="button" aria-label={'Cambiar ancho '+widget.title} title="Alternar ancho"
-              onClick={()=>change({operation:'set-widget-span',widgetId:widget.id,span:widget.span==='half'?'full':'half'})}>↔</button>
+              onClick={()=>change({operation:'set-widget-span',widgetId:widget.id,span:widget.span==='half'?'full':'half'})}><PhoenixUiIcon name="expand" size={14}/></button>
             <button type="button" aria-label={'Quitar '+widget.title}
-              onClick={()=>change({operation:'remove-widget',widgetId:widget.id})}>×</button>
+              onClick={()=>change({operation:'remove-widget',widgetId:widget.id})}><PhoenixUiIcon name="trash-2" size={14}/></button>
           </div>}
         </div>
         <WidgetContent widget={widget}/>
