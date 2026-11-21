@@ -66,7 +66,7 @@ describe('Adaptive workspace safe chat actions', () => {
     },items,read).reason).toBe('UNKNOWN_APP')
     expect(preflightAdaptiveControl({
       appId:blueprint.id,operation:'add-section',label:'Productos',
-    },items,read).reason).toBe('INVALID_SECTION')
+    },items,read).reason).toBe('DUPLICATE_SECTION')
     const updated = appendAdaptiveSection(blueprint.id,'Compras',memory)
     expect(updated.sections.map(s => s.id)).toEqual(['productos','reportes','compras'])
   })
