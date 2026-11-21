@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { ComponentProps } from 'react'
 import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
 import type { ToolCallBlock } from '@phoenix-ai/dsh-client-runtime/client'
@@ -1128,7 +1129,7 @@ function BrowserWorkspace({
     deliveredTopRef.current = scrollport.scrollTop
   }
 
-  return (
+  return typeof document === 'undefined' ? null : createPortal(
     <div className={css.browserWorkspace} data-browser-floating="true" data-browser-workspace={live ? '' : undefined}
       data-activity-open={showSidecar ? 'true' : undefined} data-chat-flow-kind="browser-workspace">
       <div className={css.browserPane}>
@@ -1215,7 +1216,8 @@ function BrowserWorkspace({
         </button>}
       </aside>}
     </div>
-  )
+
+  , document.body)
 }
 
 /**
