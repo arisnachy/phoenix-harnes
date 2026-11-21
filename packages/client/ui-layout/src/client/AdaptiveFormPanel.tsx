@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
+import { Button, Input, PhoenixUiIcon, choosePhoenixUiIcon } from '@phoenix-ai/dsh-client-ui-primitives'
 import {
   addAdaptiveField, removeAdaptiveField,
   type AdaptiveDestination, type AdaptiveInputKind, type AdaptiveOutput, type AdaptiveFormDraft,
 } from './AdaptiveAppCatalog.ts'
 import { readAdaptiveForm, saveAdaptiveForm } from './AdaptiveFormMetadataStore.ts'
 import css from './HealthiaWorkspace.module.css'
+import ui from './AdaptiveFormPanel.module.css'
 
 /**
  * Generic app form editor and LOCAL ephemeral preview.
@@ -62,10 +64,10 @@ export function AdaptiveFormPanel({ appId, sectionId }: { appId: string; section
     } catch { setError('No fue posible restaurar el esquema anterior.') }
   }
 
-  return <div className={css.formPreview}>
-    <div className={css.draftHeader}>
-      <strong>Formulario de {sectionId} · revisión {form.revision}</strong>
-      <div className={css.actions}>
+  return <div className={[css.formPreview, ui.formShell].join(' ')}>
+    <div className={[css.draftHeader,ui.header].join(' ')}>
+      <div className={ui.heading}><span className={ui.headingIcon}><PhoenixUiIcon name="clipboard" size={17}/></span><strong>Formulario de {sectionId} · revisión {form.revision}</strong></div>
+      <div className={[css.actions,ui.buttons].join(' ')}>
         <button className={css.action} type="button" onClick={() => window.dispatchEvent(
           new CustomEvent('phoenix:adaptive-form-mission', { detail: { appId, sectionId } }),
         )}>Configurar con Kira</button>
@@ -82,9 +84,9 @@ export function AdaptiveFormPanel({ appId, sectionId }: { appId: string; section
       </div>
     </div>
     <p>Personaliza entradas y salidas. Solo el esquema se guarda en este navegador; los valores permanecen temporalmente en memoria.</p>
-    <div className={css.fieldList}>
+    <div className={[css.fieldList,ui.fieldList].join(' ')}>
       {form.fields.map(field => <div key={field.id} className={css.fieldRow}>
-        <span><strong>{field.label}</strong><small>{field.kind} · {field.binding.destination.toUpperCase()} → {field.binding.output}{field.binding.destination !== 'local' ? ' · pendiente de autorización' : ''}</small></span>
+        <span><strong className={ui.fieldLabel}><PhoenixUiIcon name={choosePhoenixUiIcon(field.label)} className={ui.fieldIcon} size={15}/>{field.label}</strong><small>{field.kind} · {field.binding.destination.toUpperCase()} → {field.binding.output}{field.binding.destination !== 'local' ? ' · pendiente de autorización' : ''}</small></span>
         <button className={css.removeField} type="button" aria-label={`Quitar campo ${field.label}`}
           onClick={() => {
             try { commit(removeAdaptiveField(form, field.id)) }
@@ -92,7 +94,7 @@ export function AdaptiveFormPanel({ appId, sectionId }: { appId: string; section
           }}>×</button>
       </div>)}
     </div>
-    <form className={css.builder} onSubmit={event => {
+    <form className={[css.builder,ui.builder].join(' ')} onSubmit={event => {
       event.preventDefault()
       try {
         const next = addAdaptiveField(form, { label: label.trim(), kind, destination, output })
@@ -100,7 +102,7 @@ export function AdaptiveFormPanel({ appId, sectionId }: { appId: string; section
         setLabel('')
       } catch { setError('Introduce un nombre único y un tipo de entrada permitido.') }
     }}>
-      <input value={label} onChange={event => setLabel(event.currentTarget.value)}
+      <Input icon={<PhoenixUiIcon name="plus" size={16}/>} value={label} onChange={event => setLabel(event.currentTarget.value)}
         aria-label="Nombre del nuevo campo" placeholder="Nombre del campo" maxLength={60}/>
       <label className={css.formSelect}>Entrada
         <select value={kind} aria-label="Tipo de entrada" onChange={event => setKind(event.currentTarget.value as AdaptiveInputKind)}>
@@ -120,21 +122,21 @@ export function AdaptiveFormPanel({ appId, sectionId }: { appId: string; section
           <option value="document">Documento</option><option value="chat">Chat</option>
         </select>
       </label>
-      <button type="submit" disabled={!label.trim()}>Añadir campo</button>
+      <Button variant="primary" size="sm" type="submit" disabled={!label.trim()}>Añadir campo</Button>
     </form>
     {error && <p role="alert">{error}</p>}
-    {form.fields.length > 0 && <div className={css.formPreview}>
+    {form.fields.length > 0 && <div className={[css.formPreview,ui.preview].join(' ')}>
       <h3>Vista operativa local</h3>
-      {form.fields.map(field => <div key={field.id} className={css.formSelect}>
+      <div className={ui.fieldGrid}>{form.fields.map(field => <div key={field.id} className={[css.formSelect,ui.field].join(' ')}>
         <label htmlFor={`adaptive-value-${field.id}`}>{field.label}</label>
         {field.kind === 'textarea'
           ? <textarea id={`adaptive-value-${field.id}`} maxLength={400} rows={2}
             value={values[field.id] ?? ''} onChange={event => { const value = event.currentTarget.value; setValues(old => ({ ...old, [field.id]: value })) }}/>
           : field.kind === 'select'
             ? <select id={`adaptive-value-${field.id}`} disabled><option>Configura opciones con Kira</option></select>
-            : <input id={`adaptive-value-${field.id}`} type={field.kind} maxLength={400}
+            : <Input id={`adaptive-value-${field.id}`} type={field.kind} maxLength={400}
                 value={values[field.id] ?? ''} onChange={event => { const value = event.currentTarget.value; setValues(old => ({ ...old, [field.id]: value })) }}/>}
-      </div>)}
+      </div>)}</div>
       <div className={css.fieldList} aria-label="Salidas en pantalla">
         {form.fields.filter(field => field.binding.destination === 'local' && values[field.id]).map(field =>
           <div key={field.id} className={css.fieldRow}>
