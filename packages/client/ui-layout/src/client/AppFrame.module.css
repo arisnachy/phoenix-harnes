@@ -218,3 +218,13 @@
   background: var(--dsw-alias-button-floating-hover);
   border-color: var(--dsw-alias-border-l3);
 }
+
+/* Adaptive app switcher: centered left of the existing upper-right account controls. */
+.appLauncher { position:absolute; z-index:7; top:12px; right:258px; pointer-events:auto; }
+.appLauncherButton { display:flex; align-items:center; gap:6px; height:34px; padding:0 12px; font:inherit;font-size:12px;font-weight:600; color:var(--dsw-alias-label-primary);background:var(--dsw-specific-input-major);border:1px solid var(--dsw-alias-border-l2); border-radius:12px;cursor:pointer; }
+.appLauncherButton:hover,.appLauncherButton:focus-visible {background:var(--dsw-alias-interactive-bg-hover);}
+.appLauncherButton span {font-size:18px;color:#e76020;}
+.appLauncherMenu { position:absolute; top:42px; right:0; width:250px; padding:8px; border-radius:14px; border:1px solid var(--dsw-alias-border-l2); background:var(--dsw-specific-input-major);box-shadow:0 12px 34px rgba(30,30,30,.12); }
+.appLauncherMenu button { display:block;width:100%;font:inherit;font-size:13px;padding:10px;border:0;border-radius:8px;text-align:left;color:var(--dsw-alias-label-primary);background:transparent;cursor:pointer; }
+.appLauncherMenu button:hover,.appLauncherMenu button:focus-visible {background:var(--dsw-alias-interactive-bg-hover);}
+@media (max-width:760px) { .appLauncher {right:12px; top:58px;} .appLauncherMenu {right:0; width:min(250px,80vw);} }
