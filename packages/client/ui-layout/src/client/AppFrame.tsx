@@ -53,7 +53,7 @@ interface SurfaceBoundaryState {
  * failure stays contained behind a small retry control instead of leaving a
  * white screen that requires restarting the Host.
  */
-class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoundaryState> {
+export class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoundaryState> {
   override state: SurfaceBoundaryState = { failed: false, autoRetried: false }
 
   static getDerivedStateFromError(): Partial<SurfaceBoundaryState> {
