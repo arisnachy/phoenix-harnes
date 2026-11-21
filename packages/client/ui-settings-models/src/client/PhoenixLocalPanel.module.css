@@ -176,3 +176,16 @@
 .confirm p {
   margin: 0;
 }
+
+/* The installed Ollama picker uses PHOENIX theme tokens, no fixed colors. */
+.ollamaPicker { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: end; gap: 8px; }
+.ollamaPicker input {
+  box-sizing: border-box; width: 100%; min-height: 36px; padding: 6px 10px;
+  border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px;
+  background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font: inherit;
+}
+.ollamaPicker input:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }
+@media (max-width: 640px) {
+  .ollamaPicker { grid-template-columns: 1fr 1fr; }
+  .ollamaPicker .field { grid-column: 1 / -1; }
+}
