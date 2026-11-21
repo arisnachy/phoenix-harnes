@@ -99,13 +99,11 @@ export class HealthClinicStore {
       'CREATE INDEX IF NOT EXISTS health_attachments_patient ON health_attachments(org,patient_id,created_at);'+
       'CREATE TABLE IF NOT EXISTS health_study_interpretations (id TEXT PRIMARY KEY, org TEXT NOT NULL, patient_id TEXT NOT NULL, source_attachment_id TEXT NOT NULL, version INTEGER NOT NULL, iv TEXT NOT NULL, tag TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, authored_by TEXT NOT NULL);'+
       'CREATE INDEX IF NOT EXISTS health_study_interpretations_patient ON health_study_interpretations(org,patient_id,created_at);'+
-      'CREATE TABLE IF NOT EXISTS health_drafts (id TEXT PRIMARY KEY, org TEXT NOT NULL, username TEXT NOT NULL, scope TEXT NOT NULL, version INTEGER NOT NULL, iv TEXT NOT NULL, tag TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);'+'
-
-'CREATE TABLE IF NOT EXISTS health_patient_portal_invites (digest TEXT PRIMARY KEY, org TEXT NOT NULL, patient_id TEXT NOT NULL, expires_ms INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0);'+
-'CREATE INDEX IF NOT EXISTS health_patient_portal_invite_expiration ON health_patient_portal_invites(expires_ms);'+
-'CREATE TABLE IF NOT EXISTS health_patient_portal_accounts (account_id TEXT PRIMARY KEY, org TEXT NOT NULL, patient_id TEXT NOT NULL, salt TEXT NOT NULL, digest TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, UNIQUE(org,patient_id));'+
-'CREATE TABLE IF NOT EXISTS health_patient_portal_publications (org TEXT NOT NULL, patient_id TEXT NOT NULL, kind TEXT NOT NULL, record_id TEXT NOT NULL, published_by TEXT NOT NULL, at TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(org,patient_id,kind,record_id));'+,
-
+      'CREATE TABLE IF NOT EXISTS health_drafts (id TEXT PRIMARY KEY, org TEXT NOT NULL, username TEXT NOT NULL, scope TEXT NOT NULL, version INTEGER NOT NULL, iv TEXT NOT NULL, tag TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);'+
+      'CREATE TABLE IF NOT EXISTS health_patient_portal_invites (digest TEXT PRIMARY KEY, org TEXT NOT NULL, patient_id TEXT NOT NULL, expires_ms INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0);'+
+      'CREATE INDEX IF NOT EXISTS health_patient_portal_invite_expiration ON health_patient_portal_invites(expires_ms);'+
+      'CREATE TABLE IF NOT EXISTS health_patient_portal_accounts (account_id TEXT PRIMARY KEY, org TEXT NOT NULL, patient_id TEXT NOT NULL, salt TEXT NOT NULL, digest TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, UNIQUE(org,patient_id));'+
+      'CREATE TABLE IF NOT EXISTS health_patient_portal_publications (org TEXT NOT NULL, patient_id TEXT NOT NULL, kind TEXT NOT NULL, record_id TEXT NOT NULL, published_by TEXT NOT NULL, at TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(org,patient_id,kind,record_id));',
     )
   }
   /**
