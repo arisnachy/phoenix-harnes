@@ -513,7 +513,7 @@ export function AppFrame({
               {customApps.map(app => <button key={app.id} type="button" role="menuitem" onClick={() => {
                 setAdaptiveApp(app.id); setCustomSection(app.sections[0].id); setAppMenuOpen(false)
               }}>{app.title} · Borrador</button>)}
-              <button type="button" role="menuitem" onClick={launchAppMission}>+ Crear nueva aplicación con Kira</button>}
+              <button type="button" role="menuitem" onClick={launchAppMission}>+ Crear nueva aplicación con Kira</button>
             </div>}
           </div>
           {search && (
