@@ -215,7 +215,9 @@ async function mountFirstRun(overrides: Parameters<typeof scriptedFace>[0] = {})
     Promise.resolve(ok({
       credentials: Object.fromEntries(payload.refs.map(ref => [ref, { configured: false, writable: true }])),
     })))
-  return mountFace(scripted)
+  const mounted = await mountFace(scripted)
+  fireEvent.click(screen.getByRole('button', { name: deepSeekCopy(en.editProvider) }))
+  return mounted
 }
 
 /**
@@ -254,7 +256,7 @@ describe('ModelsSection', () => {
     expect(document.body.textContent).toBe('')
   })
 
-  it('keeps account authorization actions out of Models and leaves them to Connectors', async () => {
+  it('offers OAuth sign-in only for a provider that registers an actual account flow', async () => {
     const scripted = scriptedFace()
     const begin = vi.fn()
     ;(scripted.face as unknown as { authorization: unknown }).authorization = {
@@ -278,16 +280,18 @@ describe('ModelsSection', () => {
     expect(screen.queryByRole('button', { name: 'Sign in with OpenAI' })).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: openaiCopy(en.editProvider) }))
-    await waitFor(() => { expect(screen.getByLabelText(en.keyInput)).toBeTruthy() })
-    expect(screen.queryByRole('button', { name: /Sign in with/i })).toBeNull()
+    await waitFor(() => { expect(screen.getByText(en.wizardAuthDesc)).toBeTruthy() })
+    fireEvent.click(screen.getByText(en.wizardNext))
+    expect(screen.getByRole('button', { name: /Sign in with OpenAI Account/i })).toBeTruthy()
+    expect(screen.queryByLabelText(en.keyInput)).toBeNull()
     expect(begin).not.toHaveBeenCalled()
   })
 
-  it('renders the unkeyed whole-section provider as an open setup card in the first-run posture', async () => {
+  it('offers the unkeyed whole-section provider through the guided setup modal', async () => {
     await mountFirstRun()
     // Nothing is reachable yet, and DeepSeek has no configured credential and
     // no stored apiKey → setup card.
-    expect(screen.getByText('DeepSeek')).toBeTruthy()
+    expect(screen.getAllByText('DeepSeek').length).toBeGreaterThan(0)
     expect(screen.getByLabelText(en.keyInput)).toBeTruthy()
     expect(screen.getByText('openai')).toBeTruthy()
     expect(screen.queryByText('Active')).toBeNull()
@@ -1079,6 +1083,7 @@ describe('ModelsSection', () => {
         schema={settingsSchema}
         t={t}
       />)
+      fireEvent.click(screen.getByRole('button', { name: deepSeekCopy(en.editProvider) }))
       const key = await screen.findByLabelText<HTMLInputElement>(en.keyInput)
       expect(key.placeholder).toBe(en.keyPlaceholder)
       await new Promise(resolve => setTimeout(resolve, 10))
@@ -1268,27 +1273,18 @@ describe('ModelsSection', () => {
     expect(screen.queryByLabelText(en.provider)).toBeNull()
   })
 
-  it('collapses the setup card on cancel without disturbing another open card', async () => {
-    // The regression: the setup card shared the row/add/declare close handler,
-    // so cancelling it discarded the add card's draft while staying open itself.
+  it('keeps only one modern provider dialog open and discards a cancelled draft', async () => {
     await mountFirstRun()
     expect(screen.getAllByLabelText(en.keyInput)).toHaveLength(1)
+    fireEvent.click(screen.getByText(en.cancel))
+    expect(screen.queryByLabelText(en.keyInput)).toBeNull()
     fireEvent.click(screen.getByText(en.add))
-    await screen.findByLabelText(en.provider)
-    expect(screen.getAllByLabelText(en.keyInput)).toHaveLength(2)
-
-    // The setup card is the first one on the page, above the add block.
-    fireEvent.click(screen.getAllByText(en.cancel)[0] as HTMLElement)
-    // The add card kept its draft…
-    expect(screen.getByLabelText(en.provider)).toBeTruthy()
-    // …and DeepSeek collapsed to an ordinary row carrying the missing-key dot.
+    expect(await screen.findByLabelText(en.provider)).toBeTruthy()
     expect(screen.getAllByLabelText(en.keyInput)).toHaveLength(1)
+    fireEvent.click(screen.getByText(en.cancel))
+    expect(screen.queryByLabelText(en.provider)).toBeNull()
     expect(screen.getAllByRole('img', { name: en.credentialMissing })
       .some(dot => dot.closest('li')?.textContent?.includes('DeepSeek') === true)).toBe(true)
-    // Its card reopens through Edit, which closes the add card as any row does.
-    fireEvent.click(screen.getByRole('button', { name: deepSeekCopy(en.editProvider) }))
-    expect(screen.getAllByLabelText(en.keyInput)).toHaveLength(1)
-    expect(screen.queryByLabelText(en.provider)).toBeNull()
   })
 
   it('loads on first render of an idle controller', async () => {
