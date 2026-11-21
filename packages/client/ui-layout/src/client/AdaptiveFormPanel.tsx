@@ -6,6 +6,7 @@ import {
 } from './AdaptiveAppCatalog.ts'
 import { readAdaptiveForm, saveAdaptiveForm } from './AdaptiveFormMetadataStore.ts'
 import { AdaptiveAiFieldControl } from './AdaptiveAiFieldControl.tsx'
+import { readFieldAiConfig } from './AdaptiveIntelligentFields.ts'
 import css from './HealthiaWorkspace.module.css'
 import ui from './AdaptiveFormPanel.module.css'
 
@@ -78,6 +79,10 @@ export function AdaptiveFormPanel({ appId, sectionId }: { appId: string; section
             fields: form.fields.map(field => ({
               id: field.id, label: field.label, kind: field.kind,
               destination: field.binding.destination, output: field.binding.output,
+              ai: ['text','textarea'].includes(field.kind) ? (()=>{
+                const cfg=readFieldAiConfig(appId,sectionId,field.id)
+                return {enabled:cfg.enabled,skill:cfg.skill,revision:cfg.revision}
+              })() : undefined,
             })),
           } }),
         )}>Compartir estructura con Kira</button>
