@@ -238,6 +238,7 @@ export function registerHealthRoutes(ctx:Context):void {
         if(body.action!=='refine'||body.confirmLocalProcessing!==true)
           throw Error('Confirmación clínica requerida')
         const proposal=store.suggestClinicalNote(actor,id)
+        if(!proposal.mayUseLocalModel)throw Error('Documento clínico reservado: IA local no autorizada')
         const refined=await refineProtectedHistoryLocal(proposal,{
           enabled:process.env.PHOENIX_HEALTH_LOCAL_AI_ENABLED==='1',
           model:process.env.PHOENIX_HEALTH_LOCAL_AI_MODEL,
