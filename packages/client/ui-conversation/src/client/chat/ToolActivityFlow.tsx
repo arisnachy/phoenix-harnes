@@ -1253,8 +1253,8 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
   const [manualBrowserKey, setManualBrowserKey] = useState<string | undefined>()
   const [dismissedBrowserKey, setDismissedBrowserKey] = useState<string | undefined>()
   const previouslyActiveBrowser = useRef<string | undefined>(undefined)
-  const visibleBrowserKey = pinnedBrowserKey ?? manualBrowserKey
-    ?? (activeBrowserTurn && dismissedBrowserKey !== newestBrowserKey ? newestBrowserKey : undefined)
+  const visibleBrowserKey = activeBrowserTurn && dismissedBrowserKey !== newestBrowserKey
+    ? newestBrowserKey : pinnedBrowserKey ?? manualBrowserKey
   useEffect(() => {
     if (activeBrowserTurn) previouslyActiveBrowser.current = newestBrowserKey
     else if (!browserTurnRunning && previouslyActiveBrowser.current !== undefined) {
