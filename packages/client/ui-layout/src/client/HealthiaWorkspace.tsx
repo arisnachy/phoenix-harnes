@@ -1,6 +1,11 @@
 /** Healthia adaptive workspace. Never handles patient-identifiable form values. */
 import { useState } from 'react'
 import css from './HealthiaWorkspace.module.css'
+import {
+  addAdaptiveField, removeAdaptiveField, describeAdaptiveApp, isBindingConnected,
+  HEALTHIA_DOCTOR_FORM,
+  type AdaptiveInputKind, type AdaptiveDestination, type AdaptiveOutput, type AdaptiveFormDraft,
+} from './AdaptiveAppCatalog.ts'
 
 export type HealthiaRole = 'doctor' | 'patient'
 
@@ -12,6 +17,7 @@ export const HEALTHIA_NAV: Record<HealthiaRole, readonly { id: string; label: st
     { id: 'records', label: 'Historia clínica' },
     { id: 'prescriptions', label: 'Recetas e informes' },
     { id: 'forms', label: 'Formularios' },
+    { id: 'capabilities', label: 'Capacidades' },
     { id: 'exchange', label: 'Intercambios' },
   ],
   patient: [
@@ -20,6 +26,7 @@ export const HEALTHIA_NAV: Record<HealthiaRole, readonly { id: string; label: st
     { id: 'records', label: 'Mi expediente' },
     { id: 'documents', label: 'Documentos' },
     { id: 'consent', label: 'Autorizaciones' },
+    { id: 'capabilities', label: 'Capacidades' },
     { id: 'exchange', label: 'Compartir con mi médico' },
   ],
 }
@@ -45,9 +52,44 @@ export function HealthiaWorkspace({
   onSectionChange: (section: string) => void
   onReturn: () => void
 }) {
-  // Configuration draft only: NO patient data, persistence, API call or model context.
+  // Only field METADATA is edited in this view; never place patient values in chat/events.
   const [fieldLabel, setFieldLabel] = useState('')
-  const [fields, setFields] = useState<readonly string[]>(['Motivo de consulta', 'Antecedentes', 'Signos vitales'])
+  const [draft, setDraft] = useState<AdaptiveFormDraft>(HEALTHIA_DOCTOR_FORM)
+  const [history, setHistory] = useState<readonly AdaptiveFormDraft[]>([])
+  const [kind, setKind] = useState<AdaptiveInputKind>('text')
+  const [destination, setDestination] = useState<AdaptiveDestination>('local')
+  const [output, setOutput] = useState<AdaptiveOutput>('inline')
+  const [draftError, setDraftError] = useState('')
+  const capabilities = describeAdaptiveApp('healthia')?.capabilities ?? []
+  const addField = (event: React.FormEvent<HTMLFormElement>): void => {
+    event.preventDefault()
+    try {
+      const next = addAdaptiveField(draft, { label: fieldLabel.trim(), kind, destination, output })
+      setHistory(items => [...items.slice(-19), draft])
+      setDraft(next)
+      setFieldLabel('')
+      setDraftError('')
+    } catch {
+      setDraftError('No se pudo validar el cambio del formulario; no se modificó el borrador.')
+    }
+  }
+  const removeField = (id: string): void => {
+    try {
+      const next = removeAdaptiveField(draft, id)
+      setHistory(items => [...items.slice(-19), draft])
+      setDraft(next)
+      setDraftError('')
+    } catch {
+      setDraftError('El campo está protegido o el borrador requiere revisión.')
+    }
+  }
+  const undo = (): void => {
+    const previous = history[history.length - 1]
+    if (!previous) return
+    setDraft(previous)
+    setHistory(items => items.slice(0, -1))
+    setDraftError('')
+  }
   const active = HEALTHIA_NAV[role].some(item => item.id === section) ? section : 'overview'
   const isPatient = role === 'patient'
 
@@ -74,12 +116,49 @@ export function HealthiaWorkspace({
         </nav>
         {active === 'forms' && !isPatient ? (
           <div className={css.formPreview}>
-            <p>Editor preliminar de estructura de formularios. No introducir información de pacientes: estos campos no se publican ni almacenan todavía.</p>
-            <div className={css.chips}>{fields.map((field, i) => <span key={i} className={css.chip}>{field}<button type="button" aria-label={`Quitar campo ${field}`} onClick={() => setFields(items => items.filter((_, index) => index !== i))}>×</button></span>)}</div>
-            <form className={css.builder} onSubmit={event => { event.preventDefault(); const label = fieldLabel.trim(); if (label && label.length <= 60 && !fields.includes(label)) setFields(items => [...items, label]); setFieldLabel('') }}>
-              <input maxLength={60} aria-label="Etiqueta de nuevo campo" value={fieldLabel} onChange={e => setFieldLabel(e.target.value)} placeholder="Nombre de nuevo campo" />
+            <p><strong>Editor adaptable · solo estructura.</strong> Campos, destinos y formatos configurables sin ejecutar código ni enviar datos clínicos. Los cambios están en memoria y requieren un publicador clínico autorizado para ser persistentes.</p>
+            <div className={css.draftHeader}><span>Plantilla de consulta · revisión {draft.revision}</span>
+              <button type="button" className={css.action} disabled={history.length === 0} onClick={undo}>Deshacer cambio</button>
+            </div>
+            <div className={css.fieldList}>
+              {draft.fields.map(field => (
+                <div key={field.id} className={css.fieldRow}>
+                  <span><strong>{field.label}</strong><small>{field.kind} · {field.binding.destination.toUpperCase()} → {field.binding.output} · {isBindingConnected(field.binding, capabilities) ? 'Vista local' : 'Conector pendiente'}</small></span>
+                  {field.protected ? <span className={css.locked}>Protegido</span> : <button type="button" className={css.removeField} aria-label={`Quitar campo ${field.label}`} onClick={() => removeField(field.id)}>×</button>}
+                </div>
+              ))}
+            </div>
+            <form className={css.builder} onSubmit={addField}>
+              <input maxLength={60} aria-label="Etiqueta de nuevo campo" value={fieldLabel} onChange={e => setFieldLabel(e.target.value)} placeholder="Nombre del campo" />
+              <label className={css.formSelect}>Tipo
+                <select aria-label="Tipo de campo" value={kind} onChange={e => setKind(e.currentTarget.value as AdaptiveInputKind)}>
+                  <option value="text">Texto</option><option value="number">Número</option><option value="date">Fecha</option><option value="select">Selector</option><option value="textarea">Texto extenso</option>
+                </select>
+              </label>
+              <label className={css.formSelect}>Acción
+                <select aria-label="Destino de campo" value={destination} onChange={e => setDestination(e.currentTarget.value as AdaptiveDestination)}>
+                  <option value="local">Local</option><option value="api">API autorizada (pendiente)</option><option value="chat">Chat (pendiente)</option><option value="ai">IA (pendiente)</option>
+                </select>
+              </label>
+              <label className={css.formSelect}>Salida
+                <select aria-label="Formato de salida" value={output} onChange={e => setOutput(e.currentTarget.value as AdaptiveOutput)}>
+                  <option value="inline">En pantalla</option><option value="table">Tabla</option><option value="document">Documento</option><option value="chat">Chat</option>
+                </select>
+              </label>
               <button type="submit" disabled={!fieldLabel.trim()}>Agregar campo</button>
             </form>
+            {draftError && <p role="alert">{draftError}</p>}
+            <p className={css.notice}>Las conexiones API, Chat e IA son propuestas declarativas: ejecutar, almacenar, compartir o publicar requiere permisos y un adaptador validado.</p>
+          </div>
+        ) : active === 'capabilities' ? (
+          <div className={css.capabilityList}>
+            <p>Autoconocimiento declarativo: las funciones se anuncian en un catálogo limitado, sin revelar contraseñas ni considerar conectadas las API por el mero hecho de existir.</p>
+            {capabilities.map(capability => (
+              <div className={css.fieldRow} key={capability.id}>
+                <span><strong>{capability.label}</strong><small>{capability.explanation}</small></span>
+                <span className={css.status}>{capability.state === 'ui-ready' ? 'Interfaz lista' : capability.state === 'requires-authentication' ? 'Requiere acceso' : capability.state === 'disabled' ? 'Deshabilitado' : 'Sin conectar'}</span>
+              </div>
+            ))}
           </div>
         ) : active === 'exchange' || (active === 'consent' && isPatient) ? (
           <div className={css.exchange}>
