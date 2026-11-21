@@ -58,7 +58,7 @@ export function composeProtectedClinicalNote(input:ClinicalNoteProposalInput):Cl
   const missing=Object.entries(FIELDS).slice(0,5).filter(([key])=>!seen.has(key))
     .map(([,label])=>label)
   const proposed=[
-    ...(originalHistory?[originalHistory]:['Motivo documentado: '+complaint]),
+    ...(originalHistory?[originalHistory,'Motivo documentado: '+complaint]:['Motivo documentado: '+complaint]),
     ...(lines.length?['Relato registrado durante la entrevista:',...lines]:
       originalHistory?[]:['Entrevista clínica no documentada todavía.']),
     'Borrador asistido: completar y verificar secuencia temporal, síntomas pertinentes y hallazgos antes de firmar.',
