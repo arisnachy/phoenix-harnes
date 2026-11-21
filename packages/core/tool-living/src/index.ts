@@ -1,7 +1,7 @@
 /** Model-facing controls and standing policy for Universal Living Creations. @module @phoenix-ai/dsh-tool-living */
 
 import { randomBytes } from 'node:crypto'
-import { inspectSystemEnvironment } from './system-proprioception.ts'
+import { inspectSystemEnvironment, searchLocalApps } from './system-proprioception.ts'
 import { confirmAdaptiveExternalAction, type AdaptiveApprovalService } from './approved-action.ts'
 import type { Context } from '@phoenix-ai/cordis'
 import {
@@ -305,6 +305,16 @@ export function apply(ctx: Context): void {
       }))
     },
     presentCall:()=>({card:'generic',title:'PHOENIX · Herramientas y conectores activos',kind:'read' as const}),
+  }))
+
+  ctx.tools.register(defineTool({
+    name:'system_app_search',
+    description:'Find installed Windows Start-menu programs that match a user-provided name. Returns up to 16 safe application names only. Does not expose AppIDs, paths, devices, hidden apps or credentials, and never grants launch or execution permissions. Use when the user asks which applications or graphical tools are available.',
+    parameters:{query:{type:'string',required:true,description:'App name or category to look up, between 2 and 48 letters/numbers/spaces.'}},
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    execute(args){return Promise.resolve(JSON.stringify(searchLocalApps(args.query)))},
+    presentCall:()=>({card:'generic',title:'PHOENIX · Buscar aplicaciones instaladas',kind:'read' as const}),
   }))
 
   ctx.tools.register(defineTool({
