@@ -22,7 +22,7 @@ import { appendAdaptiveSection, renameAdaptiveSection, removeAdaptiveSection, re
 import { applyAdaptiveFormFields, restorePreviousAdaptiveForms } from './AdaptiveFormMetadataStore.ts'
 import {
   parseAdaptiveControl, preflightAdaptiveControl, findAdaptiveMetadata,
-  saveAdaptivePalette, readAdaptivePalette, applyAdaptiveFieldEdit, applyAdaptiveVisualEdit,
+  saveAdaptivePalette, readAdaptivePalette, applyAdaptiveFieldEdit, applyAdaptiveVisualEdit, applyAdaptiveAiFieldEdit,
   type AdaptiveDiscovery,
 } from './AdaptiveWorkspaceControl.ts'
 import { isVisualOperation, restoreVisualBoard, readVisualBoard } from './AdaptiveVisualKit.ts'
@@ -261,6 +261,13 @@ export function AppFrame({
               setAdaptiveApp(app.id)
               setCustomSection(command.operation === 'remove-section' ? app.sections[0].id : command.sectionId!)
               setSearch(null)
+            } else if (command.operation === 'set-field-ai') {
+              applyAdaptiveAiFieldEdit(command)
+              setAdaptiveApp(command.appId)
+              setCustomSection(command.sectionId!)
+              window.dispatchEvent(new CustomEvent('phoenix:adaptive-ai-field-config-refreshed',{
+                detail:{appId:command.appId,sectionId:command.sectionId,fieldId:command.fieldId},
+              }))
             } else if (isVisualOperation(command.operation)) {
               applyAdaptiveVisualEdit(command)
               setAdaptiveApp(command.appId)
