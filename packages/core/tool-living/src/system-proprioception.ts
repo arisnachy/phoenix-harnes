@@ -137,7 +137,10 @@ export function inspectSystemEnvironment(options: {
   let reason: string | null = platform === 'win32' ? null : 'platform-specific-probe-unavailable'
   if (platform === 'win32') {
     try {
-      const run: ProbeRunner = options.runner ?? ((command,args,opts) => spawnSync(command,[...args],opts))
+      const run: ProbeRunner = options.runner ?? ((command,args) => spawnSync(command,[...args],{
+        encoding:'utf8',windowsHide:true,timeout:9000,maxBuffer:262144,
+        stdio:['ignore','pipe','ignore'],
+      }))
       const result = run('powershell.exe',[
         '-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',
         Buffer.from(POWERSHELL_PROBE,'utf16le').toString('base64'),
