@@ -1,10 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import {
-  ADAPTIVE_APP_PRESETS, HEALTHIA_DOCTOR_FORM, addAdaptiveField, removeAdaptiveField,
+  ADAPTIVE_APP_PRESETS, HEALTHIA_DOCTOR_FORM, addAdaptiveField, removeAdaptiveField, createAdaptiveAppBlueprint,
   describeAdaptiveApp, isBindingConnected, recoverAdaptiveDraft, validateAdaptiveDraft,
 } from '../src/client/AdaptiveAppCatalog.ts'
 
 describe('Adaptive Harness declarative safety', () => {
+  it('generates safe generic app blueprints from a name and menu labels', () => {
+    const app = createAdaptiveAppBlueprint('Inventario farmacia', ['Inicio', 'Productos', 'Reportes'])
+    expect(app.id).toBe('app-inventario-farmacia')
+    expect(app.status).toBe('preview-only')
+    expect(app.sections.map(v => v.id)).toEqual(['inicio', 'productos', 'reportes'])
+    expect(() => createAdaptiveAppBlueprint('Inventario', ['Inicio', 'Inicio'])).toThrow('ADAPTIVE_DUPLICATE_SECTION')
+    expect(() => createAdaptiveAppBlueprint('Inventario', [])).toThrow('ADAPTIVE_INVALID_APP')
+  })
+
   it('preloads generic presets without inventing backend availability', () => {
     expect(ADAPTIVE_APP_PRESETS.map(item => item.id)).toEqual(['general', 'healthia', 'inventory'])
     expect(describeAdaptiveApp('healthia')?.readiness).toBe('shell-ready')
