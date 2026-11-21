@@ -10,6 +10,12 @@ AppFrame always mounts the conversation and details columns; a connected Session
 
 The `/client` exports are the plugin body (`apply`/`inject`), `LayoutController`, `ILayout`, `WorkspaceOccupancy`, `WorkspaceOccupant`, and the owner-share interfaces. AppFrame, the panel store, and the concession solver remain package-internal.
 
+## Adaptive applications
+
+The frame mounts a reversible PHOENIX General/Healthia selector and keeps the same conversation mounted when the Healthia clinician or patient view is active. The application catalog (`AdaptiveAppCatalog.ts`) declares a General shell, the Healthia clinician/patient shell and a disabled inventory template. Catalog descriptions are not proof that an API or clinical service is authenticated or available. Healthia links to the separately authenticated `/health` service. The patient view is an explicitly non-authenticated preview and does not display clinical records.
+
+The Healthia form editor changes only in-memory schema metadata: allowed field kinds, destination labels (local, API, Chat, AI), output formats and revisioned undo. It cannot execute API calls, relay PHI to Kira, publish clinical templates or enable inter-PHOENIX transfers. Proposed schema changes reject unknown/executable properties, preserve protected identity fields and support safe restoration from the last valid draft. Non-local bindings always report disconnected until a separately authorized adapter implements the operation. The capability inspector only displays bounded declared capabilities, not secrets or a privileged scan of the local machine.
+
 ## Model Experience
 
 None, as the layout shell manages browser viewing state; nothing here reaches a model request.
