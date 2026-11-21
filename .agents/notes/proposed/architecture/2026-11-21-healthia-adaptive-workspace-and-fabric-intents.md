@@ -23,6 +23,18 @@ App Studio starts as a chat mission from the application's menu, creates a regul
 
 Fast preloading should load *manifests* and validated shell components without eagerly loading every connector or model into the context window. A future runtime registry needs bounded snapshots of active, health-checked adapters with provenance, readiness, cost, role scope and permission requirements. The AI receives only a minimal, permission-filtered capability summary; it cannot inspect secrets, operating-system internals or patient records by claiming to know its own body.
 
+## Adaptive OS self-model and guarded changes
+
+The browser owns a live read-only snapshot of a fixed list of registered UI slots, distinguished from the static app capability declarations. The `adaptive:inspect` command reads local package manifests and returns only package IDs, declared dependency names, source-relative metadata and quality-gate *names*, never their command bodies, credentials, logs, clinical records or secret paths. Source presence is not proof that a provider is loaded, authenticated, healthy or safe to use. Kira must verify live state through supported tools before promising a capability.
+
+App Studio's creation entry is a real conversation mission: the UI emits only `{intent:'new-app'}`, and the conversation plugin creates a normal session and submits the planning request through the existing input admission/Host pipeline. That request plans user goals, feature discovery and faithful Pearl Light previews. It cannot itself install code, acquire medical-record permission or authorize a network request. Any execution uses existing agent/tool authorization and user approvals.
+
+The `reviewAdaptiveChangePlan` function classifies candidate paths as isolated extension, elevated harness review or blocked secret/clinical content. It returns `authorized:false` and `mayApply:false` for every plan. The policy is *preflight only*, not an approval verifier or rollback runner. Real self-modification requires a dedicated privileged supervisor with verified immutable starting commit, isolated worktree, clinical boundary checks, synthetics, required CI, explicit promotion, durable checkpoint and tested rollback. A broken adaptive UI remains isolated behind a React error boundary; returning to General leaves the conversation mounted.
+
+## Next operational integration
+
+The next phase must connect the live self-model to a host-controlled capability registry that reports health, version, permission scope and actual runtime availability; add an approved manifest-driven persistent app registry, a signed action dispatcher, and an isolated change transaction. Clinical Healthia form publishing must use its protected backend and never mirror patient values into the ordinary chat. Images generated during visual planning are proposals, not verified implementation.
+
 ## Fabric trust boundary
 
 The proposal contract is not an authorization check, signature verifier, patient lookup or transport. `subjectToken` is an opaque backend-issued capability reference, never a cédula, telephone or chat session ID. Browser events carry only workspace role and section; no patient material should appear in them. All cross-instance exchange remains **disabled** until the clinical service implements recipient authentication, patient/authorized-representative consent, professional relationship and legal basis, minimum-necessary filters, protected output generation, delivery encryption, signatures, idempotency, audit receipts, revocation and clinical data residency.
