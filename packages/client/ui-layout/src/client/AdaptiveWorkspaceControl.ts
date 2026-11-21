@@ -4,7 +4,7 @@
  * Chat events are treated as untrusted and revalidated at the layout boundary.
  */
 import { createAdaptiveAppBlueprint, validateAdaptiveDraft, type AdaptiveAppBlueprint,
-  type AdaptiveFormDraft, type AdaptiveDestination, type AdaptiveOutput } from './AdaptiveAppCatalog.ts'
+  type AdaptiveFormDraft, type AdaptiveDestination, type AdaptiveOutput, type AdaptiveInputKind } from './AdaptiveAppCatalog.ts'
 import { readAdaptiveApps } from './AdaptiveAppRegistry.ts'
 import { readAdaptiveForm, saveAdaptiveForm } from './AdaptiveFormMetadataStore.ts'
 
@@ -17,7 +17,7 @@ export const ADAPTIVE_PALETTES = {
 } as const
 export type AdaptivePalette = keyof typeof ADAPTIVE_PALETTES
 export type AdaptiveControlOperation =
-  'open' | 'find' | 'add-section' | 'rename-section' | 'remove-section' | 'palette' | 'rename-field' | 'remove-field' | 'set-binding'
+  'open' | 'find' | 'add-section' | 'rename-section' | 'remove-section' | 'palette' | 'rename-field' | 'remove-field' | 'set-binding' | 'set-field-kind' | 'set-required'
 export interface AdaptiveControlCommand {
   readonly appId: string
   readonly operation: AdaptiveControlOperation
@@ -26,6 +26,8 @@ export interface AdaptiveControlCommand {
   readonly label?: string
   readonly query?: string
   readonly palette?: AdaptivePalette
+  readonly kind?: AdaptiveInputKind
+  readonly required?: boolean
   readonly destination?: AdaptiveDestination
   readonly output?: AdaptiveOutput
   readonly expectedRevision?: number
@@ -52,7 +54,7 @@ export function parseAdaptiveControl(value: unknown): AdaptiveControlCommand | n
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const v = value as Record<string, unknown>
   if (typeof v.appId !== 'string' || !['general','healthia'].includes(v.appId) && !APP.test(v.appId)
-      || !['open','find','add-section','rename-section','remove-section','palette','rename-field','remove-field','set-binding'].includes(v.operation as string)) return null
+      || !['open','find','add-section','rename-section','remove-section','palette','rename-field','remove-field','set-binding','set-field-kind','set-required'].includes(v.operation as string)) return null
   const op = v.operation as AdaptiveControlOperation
   const base = ['appId','operation']
   let keys = base
@@ -65,6 +67,8 @@ export function parseAdaptiveControl(value: unknown): AdaptiveControlCommand | n
   if (op === 'rename-field') keys = [...base,'sectionId','fieldId','label','expectedRevision']
   if (op === 'remove-field') keys = [...base,'sectionId','fieldId','expectedRevision']
   if (op === 'set-binding') keys = [...base,'sectionId','fieldId','destination','output','expectedRevision']
+  if (op === 'set-field-kind') keys = [...base,'sectionId','fieldId','kind','expectedRevision']
+  if (op === 'set-required') keys = [...base,'sectionId','fieldId','required','expectedRevision']
   if (!onlyKeys(v,keys)) return null
   if (op !== 'open' && op !== 'find' && !APP.test(v.appId)) return null
   if (op === 'open' && v.sectionId !== undefined && (typeof v.sectionId !== 'string' || !ID.test(v.sectionId))) return null
@@ -74,13 +78,15 @@ export function parseAdaptiveControl(value: unknown): AdaptiveControlCommand | n
   if (op === 'rename-section' && !validLabel(v.label)) return null
   if (['rename-section','remove-section'].includes(op)
     && (typeof v.sectionId !== 'string' || !ID.test(v.sectionId))) return null
-  if (['rename-field','remove-field','set-binding'].includes(op)) {
+  if (['rename-field','remove-field','set-binding','set-field-kind','set-required'].includes(op)) {
     if (typeof v.sectionId !== 'string' || !ID.test(v.sectionId)
       || typeof v.fieldId !== 'string' || !ID.test(v.fieldId)
       || !Number.isSafeInteger(v.expectedRevision) || (v.expectedRevision as number) < 0) return null
   }
   if (op === 'rename-field' && !validLabel(v.label)) return null
   if (op === 'set-binding' && (!DEST.includes(v.destination as string) || !OUTPUT.includes(v.output as string))) return null
+  if (op === 'set-field-kind' && !['text','number','date','select','textarea'].includes(v.kind as string)) return null
+  if (op === 'set-required' && typeof v.required !== 'boolean') return null
   return v as unknown as AdaptiveControlCommand
 }
 
@@ -199,13 +205,15 @@ export function preflightAdaptiveControl(command: AdaptiveControlCommand, apps: 
 export function applyAdaptiveFieldEdit(command: AdaptiveControlCommand, store: StorageLike | undefined = storeOrUndefined()): AdaptiveFormDraft {
   const state = preflightAdaptiveControl(command, readAdaptiveApps(store),
     (app, section) => readAdaptiveForm(app, section, store))
-  if (!state.valid || !['rename-field','remove-field','set-binding'].includes(command.operation)) throw new Error('ADAPTIVE_PREFLIGHT_FAILED_'+state.reason)
+  if (!state.valid || !['rename-field','remove-field','set-binding','set-field-kind','set-required'].includes(command.operation)) throw new Error('ADAPTIVE_PREFLIGHT_FAILED_'+state.reason)
   const form = readAdaptiveForm(command.appId,command.sectionId!,store)
   if (!form) throw new Error('ADAPTIVE_FORM_MISSING')
   const fields: AdaptiveFormDraft['fields'] = form.fields.map(item => {
     if (item.id !== command.fieldId) return item
     if (command.operation === 'rename-field') return {...item,label:command.label!}
     if (command.operation === 'set-binding') return {...item,binding:{destination:command.destination!,output:command.output!}}
+    if (command.operation === 'set-field-kind') return {...item,kind:command.kind!}
+    if (command.operation === 'set-required') return {...item,required:command.required!}
     return item
   }).filter(item => command.operation !== 'remove-field' || item.id !== command.fieldId)
   const next: AdaptiveFormDraft = {...form,revision:form.revision+1,fields}
