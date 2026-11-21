@@ -149,7 +149,7 @@ export class HealthClinicStore {
     try {
       const consumed=this.db.prepare('UPDATE health_patient_portal_invites SET used=1 WHERE digest=? AND used=0 AND expires_ms>?')
         .run(digest,Date.now())
-      if(consumed.changes!==1)fail('Invitación inválida o caducada')
+      if(Number(consumed.changes)!==1)fail('Invitación inválida o caducada')
       this.db.prepare('DELETE FROM health_patient_portal_accounts WHERE org=? AND patient_id=?')
         .run(record.org,record.patientId)
       this.db.prepare('INSERT INTO health_patient_portal_accounts VALUES (?,?,?,?,?,1)')
