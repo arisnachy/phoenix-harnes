@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createLocalModelPaths } from '../src/local-model/paths.js'
+import { getLocalModel } from '../src/local-model/catalog.js'
 import {
   createLocalModelRuntimeManager,
+  LocalModelRuntimeFault,
   type LocalModelRuntimeManagerDependencies,
   type LocalServerHandle,
 } from '../src/local-model/manager.js'
@@ -188,5 +190,64 @@ describe('LocalModelRuntimeManager', () => {
       expect(String(target).startsWith('C:\\PhoenixData\\local-models')).toBe(true)
     }
     expect(manager.snapshot().phase).toBe('not-installed')
+  })
+
+  it('discovers locally installed Ollama models and reads allocated capacities without cloud credentials', async () => {
+    const tag = 'gemma4:e2b'
+    const id = `ollama:${tag}`
+    const { dependencies } = harness()
+    dependencies.listOllamaModels = vi.fn(async () => [{
+      tag, sizeBytes: 3_000_000_000, estimatedRamBytes: 4_000_000_000,
+      contextWindow: 8_192, nativeContextWindow: 131_072, maxTokens: 768,
+    }])
+    const manager = await createLocalModelRuntimeManager(dependencies)
+    const first = await manager.refreshCatalog()
+    expect(first.ollamaInstalledModelIds).toContain(id)
+    const entry = getLocalModel(id)
+    expect(entry).toMatchObject({
+      backend: 'ollama', contextWindow: 8_192, nativeContextWindow: 131_072, maxTokens: 768,
+    })
+    await manager.refreshCatalog()
+    expect(dependencies.listOllamaModels).toHaveBeenCalledTimes(1)
+  })
+
+  it('downloads an Ollama tag only after an explicit install request, while unlink remains non-destructive', async () => {
+    const tag = 'gemma4:e2b'
+    const id = `ollama:${tag}`
+    const { dependencies, readState } = harness()
+    let physicallyInstalled = false
+    dependencies.probeOllamaModel = vi.fn(async model => {
+      if (!physicallyInstalled) throw new LocalModelRuntimeFault('ollama-model-missing', `missing ${model}`)
+    })
+    dependencies.pullOllamaModel = vi.fn(async (_tag, onProgress) => {
+      physicallyInstalled = true
+      onProgress({ receivedBytes: 1_000, totalBytes: 1_000 })
+    })
+    dependencies.listOllamaModels = vi.fn(async () => physicallyInstalled
+      ? [{ tag, sizeBytes: 1_000, estimatedRamBytes: 4_000_000,
+        contextWindow: 4_096, maxTokens: 256 }] : [])
+    const manager = await createLocalModelRuntimeManager(dependencies)
+    await manager.install(id)
+    expect(dependencies.pullOllamaModel).toHaveBeenCalledWith(tag, expect.any(Function))
+    expect(readState().installedModelIds).toContain(id)
+    await manager.uninstall(id)
+    expect(dependencies.deleteOllamaModel).toBeUndefined()
+    expect(readState().installedModelIds).not.toContain(id)
+  })
+
+  it('only permanently deletes Ollama files through the separate method', async () => {
+    const tag = 'gemma4:e2b'
+    const id = `ollama:${tag}`
+    const { dependencies } = harness()
+    dependencies.listOllamaModels = vi.fn(async () => [{
+      tag, sizeBytes: 1_000, estimatedRamBytes: 2_000, contextWindow: 4_096, maxTokens: 256,
+    }])
+    dependencies.deleteOllamaModel = vi.fn(async () => undefined)
+    const manager = await createLocalModelRuntimeManager(dependencies)
+    await manager.refreshCatalog()
+    await manager.install(id)
+    expect(dependencies.deleteOllamaModel).not.toHaveBeenCalled()
+    await manager.deleteOllamaModel(id)
+    expect(dependencies.deleteOllamaModel).toHaveBeenCalledExactlyOnceWith(tag)
   })
 })
