@@ -18,8 +18,13 @@ import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
 import { HealthiaWorkspace, HEALTHIA_NAV, type HealthiaRole } from './HealthiaWorkspace.tsx'
 import { ADAPTIVE_APP_PRESETS, createAdaptiveAppBlueprint, type AdaptiveAppBlueprint } from './AdaptiveAppCatalog.ts'
-import { installAdaptiveApp, readAdaptiveApps } from './AdaptiveAppRegistry.ts'
+import { appendAdaptiveSection, installAdaptiveApp, readAdaptiveApps } from './AdaptiveAppRegistry.ts'
 import { applyAdaptiveFormFields } from './AdaptiveFormMetadataStore.ts'
+import {
+  parseAdaptiveControl, preflightAdaptiveControl, findAdaptiveMetadata,
+  saveAdaptivePalette, readAdaptivePalette, applyAdaptiveFieldEdit,
+  type AdaptiveDiscovery,
+} from './AdaptiveWorkspaceControl.ts'
 import { AdaptiveAppPreview } from './AdaptiveAppPreview.tsx'
 import type { AdaptiveLiveSnapshot } from './AdaptiveLiveSlots.ts'
 
@@ -190,6 +195,77 @@ export function AppFrame({
   const [healthiaSection, setHealthiaSection] = useState('overview')
   const [appMenuOpen, setAppMenuOpen] = useState(false)
   const [missionError, setMissionError] = useState(false)
+  const [search, setSearch] = useState<{ term: string; results: readonly AdaptiveDiscovery[] } | null>(null)
+  const [paletteRevision, setPaletteRevision] = useState(0)
+  // Explicit two-stage chat request. The client can only alter local UI
+  // metadata; events do not constitute permission for clinical/API actions.
+  useEffect(() => {
+    const onControl = (event: Event): void => {
+      const detail = (event as CustomEvent<unknown>).detail
+      if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return
+      const request = detail as Record<string, unknown>
+      if (Object.keys(request).some(key => !['requestId','phase','command'].includes(key))
+        || typeof request.requestId !== 'string' || request.requestId.length > 90
+        || (request.phase !== 'preflight' && request.phase !== 'apply')) return
+      const command = parseAdaptiveControl(request.command)
+      let ok = false
+      let reason = 'INVALID_COMMAND'
+      try {
+        if (command) {
+          const gate = preflightAdaptiveControl(command)
+          ok = gate.valid
+          reason = gate.reason
+          if (gate.valid && request.phase === 'apply') {
+            if (command.operation === 'open') {
+              if (command.appId === 'general') setAdaptiveApp('general')
+              else if (command.appId === 'healthia') {
+                setAdaptiveApp('healthia')
+                if (command.sectionId && HEALTHIA_NAV[healthiaRole].some(item => item.id === command.sectionId)) {
+                  setHealthiaSection(command.sectionId)
+                } else setHealthiaSection('overview')
+              } else {
+                const app = readAdaptiveApps().find(item => item.id === command.appId)
+                if (!app) throw new Error('UNKNOWN_APP')
+                setAdaptiveApp(app.id)
+                setCustomSection(command.sectionId ?? app.sections[0].id)
+              }
+              setSearch(null)
+            } else if (command.operation === 'find') {
+              const matches = findAdaptiveMetadata(command.query!)
+              setSearch({ term: command.query!, results: matches })
+              reason = matches.length ? `Se encontraron ${matches.length} componentes.` : 'No hay coincidencias en el catálogo de aplicaciones.'
+            } else if (command.operation === 'palette') {
+              saveAdaptivePalette(command.appId,command.palette!)
+              setPaletteRevision(value => value + 1)
+              setAdaptiveApp(command.appId)
+            } else if (command.operation === 'add-section') {
+              const app = appendAdaptiveSection(command.appId,command.label!)
+              setCustomApps(readAdaptiveApps())
+              setAdaptiveApp(app.id)
+              setCustomSection(app.sections[app.sections.length - 1].id)
+              setSearch(null)
+            } else {
+              applyAdaptiveFieldEdit(command)
+              setAdaptiveApp(command.appId)
+              setCustomSection(command.sectionId!)
+              window.dispatchEvent(new CustomEvent('phoenix:adaptive-form-refreshed', {
+                detail:{appId:command.appId,sectionId:command.sectionId},
+              }))
+            }
+          }
+        }
+      } catch {
+        ok = false
+        reason = 'VALIDATION_OR_STORAGE_FAILED'
+      }
+      window.dispatchEvent(new CustomEvent('phoenix:adaptive-control-result', {
+        detail:{requestId:request.requestId,phase:request.phase,ok,reason},
+      }))
+    }
+    window.addEventListener('phoenix:adaptive-control-request',onControl)
+    return () => window.removeEventListener('phoenix:adaptive-control-request',onControl)
+  }, [healthiaRole])
+
   // A chat-authored form diff is inert until the user explicitly applies it.
   // The target must be a locally installed generic app, never Healthia EHR.
   useEffect(() => {
@@ -423,6 +499,24 @@ export function AppFrame({
               <button type="button" role="menuitem" onClick={launchAppMission}>+ Crear nueva aplicación con Kira</button>}
             </div>}
           </div>
+          {search && (
+            <div className={css.adaptiveSearch} aria-label="Búsqueda en aplicaciones">
+              <div className={css.adaptiveSearchHeader}>
+                <strong>Resultados: {search.term}</strong>
+                <button type="button" onClick={() => setSearch(null)} aria-label="Cerrar resultados">×</button>
+              </div>
+              {search.results.length ? search.results.map((item,index) => (
+                <button type="button" key={index} className={css.adaptiveSearchItem}
+                  onClick={() => {
+                    setAdaptiveApp(item.appId)
+                    if (item.sectionId) setCustomSection(item.sectionId)
+                    setSearch(null)
+                  }}>
+                  {item.label} <span>{item.kind} · {item.appId}</span>
+                </button>
+              )) : <p>No se encontraron componentes en aplicaciones genéricas.</p>}
+            </div>
+          )}
           {missionError && (
             <div className={css.appMissionError} role="alert">
               No se pudo crear la conversación de App Studio. Comprueba la conexión de PHOENIX y vuelve a intentarlo.
@@ -432,6 +526,7 @@ export function AppFrame({
           <SurfaceBoundary name="adaptive" resetKey={adaptiveApp}>
             {activeBlueprint && (
               <AdaptiveAppPreview key={activeBlueprint.id} app={activeBlueprint} section={customSection}
+                palette={readAdaptivePalette(activeBlueprint.id)} paletteRevision={paletteRevision}
                 onSectionChange={setCustomSection} onReturn={() => setAdaptiveApp('general')} />
             )}
             {adaptiveApp === 'healthia' && (
