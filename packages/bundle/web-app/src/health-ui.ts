@@ -63,7 +63,7 @@ const root=document.getElementById("app"),account=document.getElementById("accou
 const patientPortalEnabled=__PATIENT_PORTAL_ENABLED__;
 let actor=null,csrf="",tab="workspace",data={},current=null,selectedPatientId="",previewUrl=null;
 let patientForm={version:1,revision:0,fields:[]},patientDraft=null;
-let clinicalTools=[],selectedClinicalTool=null,anatomyViewerCleanup=null;
+let clinicalTools=[],selectedClinicalTool=null,anatomyViewerCleanup=null,clinicalNoteProposal=null;
 let viewDrafts=Object.create(null),draftTimer=null,loadSequence=0,draftSaveQueue=Promise.resolve();
 const modules=[["workspace","Mi consulta"],["anatomy","Anatomía 3D"],["patients","Pacientes"],["encounters","Consultas"],["appointments","Agenda"],["orders","Laboratorio e imágenes"],["prescriptions","Recetas"],["inventory","Farmacia"],["invoices","Administración"],["followups","Seguimiento"],["staff","Personal"],["assignments","Equipo asistencial"],["backups","Respaldos"],["audit","Auditoría"]];
 const safe=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -1126,11 +1126,59 @@ async function execute(action,id){
   if(result.status==="sent")notice("Kira confirmó el envío del recordatorio con Gmail.");
   return;
  }
+ if(action==="prepareClinicalNote"){
+  const encounter=data.encounters?.find(x=>x.id===id);
+  if(!encounter||current?.kind!=="soap"||current.encounterId!==id||encounter.status==="signed")
+    throw Error("Consulta protegida no disponible");
+  const response=await api("clinical-note-proposal/"+encodeURIComponent(id),"POST",{});
+  const proposal=response.proposal;
+  if(!proposal||proposal.source!=="local-recorded-facts"
+    ||proposal.encounterVersion!==encounter.version||proposal.encounterId!==id)
+    throw Error("La revisión del episodio cambió; vuelve a abrir la consulta");
+  clinicalNoteProposal=proposal;
+  const prior=document.getElementById("clinical-note-proposal-preview");if(prior)prior.remove();
+  const missing=(proposal.missingInformation||[]).map(x=>"<li>"+safe(x)+"</li>").join("");
+  document.getElementById("view").insertAdjacentHTML("beforeend",
+    '<div id="clinical-note-proposal-preview">'+box("Propuesta local · enfermedad actual",
+      '<p class="notice"><strong>Sin modelo IA:</strong> redacción estructurada desde respuestas registradas, sin diagnósticos ni hallazgos inventados. Verifica todo antes de conservarla.</p>'+
+      '<label>Motivo registrado</label><p>'+safe(proposal.suggestedComplaint)+'</p>'+
+      '<label>HEA propuesta para revisión</label><textarea readonly rows="9">'+safe(proposal.suggestedHistory)+'</textarea>'+
+      (missing?'<p class="notice">Información por completar: <ul>'+missing+'</ul></p>':'')+
+      '<details><summary>Vista previa de historia completa documentada</summary>'+
+      '<p><strong>S:</strong> '+safe(proposal.note.history||"No documentado")+'</p>'+
+      '<p><strong>O:</strong> '+safe(proposal.note.exam||"No documentado")+'</p>'+
+      '<p><strong>A:</strong> '+safe(proposal.note.assessment||"Pendiente del profesional")+'</p>'+
+      '<p><strong>P:</strong> '+safe(proposal.note.plan||"Pendiente del profesional")+'</p></details>'+
+      '<p>'+button("acceptClinicalNote","Usar HEA propuesta","secondary")+
+      ' '+button("discardClinicalNote","Descartar propuesta","secondary")+'</p>')+'</div>');
+  return;
+ }
+ if(action==="acceptClinicalNote"){
+  const p=clinicalNoteProposal,enc=data.encounters?.find(x=>x.id===id);
+  if(!p||!enc||current?.kind!=="soap"||current.encounterId!==id
+    ||p.encounterId!==id||p.encounterVersion!==enc.version||enc.status==="signed")
+    throw Error("Propuesta caducada o sin permiso");
+  const target=document.getElementById("soap-history");
+  if(!target||target.value.trim()!==p.originalHistory.trim())
+    throw Error("El texto original cambió. Se preservó tu edición; vuelve a generar la propuesta.");
+  if(target.value.trim()&&!confirm("¿Reemplazar la anamnesis actual en el editor? Todavía no se guardará ni firmará."))return;
+  target.value=p.suggestedHistory;
+  clinicalNoteProposal=null;
+  document.getElementById("clinical-note-proposal-preview")?.remove();
+  notice("HEA insertada solo en el editor. Revisa, corrige y guarda el borrador si corresponde.");
+  return;
+ }
+ if(action==="discardClinicalNote"){
+  clinicalNoteProposal=null;
+  document.getElementById("clinical-note-proposal-preview")?.remove();
+  notice("Propuesta descartada; no se modificó la historia.");
+  return;
+ }
  if(action==="document"){
   const encounter=data.encounters?.find(x=>x.id===id);
   if(!encounter||encounter.practitioner!==actor.username||encounter.status==="signed")
     throw Error("Consulta no disponible para edición");
-  current={kind:"soap",encounterId:id};
+  current={kind:"soap",encounterId:id};clinicalNoteProposal=null;
   const section=(key,label,value)=>'<label for="soap-'+key+'">'+label+'</label><textarea id="soap-'+key+'">'+safe(value||"")+'</textarea>';
   document.getElementById("view").insertAdjacentHTML("beforeend",box("Historia clínica estructurada · SOAP",
     '<p class="notice">Borrador del profesional. Verifique cada hallazgo antes de revisar y firmar; los campos vacíos no significan hallazgos negativos.</p>'+
@@ -1138,6 +1186,7 @@ async function execute(action,id){
     section("exam","O · Exploración y datos objetivos",encounter.exam)+
     section("assessment","A · Evaluación y razonamiento clínico",encounter.assessment)+
     section("plan","P · Plan diagnóstico y terapéutico",encounter.plan)+
+    '<button class="secondary" data-act="prepareClinicalNote" data-id="'+safe(id)+'">Proponer HEA desde entrevista</button> '+
     '<button class="primary" data-act="saveDocument" data-id="'+safe(id)+'">Guardar borrador cifrado</button>'));
   restoreView();return;
  }
@@ -1149,7 +1198,7 @@ async function execute(action,id){
   if(!history)throw Error("La anamnesis requiere información documentada");
   await api("encounters/"+id,"PATCH",{version:encounter.version,action:"document",history,
     exam:val("soap-exam"),assessment:val("soap-assessment"),plan:val("soap-plan")});
-  current=null;
+  current=null;clinicalNoteProposal=null;
   notice("Historia clínica cifrada guardada como borrador");
   return load();
  }
