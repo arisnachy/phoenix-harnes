@@ -24,24 +24,39 @@ export function AdaptiveAiFieldControl({appId,sectionId,fieldId,formRevision,val
     setPending(null);setProposal(null);setNotice('');setError('')
   },[appId,sectionId,fieldId])
   useEffect(()=>{
+    const handleAck=(event:Event)=>{
+      const detail=(event as CustomEvent<{requestId?:string;ok?:boolean}>).detail
+      if(!pending||detail?.requestId!==pending.requestId)return
+      setNotice(detail.ok?'Solicitud preparada. Revisa el borrador del chat y envíalo.':'No se pudo preparar: hay un mensaje pendiente o no existe una sesión activa.')
+      if(!detail.ok)setPending(null)
+    }
+    window.addEventListener('phoenix:adaptive-ai-field-draft-ack',handleAck)
+    return ()=>window.removeEventListener('phoenix:adaptive-ai-field-draft-ack',handleAck)
+  },[pending])
+  useEffect(()=>{
     const handle=(event:Event)=>{
       const detail=(event as CustomEvent<unknown>).detail
       if(!validateFieldResult(detail)||!pending)return
       if(detail.props.requestId!==pending.requestId)return
+      const acknowledge=(ok:boolean)=>window.dispatchEvent(new CustomEvent('phoenix:adaptive-ai-field-result-ack',{
+        detail:{requestId:pending.requestId,ok},
+      }))
+      if(!config.enabled){acknowledge(false);return}
       if(!matchesFieldRequest(detail,pending,formRevision,value)){
         setError('La solicitud caducó: el campo o su estructura cambiaron. No se aplicó el resultado.')
-        setProposal(null)
+        setProposal(null);acknowledge(false)
         return
       }
       if(detail.props.text.length>maxLength){
-        setError('La propuesta supera la longitud permitida para este campo. Solicita una versión más breve.')
+        setError('La propuesta supera la longitud permitida para este campo. Solicita una versión más breve.');acknowledge(false)
         return
       }
       setProposal(detail);setError('');setNotice('Propuesta recibida. Compárala antes de aplicar.')
+      acknowledge(true)
     }
     window.addEventListener('phoenix:adaptive-ai-field-proposal',handle)
     return ()=>window.removeEventListener('phoenix:adaptive-ai-field-proposal',handle)
-  },[pending,formRevision,value,maxLength])
+  },[pending,formRevision,value,maxLength,config.enabled])
   const persist=(enabled:boolean)=>{
     try{
       const next=saveFieldAiConfig({...config,enabled,skill,instruction:instruction.trim(),revision:config.revision+1})
@@ -58,7 +73,7 @@ export function AdaptiveAiFieldControl({appId,sectionId,fieldId,formRevision,val
       const task:PendingFieldRequest={appId,sectionId,fieldId,requestId,expectedRevision:formRevision,original:value}
       const prompt=buildFieldAiMission(config,task)
       setPending(task);setProposal(null);setError('')
-      setNotice('Petición preparada para Kira. Revisa el borrador del chat y envíalo.')
+      setNotice('Preparando solicitud para el chat…')
       window.dispatchEvent(new CustomEvent('phoenix:adaptive-ai-field-draft',{detail:{
         appId,sectionId,fieldId,requestId,prompt,
       }}))
