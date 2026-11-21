@@ -20,17 +20,13 @@ const INTERVAL_MS=30_000
 const RESTART_LIMIT=4
 const RESTART_WINDOW_MS=10*60_000
 
-export function decideGuardianAction(input:{
-  readonly heartbeat?:{supervisorPid?:number;at?:string}
-  readonly observed?:'phoenix-supervisor'|'other-process'|'absent'|'unknown'
-  readonly recentRestarts?:number
-}):'healthy'|'start'|'hold'|'backoff' {
+export function decideGuardianAction(input) {
   if(input.observed==='phoenix-supervisor')return 'healthy'
   if(input.observed==='unknown')return 'hold'
   if((input.recentRestarts??0)>=RESTART_LIMIT)return 'backoff'
   return 'start'
 }
-function commonDir():string|null {
+function commonDir() {
   const r=spawnSync('git',['rev-parse','--git-common-dir'],{
     cwd:ROOT,encoding:'utf8',windowsHide:true,timeout:2500,
   })
@@ -39,13 +35,13 @@ function commonDir():string|null {
   if(!value||value.length>500)return null
   return resolve(isAbsolute(value)?value:join(ROOT,value))
 }
-function heartbeat(dir:string):{supervisorPid?:number;at?:string}|undefined {
+function heartbeat(dir) {
   try{
     const raw=readFileSync(join(dir,HEARTBEAT),'utf8')
     if(raw.length>5000)return undefined
-    const data:unknown=JSON.parse(raw)
+    const data=JSON.parse(raw)
     if(!data||typeof data!=='object'||Array.isArray(data))return undefined
-    const item=data as Record<string,unknown>
+    const item=data
     if(item.schema!==1)return undefined
     return {
       supervisorPid:typeof item.supervisorPid==='number'?item.supervisorPid:undefined,
@@ -53,7 +49,7 @@ function heartbeat(dir:string):{supervisorPid?:number;at?:string}|undefined {
     }
   }catch{return undefined}
 }
-function processIdentity(pid:number):'phoenix-supervisor'|'other-process'|'absent'|'unknown' {
+function processIdentity(pid) {
   if(!Number.isSafeInteger(pid)||pid<=0||pid>0x7fffffff)return 'absent'
   const script=`$p=Get-CimInstance -ClassName Win32_Process -Filter "ProcessId = ${pid}" -ErrorAction SilentlyContinue
 if($null -eq $p){'ABSENT'}elseif([string]::IsNullOrWhiteSpace($p.CommandLine)){'UNKNOWN'}elseif($p.CommandLine -like '*phoenix-windows-supervisor.mjs*'){'PHOENIX'}else{'OTHER'}`
@@ -68,7 +64,7 @@ if($null -eq $p){'ABSENT'}elseif([string]::IsNullOrWhiteSpace($p.CommandLine)){'
   if(answer==='ABSENT')return 'absent'
   return 'unknown'
 }
-function start():boolean {
+function start() {
   if(!existsSync(SUPERVISOR))return false
   try{
     const child=spawn(process.execPath,[SUPERVISOR],{
@@ -78,16 +74,16 @@ function start():boolean {
     return typeof child.pid==='number'&&child.pid>0
   }catch{return false}
 }
-async function main():Promise<void> {
+async function main() {
   if(process.platform!=='win32')throw Error('PHOENIX Guardian runs only on Windows')
   const dir=commonDir()
   if(!dir)throw Error('Cannot verify PHOENIX Git control directory')
-  const restarts:number[]=[]
+  const restarts=[]
   while(true){
     const now=Date.now()
     const state=heartbeat(dir)
     const observed=state?.supervisorPid===undefined?'absent':processIdentity(state.supervisorPid)
-    while(restarts.length&&now-restarts[0]!>=RESTART_WINDOW_MS)restarts.shift()
+    while(restarts.length&&now-restarts[0]>=RESTART_WINDOW_MS)restarts.shift()
     const action=decideGuardianAction({heartbeat:state,observed,recentRestarts:restarts.length})
     if(action==='start'){
       if(start()){
