@@ -60,3 +60,5 @@ None; this package neither assembles nor sends a provider request.
 Authorization continues and preserves the manual consent link when a browser rejects opening a popup by throwing. Account-family matching uses whole normalized tokens rather than arbitrary substrings. A stored grant does not restart sign-in solely because live runtime state is absent; failed/disconnected runtimes reconnect with the existing grant, while an explicit auth-required state still offers reauthorization.
 
 Notion, including registry installations with generated server names, prepares OAuth in its connector card and opens only the provider consent URL. If the browser blocks that deferred window, the card retains a direct authorization link; it does not open the PHOENIX waiting page.
+
+November 2026: Model editing, adoption and custom setup use the same responsive theme-token modal wizard. Account sign-in is offered only for genuinely registered Host OAuth flows. Phoenix Local shows installed Ollama tags, allows deliberate download, keeps unlink separate from confirmed deletion and surfaces operational input/output limits from the Host.

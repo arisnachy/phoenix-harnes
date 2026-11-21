@@ -5,6 +5,7 @@ import path from 'node:path'
 import net from 'node:net'
 import type { LocalThinkingCapabilities } from './types.js'
 import { createLocalModelPaths } from './paths.js'
+import { validOllamaTag, type OllamaDiscoveredModel } from './catalog.js'
 import { createLocalModelStateStore } from './state.js'
 import { downloadVerifiedArtifact } from './download.js'
 import { extractArchiveWithTar } from './extract.js'
@@ -177,6 +178,113 @@ export async function readOllamaThinkingCapabilities(model: string): Promise<Loc
   return { values, default: selectedDefault }
 }
 
+/** Read the installed Ollama catalog and model-reported native context.
+ * The returned operational window is capped separately by local free memory. */
+export async function listInstalledOllamaModels(): Promise<OllamaDiscoveredModel[]> {
+  const response = await fetch('http://127.0.0.1:11434/api/tags', {
+    signal: AbortSignal.timeout(4_000),
+  })
+  if (!response.ok) throw new Error(`Ollama /api/tags: HTTP ${String(response.status)}`)
+  const result = await response.json() as { models?: Array<{ name?: string; model?: string; size?: number }> }
+  const candidates = (result.models ?? []).slice(0, 128)
+    .filter((entry): entry is { name: string; size?: number } =>
+      typeof entry.name === 'string' && validOllamaTag(entry.name))
+  // Bound metadata calls so even large installations do not flood the daemon.
+  const descriptions: OllamaDiscoveredModel[] = []
+  for (let index = 0; index < candidates.length; index += 6) {
+    const group = await Promise.all(candidates.slice(index, index + 6).map(async entry => {
+      let nativeContextWindow: number | undefined
+      try {
+        const response = await fetch('http://127.0.0.1:11434/api/show', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ model: entry.name }),
+          signal: AbortSignal.timeout(3_000),
+        })
+        if (response.ok) {
+          const metadata = await response.json() as { model_info?: Record<string, unknown> }
+          const capacities = Object.entries(metadata.model_info ?? {})
+            .filter(([key, value]) => key.endsWith('.context_length')
+              && typeof value === 'number' && Number.isSafeInteger(value) && value > 0)
+            .map(([, value]) => value as number)
+          if (capacities.length > 0) nativeContextWindow = Math.max(...capacities)
+        }
+      } catch {
+        // Context metadata is optional; never claim an unknown native maximum.
+      }
+      const memory = freemem()
+      const safeAllocation = memory < 4_000_000_000 ? 4_096 : memory < 8_000_000_000 ? 8_192 : 16_384
+      const contextWindow = Math.min(nativeContextWindow ?? 4_096, safeAllocation)
+      const sizeBytes = typeof entry.size === 'number' && entry.size > 0 ? entry.size : 0
+      return {
+        tag: entry.name, sizeBytes,
+        estimatedRamBytes: sizeBytes + 1_000_000_000,
+        contextWindow,
+        ...(nativeContextWindow === undefined ? {} : { nativeContextWindow }),
+        maxTokens: Math.min(2_048, Math.max(256, Math.floor(contextWindow / 8))),
+      }
+    }))
+    descriptions.push(...group)
+  }
+  return descriptions
+}
+
+/** Explicit user-requested Ollama pull; surface real byte-level progress. */
+export async function pullOllamaModel(
+  tag: string,
+  onProgress: (progress: { receivedBytes: number; totalBytes?: number }) => void,
+): Promise<void> {
+  if (!validOllamaTag(tag)) throw new LocalModelRuntimeFault('invalid-model', 'Nombre de modelo Ollama inválido.')
+  const response = await fetch('http://127.0.0.1:11434/api/pull', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: tag, stream: true }),
+    signal: AbortSignal.timeout(30 * 60_000),
+  })
+  if (!response.ok || response.body === null) {
+    throw new LocalModelRuntimeFault('ollama-pull-failed', `Ollama rechazó la descarga (HTTP ${String(response.status)}).`)
+  }
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let pending = ''
+  const checkLine = (line: string): void => {
+    if (!line.trim()) return
+    const event = JSON.parse(line) as { error?: string; completed?: number; total?: number }
+    if (event.error) throw new LocalModelRuntimeFault('ollama-pull-failed', event.error.slice(0, 500))
+    if (typeof event.completed === 'number') onProgress({
+      receivedBytes: Math.max(0, event.completed),
+      ...(typeof event.total === 'number' && event.total > 0 ? { totalBytes: event.total } : {}),
+    })
+  }
+  try {
+    while (true) {
+      const part = await reader.read()
+      if (part.done) break
+      pending += decoder.decode(part.value, { stream: true })
+      if (pending.length > 1_000_000) throw new Error('Ollama pull response exceeded the line budget')
+      const lines = pending.split('\n')
+      pending = lines.pop() ?? ''
+      for (const line of lines) checkLine(line)
+    }
+    if (pending.trim()) checkLine(pending)
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+/** A destructive user action, never a side effect of disconnect. */
+export async function deleteInstalledOllamaModel(tag: string): Promise<void> {
+  if (!validOllamaTag(tag)) throw new LocalModelRuntimeFault('invalid-model', 'Nombre de modelo Ollama inválido.')
+  const response = await fetch('http://127.0.0.1:11434/api/delete', {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ model: tag }),
+    signal: AbortSignal.timeout(15_000),
+  })
+  if (!response.ok) throw new LocalModelRuntimeFault('ollama-delete-failed',
+    `Ollama no pudo eliminar ${tag} (HTTP ${String(response.status)}).`)
+}
+
 /**
  * Create the production Phoenix Local runtime manager for this Host process.
  * The heavy llama-server receives an ephemeral loopback port and stays hidden
@@ -206,6 +314,9 @@ export async function createNodeLocalModelRuntimeManager(): Promise<LocalModelRu
     spawnServer: spawnLocalServer,
     probeHealth,
     probeOllamaModel: probeInstalledOllamaModel,
+    listOllamaModels: listInstalledOllamaModels,
+    pullOllamaModel,
+    deleteOllamaModel: deleteInstalledOllamaModel,
     readOllamaThinking: readOllamaThinkingCapabilities,
     freeMemoryBytes: freemem,
   })

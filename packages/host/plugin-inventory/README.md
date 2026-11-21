@@ -55,3 +55,5 @@ Get-Content "$env:LOCALAPPDATA\\PHOENIX\\anatomy\\install.log" -Tail 50
 ```
 
 Kira dispone de `health_anatomy_connectors`, `health_anatomy_status` y `health_anatomy_prepare(component)`. El inicio de instalación no equivale a éxito: comprobar la presencia real del componente y del archivo de salida GLB o de la simulación. La validación clínica, los estudios específicos, la privacidad de pacientes y los modelos docentes adicionales mantienen controles independientes.
+
+Local Ollama management: the Host inventories loopback /api/tags and /api/show, rate-limits refresh, pulls missing models only on explicit install, and exposes a separate confirmed delete action. User-owned Ollama models are never removed by the Phoenix unlink action. Operational context and output limits are bounded by detected capacity. No local model or credential information is committed to the repository.

@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { getLocalModel, getRuntimeManifest } from './catalog.js'
+import { forgetOllamaCandidate, getLocalModel, getRuntimeManifest, registerOllamaCandidate, synchronizeOllamaCatalog, type OllamaDiscoveredModel } from './catalog.js'
 import {
   LocalModelRuntimeFault,
   type ArtifactDownloadRequest,
@@ -42,6 +42,10 @@ export interface LocalModelRuntimeManagerDependencies {
   probeOllamaModel(modelTag: string): Promise<void>
   /** Optional metadata; old Ollama releases may omit thinking support. */
   readOllamaThinking?(modelTag: string): Promise<LocalThinkingCapabilities | undefined>
+  /** Only the Host can enumerate, download or remove models at loopback Ollama. */
+  listOllamaModels?(): Promise<OllamaDiscoveredModel[]>
+  pullOllamaModel?(tag: string, onProgress: (progress: { receivedBytes: number; totalBytes?: number }) => void): Promise<void>
+  deleteOllamaModel?(tag: string): Promise<void>
   freeMemoryBytes(): number
 }
 
@@ -57,6 +61,8 @@ export interface LocalModelRuntimeManager {
   setMode(mode: LocalModelMode): Promise<LocalModelRuntimeSnapshot>
   setDefaultModel(modelId: string): Promise<LocalModelRuntimeSnapshot>
   refreshThinking(): Promise<LocalModelRuntimeSnapshot>
+  refreshCatalog(): Promise<LocalModelRuntimeSnapshot>
+  deleteOllamaModel(modelId: string): Promise<LocalModelRuntimeSnapshot>
   setThinking(thinking: LocalThinking): Promise<LocalModelRuntimeSnapshot>
   dispose(): Promise<void>
 }
@@ -83,6 +89,8 @@ class RuntimeManager implements LocalModelRuntimeManager {
   private current: LocalModelRuntimeSnapshot
   private server: LocalServerHandle | undefined
   private ensureRunningPromise: Promise<string> | undefined
+  private lastOllamaCatalogRead = 0
+  private ollamaCatalogInflight: Promise<LocalModelRuntimeSnapshot> | undefined
 
   constructor(
     private readonly dependencies: LocalModelRuntimeManagerDependencies,
@@ -97,6 +105,30 @@ class RuntimeManager implements LocalModelRuntimeManager {
 
   snapshot(): LocalModelRuntimeSnapshot {
     return cloneSnapshot(this.current)
+  }
+
+  /** Rate-limited live inventory: avoid flooding the daemon during a model pull. */
+  async refreshCatalog(): Promise<LocalModelRuntimeSnapshot> {
+    if (this.dependencies.listOllamaModels === undefined) return this.snapshot()
+    if (this.ollamaCatalogInflight !== undefined) return this.ollamaCatalogInflight
+    if (Date.now() - this.lastOllamaCatalogRead < 15_000) return this.snapshot()
+    this.ollamaCatalogInflight = (async () => {
+      try {
+        const models = await this.dependencies.listOllamaModels!()
+        const ollamaInstalledModelIds = synchronizeOllamaCatalog(models)
+        this.publish({ ...this.current, ollamaInstalledModelIds })
+      } catch {
+        // Ollama may be stopped; preserve last known model configuration.
+      } finally {
+        this.lastOllamaCatalogRead = Date.now()
+      }
+      return this.snapshot()
+    })()
+    try {
+      return await this.ollamaCatalogInflight
+    } finally {
+      this.ollamaCatalogInflight = undefined
+    }
   }
 
   /** Probe only Ollama's local /api/show metadata, never assume named thinking levels. */
@@ -190,14 +222,29 @@ class RuntimeManager implements LocalModelRuntimeManager {
   }
 
   async install(modelId: string): Promise<LocalModelRuntimeSnapshot> {
-    const model = getLocalModel(modelId)
+    const requested = getLocalModel(modelId)
+    const model = requested ?? (modelId.startsWith('ollama:')
+      ? registerOllamaCandidate(modelId.slice('ollama:'.length)) : undefined)
     if (model === undefined) throw new LocalModelRuntimeFault('unknown-model', `Modelo local desconocido: ${modelId}`)
+    modelId = model.id
     if (model.backend === 'ollama') {
       if (this.current.phase === 'running') await this.stop()
       this.publishPhase('installing')
       try {
         if (!model.ollamaModel) throw new LocalModelRuntimeFault('invalid-model', 'Falta el identificador de Ollama.')
-        await this.dependencies.probeOllamaModel(model.ollamaModel)
+        try {
+          await this.dependencies.probeOllamaModel(model.ollamaModel)
+        } catch (error) {
+          if (!(error instanceof LocalModelRuntimeFault)
+            || error.code !== 'ollama-model-missing'
+            || this.dependencies.pullOllamaModel === undefined) throw error
+          await this.dependencies.pullOllamaModel(model.ollamaModel, progress => {
+            if (this.current.phase === 'installing') this.publish({ ...this.current, progress })
+          })
+          await this.dependencies.probeOllamaModel(model.ollamaModel)
+        }
+        this.lastOllamaCatalogRead = 0
+        await this.refreshCatalog()
         const installedModelIds = [...new Set([...this.persistent.installedModelIds, modelId])]
         await this.savePersistent({ ...this.persistent, selectedModelId: modelId, installedModelIds })
         this.publishPhase('ready')
@@ -260,6 +307,7 @@ class RuntimeManager implements LocalModelRuntimeManager {
   }
 
   async start(): Promise<LocalModelRuntimeSnapshot> {
+    if (getLocalModel(this.persistent.selectedModelId) === undefined) await this.refreshCatalog()
     if (this.current.phase === 'running' && (this.server !== undefined || getLocalModel(this.persistent.selectedModelId)?.backend === 'ollama')) return this.snapshot()
     if (this.persistent.mode === 'off') {
       throw new LocalModelRuntimeFault('local-model-disabled', 'Phoenix Local está apagado en Settings.')
@@ -397,6 +445,24 @@ class RuntimeManager implements LocalModelRuntimeManager {
     return this.snapshot()
   }
 
+  /** Physical removal is deliberately separate from unlinking a Phoenix model. */
+  async deleteOllamaModel(modelId: string): Promise<LocalModelRuntimeSnapshot> {
+    const model = getLocalModel(modelId)
+    if (model?.backend !== 'ollama' || this.dependencies.deleteOllamaModel === undefined) {
+      throw new LocalModelRuntimeFault('invalid-model', 'Solo se puede borrar un modelo Ollama confirmado.')
+    }
+    if (this.current.phase === 'running' && modelId === this.persistent.selectedModelId) await this.stop()
+    await this.dependencies.deleteOllamaModel(model.ollamaModel)
+    const installedModelIds = this.persistent.installedModelIds.filter(id => id !== modelId)
+    await this.savePersistent({ ...this.persistent, installedModelIds })
+    forgetOllamaCandidate(modelId)
+    this.lastOllamaCatalogRead = 0
+    await this.refreshCatalog()
+    const phase = installedModelIds.includes(this.persistent.selectedModelId) ? 'ready' : 'not-installed'
+    this.publish({ ...this.current, phase })
+    return this.snapshot()
+  }
+
   async uninstall(modelId: string): Promise<LocalModelRuntimeSnapshot> {
     const model = getLocalModel(modelId)
     if (model === undefined) throw new LocalModelRuntimeFault('unknown-model', `Modelo local desconocido: ${modelId}`)
@@ -433,6 +499,7 @@ class RuntimeManager implements LocalModelRuntimeManager {
   }
 
   async setDefaultModel(modelId: string): Promise<LocalModelRuntimeSnapshot> {
+    if (getLocalModel(modelId) === undefined) await this.refreshCatalog()
     if (getLocalModel(modelId) === undefined) throw new LocalModelRuntimeFault('unknown-model', `Modelo local desconocido: ${modelId}`)
     if (this.current.phase === 'running' || this.server !== undefined) await this.stop()
     await this.savePersistent({ ...this.persistent, selectedModelId: modelId, thinking: null })
