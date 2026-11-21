@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   addAdaptiveField, removeAdaptiveField,
   type AdaptiveDestination, type AdaptiveInputKind, type AdaptiveOutput, type AdaptiveFormDraft,
@@ -22,6 +22,21 @@ export function AdaptiveFormPanel({ appId, sectionId }: { appId: string; section
   const [output, setOutput] = useState<AdaptiveOutput>('inline')
   const [values, setValues] = useState<Record<string, string>>({})
   const [error, setError] = useState('')
+  // Refresh only metadata after an explicit chat-card approval.
+  useEffect(() => {
+    const onRefresh = (event: Event): void => {
+      const detail = (event as CustomEvent<{ appId?: string; sectionId?: string }>).detail
+      if (detail?.appId !== appId || detail?.sectionId !== sectionId) return
+      const revised = readAdaptiveForm(appId, sectionId)
+      if (!revised) return
+      setForm(revised)
+      setHistory([])
+      setValues({})
+      setError('')
+    }
+    window.addEventListener('phoenix:adaptive-form-refreshed', onRefresh)
+    return () => window.removeEventListener('phoenix:adaptive-form-refreshed', onRefresh)
+  }, [appId, sectionId])
   const commit = (next: AdaptiveFormDraft): void => {
     try {
       saveAdaptiveForm(next)
@@ -48,7 +63,12 @@ export function AdaptiveFormPanel({ appId, sectionId }: { appId: string; section
   return <div className={css.formPreview}>
     <div className={css.draftHeader}>
       <strong>Formulario de {sectionId} · revisión {form.revision}</strong>
-      <button className={css.action} type="button" disabled={!history.length} onClick={undo}>Deshacer</button>
+      <div className={css.actions}>
+        <button className={css.action} type="button" onClick={() => window.dispatchEvent(
+          new CustomEvent('phoenix:adaptive-form-mission', { detail: { appId, sectionId } }),
+        )}>Configurar con Kira</button>
+        <button className={css.action} type="button" disabled={!history.length} onClick={undo}>Deshacer</button>
+      </div>
     </div>
     <p>Personaliza entradas y salidas. Solo el esquema se guarda en este navegador; los valores permanecen temporalmente en memoria.</p>
     <div className={css.fieldList}>
