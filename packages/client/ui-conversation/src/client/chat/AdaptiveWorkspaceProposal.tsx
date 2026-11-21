@@ -6,7 +6,7 @@ export interface AdaptiveWorkspaceProposalSpec {
   readonly version: 1
   readonly props: {
     readonly appId: string
-    readonly operation: 'open' | 'find' | 'add-section' | 'rename-section' | 'remove-section' | 'palette' | 'rename-field' | 'remove-field' | 'set-binding' | 'set-field-kind' | 'set-required'
+    readonly operation: 'open' | 'find' | 'add-section' | 'rename-section' | 'remove-section' | 'palette' | 'rename-field' | 'remove-field' | 'set-binding' | 'set-field-kind' | 'set-required' | 'add-widget' | 'remove-widget' | 'rename-widget' | 'move-widget' | 'set-widget-span'
     readonly sectionId?: string
     readonly fieldId?: string
     readonly label?: string
@@ -17,6 +17,10 @@ export interface AdaptiveWorkspaceProposalSpec {
     readonly destination?: 'local' | 'api' | 'chat' | 'ai'
     readonly output?: 'inline' | 'table' | 'document' | 'chat'
     readonly expectedRevision?: number
+    readonly widgetId?: string
+    readonly widgetKind?: 'metric'|'card'|'avatar'|'table'|'chart'|'calendar'|'timeline'|'alert'
+    readonly span?: 'half'|'full'
+    readonly direction?: 'up'|'down'
   }
 }
 const ID = /^[a-z][a-z0-9-]{0,47}$/u
@@ -35,7 +39,7 @@ export function parseAdaptiveWorkspaceProposal(input: unknown): AdaptiveWorkspac
   const p = v.props as Record<string,unknown>
   const base = ['appId','operation']
   if (typeof p.appId !== 'string' || !['general','healthia'].includes(p.appId) && !APP.test(p.appId)) return null
-  if (!['open','find','add-section','rename-section','remove-section','palette','rename-field','remove-field','set-binding','set-field-kind','set-required'].includes(p.operation as string)) return null
+  if (!['open','find','add-section','rename-section','remove-section','palette','rename-field','remove-field','set-binding','set-field-kind','set-required','add-widget','remove-widget','rename-widget','move-widget','set-widget-span'].includes(p.operation as string)) return null
   const operation = p.operation
   const keys: Record<string,string[]> = {
     open: [...base,'sectionId'],
@@ -49,6 +53,11 @@ export function parseAdaptiveWorkspaceProposal(input: unknown): AdaptiveWorkspac
     'set-binding':[...base,'sectionId','fieldId','destination','output','expectedRevision'],
     'set-field-kind':[...base,'sectionId','fieldId','kind','expectedRevision'],
     'set-required':[...base,'sectionId','fieldId','required','expectedRevision'],
+    'add-widget':[...base,'sectionId','expectedRevision','widgetKind','label','span'],
+    'remove-widget':[...base,'sectionId','expectedRevision','widgetId'],
+    'rename-widget':[...base,'sectionId','expectedRevision','widgetId','label'],
+    'move-widget':[...base,'sectionId','expectedRevision','widgetId','direction'],
+    'set-widget-span':[...base,'sectionId','expectedRevision','widgetId','span'],
   }
   if (!allowed(p,keys[operation as string] ?? [])) return null
   if (!['open','find'].includes(operation as string) && !APP.test(p.appId)) return null
@@ -70,6 +79,16 @@ export function parseAdaptiveWorkspaceProposal(input: unknown): AdaptiveWorkspac
       || !['inline','table','document','chat'].includes(p.output as string))) return null
   if (operation === 'set-field-kind' && !['text','number','date','select','textarea'].includes(p.kind as string)) return null
   if (operation === 'set-required' && typeof p.required !== 'boolean') return null
+  if (['add-widget','remove-widget','rename-widget','move-widget','set-widget-span'].includes(operation as string)) {
+    if(typeof p.sectionId!=='string'||!ID.test(p.sectionId)||!Number.isSafeInteger(p.expectedRevision)
+      ||(p.expectedRevision as number)<0)return null
+    if(operation==='add-widget'&&(!['metric','card','avatar','table','chart','calendar','timeline','alert'].includes(p.widgetKind as string)
+      ||!goodText(p.label)||(p.span!==undefined&&!['half','full'].includes(p.span as string))))return null
+    if(operation!=='add-widget'&&(typeof p.widgetId!=='string'||!/^widget-[1-9][0-9]{0,4}$/u.test(p.widgetId)))return null
+    if(operation==='rename-widget'&&!goodText(p.label))return null
+    if(operation==='move-widget'&&!['up','down'].includes(p.direction as string))return null
+    if(operation==='set-widget-span'&&!['half','full'].includes(p.span as string))return null
+  }
   return {component:'adaptive_control',version:1,props:p as unknown as AdaptiveWorkspaceProposalSpec['props']}
 }
 const nameOf: Record<AdaptiveWorkspaceProposalSpec['props']['operation'],string> = {
@@ -80,6 +99,9 @@ const nameOf: Record<AdaptiveWorkspaceProposalSpec['props']['operation'],string>
   'rename-field':'Renombrar campo','remove-field':'Eliminar campo',
   'set-binding':'Configurar destino y salida de campo',
   'set-field-kind':'Cambiar tipo de input','set-required':'Cambiar validación requerida',
+  'add-widget':'Añadir componente visual','remove-widget':'Quitar componente visual',
+  'rename-widget':'Renombrar componente visual','move-widget':'Reordenar componente visual',
+  'set-widget-span':'Cambiar ancho del componente',
 }
 
 export function AdaptiveWorkspaceProposal({spec}:{spec:AdaptiveWorkspaceProposalSpec}) {
@@ -113,6 +135,8 @@ export function AdaptiveWorkspaceProposal({spec}:{spec:AdaptiveWorkspaceProposal
     <p><strong>{spec.props.appId}</strong>{spec.props.sectionId ? ` / ${spec.props.sectionId}` : ''}
       {spec.props.label ? ` · ${spec.props.label}` : ''}
       {spec.props.palette ? ` · ${spec.props.palette}` : ''}
+      {spec.props.widgetKind ? ` · ${spec.props.widgetKind}` : ''}
+      {spec.props.widgetId ? ` · ${spec.props.widgetId}` : ''}
       {spec.props.query ? ` · Buscar: ${spec.props.query}` : ''}</p>
     <div className={css.actions}>
       <button className={css.secondary} type="button" disabled={status === 'checking'||status === 'applying'||status === 'done'}
