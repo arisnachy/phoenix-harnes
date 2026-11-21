@@ -64,6 +64,8 @@ export interface CustomProviderCardProps {
   t: (key: keyof typeof en) => string
   /** Disable writes (read-only settings provider). */
   readOnly: boolean
+  /** Display a catalog-first, guided creation workflow. */
+  guided?: boolean
   /** Close the card; `changed` reports whether a provider was created. */
   onClose: (changed: boolean) => void
 }
@@ -85,6 +87,9 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
   const [keyDraft, setKeyDraft] = useState('')
   const [models, setModels] = useState<readonly ModelDraft[]>([])
   const [busy, setBusy] = useState(false)
+  const [stage, setStage] = useState<0 | 1 | 2>(0)
+  const [checking, setChecking] = useState(false)
+  const [checkResult, setCheckResult] = useState<string | undefined>()
   const [failure, setFailure] = useState<string | undefined>(undefined)
   /**
    * The profile write landed. Only the key write can still be outstanding, so
@@ -127,6 +132,24 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
       : modelFailure !== undefined
         ? `${t('model')} ${String(modelFailure.index + 1)}: ${t(modelFailure.key)}`
         : t('customNeedsModels')
+
+  const checkConnection = async (): Promise<void> => {
+    setChecking(true)
+    setCheckResult(undefined)
+    try {
+      const response = await api.llm.discoverModels({
+        settingsNs: NS, baseURL, api: protocol,
+        ...keyValue.length === 0 ? {} : { apiKey: keyValue },
+      })
+      setCheckResult(response.result.ok
+        ? t('wizardTestOK').replace('{count}', String(response.result.value.models.length))
+        : t('wizardTestFailed').replace('{error}', response.result.error.message))
+    } catch (error) {
+      setCheckResult(t('wizardTestFailed').replace('{error}', messageOf(error)))
+    } finally {
+      setChecking(false)
+    }
+  }
 
   /** Perform the create, returning a failure message or undefined. */
   const createOnce = async (): Promise<string | undefined> => {
@@ -192,6 +215,16 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
       <div className={styles['editorHeader']}>
         <span className={styles['editorTitle']}>{t('customTitle')}</span>
       </div>
+      {props.guided === true ? (
+        <ol className={styles['wizardSteps']} aria-label={t('wizardConnection')}>
+          {(['provider', 'wizardOptions', 'wizardVerify'] as const).map((name, index) => (
+            <li key={name} className={index === stage ? styles['wizardStepActive'] : styles['wizardStep']}>
+              <span className={styles['wizardStepNumber']}>{String(index + 1)}</span>{t(name)}
+            </li>
+          ))}
+        </ol>
+      ) : null}
+      <div hidden={props.guided === true && stage !== 0}>
       <div className={styles['field']}>
         <span className={styles['fieldLabel']}>{t('customRoute')}</span>
         <input
@@ -221,6 +254,8 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
           onChange={(event) => { setDisplayName(event.target.value) }}
         />
       </div>
+      </div>
+      <div hidden={props.guided === true && stage !== 1}>
       <div className={styles['field']}>
         <span className={styles['fieldLabel']}>{t('baseUrl')}</span>
         <input
@@ -278,10 +313,44 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
         t={t}
         disabled={profileDisabled}
       />
+      </div>
+      {props.guided === true && stage === 2 ? (
+        <section className={styles['wizardReview']}>
+          <p className={styles['advancedHint']}>{t('wizardReviewHint')}</p>
+          <div className={styles['wizardReviewSummary']}>
+            <strong>{displayName || route}</strong>
+            <span>{t('wizardApi')}</span>
+          </div>
+          <button type="button" className={styles['secondaryButton']} disabled={disabled || checking}
+            onClick={() => { void checkConnection() }}>
+            {checking ? t('wizardTesting') : t('wizardTest')}
+          </button>
+          <p role="status" className={styles['advancedHint']}>{checkResult ?? t('wizardCheckOptional')}</p>
+        </section>
+      ) : null}
       {failure !== undefined ? <p className={styles['error']}>{failure}</p> : null}
       {/* Only the gates with something to say render; the route-id gate has its
           own field-level hint, so its blocked state would print an empty line. */}
       {hint === undefined ? null : <p className={styles['advancedHint']}>{hint}</p>}
+      {props.guided === true ? (
+        <div className={styles['wizardNav']}>
+          {stage > 0 ? (
+            <button type="button" className={styles['secondaryButton']} onClick={() => {
+              setStage(stage === 2 ? 1 : 0)
+            }}>{t('wizardBack')}</button>
+          ) : null}
+          {stage < 2 ? (
+            <button type="button" className={styles['secondaryButton']}
+              disabled={disabled || (stage === 0 && (route.length === 0 || routeInvalid || routeTaken))}
+              onClick={() => { setStage(stage === 0 ? 1 : 2) }}>{t('wizardNext')}</button>
+          ) : null}
+          {stage < 2 ? (
+            <button type="button" className={styles['secondaryButton']}
+              onClick={() => { props.onClose(committed) }}>{t('cancel')}</button>
+          ) : null}
+        </div>
+      ) : null}
+      <div hidden={props.guided === true && stage !== 2}>
       <EditorFooter
         t={t}
         busy={busy}
@@ -291,6 +360,7 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
         onCancel={() => { props.onClose(committed) }}
         onSubmit={() => { void create() }}
       />
+      </div>
     </div>
   )
 }
