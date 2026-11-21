@@ -1058,8 +1058,9 @@ function BrowserWorkspace({
       setSecureRequest(null)
       return
     }
-    if (request.explicit) { setSecureAskDismissed(sessionId, request.origin, false); onPinChange(true) }
+    if (request.explicit) setSecureAskDismissed(sessionId, request.origin, false)
     else if (isSecureAskDismissed(sessionId, request.origin)) return
+    if (request.explicit || (request.formObserved === true && !request.automatic)) onPinChange(true)
     secureRequestRef.current = request
     setSecureRequest(request)
   }, [sessionId,onPinChange])
