@@ -307,7 +307,10 @@ class RuntimeManager implements LocalModelRuntimeManager {
   }
 
   async start(): Promise<LocalModelRuntimeSnapshot> {
-    if (getLocalModel(this.persistent.selectedModelId) === undefined) await this.refreshCatalog()
+    // Refresh even the pinned Ollama model before its first request so the
+    // effective runtime window reflects the installed tag and host memory.
+    const selected = getLocalModel(this.persistent.selectedModelId)
+    if (selected === undefined || selected.backend === 'ollama') await this.refreshCatalog()
     if (this.current.phase === 'running' && (this.server !== undefined || getLocalModel(this.persistent.selectedModelId)?.backend === 'ollama')) return this.snapshot()
     if (this.persistent.mode === 'off') {
       throw new LocalModelRuntimeFault('local-model-disabled', 'Phoenix Local está apagado en Settings.')
