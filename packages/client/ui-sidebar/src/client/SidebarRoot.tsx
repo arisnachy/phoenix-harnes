@@ -234,7 +234,7 @@ export function SidebarRoot({
             <IconPanelLeftOutline16 size={19} />{wide && <span>PHOENIX · General</span>}
           </button>
           {(adaptive.app === 'healthia' ? HEALTHIA_NAV[adaptive.role] : adaptive.sections).map(item => (
-            <button key={item.id} type="button" className={css.navLink} aria-current={item.id === adaptive.section ? 'page' : undefined} title={!wide ? item.label : undefined} onClick={() => navigateAdaptive('healthia', adaptive.role, item.id)}>
+            <button key={item.id} type="button" className={css.navLink} aria-current={item.id === adaptive.section ? 'page' : undefined} title={!wide ? item.label : undefined} onClick={() => navigateAdaptive(adaptive.app, adaptive.role, item.id)}>
               <IconFolderOpenOutline16 size={19}/>{wide && <span>{item.label}</span>}
             </button>
           ))}
