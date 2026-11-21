@@ -11,7 +11,9 @@ import type {} from '@phoenix-ai/dsh-host-webserver'
 import { dshHomePath } from '@phoenix-ai/dsh-home-paths'
 import { HealthClinicStore, healthKinds, type ClinicActor } from './health-store.ts'
 import { renderHealthPage } from './health-ui.ts'
+import { createPatientPortalHandler } from './health-patient-routes.ts'
 import { HEALTH_CLINICAL_TOOLS, runHealthClinicalTool } from './health-clinical-tools.ts'
+import { discoverClinicalModels, runClinicalModel, type HostClinicalLlm } from './health-clinical-models.ts'
 
 type Kind = Parameters<HealthClinicStore['list']>[1]
 const jsonHeaders:Record<string,string> = {
@@ -65,6 +67,14 @@ function statusError(error:unknown):number{
 
 type GoogleMailClient = { request(input:{ service:'gmail';path:string;method?:string;headers?:Record<string,string>;body?:string }):
 Promise<{ ok:boolean;body:string;status:number }> }
+/** The live PHOENIX model registry is authoritative; credentials remain with its adapters. */
+function clinicalModelRuntime(ctx:Context):HostClinicalLlm|undefined {
+  const runtime=(ctx.get as (key:string)=>unknown)('llm')
+  if(!runtime||typeof runtime!=='object')return undefined
+  const service=runtime as Partial<HostClinicalLlm>
+  return typeof service.listProviders==='function'&&typeof service.listModels==='function'
+    &&typeof service.stream==='function'?service as HostClinicalLlm:undefined
+}
 function mailClient(ctx:Context):GoogleMailClient|undefined {
   return (ctx.get as (key:string)=>unknown)('googleApi') as GoogleMailClient|undefined
 }
@@ -110,15 +120,30 @@ async function sendReminderWithVerifiedGmail(
  * @param ctx - Authenticated host context exposing the local HTTP service.
  */
 export function registerHealthRoutes(ctx:Context):void {
-  if(process.env.PHOENIX_HEALTH_ENABLED!=='1')return
+  // Register the safe loopback entry point automatically; explicit '0' can disable.
+  if(process.env.PHOENIX_HEALTH_ENABLED==='0')return
   if(ctx.webServer.host!=='127.0.0.1'){
     ctx.logger.warn('Health Engine requiere PHOENIX en 127.0.0.1; no se expone en LAN.')
     return
   }
-  const store=new HealthClinicStore(dshHomePath('health','clinic.sqlite'))
+  // Lazy open: ordinary chats never start experimental node:sqlite or create
+  // patient records. Only visiting /health on loopback initializes the store.
+  let clinicStore:HealthClinicStore|undefined
+  const getStore=():HealthClinicStore=>clinicStore??=new HealthClinicStore(dshHomePath('health','clinic.sqlite'))
   const failures=new Map<string,{ count:number;until:number }>()
   const route=ctx.webServer.register({ kind:'prefix',path:'/health',handler:async(req,res)=>{
     if(!peer(req)){reply(res,403,{ error:'Acceso local requerido' });return}
+    // Authenticated clinical methods still require login, session and CSRF.
+    const store=getStore()
+    const patientPortal=createPatientPortalHandler(store)
+    // On a shared browser, opening the patient portal invalidates any
+    // professional login token. Patient mode must never inherit clinician rights.
+    const pathForIsolation=new URL(req.url??'/','http://127.0.0.1').pathname
+    if(process.env.PHOENIX_HEALTH_PATIENT_PORTAL_ENABLED==='1'
+      && (pathForIsolation==='/health/patient'||pathForIsolation.startsWith('/health/patient/api/'))) {
+      store.logout(cookie(req))
+    }
+    if(await patientPortal(req,res))return
     const path=new URL(req.url??'/','http://127.0.0.1').pathname
     const method=req.method??'GET'
     // Authenticated, exact-allowlist local JavaScript modules. Only the signed-in
@@ -149,7 +174,7 @@ export function registerHealthRoutes(ctx:Context):void {
     }
     if(path==='/health'&&method==='GET'){
       const nonce=randomBytes(16).toString('base64')
-      const content=renderHealthPage(nonce)
+      const content=renderHealthPage(nonce,process.env.PHOENIX_HEALTH_PATIENT_PORTAL_ENABLED==='1')
       res.writeHead(200,{
         'content-type':'text/html; charset=utf-8','cache-control':'no-store',
         'content-security-policy':"default-src 'none'; script-src 'self' 'nonce-"+nonce+"'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
@@ -193,6 +218,60 @@ export function registerHealthRoutes(ctx:Context):void {
       const valid=store.session(cookie(req),typeof req.headers['x-phoenix-csrf']==='string'?req.headers['x-phoenix-csrf']:undefined,method!=='GET')
       const actor:ClinicActor=valid.actor
       if(operation==='session'&&method==='GET'){reply(res,200,{ actor,csrf:valid.csrf });return}
+      if(operation==='patient-portal-invite'&&method==='POST'&&id===undefined){
+        if(process.env.PHOENIX_HEALTH_PATIENT_PORTAL_ENABLED!=='1')throw Error('Portal no habilitado')
+        const body=await readBody(req,2048)
+        if(typeof body.patientId!=='string')throw Error('Paciente requerido')
+        reply(res,200,store.issuePatientPortalInvite(actor,body.patientId));return
+      }
+      if(operation==='patient-portal-publish'&&method==='POST'&&id===undefined){
+        if(process.env.PHOENIX_HEALTH_PATIENT_PORTAL_ENABLED!=='1')throw Error('Portal no habilitado')
+        const body=await readBody(req,2048)
+        if(typeof body.kind!=='string'||typeof body.recordId!=='string')throw Error('Publicación inválida')
+        store.publishPatientPortalItem(actor,body.kind,body.recordId)
+        reply(res,200,{published:true});return
+      }
+      if(operation==='patient-portal-revoke'&&method==='POST'&&id===undefined){
+        if(process.env.PHOENIX_HEALTH_PATIENT_PORTAL_ENABLED!=='1')throw Error('Portal no habilitado')
+        const body=await readBody(req,2048)
+        if(typeof body.patientId!=='string')throw Error('Paciente requerido')
+        store.revokePatientPortalAccess(actor,body.patientId)
+        reply(res,200,{revoked:true});return
+      }
+
+      // Authenticated same-origin POST + session CSRF. The draft is calculated
+      // from the authorized encrypted episode and stays in the clinical realm.
+      if(operation==='clinical-note-proposal'&&id!==undefined&&method==='POST'){
+        const proposal=store.suggestClinicalNote(actor,id)
+        reply(res,200,{proposal});return
+      }
+      if(operation==='clinical-note-ai-status'&&id===undefined&&method==='GET'){
+        if(actor.role!=='clinician')throw Error('Permiso clínico insuficiente')
+        const catalog=await discoverClinicalModels(clinicalModelRuntime(ctx))
+        reply(res,200,catalog);return
+      }
+      if(operation==='clinical-note-ai'&&id!==undefined&&method==='POST'){
+        const body=await readBody(req,1024)
+        if(body.action!=='refine'||typeof body.routeId!=='string')
+          throw Error('Solicitud IA clínica inválida')
+        const recorded=store.suggestClinicalNote(actor,id)
+        if(!recorded.mayUseLocalModel)
+          throw Error('Documento clínico reservado: envío a modelos no autorizado')
+        const runtime=clinicalModelRuntime(ctx)
+        const catalog=await discoverClinicalModels(runtime)
+        const refined=await runClinicalModel(recorded,{
+          requestedId:body.routeId,
+          acknowledgeLocal:body.confirmLocalProcessing===true,
+          acknowledgeExternal:body.confirmExternalProcessing===true,
+        },catalog,runtime)
+        // A separate clinical session may have modified or signed the encounter
+        // while the model was running. Never return a stale AI proposal.
+        const latest=store.suggestClinicalNote(actor,id)
+        if(latest.encounterVersion!==recorded.encounterVersion)
+          throw Error('Consulta modificada durante la generación; solicitud IA caducada')
+        reply(res,200,{proposal:{...refined,encounterId:id,encounterVersion:recorded.encounterVersion}})
+        return
+      }
       // Persist only authorized per-user UI drafts in the encrypted clinical store.
       if(operation==='clinical-draft'&&id!==undefined){
         if(method==='GET'){reply(res,200,{draft:store.getClinicalDraft(actor,id)});return}
@@ -356,6 +435,6 @@ export function registerHealthRoutes(ctx:Context):void {
     }
   } })
   ctx.effect(()=>()=>{
-    route();store.close();failures.clear()
+    route();clinicStore?.close();clinicStore=undefined;failures.clear()
   },'PHOENIX Health: local encrypted clinic and session cleanup')
 }

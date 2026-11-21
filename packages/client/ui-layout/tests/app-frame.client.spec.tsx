@@ -11,7 +11,7 @@
  * resizes are driven through the ResizeObserver stub.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { useSyncExternalStore } from 'react'
 import { AppFrame } from '@phoenix-ai/dsh-client-ui-layout/src/client/AppFrame.tsx'
 import type { AppFrameProps } from '@phoenix-ai/dsh-client-ui-layout/src/client/AppFrame.tsx'
@@ -137,6 +137,159 @@ afterEach(() => {
 })
 
 describe('AppFrame', () => {
+
+  it('starts a real App Studio chat mission instead of a local wizard', () => {
+    const intents: unknown[] = []
+    const onMission = (event: Event) => intents.push((event as CustomEvent<unknown>).detail)
+    window.addEventListener('phoenix:adaptive-app-mission', onMission)
+    try {
+      const view = mountFrame()
+      fireEvent.click(view.getByRole('button', { name: 'Aplicaciones PHOENIX' }))
+      fireEvent.click(view.getByRole('menuitem', { name: '+ Crear nueva aplicación con Kira' }))
+      expect(intents).toEqual([{ intent: 'new-app' }])
+      expect(view.getByTestId('center-content')).toBeTruthy()
+      expect(view.queryByRole('textbox', { name: 'Nombre de nueva aplicación' })).toBeNull()
+      expect(view.queryByRole('menu')).toBeNull()
+    } finally {
+      window.removeEventListener('phoenix:adaptive-app-mission', onMission)
+    }
+  })
+
+  it('accepts an approved app card, persists it, and restores its context after remount', () => {
+    localStorage.removeItem('phoenix.adaptive.apps.v1')
+    localStorage.removeItem('phoenix.adaptive.apps.last-good.v1')
+    try {
+      const view = mountFrame()
+      const acknowledgments: unknown[] = []
+      const onAck = (event: Event) => acknowledgments.push((event as CustomEvent).detail)
+      window.addEventListener('phoenix:adaptive-app-install-result', onAck)
+      try {
+        fireEvent(window, new CustomEvent('phoenix:adaptive-app-install', {
+          detail: { requestId: 'test-install', title: 'Inventario clinico', sections: ['Inicio', 'Productos', 'Reportes'] },
+        }))
+        expect(acknowledgments).toEqual([{ requestId: 'test-install', ok: true }])
+        expect(view.getByRole('region', { name: 'Aplicación adaptable: Inventario clinico' })).toBeTruthy()
+        expect(view.getByTestId('center-content')).toBeTruthy()
+        view.unmount()
+        const restored = mountFrame()
+        fireEvent.click(restored.getByRole('button', { name: 'Aplicaciones PHOENIX' }))
+        expect(restored.getByRole('menuitem', { name: 'Inventario clinico · Borrador' })).toBeTruthy()
+      } finally {
+        window.removeEventListener('phoenix:adaptive-app-install-result', onAck)
+      }
+    } finally {
+      localStorage.removeItem('phoenix.adaptive.apps.v1')
+      localStorage.removeItem('phoenix.adaptive.apps.last-good.v1')
+    }
+  })
+
+  it('applies a user-approved AI form schema only to an installed generic app', () => {
+    for (const key of [
+      'phoenix.adaptive.apps.v1', 'phoenix.adaptive.apps.last-good.v1',
+      'phoenix.adaptive.form-schemas.v1', 'phoenix.adaptive.form-schemas.last-good.v1',
+    ]) localStorage.removeItem(key)
+    try {
+      const view = mountFrame()
+      const app = { requestId: 'app-test', title: 'Inventario local', sections: ['Productos'] }
+      fireEvent(window, new CustomEvent('phoenix:adaptive-app-install', { detail: app }))
+      const responses: unknown[] = []
+      const onResult = (event: Event) => { responses.push((event as CustomEvent).detail) }
+      window.addEventListener('phoenix:adaptive-form-install-result', onResult)
+      try {
+        fireEvent(window, new CustomEvent('phoenix:adaptive-form-install', { detail: {
+          requestId: 'form-test', appId: 'app-inventario-local', sectionId: 'productos',
+          fields: [{ label: 'Existencias', kind: 'number', destination: 'local', output: 'table' }],
+        } }))
+        expect(responses).toEqual([{ requestId: 'form-test', ok: true }])
+        expect(view.getAllByText('Existencias').length).toBeGreaterThan(0)
+        fireEvent(window, new CustomEvent('phoenix:adaptive-form-install', { detail: {
+          requestId: 'blocked', appId: 'healthia', sectionId: 'patients',
+          fields: [{ label: 'Dato privado', kind: 'text', destination: 'api', output: 'chat' }],
+        } }))
+        expect(responses.at(-1)).toEqual({ requestId: 'blocked', ok: false })
+      } finally { window.removeEventListener('phoenix:adaptive-form-install-result', onResult) }
+    } finally {
+      for (const key of [
+        'phoenix.adaptive.apps.v1', 'phoenix.adaptive.apps.last-good.v1',
+        'phoenix.adaptive.form-schemas.v1', 'phoenix.adaptive.form-schemas.last-good.v1',
+      ]) localStorage.removeItem(key)
+    }
+  })
+
+  it('checks and applies chat-controlled palette, menu and metadata search without touching General', () => {
+    const keys = [
+      'phoenix.adaptive.apps.v1','phoenix.adaptive.apps.last-good.v1',
+      'phoenix.adaptive.theme.v1',
+    ]
+    keys.forEach(key => localStorage.removeItem(key))
+    const responses: Array<{requestId:string;phase:string;ok:boolean}> = []
+    const onReply = (event:Event) => { responses.push((event as CustomEvent).detail) }
+    window.addEventListener('phoenix:adaptive-control-result',onReply)
+    try {
+      const view = mountFrame()
+      fireEvent(window,new CustomEvent('phoenix:adaptive-app-install',{detail:{
+        requestId:'created',title:'Mi inventario',sections:['Productos'],
+      }}))
+      expect(view.getByRole('region',{name:'Aplicación adaptable: Mi inventario'})).toBeTruthy()
+      const command = {appId:'app-mi-inventario',operation:'palette',palette:'ocean'}
+      fireEvent(window,new CustomEvent('phoenix:adaptive-control-request',{detail:{
+        requestId:'check-color',phase:'preflight',command,
+      }}))
+      expect(responses.at(-1)).toMatchObject({requestId:'check-color',phase:'preflight',ok:true})
+      expect(view.container.querySelector('[data-app-palette="pearl"]')).toBeTruthy()
+      fireEvent(window,new CustomEvent('phoenix:adaptive-control-request',{detail:{
+        requestId:'change-color',phase:'apply',command,
+      }}))
+      expect(responses.at(-1)).toMatchObject({requestId:'change-color',phase:'apply',ok:true})
+      expect(view.container.querySelector('[data-app-palette="ocean"]')).toBeTruthy()
+      fireEvent(window,new CustomEvent('phoenix:adaptive-control-request',{detail:{
+        requestId:'add-menu',phase:'apply',command:{
+          appId:'app-mi-inventario',operation:'add-section',label:'Proveedores',
+        },
+      }}))
+      expect(responses.at(-1)).toMatchObject({requestId:'add-menu',ok:true})
+      expect(view.getByRole('button',{name:'Proveedores'})).toBeTruthy()
+      fireEvent(window,new CustomEvent('phoenix:adaptive-control-request',{detail:{
+        requestId:'search-menu',phase:'apply',command:{
+          appId:'general',operation:'find',query:'Proveedores',
+        },
+      }}))
+      expect(responses.at(-1)).toMatchObject({requestId:'search-menu',ok:true})
+      expect(view.getByLabelText('Búsqueda en aplicaciones')).toBeTruthy()
+      fireEvent(window,new CustomEvent('phoenix:adaptive-control-request',{detail:{
+        requestId:'back-general',phase:'apply',command:{
+          appId:'general',operation:'open',
+        },
+      }}))
+      expect(responses.at(-1)).toMatchObject({requestId:'back-general',ok:true})
+      expect(view.queryByRole('region',{name:'Aplicación adaptable: Mi inventario'})).toBeNull()
+      expect(view.getByTestId('center-content')).toBeTruthy()
+    } finally {
+      window.removeEventListener('phoenix:adaptive-control-result',onReply)
+      keys.forEach(key => localStorage.removeItem(key))
+    }
+  })
+
+  it('shares only an allowlisted live capability inventory after user click', () => {
+    const events: unknown[] = []
+    const onInspect = (event: Event) => { events.push((event as CustomEvent).detail) }
+    window.addEventListener('phoenix:adaptive-self-inspect',onInspect)
+    try {
+      const view = mountFrame()
+      expect(events).toHaveLength(0)
+      fireEvent.click(view.getByRole('button',{name:'Aplicaciones PHOENIX'}))
+      fireEvent.click(view.getByRole('menuitem',{name:'Inspeccionar capacidades con Kira'}))
+      expect(events).toHaveLength(1)
+      const payload = events[0] as {
+        activeApp:string;apps:unknown[];declared:{id:string}[];slots:unknown[]
+      }
+      expect(payload.activeApp).toBe('general')
+      expect(payload.declared.map(x => x.id)).toContain('healthia')
+      expect(payload.slots).toEqual([])
+      expect(JSON.stringify(payload)).not.toMatch(/apiKey|password|patientName/u)
+    } finally { window.removeEventListener('phoenix:adaptive-self-inspect',onInspect) }
+  })
+
   it('renders three tracks from store state', () => {
     const { frame } = mountFrame()
     expect(tracks(frame)).toEqual([SIDEBAR_DEFAULT, 0])

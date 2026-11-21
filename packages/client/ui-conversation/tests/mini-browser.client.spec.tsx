@@ -56,6 +56,21 @@ function installBrowserMock(current: typeof state = state) {
 }
 
 describe('MiniBrowser in Phoenix conversation', () => {
+  it('keeps the adaptive dock minimal until the person opens advanced tools', async () => {
+    installBrowserMock()
+    const pin=vi.fn(),close=vi.fn()
+    render(<MiniBrowser sessionId="compact-session" requested compact
+      onPinChange={pin} onClose={close}/>)
+    await waitFor(()=>expect(screen.getByRole('region',{name:'Navegador de Kira'})).toBeTruthy())
+    expect(screen.queryByRole('textbox',{name:'Dirección web'})).toBeNull()
+    fireEvent.click(screen.getByRole('button',{name:'Más herramientas del navegador'}))
+    expect(screen.getByRole('textbox',{name:'Dirección web'})).toBeTruthy()
+    expect(pin).toHaveBeenCalledWith(true)
+    fireEvent.click(screen.getByRole('button',{name:'Cerrar navegador y volver al chat'}))
+    expect(close).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('region',{name:'Navegador de Kira'})).toBeNull()
+  })
+
   it('opens a real public research source after Chrome is available, once per URL', async () => {
     const blank = { ...state, url: 'about:blank', title: '',
       tabs: [{ id: 'shared-tab', title: '', url: 'about:blank' }] }

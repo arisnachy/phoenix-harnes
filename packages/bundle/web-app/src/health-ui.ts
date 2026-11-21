@@ -5,7 +5,7 @@ import {DIAGNOSTIC_INPUT_GROUPS,DIAGNOSTIC_INPUTS,diagnosticPolicyFor}
  * @param nonce - Fresh per-response CSP nonce injected into the inline script.
  * @returns HTML for the authenticated local workspace.
  */
-export function renderHealthPage(nonce:string):string {
+export function renderHealthPage(nonce:string, patientPortalEnabled=false):string {
   const html=String.raw`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PHOENIX Health · Clínica</title>
 <style>
 :root{color-scheme:light;font:14px/1.45 "Segoe UI",system-ui,sans-serif;background:#f6f9fc;color:#263a53}*{box-sizing:border-box}
@@ -60,9 +60,10 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{border-bottom:1px
 <script nonce="__NONCE__">
 "use strict";
 const root=document.getElementById("app"),account=document.getElementById("account"),flash=document.getElementById("flash");
+const patientPortalEnabled=__PATIENT_PORTAL_ENABLED__;
 let actor=null,csrf="",tab="workspace",data={},current=null,selectedPatientId="",previewUrl=null;
 let patientForm={version:1,revision:0,fields:[]},patientDraft=null;
-let clinicalTools=[],selectedClinicalTool=null,anatomyViewerCleanup=null;
+let clinicalTools=[],selectedClinicalTool=null,anatomyViewerCleanup=null,clinicalNoteProposal=null;
 let viewDrafts=Object.create(null),draftTimer=null,loadSequence=0,draftSaveQueue=Promise.resolve();
 const modules=[["workspace","Mi consulta"],["anatomy","Anatomía 3D"],["patients","Pacientes"],["encounters","Consultas"],["appointments","Agenda"],["orders","Laboratorio e imágenes"],["prescriptions","Recetas"],["inventory","Farmacia"],["invoices","Administración"],["followups","Seguimiento"],["staff","Personal"],["assignments","Equipo asistencial"],["backups","Respaldos"],["audit","Auditoría"]];
 const safe=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -388,6 +389,25 @@ function renderWorkspace(){
    '<p><strong>Problemas:</strong> '+safe(patient.medicalHistory?.problems||"No documentados")+'</p>'+
    '<button class="secondary" data-act="openMedicalHistory" data-id="'+safe(id)+'">Revisar antecedentes</button> '+
    '<button class="secondary" data-act="allergyReview" data-id="'+safe(id)+'">Verificar alergias</button>');
+  if(patientPortalEnabled&&actor.role==="clinician"){
+    const allowed=[
+      ...(data.appointments||[]).filter(x=>x.patientId===id&&x.practitioner===actor.username)
+        .map(x=>({kind:"appointments",id:x.id,title:"Cita "+(x.startsAt||"")})),
+      ...(data.prescriptions||[]).filter(x=>x.patientId===id&&x.signedBy===actor.username&&x.status==="prescribed")
+        .map(x=>({kind:"prescriptions",id:x.id,title:"Receta "+(x.medication||"")})),
+    ];
+    panel+=box("Portal del paciente · publicación controlada",
+      '<p class="muted">Cuenta independiente. Invita al paciente por un canal privado. Solo lo que publiques aquí será visible. No se envía al chat ni a otro PHOENIX.</p>'+
+      button("portalInvite","Crear invitación (15 min)","secondary")+
+      ' '+button("portalRevoke","Revocar acceso","secondary")+
+      '<div class="ws-item" id="portal-invitation" aria-live="polite"></div>'+
+      '<p class="muted">Publicar solamente citas o recetas confirmadas. Cada publicación queda auditada.</p>'+
+      (allowed.length?allowed.map(x=>'<div class="ws-item"><strong>'+safe(x.title)+'</strong> '+
+        '<button class="secondary" data-act="portalPublish" data-id="'+safe(x.kind+":"+x.id)+'">Publicar al paciente</button></div>').join(""):
+       '<p class="muted">No hay citas/recetas propias aptas para publicar.</p>')+
+      '<p class="muted">Por seguridad, abrir el portal paciente en el mismo navegador cerrará la sesión profesional. Se recomienda una ventana o perfil de navegador independiente.</p>'+
+      '<p><a href="/health/patient" target="_blank" rel="noopener noreferrer">Abrir portal paciente (acceso separado)</a></p>');
+  }
   panel+='<div id="ws-current-visit">';
   panel+=box("Atender en consulta",
    '<div class="ws-grid"><div>'+field("ws-specialty","Especialidad","text",true,"Medicina familiar")+
@@ -609,6 +629,29 @@ function render(){
  box("Registros",genericRows(d,cols))+(tab==="prescriptions"?'<p class="notice warning">Las recetas no se envían por correo desde esta versión. La firma clínica exige revisión profesional.</p>':'');
 }
 async function execute(action,id){
+ if(action==="portalInvite"){
+  if(!patientPortalEnabled||!selectedPatientId)throw Error("Portal no disponible o paciente no seleccionado");
+  if(!confirm("¿Crear invitación? Debes entregarla en privado y confirmar la identidad del paciente. No la pegues en el chat."))return;
+  const invite=await api("patient-portal-invite","POST",{patientId:selectedPatientId});
+  const node=document.getElementById("portal-invitation");
+  if(node){node.textContent="Invitación de uso único, vigente hasta "+String(invite.expiresAt)+": "+String(invite.invite)+". Entrégala personalmente al paciente."}
+  return;
+ }
+ if(action==="portalRevoke"){
+  if(!patientPortalEnabled||!selectedPatientId)throw Error("Portal no disponible");
+  if(!confirm("¿Revocar todas las sesiones, credenciales e invitaciones del paciente seleccionado?"))return;
+  await api("patient-portal-revoke","POST",{patientId:selectedPatientId});
+  notice("Acceso del paciente revocado.");return;
+ }
+ if(action==="portalPublish"){
+  if(!patientPortalEnabled||!selectedPatientId)throw Error("Portal no disponible");
+  const [kind,recordId]=String(id||"").split(":");
+  if(!["appointments","prescriptions"].includes(kind)||!/^[0-9a-f-]{36}$/u.test(recordId||""))throw Error("Registro no válido");
+  if(!confirm("¿Publicar este documento al portal del paciente? Es un acto asistencial y quedará auditado."))return;
+  await api("patient-portal-publish","POST",{kind,recordId});
+  notice("Documento autorizado para el portal del paciente.");return;
+ }
+
  if(action==="kiraTalk"){
   // This input accepts only task commands. No raw note is logged, sent to models or saved.
   const command=val("kira-command");return clinicalIntent(command);
@@ -895,7 +938,7 @@ async function execute(action,id){
  }
 
  if(action==="openCriticalFollowups"){tab="followups";return load()}
- if(action==="logout"){clearTimeout(draftTimer);await api("logout","POST",{});actor=null;csrf="";data={};viewDrafts=Object.create(null);patientDraft=null;clinicalTools=[];selectedClinicalTool=null;tab="patients";return splash()}
+ if(action==="logout"){clinicalNoteProposal=null;clearTimeout(draftTimer);await api("logout","POST",{});actor=null;csrf="";data={};viewDrafts=Object.create(null);patientDraft=null;clinicalTools=[];selectedClinicalTool=null;tab="patients";return splash()}
  if(action==="setup"){await api("setup","POST",{username:val("user"),password:val("pass"),organization:val("org")});notice("Clínica configurada. Inicia sesión.");return splash()}
  if(action==="login"){const x=await api("login","POST",{username:val("user"),password:val("pass")});csrf=x.csrf;actor=x.actor;data={};viewDrafts=Object.create(null);tab="workspace";return load()}
  if(action==="openAskCopilot"){
@@ -1083,11 +1126,105 @@ async function execute(action,id){
   if(result.status==="sent")notice("Kira confirmó el envío del recordatorio con Gmail.");
   return;
  }
+async function refreshClinicalModelChoices(){
+ const field=document.getElementById("healthia-clinical-model");
+ const statusEl=document.getElementById("healthia-clinical-model-status");
+ if(!field)return;
+ try{
+  const catalog=await api("clinical-note-ai-status");
+  if(field!==document.getElementById("healthia-clinical-model"))return;
+  field.replaceChildren(new Option("Selecciona un modelo...", ""));
+  for(const entry of catalog.models||[]){
+   field.add(new Option(entry.label+(entry.location==="local"?" · local":" · OAuth/API externa"),entry.id));
+  }
+  field.value=catalog.defaultId||"";
+  if(statusEl)statusEl.textContent=catalog.models?.length
+   ?(catalog.models.length+" modelos registrados/detectados. Local primero; un proveedor externo requiere aprobación explícita.")
+   :"Sin modelo disponible. La preparación local de HEA sigue funcionando.";
+ }catch{
+  if(statusEl)statusEl.textContent="No se pudo consultar el catálogo del Host. La preparación local de HEA sigue funcionando.";
+ }
+}
+ if(action==="prepareClinicalNote"||action==="prepareClinicalAi"){
+  const useModel=action==="prepareClinicalAi";
+  const encounter=data.encounters?.find(x=>x.id===id);
+  if(!encounter||current?.kind!=="soap"||current.encounterId!==id||encounter.status==="signed")
+    throw Error("Consulta protegida no disponible");
+  let chosen=null;
+  if(useModel){
+    const requestedId=document.getElementById("healthia-clinical-model")?.value;
+    const status=await api("clinical-note-ai-status");
+    chosen=(status.models||[]).find(x=>x.id===requestedId)||null;
+    if(!chosen){
+      notice("Selecciona un modelo en el campo IA. Los modelos locales disponibles se seleccionan automáticamente.");
+      await refreshClinicalModelChoices();
+      return;
+    }
+    const remote=chosen.location==="external";
+    const text=remote
+      ?"Este proveedor está configurado mediante el Host, pero el envío sale del equipo. El contenido clínico documentado se transmitirá al proveedor "+chosen.provider+". Verifica el contrato de datos y el consentimiento del paciente. ¿Autorizas ESTA solicitud?"
+      :"El borrador clínico será procesado mediante "+chosen.label+" dentro del entorno local. Revisa permisos, privacidad y el resultado. ¿Autorizas ESTA solicitud?";
+    if(!confirm(text))return;
+  }
+  const response=useModel
+    ?await api("clinical-note-ai/"+encodeURIComponent(id),"POST",{
+      action:"refine",routeId:chosen.id,
+      confirmLocalProcessing:chosen.location==="local",
+      confirmExternalProcessing:chosen.location==="external",
+    })
+    :await api("clinical-note-proposal/"+encodeURIComponent(id),"POST",{});
+  const proposal=response.proposal;
+  if(!proposal||(useModel?proposal.source!=="phoenix-model-unverified":proposal.source!=="local-recorded-facts")
+    ||proposal.encounterVersion!==encounter.version||proposal.encounterId!==id)
+    throw Error("La revisión del episodio cambió; vuelve a abrir la consulta");
+  clinicalNoteProposal=proposal;
+  const prior=document.getElementById("clinical-note-proposal-preview");if(prior)prior.remove();
+  const missing=(proposal.missingInformation||[]).map(x=>"<li>"+safe(x)+"</li>").join("");
+  const numeric=(proposal.numericWarnings||[]).map(x=>"<li>"+safe(x)+"</li>").join("");
+  document.getElementById("view").insertAdjacentHTML("beforeend",
+    '<div id="clinical-note-proposal-preview">'+box(useModel?"Propuesta IA · pendiente de validación":"Propuesta local · enfermedad actual",
+      (useModel?'<p class="notice"><strong>Propuesta del modelo '+safe(proposal.provider||"")+' · '+safe(proposal.model||"")+' ('+safe(proposal.location||"")+', sin verificar):</strong> puede contener errores, omisiones o información inventada. Contrasta cada hecho con el expediente antes de aceptar.</p>':
+      '<p class="notice"><strong>Sin modelo IA:</strong> redacción estructurada desde respuestas registradas, sin diagnósticos ni hallazgos inventados. Verifica todo antes de conservarla.</p>')+
+      '<label>Motivo registrado</label><p>'+safe(proposal.suggestedComplaint)+'</p>'+
+      '<label>HEA propuesta para revisión</label><textarea readonly rows="9">'+safe(proposal.suggestedHistory)+'</textarea>'+
+      (missing?'<p class="notice">Información por completar: <ul>'+missing+'</ul></p>':'')+
+      (numeric?'<p class="notice warning">Cifras no observadas en el texto fuente: <ul>'+numeric+'</ul></p>':'')+
+      '<details><summary>Vista previa de historia completa documentada</summary>'+
+      '<p><strong>S:</strong> '+safe(proposal.note.history||"No documentado")+'</p>'+
+      '<p><strong>O:</strong> '+safe(proposal.note.exam||"No documentado")+'</p>'+
+      '<p><strong>A:</strong> '+safe(proposal.note.assessment||"Pendiente del profesional")+'</p>'+
+      '<p><strong>P:</strong> '+safe(proposal.note.plan||"Pendiente del profesional")+'</p></details>'+
+      '<p>'+button("acceptClinicalNote","Usar HEA propuesta","secondary")+
+      ' '+button("discardClinicalNote","Descartar propuesta","secondary")+'</p>')+'</div>');
+  return;
+ }
+ if(action==="acceptClinicalNote"){
+  const targetId=current?.encounterId;
+  const p=clinicalNoteProposal,enc=data.encounters?.find(x=>x.id===targetId);
+  if(!p||!enc||current?.kind!=="soap"||current.encounterId!==targetId
+    ||p.encounterId!==targetId||p.encounterVersion!==enc.version||enc.status==="signed")
+    throw Error("Propuesta caducada o sin permiso");
+  const target=document.getElementById("soap-history");
+  if(!target||target.value.trim()!==p.originalHistory.trim())
+    throw Error("El texto original cambió. Se preservó tu edición; vuelve a generar la propuesta.");
+  if(target.value.trim()&&!confirm("¿Reemplazar la anamnesis actual en el editor? Todavía no se guardará ni firmará."))return;
+  target.value=p.suggestedHistory;
+  clinicalNoteProposal=null;
+  document.getElementById("clinical-note-proposal-preview")?.remove();
+  notice("HEA insertada solo en el editor. Revisa, corrige y guarda el borrador si corresponde.");
+  return;
+ }
+ if(action==="discardClinicalNote"){
+  clinicalNoteProposal=null;
+  document.getElementById("clinical-note-proposal-preview")?.remove();
+  notice("Propuesta descartada; no se modificó la historia.");
+  return;
+ }
  if(action==="document"){
   const encounter=data.encounters?.find(x=>x.id===id);
   if(!encounter||encounter.practitioner!==actor.username||encounter.status==="signed")
     throw Error("Consulta no disponible para edición");
-  current={kind:"soap",encounterId:id};
+  current={kind:"soap",encounterId:id};clinicalNoteProposal=null;
   const section=(key,label,value)=>'<label for="soap-'+key+'">'+label+'</label><textarea id="soap-'+key+'">'+safe(value||"")+'</textarea>';
   document.getElementById("view").insertAdjacentHTML("beforeend",box("Historia clínica estructurada · SOAP",
     '<p class="notice">Borrador del profesional. Verifique cada hallazgo antes de revisar y firmar; los campos vacíos no significan hallazgos negativos.</p>'+
@@ -1095,8 +1232,13 @@ async function execute(action,id){
     section("exam","O · Exploración y datos objetivos",encounter.exam)+
     section("assessment","A · Evaluación y razonamiento clínico",encounter.assessment)+
     section("plan","P · Plan diagnóstico y terapéutico",encounter.plan)+
+    '<button class="secondary" data-act="prepareClinicalNote" data-id="'+safe(id)+'">Proponer HEA desde entrevista</button> '+
+    '<div class="ws-model-choice"><label for="healthia-clinical-model">Modelo de IA disponible en PHOENIX</label>'+
+    '<select id="healthia-clinical-model"><option value="">Buscando modelos autorizados...</option></select>'+
+    '<p id="healthia-clinical-model-status" class="muted" role="status">El Host detectará modelos locales y proveedores registrados por OAuth/API.</p></div>'+
+    '<button class="secondary" data-act="prepareClinicalAi" data-id="'+safe(id)+'">Mejorar HEA con IA</button> '+
     '<button class="primary" data-act="saveDocument" data-id="'+safe(id)+'">Guardar borrador cifrado</button>'));
-  restoreView();return;
+  restoreView();void refreshClinicalModelChoices();return;
  }
  if(action==="saveDocument"){
   const encounter=data.encounters?.find(x=>x.id===id);
@@ -1106,7 +1248,7 @@ async function execute(action,id){
   if(!history)throw Error("La anamnesis requiere información documentada");
   await api("encounters/"+id,"PATCH",{version:encounter.version,action:"document",history,
     exam:val("soap-exam"),assessment:val("soap-assessment"),plan:val("soap-plan")});
-  current=null;
+  current=null;clinicalNoteProposal=null;
   notice("Historia clínica cifrada guardada como borrador");
   return load();
  }
@@ -1191,6 +1333,7 @@ refresh();
     .map(id=>[id,diagnosticPolicyFor(id)?.source??'Revisar fuente original']))
   const safeScript=(value:unknown)=>JSON.stringify(value).replace(/</g,'\\u003c')
   return html.replaceAll('__NONCE__',nonce)
+    .replace('__PATIENT_PORTAL_ENABLED__',patientPortalEnabled?'true':'false')
     .replace('__PHOENIX_DIAGNOSTIC_OPTIONS__',safeScript(options))
     .replace('__PHOENIX_DIAGNOSTIC_SOURCES__',safeScript(hints))
 }

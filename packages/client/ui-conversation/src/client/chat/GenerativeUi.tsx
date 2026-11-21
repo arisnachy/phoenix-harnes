@@ -4,6 +4,10 @@ import { ScaleForm, parseScaleForm, type ScaleFormSpec } from './ScaleForm.tsx'
 import { resolveGeneratedAssessment } from './AssessmentCatalog.ts'
 import { parseSmartForm, parseSmartLibrary, type SmartFormSpec, type SmartLibrarySpec } from './SmartFormEngine.ts'
 import { SmartFormWorkspace } from './SmartFormSurface.tsx'
+import { AdaptiveAppProposal, parseAdaptiveAppProposal, type AdaptiveAppProposalSpec } from './AdaptiveAppProposal.tsx'
+import { AdaptiveFormProposal, parseAdaptiveFormProposal, type AdaptiveFormProposalSpec } from './AdaptiveFormProposal.tsx'
+import { AdaptiveWorkspaceProposal, parseAdaptiveWorkspaceProposal, type AdaptiveWorkspaceProposalSpec } from './AdaptiveWorkspaceProposal.tsx'
+import { AdaptiveFieldResultProposal, parseAdaptiveFieldResult, type AdaptiveFieldResultSpec } from './AdaptiveFieldResultProposal.tsx'
 import { SpreadsheetSurface, parseSpreadsheet, type SpreadsheetSpec } from './SpreadsheetSurface.tsx'
 import { GeoMap, parseGeoMapSpec, type GeoMapSpec } from './GeoMap.tsx'
 import { SceneMap, parseSceneMapSpec, type SceneMapSpec } from './SceneMap.tsx'
@@ -227,7 +231,7 @@ type AgentLineBlock = {
 const supportedTones: readonly PhoenixStatusTone[] = ['positive', 'warning', 'negative', 'info', 'neutral']
 
 export type GenerativeUiBlock = EventCard | MetricCard | ComparisonCard | TimelineCard | SmartCard | SportsGameCard | SportsScheduleCard | SportsTicketCard | SportsTicketBundleCard | SportsOddsCard | SportsEspnDashboard | SportsResearchTableBlock
-  | CanvasSpec | VisualIntelligenceSpec | ScaleFormSpec | SmartFormSpec | SmartLibrarySpec | SpreadsheetSpec | GeoMapSpec | SceneMapSpec | DiagramSpec | StatusPillBlock | AgentLineBlock
+  | CanvasSpec | VisualIntelligenceSpec | ScaleFormSpec | SmartFormSpec | SmartLibrarySpec | SpreadsheetSpec | GeoMapSpec | SceneMapSpec | DiagramSpec | StatusPillBlock | AgentLineBlock | AdaptiveAppProposalSpec | AdaptiveFormProposalSpec | AdaptiveWorkspaceProposalSpec | AdaptiveFieldResultSpec
 
 export type GenerativeUiSegment =
   | { kind: 'markdown'; text: string }
@@ -784,6 +788,10 @@ export function parseGenerativeUiBlock(value: unknown): GenerativeUiBlock | null
     case 'scale_form': return parseScaleForm(value)
     case 'smart_form': return parseSmartForm(value)
     case 'smart_form_library': return parseSmartLibrary(value)
+    case 'adaptive_app': return parseAdaptiveAppProposal(value)
+    case 'adaptive_form': return parseAdaptiveFormProposal(value)
+    case 'adaptive_control': return parseAdaptiveWorkspaceProposal(value)
+    case 'adaptive_field_result': return parseAdaptiveFieldResult(value)
     case 'spreadsheet': return parseSpreadsheet(value)
     case 'geo_map': return parseGeoMapSpec(value)
     case 'scene_map': return parseSceneMapSpec(value)
@@ -845,7 +853,7 @@ export function splitGenerativeUiText(
     if (parsed === null) {
       if (/"component"\s*:\s*"(?:sports_game_card|sports_schedule_card|sports_ticket_card|sports_ticket_bundle_card)"/.test(body ?? ''))
         segments.push({ kind: 'notice', text: 'La tarjeta deportiva no pudo validarse. Kira debe consultar de nuevo el evento y entregar los datos verificados.' })
-      else if (/"component"\s*:\s*"(?:visual_intelligence|ui_canvas|scale_form|smart_form|smart_form_library|spreadsheet|geo_map|scene_map|diagram|status_pill|agent_line|smart_card|metric_card|event_card|comparison|timeline|sports_espn_dashboard|sports_game_card|sports_schedule_card|sports_ticket_card|sports_ticket_bundle_card|sports_odds_card)"/.test(body ?? ''))
+      else if (/"component"\s*:\s*"(?:visual_intelligence|ui_canvas|scale_form|smart_form|smart_form_library|adaptive_app|adaptive_form|adaptive_control|adaptive_field_result|spreadsheet|geo_map|scene_map|diagram|status_pill|agent_line|smart_card|metric_card|event_card|comparison|timeline|sports_espn_dashboard|sports_game_card|sports_schedule_card|sports_ticket_card|sports_ticket_bundle_card|sports_odds_card)"/.test(body ?? ''))
         segments.push({ kind: 'notice', text: 'Esta interfaz no pudo mostrarse. Pide a Kira que la actualice.' })
       else appendMarkdown(segments, raw)
     }
@@ -859,7 +867,7 @@ export function splitGenerativeUiText(
   let tail = text.slice(cursor)
   if (options.streaming === true) {
     const lastJsonFence = tail.lastIndexOf('```json')
-    const relevantJson = lastJsonFence >= 0 && /"component"\s*:\s*"(?:visual_intelligence|ui_canvas|scale_form|smart_form|smart_form_library|spreadsheet|geo_map|scene_map|diagram|status_pill|agent_line|smart_card|metric_card|event_card|comparison|timeline|sports_espn_dashboard|sports_game_card|sports_schedule_card|sports_ticket_card|sports_ticket_bundle_card|sports_odds_card)"/.test(tail.slice(lastJsonFence))
+    const relevantJson = lastJsonFence >= 0 && /"component"\s*:\s*"(?:visual_intelligence|ui_canvas|scale_form|smart_form|smart_form_library|adaptive_app|adaptive_form|adaptive_control|adaptive_field_result|spreadsheet|geo_map|scene_map|diagram|status_pill|agent_line|smart_card|metric_card|event_card|comparison|timeline|sports_espn_dashboard|sports_game_card|sports_schedule_card|sports_ticket_card|sports_ticket_bundle_card|sports_odds_card)"/.test(tail.slice(lastJsonFence))
       ? lastJsonFence : -1
     const unfinishedFence = Math.max(tail.lastIndexOf('```generative-ui'), relevantJson)
     if (unfinishedFence >= 0) tail = tail.slice(0, unfinishedFence)
@@ -887,7 +895,7 @@ function expandRawCanvases(segments: GenerativeUiSegment[], streaming: boolean):
       continue
     }
     const source = segment.text
-    const startPattern = /^[ \t]*\{\s*"component"\s*:\s*"(?:visual_intelligence|ui_canvas|scale_form|smart_form|smart_form_library|spreadsheet|geo_map|scene_map|diagram|status_pill|agent_line|smart_card|metric_card|event_card|comparison|timeline|sports_espn_dashboard|sports_game_card|sports_schedule_card|sports_ticket_card|sports_ticket_bundle_card|sports_odds_card)"/gm
+    const startPattern = /^[ \t]*\{\s*"component"\s*:\s*"(?:visual_intelligence|ui_canvas|scale_form|smart_form|smart_form_library|adaptive_app|adaptive_form|adaptive_control|adaptive_field_result|spreadsheet|geo_map|scene_map|diagram|status_pill|agent_line|smart_card|metric_card|event_card|comparison|timeline|sports_espn_dashboard|sports_game_card|sports_schedule_card|sports_ticket_card|sports_ticket_bundle_card|sports_odds_card)"/gm
     let cursor = 0
     for (const match of source.matchAll(startPattern)) {
       if (count >= MAX_UI_BLOCKS) break
@@ -1177,6 +1185,10 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
     }
     case 'smart_form': return <SmartFormWorkspace initial={block} onAction={onAction} />
     case 'smart_form_library': return <SmartFormWorkspace title={block.props.title} onAction={onAction} />
+    case 'adaptive_app': return <AdaptiveAppProposal spec={block} onAction={onAction} />
+    case 'adaptive_form': return <AdaptiveFormProposal spec={block} />
+    case 'adaptive_control': return <AdaptiveWorkspaceProposal spec={block} />
+    case 'adaptive_field_result': return <AdaptiveFieldResultProposal spec={block} />
     case 'spreadsheet': return <SpreadsheetSurface key={block.props.id} spec={block} />
     case 'geo_map': return <GeoMap key={(conversationId ?? block.props.conversationId ?? 'ephemeral') + ':' + block.props.id} spec={block} onAction={onAction} {...(conversationId === undefined ? {} : { conversationId })} />
     case 'scene_map': return <SceneMap key={(conversationId ?? 'ephemeral') + ':' + block.props.id} spec={block} onAction={onAction} />

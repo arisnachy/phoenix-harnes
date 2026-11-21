@@ -1,6 +1,8 @@
 /** Model-facing controls and standing policy for Universal Living Creations. @module @phoenix-ai/dsh-tool-living */
 
 import { randomBytes } from 'node:crypto'
+import { inspectSystemEnvironment, searchLocalApps } from './system-proprioception.ts'
+import { confirmAdaptiveExternalAction, type AdaptiveApprovalService } from './approved-action.ts'
 import type { Context } from '@phoenix-ai/cordis'
 import {
   LivingCreationId, createLivingControlResource, livingControlForManifest,
@@ -275,6 +277,60 @@ function assertTargetReached(snapshot: LivingCreationSnapshot): void {
 /** Register the universal living-creation policy and model controls. */
 export function apply(ctx: Context): void {
   ctx.systemPrompt.section({ name: 'tool:living', order: 115, text: LIVING_CREATION_POLICY })
+  ctx.tools.register(defineTool({
+    name: 'system_runtime_inspect',
+    description: 'Read active PHOENIX tool registration names, available nonclinical Living connectors and declared actions (metadata only). This is live Host proprioception, not evidence of authorization, successful execution, login or system health. No manifest resources, bearer tokens, records, file paths or secret settings.',
+    parameters:{},
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    execute(){
+      const names=ctx.tools.schemas().map(schema=>schema.name)
+        .filter(name=>/^[a-z][a-z0-9_.-]{0,90}$/u.test(name)).slice(0,160)
+      const connected=ctx.living.list()
+        .filter(item=>!/(?:clinical|patient|health|medic|pacient|expediente|historia)/iu.test(item.manifest.kind))
+        .slice(0,40).map(item=>({
+          id:String(item.manifest.id),kind:item.manifest.kind.slice(0,40),
+          connected:item.connected,achieved:item.achievedLevel,
+          declaredActions:item.manifest.actions
+            .filter(name=>/^[a-z][a-z0-9_.-]{0,80}$/u.test(name)).slice(0,30),
+        }))
+      return Promise.resolve(JSON.stringify({
+        schema:'phoenix.runtime-self.v1',registeredToolNames:names,
+        livingConnectors:connected,
+        authority:'registration-only',
+        permissions:'must-check-current-tool-policy-and-user-approval',
+        authentication:'not-inspected',
+        externalExecution:'not-attempted',
+        clinicalBoundary:'never-export-patient-information-to-ordinary-chat',
+      }))
+    },
+    presentCall:()=>({card:'generic',title:'PHOENIX · Herramientas y conectores activos',kind:'read' as const}),
+  }))
+
+  ctx.tools.register(defineTool({
+    name:'system_app_search',
+    description:'Find installed Windows Start-menu programs that match a user-provided name. Returns up to 16 safe application names only. Does not expose AppIDs, paths, devices, hidden apps or credentials, and never grants launch or execution permissions. Use when the user asks which applications or graphical tools are available.',
+    parameters:{query:{type:'string',required:true,description:'App name or category to look up, between 2 and 48 letters/numbers/spaces.'}},
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    execute(args){return Promise.resolve(JSON.stringify(searchLocalApps(args.query)))},
+    presentCall:()=>({card:'generic',title:'PHOENIX · Buscar aplicaciones instaladas',kind:'read' as const}),
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'system_environment_inspect',
+    description: 'Read current PHOENIX Host, Windows/macOS/Linux identification, aggregate CPU/RAM/GPU, PC/laptop classification and allowlisted software/tool presence. Use only for user-requested device/OS/tool availability questions or app capability planning. Read-only; detected does NOT mean authorized, usable, healthy, or installed. No paths, secrets, serials, process lists or patient data.',
+    parameters: {},
+    output: {
+      schema: { type: 'string' },
+      render: (_args, value) => [{ type: 'text' as const, text: value }],
+    },
+    isConcurrencySafe: () => true,
+    async execute() {
+      return JSON.stringify(inspectSystemEnvironment())
+    },
+    presentCall: () => ({ card:'generic', title:'PHOENIX · Inspeccionar entorno y capacidades', kind:'read' as const }),
+  }))
 
   ctx.tools.register(defineTool({
     name: 'living_register_creation',
@@ -390,8 +446,93 @@ export function apply(ctx: Context): void {
   }))
 
   ctx.tools.register(defineTool({
+    name: 'adaptive_app_action_plan',
+    description: 'Read-only preflight for an installed PHOENIX Living connector. Reports whether a named nonclinical action is declared and the creation is online. Does not execute anything or grant permission.',
+    parameters: {
+      id: {type:'string',required:true},
+      action: {type:'string',required:true},
+    },
+    output: {schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    execute(args) {
+      try {
+        const snapshot=ctx.living.inspect(LivingCreationId(args.id))
+        const isClinical=/(?:clinical|patient|health|medic|pacient|expediente|historia)/iu.test(snapshot.manifest.kind)
+        return Promise.resolve(JSON.stringify({
+          creationId:args.id,action:args.action,
+          declared:snapshot.manifest.actions.includes(args.action),
+          connected:snapshot.connected,
+          clinicalDenied:isClinical,
+          executionAuthorized:false,
+          requires:'human-approval-each-action',
+        }))
+      } catch {
+        return Promise.resolve(JSON.stringify({
+          creationId:args.id,action:args.action,
+          declared:false,connected:false,clinicalDenied:false,
+          executionAuthorized:false,requires:'available-creation',
+        }))
+      }
+    },
+    presentCall:()=>({card:'generic',title:'PHOENIX · Comprobar conector',kind:'read' as const}),
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'adaptive_app_execute_approved',
+    description: 'Execute one declared action of an ONLINE, NONCLINICAL PHOENIX Living connector ONLY after the user confirms this precise action and JSON input in ASK. Fail closed on missing ASK provider, timeout, denial, disconnected connector, or changed manifest. Never send patient information, secrets, raw shell commands or untrusted URLs. The general living_act tool remains separate.',
+    parameters: {
+      id:{type:'string',required:true,description:'Exact existing Living creation ID.'},
+      action:{type:'string',required:true,description:'Exact action declared by that creation.'},
+      input_json:{type:'string',required:true,description:'JSON input for the creation, at most 2,000 characters and no personal/clinical data.'},
+    },
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>false,
+    async execute(args,exec) {
+      const denied=(reason:string)=>JSON.stringify({
+        status:'denied',reason,executed:false,createdNewAuthorization:false,
+      })
+      if (args.input_json.length > 2000 || !/^[\w.-]{1,80}$/u.test(args.action)
+        || !/^[\w.-]{1,80}$/u.test(args.id)) return denied('INVALID_REQUEST')
+      let snapshot
+      try {snapshot=ctx.living.inspect(LivingCreationId(args.id))}
+      catch {return denied('UNKNOWN_CREATION')}
+      if (/(?:clinical|patient|health|medic|pacient|expediente|historia)/iu.test(snapshot.manifest.kind))
+        return denied('CLINICAL_CONNECTORS_REQUIRE_PROTECTED_PORTAL')
+      if (!snapshot.connected || !snapshot.manifest.actions.includes(args.action))
+        return denied('ACTION_NOT_AVAILABLE')
+      let input
+      try {input=parseInput(args.input_json)}
+      catch {return denied('INVALID_JSON')}
+      let provider:AdaptiveApprovalService|undefined
+      try {
+        provider=(ctx as unknown as {get(name:string):unknown}).get('userQuestions') as AdaptiveApprovalService|undefined
+      } catch { return denied('HUMAN_APPROVAL_NOT_AVAILABLE') }
+      const approved=await confirmAdaptiveExternalAction({
+        ...(provider===undefined?{}:{ask:provider}),
+        creationId:args.id,action:args.action,inputJson:args.input_json,
+        ...(exec.agent===undefined?{}:{agent:exec.agent}),
+        ...(exec.signal===undefined?{}:{signal:exec.signal}),
+      })
+      if (!approved) return denied('HUMAN_APPROVAL_NOT_GIVEN')
+      // Re-read live state AFTER the prompt to prevent stale/offline actions.
+      try {
+        const latest=ctx.living.inspect(LivingCreationId(args.id))
+        if (!latest.connected || !latest.manifest.actions.includes(args.action)
+          || latest.manifest.kind !== snapshot.manifest.kind)
+          return denied('CONNECTOR_CHANGED_DURING_APPROVAL')
+        const result=await ctx.living.act(LivingCreationId(args.id),args.action,input)
+        return JSON.stringify({status:'executed',executed:true,creationId:args.id,
+          action:args.action,result_json:JSON.stringify(result)})
+      } catch {
+        return JSON.stringify({status:'unknown-outcome',executed:'unconfirmed',reason:'CONNECTOR_EXECUTION_FAILED_CHECK_PROVIDER_BEFORE_RETRY'})
+      }
+    },
+    presentCall:args=>({card:'generic',title:`PHOENIX · Acción aprobada: ${args.action}`,kind:'execute' as const}),
+  }))
+
+  ctx.tools.register(defineTool({
     name: 'living_act',
-    description: 'Execute one action declared by a connected creation. The call fails when the creation is offline or the action was not declared.',
+    description: 'Legacy Living action entry. Enforces the same explicit human confirmation and clinical safety boundary as adaptive_app_execute_approved; no direct unapproved execution.',
     parameters: {
       id: { type: 'string', required: true }, action: { type: 'string', required: true },
       input_json: { type: 'string', required: true, description: 'JSON value passed to the creation action.' },
@@ -400,9 +541,14 @@ export function apply(ctx: Context): void {
       schema: { type: 'object', additionalProperties: false, properties: { result_json: { type: 'string', required: true } } },
       render: (_args, value) => [{ type: 'text' as const, text: value.result_json }],
     },
-    async execute(args) {
-      const result = await ctx.living.act(LivingCreationId(args.id), args.action, parseInput(args.input_json))
-      return { result_json: JSON.stringify(result) }
+    async execute(args,exec) {
+      // Do not preserve a bypass around the one-time human confirmation.
+      const guarded=ctx.tools.get('adaptive_app_execute_approved')
+      if (!guarded) return {result_json:JSON.stringify({
+        status:'denied',executed:false,reason:'APPROVAL_GATE_UNAVAILABLE',
+      })}
+      const result=await guarded.execute(args,exec)
+      return {result_json:typeof result==='string'?result:JSON.stringify(result)}
     },
     presentCall: args => present(`Living action: ${args.action}`, args.id),
   }))

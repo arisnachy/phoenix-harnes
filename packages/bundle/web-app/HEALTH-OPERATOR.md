@@ -189,3 +189,30 @@ Kira utiliza `health_diagnostic_concordance` para revisar la consistencia de obs
 Caso de regresión específico: una fotografía de ECG con indicios de onda delta, PR posiblemente corto o QRS ancho **no debe despacharse como eje izquierdo o hemibloqueo aislado**. Se prioriza el diferencial de preexcitación/WPW y se distingue lo cualitativo (foto) de lo verificado (PR/QRS en milisegundos sobre trazado calibrado). La herramienta `health_ecg_preexcitation_review` acepta `photoDeltaHint=possible` y `qualitativePrHint=appears-short` para producir `PHOTO_SUGGESTS_PREEXCITATION_UNVERIFIED` sin inventar medidas ni confirmar síndrome WPW; exige confirmar con el estudio original. La representación puede mostrar solamente un mecanismo genérico de conducción por vía accesoria y rotular claramente que es una hipótesis.
 
 La verificación de concordancia NO sustituye un intérprete clínico validado de imágenes, señales o valores de laboratorio ni afirma haber leído los píxeles. Las conclusiones deben basarse en datos observables o medidos, nunca en la mera disponibilidad del catálogo. Pruebas `scripts/phoenix-health-diagnostic-accuracy.test.mjs`.
+
+## Healthia · portal de paciente local (piloto opt-in)
+
+El portal de paciente se habilita solo cuando la clínica local está activa, mediante una decisión expresa del operador. NO es una instalación en nube, una función de acceso remoto ni un intercambio PHOENIX↔PHOENIX. Los roles profesionales siguen separados de las cuentas de pacientes.
+
+```powershell
+$env:PHOENIX_HEALTH_ENABLED = "1"
+$env:PHOENIX_HEALTH_PATIENT_PORTAL_ENABLED = "1"
+pnpm phoenix
+```
+
+Tras iniciar sesión profesional en `/health`, el médico asignado a un paciente puede crear una invitación de **15 minutos y un solo uso**, que debe entregar por una vía privada tras verificar la identidad del destinatario. La invitación no se copia a Kira y solo se almacena su hash. El paciente abre `/health/patient` en la **misma computadora clínica**, canjea el código, crea su contraseña de al menos 16 caracteres y conserva su identificador de acceso. Las cuentas de paciente usan cookies HttpOnly, SameSite=Strict, ruta `/health/patient`, CSRF independiente y limitación de intentos; nunca reciben rol de médico/recepción.
+
+El médico decide por separado qué citas y recetas firmadas publicar. Nada se publica automáticamente; los datos de historia clínica, psicoterapia, anexos, resultados no revisados, formularios, archivos e información de otros pacientes permanecen excluidos del portal. Se pueden revocar credenciales, sesiones, invitaciones y publicaciones para un paciente; toda invitación, activación, publicación o revocación queda registrada en la cadena de auditoría clínica. En una instalación sin `PHOENIX_HEALTH_PATIENT_PORTAL_ENABLED=1`, `/health/patient` y las operaciones de publicación no se activan.
+
+El modo «Paciente» del Adaptive Workspace solo abre esa página separada; **seleccionar el modo en el menú no autentica a ninguna persona ni proporciona acceso clínico al chat**.
+
+**Limitaciones del piloto:** requiere revisión de seguridad, pruebas de penetración, restauración de backups, consentimiento y base jurídica específicos, verificación independiente de identidad y cumplimiento de normas locales antes de uso clínico real. No se ha habilitado acceso remoto, federación entre dispositivos ni sincronización entre PHOENIX.
+
+### Pruebas de esta integración
+
+```powershell
+pnpm run test:healthia:patient
+pnpm run test:adaptive:all
+```
+
+La función solo debe publicarse después de CI, Windows y pruebas de privacidad satisfactorias. 

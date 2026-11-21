@@ -2117,6 +2117,9 @@ importers:
       '@phoenix-ai/dsh-user-approval':
         specifier: workspace:^
         version: link:../../interaction/user-approval
+      '@types/react-dom':
+        specifier: ~18.3.0
+        version: 18.3.7(@types/react@18.3.31)
       '@types/react':
         specifier: ~18.3.1
         version: 18.3.31
@@ -2126,6 +2129,9 @@ importers:
       react:
         specifier: ^18.2.0
         version: 18.3.1
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.3.1(react@18.3.1)
 
   packages/client/ui-deliverables:
     devDependencies:
@@ -2420,6 +2426,9 @@ importers:
       '@phoenix-ai/dsh-client-runtime':
         specifier: workspace:^
         version: link:../runtime
+      '@phoenix-ai/dsh-client-ui-primitives':
+        specifier: workspace:^
+        version: link:../ui-primitives
       '@phoenix-ai/dsh-client-ui-slots':
         specifier: workspace:^
         version: link:../ui-slots
