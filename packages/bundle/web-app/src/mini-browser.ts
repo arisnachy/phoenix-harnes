@@ -829,6 +829,26 @@ async function action(input: Action, signal?: AbortSignal): Promise<Record<strin
   const type = input.type
   const sessionId = input.sessionId
   if (sessionId !== undefined && !validBrowserScopeId(sessionId)) throw new Error('Conversación inválida.')
+  // Finishing a conversation-owned browser is different from closing a tab.
+  // Release the owned Chromium process, CDP transports and ownership records
+  // without touching any other conversation's browser or an external Chrome.
+  if (type === 'release-session') {
+    if (sessionId === undefined) throw new Error('Se requiere conversación para liberar Chromium.')
+    // A start already in progress must settle before disposing its process,
+    // otherwise it can create an orphan after release.
+    const launch = scopedLaunching.get(sessionId)
+    if (launch !== undefined) await launch.catch(() => undefined)
+    for (const tabId of browserScopes.snapshot()[sessionId]?.tabIds ?? []) {
+      cdpSessions.get(tabId)?.session.close('CDP_SESSION_CLOSED: tarea de navegación completada')
+      cdpSessions.delete(tabId)
+      frameFlights.delete(tabId)
+      publisherRestoreAttempt.delete(tabId)
+      browserScopes.release(sessionId, tabId)
+    }
+    persistBrowserScopes()
+    disposeScopedBrowser(sessionId)
+    return { available:false, tabs:[] }
+  }
   throwIfAborted(signal)
   const base = await endpoint(type === 'open' || type === 'new-tab' || type === 'start', signal, sessionId)
   throwIfAborted(signal)
