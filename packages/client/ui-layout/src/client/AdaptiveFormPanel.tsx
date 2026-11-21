@@ -5,6 +5,7 @@ import {
   type AdaptiveDestination, type AdaptiveInputKind, type AdaptiveOutput, type AdaptiveFormDraft,
 } from './AdaptiveAppCatalog.ts'
 import { readAdaptiveForm, saveAdaptiveForm } from './AdaptiveFormMetadataStore.ts'
+import { AdaptiveAiFieldControl } from './AdaptiveAiFieldControl.tsx'
 import css from './HealthiaWorkspace.module.css'
 import ui from './AdaptiveFormPanel.module.css'
 
@@ -130,12 +131,17 @@ export function AdaptiveFormPanel({ appId, sectionId }: { appId: string; section
       <div className={ui.fieldGrid}>{form.fields.map(field => <div key={field.id} className={[css.formSelect,ui.field].join(' ')}>
         <label htmlFor={`adaptive-value-${field.id}`}>{field.label}</label>
         {field.kind === 'textarea'
-          ? <textarea id={`adaptive-value-${field.id}`} maxLength={400} rows={2}
+          ? <textarea id={`adaptive-value-${field.id}`} maxLength={3000} rows={4}
             value={values[field.id] ?? ''} onChange={event => { const value = event.currentTarget.value; setValues(old => ({ ...old, [field.id]: value })) }}/>
           : field.kind === 'select'
             ? <select id={`adaptive-value-${field.id}`} disabled><option>Configura opciones con Kira</option></select>
             : <Input id={`adaptive-value-${field.id}`} type={field.kind} maxLength={400}
                 value={values[field.id] ?? ''} onChange={event => { const value = event.currentTarget.value; setValues(old => ({ ...old, [field.id]: value })) }}/>}
+        {(field.kind==='text'||field.kind==='textarea')&&<AdaptiveAiFieldControl
+          appId={appId} sectionId={sectionId} fieldId={field.id}
+          formRevision={form.revision} value={values[field.id] ?? ''}
+          maxLength={field.kind==='textarea'?3000:400}
+          onAccept={text=>setValues(old=>({...old,[field.id]:text}))}/>}
       </div>)}</div>
       <div className={css.fieldList} aria-label="Salidas en pantalla">
         {form.fields.filter(field => field.binding.destination === 'local' && values[field.id]).map(field =>
