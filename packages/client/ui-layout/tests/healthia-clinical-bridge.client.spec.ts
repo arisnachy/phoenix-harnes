@@ -11,7 +11,7 @@ describe('Healthia readonly authenticated bridge', () => {
       csrf:'SENSITIVE_SENTINEL',patient:{name:'private-patient'},
     }))
     const result=await probeClinicalSession(fetcher as unknown as typeof fetch)
-    expect(result).toEqual({status:'authenticated',role:'clinician',patientPortal:'not-enabled'})
+    expect(result).toEqual({status:'authenticated',role:'clinician',patientPortal:'not-verified'})
     const serialized=JSON.stringify(result)
     for(const secret of ['SENSITIVE_SENTINEL','private-clinician','private-hospital','private-patient']) {
       expect(serialized).not.toContain(secret)
