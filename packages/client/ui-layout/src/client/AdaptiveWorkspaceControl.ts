@@ -162,7 +162,12 @@ export function preflightAdaptiveControl(command: AdaptiveControlCommand, apps: 
   if (command.operation === 'palette') return { valid:true, reason:'APP_SCOPED_THEME' }
   if (command.operation === 'add-section') {
     try {
-      createAdaptiveAppBlueprint(app.title, [...app.sections.map(s => s.label), command.label!])
+      if (app.sections.length >= 12) return {valid:false,reason:'MENU_LIMIT'}
+      const section = createAdaptiveAppBlueprint(app.title,[command.label!]).sections[0]!
+      if (app.sections.some(item => item.id === section.id
+        || item.label.toLocaleLowerCase('es') === command.label!.toLocaleLowerCase('es'))) {
+        return {valid:false,reason:'DUPLICATE_SECTION'}
+      }
       return {valid:true,reason:'STRUCTURAL_CHANGE'}
     } catch { return {valid:false,reason:'INVALID_SECTION'} }
   }
