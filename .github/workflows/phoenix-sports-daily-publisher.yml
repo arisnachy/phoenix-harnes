@@ -61,7 +61,9 @@ jobs:
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
       THE_ODDS_API_KEY: ${{ secrets.THE_ODDS_API_KEY }}
       SPORTSGAMEODDS_API_KEY: ${{ secrets.SPORTSGAMEODDS_API_KEY }}
-      PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED: ${{ vars.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED || '0' }}
+      # Keyless public-source lookup is enabled for the scheduled publisher by default.
+      # Repository variable '0' remains an explicit opt-out; no prices are fabricated.
+      PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED: ${{ vars.PHOENIX_SPORTS_KEYLESS_ODDS_ENABLED || '1' }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
