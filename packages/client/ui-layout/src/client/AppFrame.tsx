@@ -51,7 +51,13 @@ class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoundarySta
   }
 
   override componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error(`PHOENIX ${this.props.name} surface render failed:`, error, info.componentStack)
+    // Adaptive forms may ultimately handle clinical content: never send exception
+    // messages or component props to generic console/telemetry on that surface.
+    if (this.props.name === 'adaptive') {
+      console.error('PHOENIX adaptive surface render failed (details withheld)')
+    } else {
+      console.error(`PHOENIX ${this.props.name} surface render failed:`, error, info.componentStack)
+    }
     this.setState(state => state.autoRetried
       ? null
       : { failed: false, autoRetried: true })
