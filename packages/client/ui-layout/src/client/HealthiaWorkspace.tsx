@@ -1,5 +1,5 @@
 /** Healthia adaptive workspace. Never handles patient-identifiable form values. */
-import { useState } from 'react'
+import { useState, type FormEvent } from 'react'
 import css from './HealthiaWorkspace.module.css'
 import {
   addAdaptiveField, removeAdaptiveField, describeAdaptiveApp, isBindingConnected,
@@ -61,7 +61,7 @@ export function HealthiaWorkspace({
   const [output, setOutput] = useState<AdaptiveOutput>('inline')
   const [draftError, setDraftError] = useState('')
   const capabilities = describeAdaptiveApp('healthia')?.capabilities ?? []
-  const addField = (event: React.FormEvent<HTMLFormElement>): void => {
+  const addField = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
     try {
       const next = addAdaptiveField(draft, { label: fieldLabel.trim(), kind, destination, output })
