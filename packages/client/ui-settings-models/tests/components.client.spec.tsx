@@ -232,7 +232,7 @@ async function mountDeepSeekCard(overrides: Parameters<typeof scriptedFace>[0] =
 describe('ModelsSection', () => {
   it('filters provider cards and guides an edit through connection, settings and review', async () => {
     const { mutate } = await mountSection()
-    const search = screen.getByRole<HTMLInputElement>('searchbox', { name: en.searchProviders })
+    const search = screen.getByRole('searchbox', { name: en.searchProviders }) as HTMLInputElement
     fireEvent.change(search, { target: { value: 'openai' } })
     expect(screen.queryByText('DeepSeek')).toBeNull()
     fireEvent.change(search, { target: { value: '' } })
