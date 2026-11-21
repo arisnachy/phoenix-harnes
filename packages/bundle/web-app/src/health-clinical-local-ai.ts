@@ -89,6 +89,7 @@ export async function discoverProtectedLocalAiModel(
     return typeof name==='string'&&name.length<=100
       &&/^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/u.test(name)
       &&!/(?:^|[/:.-])cloud(?:$|[/:.-])/iu.test(name)
+      &&!/(embed|embedding|clip|whisper|tts|rerank|bert)/iu.test(name)
       ?[{name,score:/(gemma|qwen|llama|mistral|phi)/iu.test(name)?0:1}]:[]
   }).sort((a,b)=>a.score-b.score||a.name.localeCompare(b.name))
   return eligible.length?{available:true,model:eligible[0]!.name,reason:'ready'}:
