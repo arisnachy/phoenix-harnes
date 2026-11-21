@@ -1066,3 +1066,32 @@ select.input {
     min-height: 0;
   }
 }
+
+/* Phoenix Pearl Light: accessible, responsive pop-up setup rather than a
+   permanently expanded provider card underneath the catalog. */
+.modelWizardDialog {
+  box-sizing: border-box;
+  width: min(760px, calc(100vw - 32px));
+  max-width: 100%;
+  max-height: min(86dvh, 900px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 20px;
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-label-primary);
+  box-shadow: 0 24px 80px color-mix(in srgb, var(--dsw-alias-label-primary) 12%, transparent);
+}
+.modelWizardDialog .editor {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 8px 0 0;
+}
+.modelWizardDialog .wizardSteps { margin-bottom: 8px; }
+.modelWizardDialog .wizardMethods { padding: 12px 0; }
+.modelWizardDialog .wizardMethodCard { min-height: 66px; }
+@media (max-width: 520px) {
+  .modelWizardDialog { width: calc(100vw - 16px); max-height: 92dvh; border-radius: 14px; }
+  .modelWizardDialog .wizardStep, .modelWizardDialog .wizardStepActive { font-size: 10px; }
+}

@@ -185,9 +185,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   const [keyState, setKeyState] = useState<CredentialView | undefined>(undefined)
   const [busy, setBusy] = useState(false)
   const [wizardStep, setWizardStep] = useState<0 | 1 | 2>(0)
-  const [preferredMethod, setPreferredMethod] = useState<'api-key' | 'oauth'>(
-    () => props.provider === 'openai-codex' ? 'oauth' : 'api-key',
-  )
+  const [preferredMethod, setPreferredMethod] = useState<'auto' | 'api-key' | 'oauth'>('auto')
   const [authorizedDuringEdit, setAuthorizedDuringEdit] = useState(false)
   const [probeBusy, setProbeBusy] = useState(false)
   const [probeFeedback, setProbeFeedback] = useState<string | undefined>()
@@ -214,12 +212,10 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   const isCodex = props.provider === 'openai-codex'
   const supportsAccount = isCodex || oauth?.methods.some(method => method.id === 'oauth') === true
   const supportsApiKey = !isCodex && !isChatGptWeb
-    && (oauth === undefined || oauth.methods.some(method => method.id === 'api-key'))
-  const selectedMethod = supportsApiKey
-    ? (supportsAccount ? preferredMethod : 'api-key')
-    : 'oauth'
-  const oauthOnly = isCodex || (oauth !== undefined && !oauth.methods.some(method => method.id === 'api-key'))
-    || (props.guided === true && selectedMethod === 'oauth')
+  const selectedMethod = supportsAccount && preferredMethod === 'auto'
+    ? 'oauth'
+    : supportsApiKey ? (preferredMethod === 'oauth' && supportsAccount ? 'oauth' : 'api-key') : 'oauth'
+  const oauthOnly = isCodex || (props.guided === true && selectedMethod === 'oauth')
   const accountReady = oauth?.connected === true || authorizedDuringEdit
   const { attempt, answer, setAnswer, failure: authFailure, begin, submitAnswer, cancel } =
     useAuthorizationAttempt(api.authorization, () => {
@@ -474,7 +470,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
               ? <p role="status" className={styles['connectedChip']}>{t('accountSignedIn')}</p>
               : null}
             <div className={styles['authorizationActions']}>
-              {oauth.methods.filter(method => !isCodex || method.id === 'oauth').map(method => (
+              {oauth.methods.filter(method => method.id === 'oauth').map(method => (
                 <button
                   key={method.id}
                   type="button"
@@ -654,7 +650,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
                 <label className={styles['wizardMethodCard']}>
                   <input type="radio" name={`method-${props.provider}`} value="oauth"
                     checked={selectedMethod === 'oauth'}
-                    disabled={disabled || !supportsApiKey}
+                    disabled={disabled}
                     onChange={() => { setPreferredMethod('oauth'); setProbeFeedback(undefined) }} />
                   <span><strong>{t('wizardAuth')}</strong><small>{t('wizardAuthDesc')}</small></span>
                 </label>
