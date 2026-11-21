@@ -66,3 +66,57 @@ export function saveAdaptiveForm(
   store.setItem(PRIMARY, encoded)
   return form
 }
+
+type ProposedField = {
+  readonly label: string
+  readonly kind: 'text'|'number'|'date'|'select'|'textarea'
+  readonly destination: 'local'|'api'|'chat'|'ai'
+  readonly output: 'inline'|'table'|'document'|'chat'
+}
+/**
+ * Append a model-proposed FORM STRUCTURE after a user clicked approval.
+ * Validates every object, builds stable non-executable field IDs and commits
+ * exactly one revision. Values, API addresses and code are never accepted.
+ */
+export function applyAdaptiveFormFields(
+  appId: string, sectionId: string, input: unknown, store: Store | undefined = currentStore(),
+): AdaptiveFormDraft {
+  if (!store || !/^app-[a-z0-9-]{1,45}$/u.test(appId)
+    || !/^[a-z][a-z0-9-]{0,47}$/u.test(sectionId)
+    || !Array.isArray(input) || input.length < 1 || input.length > 20) {
+    throw new Error('ADAPTIVE_INVALID_FORM_PROPOSAL')
+  }
+  const prior = readAdaptiveForm(appId, sectionId, store) ?? {
+    version: 1 as const, appId, templateId: sectionId,
+    revision: 0, state: 'local-draft' as const, fields: [],
+  }
+  if (prior.fields.length + input.length > 40) throw new Error('ADAPTIVE_FORM_LIMIT')
+  const ids = new Set(prior.fields.map(field => field.id))
+  const labels = new Set(prior.fields.map(field => field.label.toLocaleLowerCase('es')))
+  const proposed: AdaptiveFormDraft['fields'][number][] = []
+  let serial = 1
+  for (const raw of input) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('ADAPTIVE_INVALID_FORM_PROPOSAL')
+    const field = raw as Record<string, unknown>
+    if (Object.keys(field).some(key => !['label','kind','destination','output'].includes(key))
+      || typeof field.label !== 'string' || field.label !== field.label.trim()
+      || field.label.length < 1 || field.label.length > 60
+      || /[\u0000-\u001f\u007f]/u.test(field.label)
+      || !['text','number','date','select','textarea'].includes(field.kind as string)
+      || !['local','api','chat','ai'].includes(field.destination as string)
+      || !['inline','table','document','chat'].includes(field.output as string)
+      || labels.has(field.label.toLocaleLowerCase('es'))) throw new Error('ADAPTIVE_INVALID_FORM_PROPOSAL')
+    labels.add(field.label.toLocaleLowerCase('es'))
+    while (ids.has(`cfg-${serial}`)) serial += 1
+    const id = `cfg-${serial++}`
+    ids.add(id)
+    proposed.push({
+      id, label: field.label, kind: field.kind as ProposedField['kind'],
+      required: false, protected: false,
+      binding: { destination: field.destination as ProposedField['destination'], output: field.output as ProposedField['output'] },
+    })
+  }
+  const next: AdaptiveFormDraft = { ...prior, revision: prior.revision + 1, fields: [...prior.fields, ...proposed] }
+  if (!validateAdaptiveDraft(next)) throw new Error('ADAPTIVE_INVALID_FORM_PROPOSAL')
+  return saveAdaptiveForm(next, store)
+}
