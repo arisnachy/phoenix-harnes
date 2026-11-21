@@ -6,7 +6,7 @@
  * Local routes are preferred; external adapters are explicit per-request only.
  */
 import { randomUUID } from 'node:crypto'
-import { discoverProtectedLocalAiModel, refineProtectedHistoryLocal } from './health-clinical-local-ai.ts'
+import { listProtectedLocalAiModels, refineProtectedHistoryLocal } from './health-clinical-local-ai.ts'
 import type { ClinicalNoteProposal } from './health-note-draft.ts'
 
 type BridgeChunk = {
@@ -49,14 +49,15 @@ function localRoute(provider:string):boolean {
 /** Discovery only reports registered/detected models; auth and execution are checked at call time. */
 export async function discoverClinicalModels(
   llm:HostClinicalLlm|undefined,
-  ollama:typeof discoverProtectedLocalAiModel=discoverProtectedLocalAiModel,
+  ollama:typeof listProtectedLocalAiModels=listProtectedLocalAiModels,
 ):Promise<ClinicalModelCatalog>{
   const models:ClinicalModelRoute[]=[]
   let partial=false
-  const local=await ollama().catch(()=>({available:false,model:null,reason:'no-service' as const}))
-  if(local.available&&local.model&&textModel(local.model,undefined)){
-    models.push({id:'ollama/'+local.model,provider:'ollama-local',model:local.model,
-      label:'Ollama · '+local.model,origin:'ollama',location:'local',availability:'detected'})
+  const local=await ollama().catch(()=>[] as string[])
+  for(const name of local.slice(0,40)){
+    if(!textModel(name,undefined))continue
+    models.push({id:'ollama/'+name,provider:'ollama-local',model:name,
+      label:'Ollama · '+name,origin:'ollama',location:'local',availability:'detected'})
   }
   if(llm){
     let providers:Array<{id:string;name:string}>=[]
