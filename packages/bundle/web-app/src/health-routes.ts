@@ -13,6 +13,7 @@ import { HealthClinicStore, healthKinds, type ClinicActor } from './health-store
 import { renderHealthPage } from './health-ui.ts'
 import { createPatientPortalHandler } from './health-patient-routes.ts'
 import { HEALTH_CLINICAL_TOOLS, runHealthClinicalTool } from './health-clinical-tools.ts'
+import { refineProtectedHistoryLocal } from './health-clinical-local-ai.ts'
 
 type Kind = Parameters<HealthClinicStore['list']>[1]
 const jsonHeaders:Record<string,string> = {
@@ -229,6 +230,20 @@ export function registerHealthRoutes(ctx:Context):void {
       if(operation==='clinical-note-proposal'&&id!==undefined&&method==='POST'){
         const proposal=store.suggestClinicalNote(actor,id)
         reply(res,200,{proposal});return
+      }
+      if(operation==='clinical-note-ai'&&id!==undefined&&method==='POST'){
+        // Clinic session + CSRF/origin are already enforced above. The operator
+        // must opt in independently and the clinician must click/confirm.
+        const body=await readBody(req,1024)
+        if(body.action!=='refine'||body.confirmLocalProcessing!==true)
+          throw Error('Confirmación clínica requerida')
+        const proposal=store.suggestClinicalNote(actor,id)
+        const refined=await refineProtectedHistoryLocal(proposal,{
+          enabled:process.env.PHOENIX_HEALTH_LOCAL_AI_ENABLED==='1',
+          model:process.env.PHOENIX_HEALTH_LOCAL_AI_MODEL,
+        })
+        reply(res,200,{proposal:{...refined,encounterId:id,encounterVersion:proposal.encounterVersion}})
+        return
       }
       // Persist only authorized per-user UI drafts in the encrypted clinical store.
       if(operation==='clinical-draft'&&id!==undefined){
