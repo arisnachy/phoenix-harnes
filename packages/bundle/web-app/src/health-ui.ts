@@ -1174,7 +1174,7 @@ async function refreshClinicalModelChoices(){
     })
     :await api("clinical-note-proposal/"+encodeURIComponent(id),"POST",{});
   const proposal=response.proposal;
-  if(!proposal||proposal.source!=="local-recorded-facts"
+  if(!proposal||(useModel?proposal.source!=="phoenix-model-unverified":proposal.source!=="local-recorded-facts")
     ||proposal.encounterVersion!==encounter.version||proposal.encounterId!==id)
     throw Error("La revisión del episodio cambió; vuelve a abrir la consulta");
   clinicalNoteProposal=proposal;
