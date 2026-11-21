@@ -938,7 +938,7 @@ async function execute(action,id){
  }
 
  if(action==="openCriticalFollowups"){tab="followups";return load()}
- if(action==="logout"){clearTimeout(draftTimer);await api("logout","POST",{});actor=null;csrf="";data={};viewDrafts=Object.create(null);patientDraft=null;clinicalTools=[];selectedClinicalTool=null;tab="patients";return splash()}
+ if(action==="logout"){clinicalNoteProposal=null;clearTimeout(draftTimer);await api("logout","POST",{});actor=null;csrf="";data={};viewDrafts=Object.create(null);patientDraft=null;clinicalTools=[];selectedClinicalTool=null;tab="patients";return splash()}
  if(action==="setup"){await api("setup","POST",{username:val("user"),password:val("pass"),organization:val("org")});notice("Clínica configurada. Inicia sesión.");return splash()}
  if(action==="login"){const x=await api("login","POST",{username:val("user"),password:val("pass")});csrf=x.csrf;actor=x.actor;data={};viewDrafts=Object.create(null);tab="workspace";return load()}
  if(action==="openAskCopilot"){
@@ -1154,9 +1154,10 @@ async function execute(action,id){
   return;
  }
  if(action==="acceptClinicalNote"){
-  const p=clinicalNoteProposal,enc=data.encounters?.find(x=>x.id===id);
-  if(!p||!enc||current?.kind!=="soap"||current.encounterId!==id
-    ||p.encounterId!==id||p.encounterVersion!==enc.version||enc.status==="signed")
+  const targetId=current?.encounterId;
+  const p=clinicalNoteProposal,enc=data.encounters?.find(x=>x.id===targetId);
+  if(!p||!enc||current?.kind!=="soap"||current.encounterId!==targetId
+    ||p.encounterId!==targetId||p.encounterVersion!==enc.version||enc.status==="signed")
     throw Error("Propuesta caducada o sin permiso");
   const target=document.getElementById("soap-history");
   if(!target||target.value.trim()!==p.originalHistory.trim())
