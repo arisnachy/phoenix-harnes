@@ -8,10 +8,17 @@ import { createAdaptiveAppBlueprint, type AdaptiveAppBlueprint } from './Adaptiv
 
 const CURRENT = 'phoenix.adaptive.apps.v1'
 const BACKUP = 'phoenix.adaptive.apps.last-good.v1'
+const ROLLBACK = 'phoenix.adaptive.apps.pre-change.v1'
 const MAX_APPS = 24
 const MAX_BYTES = 48_000
 
 type Store = Pick<Storage, 'getItem' | 'setItem'>
+function validMenuLabel(value: unknown): value is string {
+  return typeof value === 'string' && value.trim() === value
+    && value.length > 0 && value.length <= 60
+    && !/[\\u0000-\\u001f\\u007f]/u.test(value)
+}
+
 
 function browserStore(): Store | undefined {
   try { return typeof localStorage === 'undefined' ? undefined : localStorage }
@@ -33,18 +40,20 @@ function parse(raw: string | null): readonly AdaptiveAppBlueprint[] | null {
       if (Object.keys(item).some(key => !['version','id','title','status','sections'].includes(key))
         || item.version !== 1 || item.status !== 'preview-only'
         || typeof item.title !== 'string' || !Array.isArray(item.sections)) return null
+      if (item.sections.length < 1 || item.sections.length > 12) return null
       const sections = item.sections.map((section: unknown) => {
-        if (!section || typeof section !== 'object' || Array.isArray(section)) return null
+        if (!section || typeof section !== 'object' || Array.isArray(section)) throw new Error('SECTION')
         const x = section as Record<string, unknown>
-        if (Object.keys(x).some(key => !['id', 'label'].includes(key))
-          || typeof x.id !== 'string' || typeof x.label !== 'string') return null
-        return { id: x.id, label: x.label }
+        if (Object.keys(x).some(key => !['id','label'].includes(key))
+          || typeof x.id !== 'string' || !/^[a-z][a-z0-9-]{0,47}$/u.test(x.id)
+          || !validMenuLabel(x.label)) throw new Error('SECTION')
+        return {id:x.id,label:x.label}
       })
-      if (sections.some(section => section === null)) return null
-      const recreated = createAdaptiveAppBlueprint(item.title, sections.map(section => section!.label))
-      if (recreated.id !== item.id || recreated.sections.some((s, i) => s.id !== sections[i]!.id)
-        || result.some(app => app.id === recreated.id)) return null
-      result.push(recreated)
+      const recreated = createAdaptiveAppBlueprint(item.title,['Inicio'])
+      if (recreated.id !== item.id || result.some(app => app.id === recreated.id)
+        || new Set(sections.map(x => x.id)).size !== sections.length
+        || new Set(sections.map(x => x.label.toLocaleLowerCase('es'))).size !== sections.length) return null
+      result.push({...recreated,sections})
     }
     return result
   } catch { return null }
@@ -55,6 +64,26 @@ export function readAdaptiveApps(store: Store | undefined = browserStore()): rea
   if (!store) return []
   try { return parse(store.getItem(CURRENT)) ?? parse(store.getItem(BACKUP)) ?? [] }
   catch { return [] }
+}
+
+function commitApps(store: Store, previous: readonly AdaptiveAppBlueprint[], next: readonly AdaptiveAppBlueprint[]): void {
+  const old = JSON.stringify({version:1,apps:previous})
+  const serialized = JSON.stringify({version:1,apps:next})
+  if (serialized.length > MAX_BYTES || parse(serialized) === null) throw new Error('ADAPTIVE_INVALID_SNAPSHOT')
+  store.setItem(ROLLBACK,old)
+  store.setItem(BACKUP,old)
+  store.setItem(CURRENT,serialized)
+  try { store.setItem(BACKUP,serialized) } catch { /* previous snapshot remains */ }
+}
+/** Restore exactly the previous validated UI state after a repeated app crash. */
+export function restorePreviousAdaptiveApps(store: Store | undefined = browserStore()): readonly AdaptiveAppBlueprint[] {
+  if (!store) return []
+  const previous = parse(store.getItem(ROLLBACK))
+  if (previous === null) return readAdaptiveApps(store)
+  const raw = JSON.stringify({version:1,apps:previous})
+  store.setItem(CURRENT,raw)
+  store.setItem(BACKUP,raw)
+  return previous
 }
 
 /** Explicit user-click installation of configuration ONLY, with last-good recovery. */
@@ -70,15 +99,7 @@ export function installAdaptiveApp(app: AdaptiveAppBlueprint, store: Store | und
   if (previous.some(item => item.id === app.id)) throw new Error('ADAPTIVE_APP_EXISTS')
   if (previous.length >= MAX_APPS) throw new Error('ADAPTIVE_APP_LIMIT')
   const next = [...previous, rebuilt]
-  const serialized = JSON.stringify({ version: 1, apps: next })
-  if (serialized.length > MAX_BYTES) throw new Error('ADAPTIVE_APP_LIMIT')
-  // Backup is committed before the new snapshot. A write failure leaves old
-  // CURRENT intact or BACKUP recoverable; no state is promoted on error.
-  store.setItem(BACKUP, JSON.stringify({ version: 1, apps: previous }))
-  store.setItem(CURRENT, serialized)
-  // A fully written snapshot becomes the new last-good copy. A backup
-  // quota failure after primary success is non-fatal; previous backup survives.
-  try { store.setItem(BACKUP, serialized) } catch { /* primary already committed */ }
+  commitApps(store,previous,next)
   return next
 }
 
@@ -88,10 +109,7 @@ export function removeAdaptiveApp(appId: string, store: Store | undefined = brow
   const previous = readAdaptiveApps(store)
   if (!previous.some(app => app.id === appId)) throw new Error('ADAPTIVE_UNKNOWN_APP')
   const next = previous.filter(app => app.id !== appId)
-  store.setItem(BACKUP, JSON.stringify({ version: 1, apps: previous }))
-  const updated = JSON.stringify({ version: 1, apps: next })
-  store.setItem(CURRENT, updated)
-  try { store.setItem(BACKUP, updated) } catch { /* primary already committed */ }
+  commitApps(store,previous,next)
   return next
 }
 
@@ -103,13 +121,44 @@ export function appendAdaptiveSection(
   const current = readAdaptiveApps(store)
   const app = current.find(item => item.id === appId)
   if (!app) throw new Error('ADAPTIVE_UNKNOWN_APP')
-  const changed = createAdaptiveAppBlueprint(app.title, [...app.sections.map(s => s.label), label])
-  if (changed.id !== app.id) throw new Error('ADAPTIVE_ID_MISMATCH')
-  const next = current.map(item => item.id === app.id ? changed : item)
-  const serialized = JSON.stringify({version:1,apps:next})
-  if (serialized.length > MAX_BYTES) throw new Error('ADAPTIVE_APP_LIMIT')
-  store.setItem(BACKUP, JSON.stringify({version:1,apps:current}))
-  store.setItem(CURRENT, serialized)
-  try { store.setItem(BACKUP, serialized) } catch { /* old backup remains */ }
+  if (app.sections.length >= 12 || !validMenuLabel(label)) throw new Error('ADAPTIVE_INVALID_SECTION')
+  const section = createAdaptiveAppBlueprint(app.title,[label]).sections[0]!
+  if (app.sections.some(item => item.id === section.id
+    || item.label.toLocaleLowerCase('es') === label.toLocaleLowerCase('es'))) {
+    throw new Error('ADAPTIVE_DUPLICATE_SECTION')
+  }
+  const changed: AdaptiveAppBlueprint = {...app,sections:[...app.sections,section]}
+  commitApps(store,current,current.map(item => item.id === app.id ? changed : item))
+  return changed
+}
+
+export function renameAdaptiveSection(
+  appId: string, sectionId: string, label: string, store: Store | undefined = browserStore(),
+): AdaptiveAppBlueprint {
+  if (!store) throw new Error('ADAPTIVE_STORAGE_UNAVAILABLE')
+  const current = readAdaptiveApps(store)
+  const app = current.find(item => item.id === appId)
+  if (!app || !app.sections.some(item => item.id === sectionId) || !validMenuLabel(label)
+    || app.sections.some(item => item.id !== sectionId &&
+      item.label.toLocaleLowerCase('es') === label.toLocaleLowerCase('es'))) {
+    throw new Error('ADAPTIVE_INVALID_SECTION')
+  }
+  const changed: AdaptiveAppBlueprint = {...app,sections:app.sections.map(item =>
+    item.id === sectionId ? {...item,label} : item)}
+  commitApps(store,current,current.map(item => item.id === app.id ? changed : item))
+  return changed
+}
+export function removeAdaptiveSection(
+  appId: string, sectionId: string, store: Store | undefined = browserStore(),
+): AdaptiveAppBlueprint {
+  if (!store) throw new Error('ADAPTIVE_STORAGE_UNAVAILABLE')
+  const current = readAdaptiveApps(store)
+  const app = current.find(item => item.id === appId)
+  if (!app || app.sections.length <= 1 || !app.sections.some(item => item.id === sectionId)) {
+    throw new Error('ADAPTIVE_INVALID_SECTION')
+  }
+  // Form definitions are retained for recovery; this only hides navigation.
+  const changed: AdaptiveAppBlueprint = {...app,sections:app.sections.filter(item => item.id !== sectionId)}
+  commitApps(store,current,current.map(item => item.id === app.id ? changed : item))
   return changed
 }
