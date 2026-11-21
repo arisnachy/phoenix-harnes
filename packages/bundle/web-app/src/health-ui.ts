@@ -5,7 +5,7 @@ import {DIAGNOSTIC_INPUT_GROUPS,DIAGNOSTIC_INPUTS,diagnosticPolicyFor}
  * @param nonce - Fresh per-response CSP nonce injected into the inline script.
  * @returns HTML for the authenticated local workspace.
  */
-export function renderHealthPage(nonce:string):string {
+export function renderHealthPage(nonce:string, patientPortalEnabled=false):string {
   const html=String.raw`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PHOENIX Health · Clínica</title>
 <style>
 :root{color-scheme:light;font:14px/1.45 "Segoe UI",system-ui,sans-serif;background:#f6f9fc;color:#263a53}*{box-sizing:border-box}
@@ -60,6 +60,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{border-bottom:1px
 <script nonce="__NONCE__">
 "use strict";
 const root=document.getElementById("app"),account=document.getElementById("account"),flash=document.getElementById("flash");
+const patientPortalEnabled=__PATIENT_PORTAL_ENABLED__;
 let actor=null,csrf="",tab="workspace",data={},current=null,selectedPatientId="",previewUrl=null;
 let patientForm={version:1,revision:0,fields:[]},patientDraft=null;
 let clinicalTools=[],selectedClinicalTool=null,anatomyViewerCleanup=null;
@@ -388,6 +389,24 @@ function renderWorkspace(){
    '<p><strong>Problemas:</strong> '+safe(patient.medicalHistory?.problems||"No documentados")+'</p>'+
    '<button class="secondary" data-act="openMedicalHistory" data-id="'+safe(id)+'">Revisar antecedentes</button> '+
    '<button class="secondary" data-act="allergyReview" data-id="'+safe(id)+'">Verificar alergias</button>');
+  if(patientPortalEnabled&&actor.role==="clinician"){
+    const allowed=[
+      ...(data.appointments||[]).filter(x=>x.patientId===id&&x.practitioner===actor.username)
+        .map(x=>({kind:"appointments",id:x.id,title:"Cita "+(x.startsAt||"")})),
+      ...(data.prescriptions||[]).filter(x=>x.patientId===id&&x.signedBy===actor.username&&x.status==="prescribed")
+        .map(x=>({kind:"prescriptions",id:x.id,title:"Receta "+(x.medication||"")})),
+    ];
+    panel+=box("Portal del paciente · publicación controlada",
+      '<p class="muted">Cuenta independiente. Invita al paciente por un canal privado. Solo lo que publiques aquí será visible. No se envía al chat ni a otro PHOENIX.</p>'+
+      button("portalInvite","Crear invitación (15 min)","secondary")+
+      ' '+button("portalRevoke","Revocar acceso","secondary")+
+      '<div class="ws-item" id="portal-invitation" aria-live="polite"></div>'+
+      '<p class="muted">Publicar solamente citas o recetas confirmadas. Cada publicación queda auditada.</p>'+
+      (allowed.length?allowed.map(x=>'<div class="ws-item"><strong>'+safe(x.title)+'</strong> '+
+        '<button class="secondary" data-act="portalPublish" data-id="'+safe(x.kind+":"+x.id)+'">Publicar al paciente</button></div>').join(""):
+       '<p class="muted">No hay citas/recetas propias aptas para publicar.</p>')+
+      '<p><a href="/health/patient" target="_blank" rel="noopener noreferrer">Abrir portal paciente (acceso separado)</a></p>');
+  }
   panel+='<div id="ws-current-visit">';
   panel+=box("Atender en consulta",
    '<div class="ws-grid"><div>'+field("ws-specialty","Especialidad","text",true,"Medicina familiar")+
@@ -609,6 +628,29 @@ function render(){
  box("Registros",genericRows(d,cols))+(tab==="prescriptions"?'<p class="notice warning">Las recetas no se envían por correo desde esta versión. La firma clínica exige revisión profesional.</p>':'');
 }
 async function execute(action,id){
+ if(action==="portalInvite"){
+  if(!patientPortalEnabled||!selectedPatientId)throw Error("Portal no disponible o paciente no seleccionado");
+  if(!confirm("¿Crear invitación? Debes entregarla en privado y confirmar la identidad del paciente. No la pegues en el chat."))return;
+  const invite=await api("patient-portal-invite","POST",{patientId:selectedPatientId});
+  const node=document.getElementById("portal-invitation");
+  if(node){node.textContent="Invitación de uso único, vigente hasta "+String(invite.expiresAt)+": "+String(invite.invite)+". Entrégala personalmente al paciente."}
+  return;
+ }
+ if(action==="portalRevoke"){
+  if(!patientPortalEnabled||!selectedPatientId)throw Error("Portal no disponible");
+  if(!confirm("¿Revocar todas las sesiones, credenciales e invitaciones del paciente seleccionado?"))return;
+  await api("patient-portal-revoke","POST",{patientId:selectedPatientId});
+  notice("Acceso del paciente revocado.");return;
+ }
+ if(action==="portalPublish"){
+  if(!patientPortalEnabled||!selectedPatientId)throw Error("Portal no disponible");
+  const [kind,recordId]=String(id||"").split(":");
+  if(!["appointments","prescriptions"].includes(kind)||!/^[0-9a-f-]{36}$/u.test(recordId||""))throw Error("Registro no válido");
+  if(!confirm("¿Publicar este documento al portal del paciente? Es un acto asistencial y quedará auditado."))return;
+  await api("patient-portal-publish","POST",{kind,recordId});
+  notice("Documento autorizado para el portal del paciente.");return;
+ }
+
  if(action==="kiraTalk"){
   // This input accepts only task commands. No raw note is logged, sent to models or saved.
   const command=val("kira-command");return clinicalIntent(command);
@@ -1191,6 +1233,7 @@ refresh();
     .map(id=>[id,diagnosticPolicyFor(id)?.source??'Revisar fuente original']))
   const safeScript=(value:unknown)=>JSON.stringify(value).replace(/</g,'\\u003c')
   return html.replaceAll('__NONCE__',nonce)
+    .replace('__PATIENT_PORTAL_ENABLED__',patientPortalEnabled?'true':'false')
     .replace('__PHOENIX_DIAGNOSTIC_OPTIONS__',safeScript(options))
     .replace('__PHOENIX_DIAGNOSTIC_SOURCES__',safeScript(hints))
 }
