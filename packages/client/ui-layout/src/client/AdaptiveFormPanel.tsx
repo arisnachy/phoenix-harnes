@@ -92,7 +92,7 @@ export function AdaptiveFormPanel({ appId, sectionId }: { appId: string; section
     <p>Personaliza entradas y salidas. Solo el esquema se guarda en este navegador; los valores permanecen temporalmente en memoria.</p>
     <div className={[css.fieldList,ui.fieldList].join(' ')}>
       {form.fields.map(field => <div key={field.id} className={css.fieldRow}>
-        <span><strong className={ui.fieldLabel}><PhoenixUiIcon name={choosePhoenixUiIcon(field.label)} className={ui.fieldIcon} size={15}/>{field.label}</strong><small>{field.kind} · {field.binding.destination.toUpperCase()} → {field.binding.output}{field.binding.destination !== 'local' ? ' · pendiente de autorización' : ''}</small></span>
+        <span><strong className={ui.fieldLabel}><PhoenixUiIcon name={choosePhoenixUiIcon(field.label)} className={ui.fieldIcon ?? ''} size={15}/>{field.label}</strong><small>{field.kind} · {field.binding.destination.toUpperCase()} → {field.binding.output}{field.binding.destination !== 'local' ? ' · pendiente de autorización' : ''}</small></span>
         <button className={css.removeField} type="button" aria-label={`Quitar campo ${field.label}`}
           onClick={() => {
             try { commit(removeAdaptiveField(form, field.id)) }
