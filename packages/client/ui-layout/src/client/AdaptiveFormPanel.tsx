@@ -127,11 +127,11 @@ export function AdaptiveFormPanel({ appId, sectionId }: { appId: string; section
         <label htmlFor={`adaptive-value-${field.id}`}>{field.label}</label>
         {field.kind === 'textarea'
           ? <textarea id={`adaptive-value-${field.id}`} maxLength={400} rows={2}
-            value={values[field.id] ?? ''} onChange={event => setValues(old => ({ ...old, [field.id]: event.currentTarget.value }))}/>
+            value={values[field.id] ?? ''} onChange={event => { const value = event.currentTarget.value; setValues(old => ({ ...old, [field.id]: value })) }}/>
           : field.kind === 'select'
             ? <select id={`adaptive-value-${field.id}`} disabled><option>Configura opciones con Kira</option></select>
             : <input id={`adaptive-value-${field.id}`} type={field.kind} maxLength={400}
-                value={values[field.id] ?? ''} onChange={event => setValues(old => ({ ...old, [field.id]: event.currentTarget.value }))}/>}
+                value={values[field.id] ?? ''} onChange={event => { const value = event.currentTarget.value; setValues(old => ({ ...old, [field.id]: value })) }}/>}
       </div>)}
       <div className={css.fieldList} aria-label="Salidas en pantalla">
         {form.fields.filter(field => field.binding.destination === 'local' && values[field.id]).map(field =>
