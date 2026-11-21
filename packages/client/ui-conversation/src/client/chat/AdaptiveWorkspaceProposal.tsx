@@ -6,7 +6,7 @@ export interface AdaptiveWorkspaceProposalSpec {
   readonly version: 1
   readonly props: {
     readonly appId: string
-    readonly operation: 'open' | 'find' | 'add-section' | 'palette' | 'rename-field' | 'remove-field' | 'set-binding'
+    readonly operation: 'open' | 'find' | 'add-section' | 'rename-section' | 'remove-section' | 'palette' | 'rename-field' | 'remove-field' | 'set-binding'
     readonly sectionId?: string
     readonly fieldId?: string
     readonly label?: string
@@ -33,12 +33,14 @@ export function parseAdaptiveWorkspaceProposal(input: unknown): AdaptiveWorkspac
   const p = v.props as Record<string,unknown>
   const base = ['appId','operation']
   if (typeof p.appId !== 'string' || !['general','healthia'].includes(p.appId) && !APP.test(p.appId)) return null
-  if (!['open','find','add-section','palette','rename-field','remove-field','set-binding'].includes(p.operation as string)) return null
+  if (!['open','find','add-section','rename-section','remove-section','palette','rename-field','remove-field','set-binding'].includes(p.operation as string)) return null
   const operation = p.operation
   const keys: Record<string,string[]> = {
     open: [...base,'sectionId'],
     find: [...base,'query'],
     'add-section':[...base,'label'],
+    'rename-section':[...base,'sectionId','label'],
+    'remove-section':[...base,'sectionId'],
     palette:[...base,'palette'],
     'rename-field':[...base,'sectionId','fieldId','label','expectedRevision'],
     'remove-field':[...base,'sectionId','fieldId','expectedRevision'],
@@ -50,6 +52,9 @@ export function parseAdaptiveWorkspaceProposal(input: unknown): AdaptiveWorkspac
     && (typeof p.sectionId !== 'string' || !ID.test(p.sectionId))) return null
   if (operation === 'find' && !goodText(p.query)) return null
   if (operation === 'add-section' && !goodText(p.label)) return null
+  if (operation === 'rename-section' && !goodText(p.label)) return null
+  if (['rename-section','remove-section'].includes(operation as string)
+    && (typeof p.sectionId !== 'string' || !ID.test(p.sectionId))) return null
   if (operation === 'palette' && !['pearl','ocean','sage','iris','amber'].includes(p.palette as string)) return null
   if (['rename-field','remove-field','set-binding'].includes(operation as string)
     && (typeof p.sectionId !== 'string' || !ID.test(p.sectionId)
@@ -63,7 +68,9 @@ export function parseAdaptiveWorkspaceProposal(input: unknown): AdaptiveWorkspac
 }
 const nameOf: Record<AdaptiveWorkspaceProposalSpec['props']['operation'],string> = {
   open:'Abrir espacio / sección',find:'Buscar componentes',
-  'add-section':'Agregar menú / sección',palette:'Cambiar paleta de colores',
+  'add-section':'Agregar menú / sección',
+  'rename-section':'Renombrar sección','remove-section':'Ocultar sección (sin borrar formularios)',
+  palette:'Cambiar paleta de colores',
   'rename-field':'Renombrar campo','remove-field':'Eliminar campo',
   'set-binding':'Configurar destino y salida de campo',
 }
