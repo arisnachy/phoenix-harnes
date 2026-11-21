@@ -233,7 +233,7 @@ function youtubeId(raw: string | undefined): string | undefined {
 export function MiniBrowser({
   sessionId, requested = false, active = true, initialTabId, sourceUrl, onActivate, autoScroll = true,
   onPageChange, onSecureLoginRequest, onSavedAccessNotice, secureLoginRequestEpoch = 0,
-  pinned = false, onPinChange, onClose,
+  pinned = false, onPinChange, onClose, compact = false,
 }: {
   sessionId: string
   requested?: boolean
@@ -254,12 +254,14 @@ export function MiniBrowser({
   onPinChange?: (pinned: boolean) => void
   /** Close the UI AND release this session's Chromium from the Host. */
   onClose?: () => void
+  /** Compact presentation for Adaptive Workspace; legacy controls remain available otherwise. */
+  compact?: boolean
 }) {
   const [snapshot, setSnapshot] = useState<Snapshot>(BLANK)
   const [enabled, setEnabled] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
-  const [advanced, setAdvanced] = useState(false)
+  const [advanced, setAdvanced] = useState(!compact)
   const [dismissed, setDismissed] = useState(false)
   const [address, setAddress] = useState('')
   const [typed, setTyped] = useState('')
@@ -896,21 +898,22 @@ export function MiniBrowser({
         </span>
         <span className={css.status}
           data-state={!active ? 'inactive' : hasPage ? 'live' : connectionError ? 'error' : 'connecting'}>
-          {!active ? 'En pausa' : hasPage ? 'En uso' : 'Abriendo'}
+          {!active ? compact ? 'En pausa' : 'Vista conservada' : hasPage ? compact ? 'En uso' : 'Chrome · Página activa' : compact ? 'Abriendo' : 'Chrome · Preparando página'}
         </span>
+        {!active && !compact && <button type="button" onClick={() => onActivate?.()}>↻ Reactivar</button>}
         <span className={css.grow} />
-        <button type="button" title="Herramientas de navegación" aria-label="Más herramientas del navegador"
-          aria-expanded={advanced} onClick={() => setAdvanced(value => !value)}>⋯</button>
+        {compact && <button type="button" title="Herramientas de navegación" aria-label="Más herramientas del navegador"
+          aria-expanded={advanced} onClick={() => setAdvanced(value => !value)}>⋯</button>}
         {onPinChange && <button type="button" title={pinned ? 'Soltar navegador' : 'Fijar navegador'}
           aria-pressed={pinned} onClick={() => onPinChange(!pinned)}>
           {pinned ? 'Fijado' : 'Fijar'}
         </button>}
         <button type="button" title={expanded ? 'Volver al chat' : 'Ampliar navegador'}
           onClick={() => { setExpanded(value => !value); setCollapsed(false) }}>
-          {expanded ? 'Reducir' : 'Ampliar'}
+          {expanded ? compact ? 'Reducir' : '↙ Volver al chat' : compact ? 'Ampliar' : '⛶ Ampliar'}
         </button>
-        <button type="button" aria-label="Cerrar navegador y volver al chat"
-          title="Cerrar navegador y liberar recursos"
+        <button type="button" aria-label={compact ? "Cerrar navegador y volver al chat" : undefined}
+          title={compact ? "Cerrar navegador y liberar recursos" : "Ocultar microventana"}
           onClick={() => {
             setDismissed(true); setEnabled(false); setCollapsed(true); setExpanded(false)
             onClose?.()
