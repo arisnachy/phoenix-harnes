@@ -32,15 +32,14 @@ function fakeHost(){
 test('Healthia lists exact registered local, OAuth and API routes, no keys, no invented readiness',async()=>{
   const {host}=fakeHost()
   const catalog=await discoverClinicalModels(host,async()=>({available:true,model:'gemma4:e2b',reason:'ready'}))
-  assert.deepEqual(catalog.models.map(x=>x.id),[
+  assert.equal(catalog.models.length,4)
+  assert.deepEqual(new Set(catalog.models.map(x=>x.id)),new Set([
     'ollama/gemma4:e2b',
     'phoenix/phoenix-local/phoenix-local',
     'phoenix/openai-codex/gpt-6-luna',
     'phoenix/openai/gpt-test',
-  ].sort((a,b)=>{
-    const local=(x)=>x.startsWith('ollama/')||x.startsWith('phoenix/phoenix-local')
-    return Number(!local(a))-Number(!local(b))
-  }).length===4?catalog.models.map(x=>x.id):[])
+  ]))
+  assert(catalog.models.slice(0,2).every(x=>x.location==='local'))
   assert.equal(catalog.defaultId,'ollama/gemma4:e2b')
   assert(catalog.models.find(x=>x.provider==='openai-codex').location==='external')
   assert(!JSON.stringify(catalog).includes('apiKey'))
