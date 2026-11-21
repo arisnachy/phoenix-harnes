@@ -17,7 +17,7 @@ export const ADAPTIVE_PALETTES = {
 } as const
 export type AdaptivePalette = keyof typeof ADAPTIVE_PALETTES
 export type AdaptiveControlOperation =
-  'open' | 'find' | 'add-section' | 'palette' | 'rename-field' | 'remove-field' | 'set-binding'
+  'open' | 'find' | 'add-section' | 'rename-section' | 'remove-section' | 'palette' | 'rename-field' | 'remove-field' | 'set-binding'
 export interface AdaptiveControlCommand {
   readonly appId: string
   readonly operation: AdaptiveControlOperation
@@ -52,7 +52,7 @@ export function parseAdaptiveControl(value: unknown): AdaptiveControlCommand | n
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const v = value as Record<string, unknown>
   if (typeof v.appId !== 'string' || !['general','healthia'].includes(v.appId) && !APP.test(v.appId)
-      || !['open','find','add-section','palette','rename-field','remove-field','set-binding'].includes(v.operation as string)) return null
+      || !['open','find','add-section','rename-section','remove-section','palette','rename-field','remove-field','set-binding'].includes(v.operation as string)) return null
   const op = v.operation as AdaptiveControlOperation
   const base = ['appId','operation']
   let keys = base
@@ -60,6 +60,8 @@ export function parseAdaptiveControl(value: unknown): AdaptiveControlCommand | n
   if (op === 'find') keys = [...base,'query']
   if (op === 'palette') keys = [...base,'palette']
   if (op === 'add-section') keys = [...base,'label']
+  if (op === 'rename-section') keys = [...base,'sectionId','label']
+  if (op === 'remove-section') keys = [...base,'sectionId']
   if (op === 'rename-field') keys = [...base,'sectionId','fieldId','label','expectedRevision']
   if (op === 'remove-field') keys = [...base,'sectionId','fieldId','expectedRevision']
   if (op === 'set-binding') keys = [...base,'sectionId','fieldId','destination','output','expectedRevision']
@@ -69,6 +71,9 @@ export function parseAdaptiveControl(value: unknown): AdaptiveControlCommand | n
   if (op === 'find' && !validLabel(v.query)) return null
   if (op === 'palette' && (typeof v.palette !== 'string' || !Object.hasOwn(ADAPTIVE_PALETTES, v.palette))) return null
   if (op === 'add-section' && !validLabel(v.label)) return null
+  if (op === 'rename-section' && !validLabel(v.label)) return null
+  if (['rename-section','remove-section'].includes(op)
+    && (typeof v.sectionId !== 'string' || !ID.test(v.sectionId))) return null
   if (['rename-field','remove-field','set-binding'].includes(op)) {
     if (typeof v.sectionId !== 'string' || !ID.test(v.sectionId)
       || typeof v.fieldId !== 'string' || !ID.test(v.fieldId)
@@ -160,6 +165,18 @@ export function preflightAdaptiveControl(command: AdaptiveControlCommand, apps: 
       createAdaptiveAppBlueprint(app.title, [...app.sections.map(s => s.label), command.label!])
       return {valid:true,reason:'STRUCTURAL_CHANGE'}
     } catch { return {valid:false,reason:'INVALID_SECTION'} }
+  }
+  if (command.operation === 'rename-section') {
+    if (!app.sections.some(s => s.id === command.sectionId)) return {valid:false,reason:'UNKNOWN_SECTION'}
+    if (app.sections.some(s => s.id !== command.sectionId &&
+      s.label.toLocaleLowerCase('es') === command.label!.toLocaleLowerCase('es'))) {
+      return {valid:false,reason:'DUPLICATE_LABEL'}
+    }
+    return {valid:true,reason:'SAFE_MENU_RENAME'}
+  }
+  if (command.operation === 'remove-section') {
+    return app.sections.length > 1 && app.sections.some(s => s.id === command.sectionId)
+      ? {valid:true,reason:'HIDE_MENU_KEEP_FORM_DATA'} : {valid:false,reason:'LAST_OR_UNKNOWN_SECTION'}
   }
   if (!app.sections.some(s => s.id === command.sectionId)) return {valid:false,reason:'UNKNOWN_SECTION'}
   const form = formReader(app.id, command.sectionId!)
