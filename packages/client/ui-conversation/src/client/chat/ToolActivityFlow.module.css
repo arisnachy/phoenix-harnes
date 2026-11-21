@@ -227,7 +227,7 @@
   z-index: 70;
   top: clamp(62px, 10vh, 104px);
   right: clamp(12px, 2.2vw, 34px);
-  bottom: clamp(110px, 15vh, 164px);
+  bottom: calc(max(152px, var(--dsh-composer-height, 152px)) + 12px);
   width: min(940px, calc(100vw - 42px));
   max-width: none;
   height: auto;
@@ -290,7 +290,7 @@
     top: 60px;
     right: 10px;
     width: calc(100vw - 20px);
-    bottom: clamp(105px, 17vh, 155px);
+    bottom: calc(max(115px, var(--dsh-composer-height, 115px)) + 8px);
     padding: 7px;
     border-radius: 14px;
   }
