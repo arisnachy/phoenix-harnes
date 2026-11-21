@@ -26,6 +26,8 @@ export function newAdaptiveAppMission(): string {
     'Cuando acordemos nombre y secciones, crea una propuesta instalable en un bloque ```generative-ui de JSON estricto con {"component":"adaptive_app","version":1,"props":{"title":"Nombre de la app","description":"Objetivo resumido","sections":["Inicio","Gestión","Reportes"]}}. Sustituye esos valores por lo acordado; usa de 1 a 12 secciones, textos breves y no incluyas credenciales, datos personales ni acciones ejecutables. El usuario pulsa «Añadir a mis aplicaciones» para guardar solo el manifiesto validado y abrir su espacio. Esto no instala conectores ni un backend; continúa el desarrollo de funciones por el chat.',
 
     'Antes de instalar o publicar cambios, enséñame una vista previa, un diff de capacidades/estructura y los efectos previstos; pide aprobación para escrituras sensibles o cambios persistentes. Nunca transformes automáticamente el núcleo ni eludas autenticación, controles clínicos o autorizaciones.',
+    'Tras instalar una app genérica, puedes guiarme para buscar sus menús, abrir secciones, ajustar campos y cambiar una paleta armonizada usando bloques adaptive_control v1; primero inspecciona su estado real, presenta la comprobación previa y nunca inventes IDs. La interfaz de la app permite compartir con Kira la estructura de un formulario sin sus valores.',
+
     'Una vez aprobado, implementa en una extensión aislada de la aplicación, verifica compilación y pruebas con datos sintéticos, activa por etapas y registra un punto de recuperación. Si falla, restaura el último estado correcto y conserva PHOENIX General.',
     'Comienza preguntándome qué aplicación quiero construir y qué problema debe resolver; luego planifica conmigo paso a paso.',
   ].join('\n\n')
@@ -85,6 +87,8 @@ export function newAdaptiveFormMission(appId: string, sectionId: string): string
       + '","fields":[{"label":"Cantidad","kind":"number","destination":"local","output":"table"}]}}.',
     'Tipos de entrada permitidos: text, number, date, select, textarea. Destinos: local, api, chat, ai. Salidas: inline, table, document, chat. Máximo 20 campos por propuesta y 40 por formulario. No incluyas valores, rutas, scripts, URLs, secretos o datos personales.',
     'La propuesta se aplicará solo cuando yo pulse «Aplicar campos al formulario». API, chat e IA son configuraciones pendientes: no las ejecutes ni afirmes que están conectadas.',
+    'Para abrir o buscar componentes existentes o modificar una entrada, presenta un bloque JSON ```generative-ui con {"component":"adaptive_control","version":1,"props":{"appId":"'+appId+'","operation":"find","query":"campo"}}. Otras operaciones admitidas son open (sectionId opcional), add-section (label), palette (pearl, ocean, sage, iris, amber), rename-field/remove-field/set-binding (sectionId, fieldId, expectedRevision). Usa solo IDs y revisiones verificados del inventario compartido por el usuario; nunca inventes una revisión. Cada cambio pasa por preflight y aprobación.',
+
     'Para integración real con herramientas o servicios, crea adaptadores revisables, solicita permisos, realiza pruebas y utiliza el sistema de recuperación. Healthia clínica usa exclusivamente el backend protegido.',
   ].join('\n\n')
 }
