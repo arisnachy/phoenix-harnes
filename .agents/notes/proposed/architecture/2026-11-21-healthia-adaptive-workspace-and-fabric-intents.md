@@ -86,3 +86,33 @@ Focused validation should compile the client UI and execute the metadata exchang
 3. Authenticated patient portal with delegated representatives and explicit consent state.
 4. Cryptographically verified PHOENIX-to-PHOENIX pairing, signed requests and FHIR/document exchange with revocation.
 5. Real integration tests on independent instances and legal/clinical governance review.
+
+## Third slice: true Host/OS proprioception, approved actions and patient isolation
+
+### System and Host self model
+
+The existing live UI-slot model is augmented by `system_environment_inspect` (current Host OS, hardware, form factor, allowlisted command/GUI-app detection), `system_runtime_inspect` (live registered tool names and nonclinical Living connectors, metadata only), and `system_app_search` (requested-name-only Windows Start Apps search). All responses distinguish presence from authorization and health; the Windows probe executes a built-in, immutable PowerShell script and never transmits hostnames, user paths, serials, process lists or credentials. These tools run in the existing `tool-living` plugin loaded by the base bundle; no extra secret registry is created.
+
+### Explicit external effects
+
+`adaptive_app_action_plan` checks real Living creation state without executing. `adaptive_app_execute_approved` requires an exact, sensitive ASK confirmation on every nonclinical action with the proposed JSON input and rechecks connector/action after approval. Missing ASK, automated response, cancellation, changed connector or clinical kinds deny. The legacy `living_act` now routes through this same gate to prevent bypass. A connector timeout returns `unknown-outcome` and never triggers automatic retries. Model-created form inputs only copy values into an unsent chat draft following user review; the DOM itself cannot run connector actions.
+
+### Recovery boundaries
+
+The original `phoenix-windows-supervisor.mjs` already relaunches unexpected Host exits, protects the stable runtime and reverts critical settings after a failed boot. `phoenix-windows-guardian.mjs` is an OPTIONAL process-level guardian for when even that supervisor disappears. It verifies the PID/command line against a Git-controlled heartbeat and applies a restart circuit breaker. Installation into the current user's Windows logon task is a separate explicit operator action: `scripts/phoenix-windows-guardian-task.ps1 -Install`, reversible with `-Uninstall`. No automated task is installed by PR merging. Restart of Windows, OS kernel or database corruption is not cured by this process monitor.
+
+### Healthia clinical and patient roles
+
+The encrypted professional clinic remains the sole owner of PHI at `/health`. The local-only patient pilot is a different authentication and cookie principal under `/health/patient`, gated behind `PHOENIX_HEALTH_PATIENT_PORTAL_ENABLED=1`, with one-use 15-minute invitations, scrypt-hashed credentials, CSRF, rate limits and explicit revocation. On a shared browser, entering patient mode revokes any professional session rather than inheriting it. Patient feed returns only expressly published appointments/prescriptions with field-level allowlisting. Clinical notes, unreviewed studies, private drafts and all other records remain invisible. Invitations, publications, activations and revocations are audited. This implementation **is not clinical production release** until comprehensive automated security and usability tests, professional review, local legal requirements and real Windows validation have passed. No federation or PHOENIX↔PHOENIX record transfers are enabled.
+
+### Focused release checks
+
+```text
+pnpm run test:adaptive:all
+pnpm run check:ci:static
+pnpm run check:ci:coverage
+pnpm run check:ci:consumers
+```
+
+Required Windows build, public-distribution secret scan and relevant CI checks MUST be successful at the actual PR heads before merging to main/stable. A mergeable branch is NOT evidence of correct clinical or process behavior.
+
