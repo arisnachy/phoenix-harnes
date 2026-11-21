@@ -31,6 +31,7 @@ export interface PhoenixLocalModelSnapshot {
   readonly mode: PhoenixLocalModelMode
   readonly selectedModelId: string
   readonly installedModelIds: readonly string[]
+  readonly ollamaInstalledModelIds?: readonly string[]
   readonly phase: PhoenixLocalModelPhase
   readonly progress?: { readonly receivedBytes: number; readonly totalBytes?: number }
   readonly error?: { readonly code: string; readonly message: string }
@@ -44,6 +45,8 @@ export interface PhoenixLocalModelClient {
   start(): Promise<PhoenixLocalModelSnapshot>
   stop(): Promise<PhoenixLocalModelSnapshot>
   uninstall(modelId: string): Promise<PhoenixLocalModelSnapshot>
+  /** Explicit permanent removal from the Ollama daemon, not a Phoenix unlink. */
+  removeFromOllama?(modelId: string): Promise<PhoenixLocalModelSnapshot>
   setMode(mode: PhoenixLocalModelMode): Promise<PhoenixLocalModelSnapshot>
   setDefaultModel(modelId: string): Promise<PhoenixLocalModelSnapshot>
   setThinking(value: boolean | string | null): Promise<PhoenixLocalModelSnapshot>
@@ -86,6 +89,8 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
   const [failure, setFailure] = useState<string | undefined>(undefined)
   const [busy, setBusy] = useState(false)
   const [confirmUninstall, setConfirmUninstall] = useState(false)
+  const [confirmOllamaDelete, setConfirmOllamaDelete] = useState(false)
+  const [ollamaTag, setOllamaTag] = useState('')
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
@@ -116,6 +121,13 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
   const installed = snapshot !== undefined && selected !== undefined
     && snapshot.installedModelIds.includes(selected.id)
   const percent = snapshot === undefined ? undefined : progressPercent(snapshot)
+  const inOllama = selected?.backend === 'ollama'
+    && snapshot?.ollamaInstalledModelIds?.includes(selected.id) === true
+  const outputBudget = selected === undefined ? 0
+    : Math.min(selected.maxTokens, Math.max(1, Math.floor(selected.contextWindow / 4)))
+  const inputBudget = selected === undefined ? 0
+    : Math.max(0, selected.contextWindow - outputBudget
+      - Math.min(2_048, Math.floor(selected.contextWindow / 4)))
   const modes = snapshot?.thinkingCapabilities?.values ?? []
   const activeThinking = snapshot?.thinking ?? null
   const thinkingKey = activeThinking === null ? 'default'
@@ -190,6 +202,7 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
           onChange={(event) => {
             const modelId = event.currentTarget.value
             setConfirmUninstall(false)
+            setConfirmOllamaDelete(false)
             void run(() => client.setDefaultModel(modelId))
           }}
         >
@@ -216,11 +229,31 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
         </select>
       </label>
 
+      <div className={styles['ollamaPicker']}>
+        <label className={styles['field']}>
+          <span className={styles['label']}>{t('ollamaTag')}</span>
+          <input type="text" value={ollamaTag} autoComplete="off"
+            placeholder="gemma4:e2b"
+            disabled={busy || TRANSIENT_PHASES.has(snapshot.phase)}
+            onChange={event => { setOllamaTag(event.currentTarget.value) }} />
+        </label>
+        <button type="button" className={styles['secondary']}
+          disabled={busy || !/^[a-zA-Z0-9][a-zA-Z0-9._/:-]{0,159}$/u.test(ollamaTag.trim())}
+          onClick={() => {
+            const tag = ollamaTag.trim()
+            void run(() => client.install(`ollama:${tag}`), 'installing')
+          }}>{t('ollamaPull')}</button>
+        <button type="button" className={styles['secondary']} disabled={busy}
+          onClick={() => { void refresh() }}>{t('ollamaRefresh')}</button>
+      </div>
+      <p className={styles['muted']}>{t('ollamaTagHint')}</p>
       {selected === undefined ? null : (
         <div className={styles['facts']}>
-          <span><b>{t('download')}:</b> {selected.backend === 'ollama' ? t('ollamaExisting') : formatBytes(selected.sizeBytes)}</span>
+          <span><b>{t('download')}:</b> {selected.backend === 'ollama' ? inOllama ? t('ollamaExisting') : t('ollamaNotDownloaded') : formatBytes(selected.sizeBytes)}</span>
           <span><b>{t('ram')}:</b> {formatBytes(selected.estimatedRamBytes)}</span>
           <span><b>{t('context')}:</b> {selected.contextWindow.toLocaleString()} tokens</span>
+          <span><b>{t('inputBudget')}:</b> {inputBudget.toLocaleString()} tokens</span>
+          <span><b>{t('outputBudget')}:</b> {outputBudget.toLocaleString()} tokens</span>
         </div>
       )}
 
@@ -277,7 +310,7 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
             onClick={() => {
               if (selected !== undefined) void run(() => client.install(selected.id), 'installing')
             }}
-          >{snapshot.phase === 'installing' ? t('installing') : selected?.backend === 'ollama' ? t('connectOllama') : t('install')}</button>
+          >{snapshot.phase === 'installing' ? t('installing') : selected?.backend === 'ollama' ? inOllama ? t('connectOllama') : t('ollamaPull') : t('install')}</button>
         ) : null}
 
         {installed && snapshot.phase !== 'running' ? (
@@ -308,6 +341,27 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
         ) : null}
       </div>
 
+      {selected?.backend === 'ollama' && inOllama && client.removeFromOllama !== undefined ? (
+        <div className={styles['actions']}>
+          <button type="button" className={styles['danger']}
+            disabled={busy || TRANSIENT_PHASES.has(snapshot.phase)}
+            onClick={() => { setConfirmOllamaDelete(true) }}>{t('ollamaDelete')}</button>
+        </div>
+      ) : null}
+      {confirmOllamaDelete && selected?.backend === 'ollama' ? (
+        <div role="alertdialog" className={styles['confirm']} aria-label={t('ollamaDelete')}>
+          <p>{t('ollamaDeleteQuestion').replace('{model}', selected.displayName)}</p>
+          <div className={styles['actions']}>
+            <button type="button" className={styles['secondary']}
+              onClick={() => { setConfirmOllamaDelete(false) }}>{t('cancel')}</button>
+            <button type="button" className={styles['danger']} disabled={busy}
+              onClick={() => {
+                setConfirmOllamaDelete(false)
+                if (client.removeFromOllama !== undefined) void run(() => client.removeFromOllama!(selected.id))
+              }}>{t('ollamaDeleteConfirm')}</button>
+          </div>
+        </div>
+      ) : null}
       {confirmUninstall && selected !== undefined ? (
         <div className={styles['confirm']} role="alertdialog" aria-label={t('uninstallQuestion')}>
           <p>{selected.backend === 'ollama' ? t('disconnectOllamaQuestion') : t('uninstallQuestion')}</p>

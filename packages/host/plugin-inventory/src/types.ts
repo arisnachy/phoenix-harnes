@@ -499,6 +499,7 @@ export interface PhoenixLocalModelSnapshot {
   readonly progress?: PhoenixLocalModelProgress
   readonly error?: PhoenixLocalModelError
   readonly catalog: readonly PhoenixLocalModelCatalogEntry[]
+  readonly ollamaInstalledModelIds?: readonly string[]
 }
 
 /** Model-address request used by install/uninstall/default actions. */

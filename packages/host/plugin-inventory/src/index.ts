@@ -125,6 +125,7 @@ function publicLocalSnapshot(snapshot: LocalModelRuntimeSnapshot): PhoenixLocalM
     mode: snapshot.mode,
     selectedModelId: snapshot.selectedModelId,
     installedModelIds: [...snapshot.installedModelIds],
+    ...(snapshot.ollamaInstalledModelIds === undefined ? {} : { ollamaInstalledModelIds: [...snapshot.ollamaInstalledModelIds] }),
     thinking: snapshot.thinking ?? null,
     ...(snapshot.thinkingCapabilities === undefined ? {} : { thinkingCapabilities: snapshot.thinkingCapabilities }),
     phase: snapshot.phase,
@@ -374,7 +375,9 @@ export class PluginInventoryGateway extends TypertRemoteService {
 
   @Remote('localModelState')
   async localModelState(): Promise<PhoenixLocalModelSnapshot> {
-    return publicLocalSnapshot(await (await this.localModel).refreshThinking())
+    const local = await this.localModel
+    await local.refreshCatalog()
+    return publicLocalSnapshot(await local.refreshThinking())
   }
 
 
@@ -977,6 +980,12 @@ export class PluginInventoryGateway extends TypertRemoteService {
   @Remote('uninstallLocalModel')
   async uninstallLocalModel(request: PhoenixLocalModelRequest): Promise<PhoenixLocalModelSnapshot> {
     return publicLocalSnapshot(await (await this.localModel).uninstall(request.modelId))
+  }
+
+  /** Permanently remove a user-confirmed Ollama model from the local daemon. */
+  @Remote('deleteInstalledOllamaModel')
+  async deleteInstalledOllamaModel(request: PhoenixLocalModelRequest): Promise<PhoenixLocalModelSnapshot> {
+    return publicLocalSnapshot(await (await this.localModel).deleteOllamaModel(request.modelId))
   }
 
   /**
