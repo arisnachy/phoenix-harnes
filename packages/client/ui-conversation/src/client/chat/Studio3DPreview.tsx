@@ -45,11 +45,11 @@ export function Studio3DPreview({ value,title }:{ readonly value:unknown;readonl
     </div>
     <button type="button" style={{ ...linkStyle,justifySelf:'start',cursor:'pointer' }}
       aria-expanded={viewerOpen} aria-controls={viewerId}
-      onClick={()=>setView(viewerOpen?'render':'model')}>{viewerOpen?'Cerrar visor 3D':'Ver modelo 3D'}</button>
+      onClick={()=>{setView(viewerOpen?'render':'model')}}>{viewerOpen?'Cerrar visor 3D':'Ver modelo 3D'}</button>
     <div id={viewerId}>
       {viewerOpen
         ? <Studio3DGLBViewer key={assets.modelUrl} modelUrl={assets.modelUrl} title={title}
-          onError={()=>setView('fallback')}/>
+          onError={()=>{setView('fallback')}}/>
         : <>
           {view==='fallback'&&<p role="status">El visor 3D no se pudo cargar. Se muestra el render de Blender.</p>}
           <img alt={'Render real de Blender: '+title} src={assets.renderUrl}
