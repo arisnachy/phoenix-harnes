@@ -34,9 +34,13 @@ const buttonStyle: CSSProperties = {
 function disposeObject(root: THREE.Object3D): void {
   const textures = new Set<THREE.Texture>()
   root.traverse((object) => {
-    const mesh = object as THREE.Mesh
-    if (mesh.geometry !== undefined) mesh.geometry.dispose()
-    const materials = Array.isArray(mesh.material) ? mesh.material : mesh.material === undefined ? [] : [mesh.material]
+    const { geometry, material } = object as THREE.Object3D & {
+      geometry?: THREE.BufferGeometry
+      material?: THREE.Material | THREE.Material[]
+    }
+    geometry?.dispose()
+    if (material === undefined) return
+    const materials = Array.isArray(material) ? material : [material]
     for (const material of materials) {
       for (const value of Object.values(material as unknown as Record<string, unknown>)) {
         if (value instanceof THREE.Texture) textures.add(value)
@@ -67,6 +71,7 @@ export function Studio3DGLBViewer({ modelUrl, title, onError }: Studio3DGLBViewe
     const host = hostRef.current
     if (canvas === null || host === null) return
 
+    const manager = new THREE.LoadingManager()
     let active = true
     let frame: number | undefined
     let loadedModel: THREE.Object3D | undefined
@@ -175,7 +180,6 @@ export function Studio3DGLBViewer({ modelUrl, title, onError }: Studio3DGLBViewe
 
       // A published Blender GLB embeds its resources. The loader can also
       // resolve external URI fields, which this preview does not need.
-      const manager = new THREE.LoadingManager()
       manager.setURLModifier((url) => {
         if (url === modelUrl || url.startsWith('blob:') || url.startsWith('data:')) return url
         throw new Error('El GLB incluye recursos externos')
@@ -212,6 +216,7 @@ export function Studio3DGLBViewer({ modelUrl, title, onError }: Studio3DGLBViewe
 
     return () => {
       active = false
+      manager.abort()
       if (frame !== undefined) window.cancelAnimationFrame(frame)
       resizeObserver?.disconnect()
       if (resizeObserver === undefined) window.removeEventListener('resize', resize)
@@ -232,8 +237,8 @@ export function Studio3DGLBViewer({ modelUrl, title, onError }: Studio3DGLBViewe
       {status === 'error' && <p role="alert" style={{ position: 'absolute', inset: '50% 12px auto', transform: 'translateY(-50%)', margin: 0, textAlign: 'center' }}>{problem}</p>}
     </div>
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: 10 }}>
-      <button type="button" style={buttonStyle} onClick={() => resetRef.current()} disabled={status !== 'ready'}>Restablecer vista</button>
-      <button type="button" style={buttonStyle} onClick={() => fitRef.current()} disabled={status !== 'ready'}>Ajustar modelo</button>
+      <button type="button" style={buttonStyle} onClick={() => { resetRef.current() }} disabled={status !== 'ready'}>Restablecer vista</button>
+      <button type="button" style={buttonStyle} onClick={() => { fitRef.current() }} disabled={status !== 'ready'}>Ajustar modelo</button>
       <span style={{ marginInlineStart: 'auto', opacity: .7, fontSize: 12 }}>Arrastra para girar · botón derecho o dos dedos para desplazar · rueda o pellizco para acercar</span>
     </div>
   </section>
