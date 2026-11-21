@@ -61,11 +61,15 @@ export async function discoverClinicalModels(
   }
   if(llm){
     let providers:Array<{id:string;name:string}>=[]
-    try{providers=llm.listProviders().slice(0,32)}catch{partial=true}
+    try{providers=llm.listProviders().slice(0,20)}catch{partial=true}
     const groups=await Promise.all(providers.map(async p=>{
       if(!ID.test(p.id)||p.id==='ollama-local')return []
       try{
-        const rows=await llm.listModels(p.id)
+        const rows=await Promise.race([
+          llm.listModels(p.id),
+          new Promise<Array<{id:string;name:string;inputModalities?:readonly string[]}>>((_,reject)=>
+            setTimeout(()=>reject(Error('MODEL_CATALOG_TIMEOUT')),4_000)),
+        ])
         return rows.slice(0,36).filter(x=>textModel(x.id,x.inputModalities)).map(x=>({
           id:'phoenix/'+p.id+'/'+x.id,provider:p.id,model:x.id,
           label:(p.name||p.id).slice(0,80)+' · '+x.name.slice(0,120),
