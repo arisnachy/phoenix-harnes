@@ -29,6 +29,29 @@ async function bench() {
 }
 
 describe('tool-living', () => {
+  it('exposes live tool registration without Living resource secrets or clinical records', async()=>{
+    const root=await bench()
+    await root.living.remember({
+      id:LivingCreationId('warehouse-connector'),title:'Warehouse',
+      kind:'inventory',targetLevel:'connected',
+      state:['health'],actions:['get_stock'],events:[],
+      resources:['phoenix-control://sensitive-bearer-token'],actors:[],
+    })
+    const tool=root.tools.get('system_runtime_inspect')
+    expect(tool).toBeDefined()
+    const raw=await tool!.execute({},{} as never) as string
+    const result=JSON.parse(raw) as {
+      registeredToolNames:string[];livingConnectors:{id:string;declaredActions:string[];connected:boolean}[]
+      permissions:string
+    }
+    expect(result.registeredToolNames).toContain('system_environment_inspect')
+    expect(result.registeredToolNames).toContain('adaptive_app_execute_approved')
+    expect(result.livingConnectors.find(item=>item.id==='warehouse-connector')?.declaredActions).toEqual(['get_stock'])
+    expect(JSON.stringify(result)).not.toContain('sensitive-bearer-token')
+    expect(result.permissions).toContain('user-approval')
+  })
+
+
   it('states one universal rule instead of enumerating creation domains', async () => {
     const root = await bench()
     const assembly = await root.systemPrompt.assemble()
