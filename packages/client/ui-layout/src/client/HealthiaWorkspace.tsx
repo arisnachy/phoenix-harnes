@@ -212,7 +212,12 @@ export function HealthiaWorkspace({
         )}
         <div className={css.footer}>
           {!isPatient && <a className={css.openClinical} href="/health" target="_blank" rel="noopener noreferrer">Abrir servicio clínico protegido ↗</a>}
-          {isPatient && <span className={css.notice}>El acceso del paciente requiere identidad autenticada y permisos; no se ha habilitado aquí.</span>}
+          {isPatient && <>
+            <a className={css.openClinical} href="/health/patient" target="_blank" rel="noopener noreferrer">
+              Abrir portal paciente protegido
+            </a>
+            <span className={css.notice}>Funciona solo si el administrador habilita el piloto clínico local. El selector de rol no concede acceso.</span>
+          </>}
           <span className={css.chatHint}>Kira y el chat continúan disponibles debajo.</span>
         </div>
       </div>
