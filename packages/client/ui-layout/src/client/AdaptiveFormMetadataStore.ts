@@ -88,7 +88,7 @@ export function applyAdaptiveFormFields(
     || !Array.isArray(input) || input.length < 1 || input.length > 20) {
     throw new Error('ADAPTIVE_INVALID_FORM_PROPOSAL')
   }
-  const prior = readAdaptiveForm(appId, sectionId, store) ?? {
+  const prior: AdaptiveFormDraft = readAdaptiveForm(appId, sectionId, store) ?? {
     version: 1 as const, appId, templateId: sectionId,
     revision: 0, state: 'local-draft' as const, fields: [],
   }
