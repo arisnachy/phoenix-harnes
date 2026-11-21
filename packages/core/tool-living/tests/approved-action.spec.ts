@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ADAPTIVE_ALLOW_ONCE, ADAPTIVE_DENY, confirmAdaptiveExternalAction } from '../src/approved-action.ts'
+import { ADAPTIVE_ALLOW_ONCE, ADAPTIVE_DENY, confirmAdaptiveExternalAction, type AdaptiveApprovalService } from '../src/approved-action.ts'
 
 const sample = {creationId:'app-inventory',action:'stock-adjust',inputJson:'{"quantity":2}'}
 const answer = (selected:string[],automatic=false)=>({
@@ -26,7 +26,7 @@ describe('one-time external tool approval', () => {
     })).toBe(false)
   })
   it('approves exactly one user-confirmed action, with full input preview', async () => {
-    const ask=vi.fn(async()=>answer([ADAPTIVE_ALLOW_ONCE]))
+    const ask=vi.fn(async (_request: Parameters<AdaptiveApprovalService['ask']>[0])=>answer([ADAPTIVE_ALLOW_ONCE]))
     expect(await confirmAdaptiveExternalAction({...sample,ask:{ask}})).toBe(true)
     expect(ask).toHaveBeenCalledOnce()
     const sent=ask.mock.calls[0]?.[0]
@@ -36,7 +36,7 @@ describe('one-time external tool approval', () => {
     expect(sent.questions[0]?.options[0]?.label).toBe(ADAPTIVE_DENY)
   })
   it('fails closed on oversized inputs, unsafe names and provider failure', async () => {
-    const ask=vi.fn(async()=>answer([ADAPTIVE_ALLOW_ONCE]))
+    const ask=vi.fn(async (_request: Parameters<AdaptiveApprovalService['ask']>[0])=>answer([ADAPTIVE_ALLOW_ONCE]))
     expect(await confirmAdaptiveExternalAction({...sample,action:'../../bin/sh',ask:{ask}})).toBe(false)
     expect(await confirmAdaptiveExternalAction({...sample,inputJson:'x'.repeat(2001),ask:{ask}})).toBe(false)
     expect(await confirmAdaptiveExternalAction({...sample,ask:{ask:async()=>{throw new Error('offline')}}})).toBe(false)
