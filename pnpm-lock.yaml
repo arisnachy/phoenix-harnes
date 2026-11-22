@@ -2381,6 +2381,9 @@ importers:
       '@phoenix-ai/dsh-api-remotes':
         specifier: workspace:^
         version: link:../../api/remotes
+      '@phoenix-ai/dsh-client-connection':
+        specifier: workspace:^
+        version: link:../connection
       '@phoenix-ai/dsh-client-locale':
         specifier: workspace:^
         version: link:../locale
