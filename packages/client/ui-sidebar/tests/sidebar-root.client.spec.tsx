@@ -162,8 +162,11 @@ describe('SidebarRoot shell', () => {
       features.push((event as CustomEvent<{ destination: string; label: string }>).detail)
     }
     const onLibrary = () => { libraries++ }
+    let legacyModals = 0
+    const onLegacyLibrary = () => { legacyModals++ }
     window.addEventListener('phoenix:open-feature', onFeature)
-    window.addEventListener('phoenix:open-workspace-library', onLibrary)
+    window.addEventListener('phoenix:open-workspace-library', onLegacyLibrary)
+    window.addEventListener('phoenix:open-space', onLibrary)
     try {
       fireEvent.click(screen.getByRole('button', { name: 'Home' }))
       expect(b.startSession).toHaveBeenCalledOnce()
@@ -176,9 +179,11 @@ describe('SidebarRoot shell', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Library' }))
       expect(features).toEqual([{ destination: 'connectors', label: 'Connectors' }])
       expect(libraries).toBe(1)
+      expect(legacyModals).toBe(0) // never open the old sessions modal from Biblioteca
     } finally {
       window.removeEventListener('phoenix:open-feature', onFeature)
-      window.removeEventListener('phoenix:open-workspace-library', onLibrary)
+      window.removeEventListener('phoenix:open-workspace-library', onLegacyLibrary)
+      window.removeEventListener('phoenix:open-space', onLibrary)
     }
   })
 
@@ -255,7 +260,7 @@ describe('SidebarRoot shell', () => {
     const onLibrary = () => { received.push('library') }
     const onTeam = () => { received.push('team') }
     window.addEventListener('phoenix:open-feature', onFeature)
-    window.addEventListener('phoenix:open-workspace-library', onLibrary)
+    window.addEventListener('phoenix:open-space', onLibrary)
     window.addEventListener('phoenix:toggle-team-directory', onTeam)
     try {
       fireEvent.click(screen.getByRole('button', { name: 'Home' }))
@@ -268,7 +273,7 @@ describe('SidebarRoot shell', () => {
       expect(screen.queryByText('Scheduled tasks')).toBeNull()
     } finally {
       window.removeEventListener('phoenix:open-feature', onFeature)
-      window.removeEventListener('phoenix:open-workspace-library', onLibrary)
+      window.removeEventListener('phoenix:open-space', onLibrary)
       window.removeEventListener('phoenix:toggle-team-directory', onTeam)
     }
   })
