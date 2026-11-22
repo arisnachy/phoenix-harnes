@@ -249,9 +249,8 @@
 .adaptiveChatChrome button:hover {color:var(--dsw-alias-label-primary);}
 @media (max-width:760px) {.adaptiveChatCard{padding:12px;border-radius:16px;}}
 
-/* The shell always reserves ONE conversation column with the original composer.
-   Only explicit adaptive apps (Healthia/App Studio) obtain another shell pane.
-   MiniBrowser shares the response timeline and must never split the shell. */
+/* One shell conversation at all times. Adaptive apps are portals into the
+   transcript's content region, NOT independent flex columns. */
 .conversationPane {
   order: 1;
   display: flex;
@@ -262,54 +261,36 @@
   height: 100%;
   overflow: hidden;
 }
-.conversationPane > * { flex: 1 1 auto; min-width: 0; min-height: 0; }
-.adaptiveWorkspacePane {
-  order: 0;
-  display: none;
-  flex: 0 0 min(56%, 900px);
+.conversationPane > * {
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
-  height: 100%;
+}
+.adaptiveWorkspacePane {
   box-sizing: border-box;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
   border-right: 1px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-1);
 }
-.centerCol[data-adaptive-active] { flex-direction: row; }
-.centerCol[data-adaptive-active] > .adaptiveWorkspacePane {
-  display: flex;
-  flex-direction: column;
-}
-.centerCol[data-adaptive-active] > .conversationPane {
-  flex: 1 1 44%;
-  width: auto;
-  --dsh-chat-floating-overlay-axis-shift: 0px;
-}
 .adaptiveWorkspacePane > [data-surface-recovery='adaptive'] { min-height: 100%; }
 .adaptiveWorkspacePane > * { width: 100%; min-width: 0; }
 .adaptiveWorkspacePane .adaptiveChatCard {
+  box-sizing: border-box;
   min-height: 100%;
-  padding: 16px 20px 24px;
+  padding: clamp(10px, 1.6vw, 20px);
   border: none;
   border-radius: 0;
   background: var(--dsw-alias-bg-layer-1);
   box-shadow: none;
 }
 @media (max-width: 980px) {
-  .centerCol[data-adaptive-active] { flex-direction: column; }
-  .centerCol[data-adaptive-active] > .adaptiveWorkspacePane {
-    order: 0;
-    flex: 0 0 min(46vh, 460px);
-    height: min(46vh, 460px);
-    width: 100%;
-    border-right: 0;
-    border-bottom: 1px solid var(--dsw-alias-border-l2);
-  }
-  .centerCol[data-adaptive-active] > .conversationPane {
-    order: 1;
-    flex: 1 1 auto;
-    min-height: 0;
-    width: 100%;
-  }
+  .adaptiveWorkspacePane { border-right: 0; border-bottom: 1px solid var(--dsw-alias-border-l2); }
 }
