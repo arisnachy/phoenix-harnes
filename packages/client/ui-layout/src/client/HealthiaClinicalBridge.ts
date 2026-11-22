@@ -23,10 +23,10 @@ export async function probeClinicalSession(fetcher?:typeof fetch):Promise<Clinic
       headers:{accept:'application/json'},
       signal:AbortSignal.timeout(3000),
     })
-    if (response.status === 404 || response.status === 503) return {
+    if (response.status === 401) return locked
+    if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) return {
       status:'unavailable',role:null,patientPortal:'not-verified',
     }
-    if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) return locked
     const body:unknown = await response.json()
     if (!body || typeof body !== 'object' || Array.isArray(body)) return locked
     const actor = (body as {actor?:unknown}).actor
