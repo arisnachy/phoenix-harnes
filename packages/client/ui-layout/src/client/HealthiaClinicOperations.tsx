@@ -52,6 +52,9 @@ export function restoreClinicalNote(encounter:ClinicalEncounter):{
   let current:string|undefined
   for(const line of saved.split('\n').slice(1)) {
     if(line==='Pendiente de revisión, vinculación al paciente y firma profesional.')break
+    // Continuation lines are indented by the writer: user prose that looks
+    // like a clinical field or heading must never be reclassified.
+    if(current && line.startsWith('  ')){values[current]=(values[current]??'')+'\n'+line.slice(2);continue}
     if(line.startsWith('IMC calculado: ')){current=undefined;continue}
     if(['ENTREVISTA','ANTECEDENTES','EXPLORACIÓN','EVALUACIÓN Y PLAN'].includes(line)){current=undefined;continue}
     const idx=line.indexOf(': ')
