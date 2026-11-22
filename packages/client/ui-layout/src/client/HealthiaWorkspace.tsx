@@ -5,7 +5,7 @@
  */
 import { useEffect, useState, type FormEvent } from 'react'
 import css from './HealthiaWorkspace.module.css'
-import { HealthiaClinicalNote } from './HealthiaClinicalNote.tsx'
+import { HealthiaClinicOperations } from './HealthiaClinicOperations.tsx'
 import type { AdaptiveLiveSnapshot } from './AdaptiveLiveSlots.ts'
 import { probeClinicalSession, type ClinicalRouteStatus } from './HealthiaClinicalBridge.ts'
 import {
@@ -169,8 +169,9 @@ export function HealthiaWorkspace({
             </div>
           </div>
         )}
-        {!isPatient && active === 'encounters' && <HealthiaClinicalNote />}
-        {active !== 'overview' && active !== 'encounters' && active !== 'tools' && (
+        {!isPatient && (active === 'encounters' || active === 'patients') &&
+          <HealthiaClinicOperations area={active} />}
+        {active !== 'overview' && active !== 'encounters' && active !== 'patients' && active !== 'tools' && (
           <div className={css.modulePlaceholder}>
             <strong>{MODULES[active]?.title ?? HEALTHIA_NAV[role].find(item => item.id === active)?.label}</strong>
             <p>{MODULES[active]?.detail}</p>
