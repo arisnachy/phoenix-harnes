@@ -52,6 +52,7 @@ export function restoreClinicalNote(encounter:ClinicalEncounter):{
   let current:string|undefined
   for(const line of saved.split('\n').slice(1)) {
     if(line==='Pendiente de revisión, vinculación al paciente y firma profesional.')break
+    if(line.startsWith('IMC calculado: ')){current=undefined;continue}
     if(['ENTREVISTA','ANTECEDENTES','EXPLORACIÓN','EVALUACIÓN Y PLAN'].includes(line)){current=undefined;continue}
     const idx=line.indexOf(': ')
     const name=idx>0?line.slice(0,idx):''
@@ -161,8 +162,9 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
     setBusy(true);setError('');setNotice('')
     try {
       const record=await api.createPatient(session,{
-        name:name.trim(),dateOfBirth:birthDate,...phone.trim()?{phone:phone.trim()}: {},
-        ...email.trim()?{email:email.trim()}: {},
+        name:name.trim(),dateOfBirth:birthDate,
+        ...(phone.trim()?{phone:phone.trim()}:{}),
+        ...(email.trim()?{email:email.trim()}:{}),
       })
       setPatients(prev=>[record,...prev])
       setPatientId(record.id)
