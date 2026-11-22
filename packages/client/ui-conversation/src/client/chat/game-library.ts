@@ -51,6 +51,19 @@ export function libraryGameId(title: string): string {
 export async function saveLibraryGame(title: string, html: string): Promise<void> {
   const game: LibraryGame = { id: libraryGameId(title), title, html, updatedAt: Date.now() }
   await transact('readwrite', store => store.put(game))
+  // Legacy IndexedDB remains the authoritative fallback. PHOENIX Space
+  // receives a separately persisted, idempotent nonclinical game copy.
+  try {
+    await fetch('/space-api/items', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-phoenix-space': '1' },
+      body: JSON.stringify({
+        kind: 'game', space: 'juegos', title: game.title,
+        mime: 'text/html', content: game.html,
+        sourceKey: 'legacy-game:' + game.id,
+      }),
+    })
+  } catch { /* No dependency on Space for local Game Studio recovery. */ }
 }
 
 export async function listLibraryGames(): Promise<LibraryGame[]> {
