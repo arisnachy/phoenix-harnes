@@ -112,12 +112,8 @@ describe('AppFrame visual workspace', () => {
           <div data-composer-seat="" />
         </div>
       : null) as AppFrameProps['renderSlot']
-    const view = render(<AppFrame
-      useStore={hookOf(store)}
-      actions={store.actions}
-      useSessions={useSessions}
-      renderSlot={renderSlot}
-    />)
+    const props = { useStore: hookOf(store), actions: store.actions, useSessions, renderSlot } as unknown as AppFrameProps
+    const view = render(<AppFrame {...props} />)
     const composer = view.container.querySelector('[data-composer-seat]')
     expect(composer).not.toBeNull()
     expect(view.container.querySelector('[data-adaptive-workspace-host]')).toBeNull()
