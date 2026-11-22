@@ -287,7 +287,7 @@ describe('ModelsSection', () => {
     expect(screen.getByText(en.wizardOpenAiSeparateRoutes)).toBeTruthy()
     expect((screen.getByRole('radio', { name: /ChatGPT \/ Codex/ }) as HTMLInputElement).checked).toBe(true)
     fireEvent.click(screen.getByText(en.wizardNext))
-    expect(screen.getByRole('button', { name: /Sign in with ChatGPT \/ Codex/ })).toBeTruthy()
+    await waitFor(() => { expect(screen.getByRole('button', { name: /Sign in with ChatGPT \/ Codex/ })).toBeTruthy() })
     expect(screen.queryByLabelText(en.keyInput)).toBeNull()
     expect(begin).not.toHaveBeenCalled()
     fireEvent.click(screen.getByText(en.wizardBack))
@@ -317,6 +317,36 @@ describe('ModelsSection', () => {
     fireEvent.click(screen.getByRole('button', { name: deepSeekCopy(en.editProvider) }))
     expect(screen.queryByText(en.wizardAuthDesc)).toBeNull()
     expect(screen.getByRole('radio', { name: /API key/ })).toBeTruthy()
+  })
+
+
+  it('never invents an API-key route for a provider with OAuth-only auth', async () => {
+    const scripted = scriptedFace()
+    ;(scripted.face as unknown as { authorization: unknown }).authorization = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'llm-pi-ai/anthropic', label: 'Anthropic',
+        methods: [{ id: 'oauth', label: 'Sign in' }],
+        inFlight: false,
+      }] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    }
+    await mountFace(scripted)
+    fireEvent.click(screen.getByText(en.add))
+    await screen.findByLabelText(en.provider)
+    await waitFor(() => { expect(screen.getByText(en.wizardAuthDesc)).toBeTruthy() })
+    expect(screen.queryByRole('radio', { name: /API key/ })).toBeNull()
+    expect(screen.getByRole('radio', { name: /Sign in to your account/ })).toBeTruthy()
+  })
+
+  it('warns when the account registry fails instead of silently claiming API-only support', async () => {
+    const scripted = scriptedFace()
+    ;(scripted.face as unknown as { authorization: unknown }).authorization = {
+      list: vi.fn(() => Promise.resolve(fail('authorization-offline', 'auth-unavailable'))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    }
+    await mountFace(scripted)
+    await waitFor(() => { expect(screen.getByText(en.wizardAuthRegistryUnavailable)).toBeTruthy() })
+    expect(screen.getByRole('button', { name: en.retry })).toBeTruthy()
   })
 
   it('renders nothing before the slot injects its dependencies', () => {
