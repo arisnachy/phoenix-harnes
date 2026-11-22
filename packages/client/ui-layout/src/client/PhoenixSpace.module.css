@@ -10,10 +10,14 @@
 .railCaption{font-size:10px;letter-spacing:.12em;color:var(--dsw-alias-label-secondary,#777);font-weight:650;padding:23px 10px 8px}
 .railNote{color:var(--dsw-alias-label-secondary,#777);font-size:11px;line-height:1.6;padding:18px 11px}
 .main{position:relative;min-width:0;min-height:0;overflow-y:auto;display:flex;flex-direction:column;padding:0 clamp(14px,3vw,42px) 28px;overscroll-behavior:contain}
-.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:22px 0 24px}
-.topbar>div{display:flex;flex-direction:column;gap:3px}
-.topbar strong{font-size:23px;font-weight:690}
-.topbar span{font-size:12px;color:var(--dsw-alias-label-secondary,#777)}
+.topbar{position:sticky;top:0;z-index:25;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0 18px;background:var(--dsw-alias-bg-base,#faf9f7);border-bottom:1px solid var(--dsw-alias-border-l1,#eee)}
+.topbarTitle{display:flex;flex-direction:column;gap:4px;min-width:0}
+.topbarTitle strong{font-size:23px;font-weight:690}
+.topbarTitle span{font-size:12px;color:var(--dsw-alias-label-secondary,#777)}
+.backToChat{display:inline-flex;align-self:flex-start;align-items:center;min-height:34px;padding:6px 10px!important;margin:0 0 8px -8px;border:1px solid var(--dsw-alias-border-l2,#dedad5)!important;border-radius:10px!important;background:var(--dsw-alias-bg-layer-1,#fff)!important;font-size:13px!important;font-weight:650!important;white-space:nowrap;position:relative;z-index:2}
+.backToChat:hover{background:var(--dsw-alias-bg-layer-2,#edeae6)!important}
+.exitActions{display:flex;align-items:center;gap:8px;flex-shrink:0;padding-right:clamp(0px,11vw,170px)}
+.discardExit{font-size:11px!important;white-space:nowrap;text-decoration:underline}
 .close{width:36px;height:36px;border-radius:50%!important;font-size:24px!important;background:var(--dsw-alias-bg-layer-1,#f1efec)!important}
 .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 0 20px}
 .toolbar input,.editFields input{min-height:40px;border-radius:12px;border:1px solid var(--dsw-alias-border-l2,#dbd9d6);background:var(--dsw-alias-bg-layer-1,#fff);padding:0 12px;color:inherit}
@@ -82,5 +86,5 @@
 .image{max-width:100%;max-height:65vh;object-fit:contain;align-self:center}
 .gamePreview{border:1px solid var(--dsw-alias-border-l2,#ddd);width:100%;min-height:300px;background:#fff}
 @media(max-width:860px){.root{grid-template-columns:64px minmax(0,1fr)}.rail{padding:12px 5px}.railTitle{font-size:10px;overflow-wrap:anywhere;padding:6px 2px}.railAction{font-size:9px!important;padding:7px 4px!important}.railCaption,.railNote{display:none}.deck{grid-template-columns:1fr}.slideList{flex-direction:row;max-height:90px}.slideList button{min-width:110px}}
-@media(max-width:500px){.root{grid-template-columns:1fr}.rail{display:none}.main{padding:0 12px 22px}.topbar strong{font-size:19px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.tile{min-height:135px;padding:12px!important}}
+@media(max-width:500px){.root{grid-template-columns:1fr}.rail{display:none}.main{padding:0 12px 22px}.topbarTitle strong{font-size:19px}.exitActions{padding-right:0}.close{width:32px;height:32px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.tile{min-height:135px;padding:12px!important}}
 @media(prefers-reduced-motion:reduce){.tile{transition:none!important}}
