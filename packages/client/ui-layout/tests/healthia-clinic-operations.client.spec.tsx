@@ -75,7 +75,7 @@ describe('Native clinic inside PHOENIX (protected Host ownership)',()=>{
       const path=String(input).split('/health/api/')[1]!
       const method=init?.method??'GET'
       const body=init?.body?JSON.parse(String(init.body)) as Record<string,unknown>:undefined
-      calls.push({path,method,body})
+      calls.push({path,method,...(body===undefined?{}:{body})})
       if(path==='session')return answer({error:'requires login'},401)
       if(path==='status')return answer({initialized:false,enabled:true})
       if(path==='branding')return answer({logoDataUrl:null})
