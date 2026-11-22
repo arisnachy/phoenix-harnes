@@ -80,14 +80,14 @@ export function simulateSportsPortfolio(
     add('double',[a!,b!],stakeDouble)
     if(full&&fullStake)add('full',valid,fullStake)
   }
-  const scenarios:SportsPortfolioScenario[]=[
+  const scenarios:SportsPortfolioScenario[]=matched?([
     [false,false],[true,false],[false,true],[true,true],
-  ].map(([aw,bw])=>{
+  ] as [boolean,boolean][]).map(([aw,bw])=>{
     const grossReturn=cents((aw?stakeA*a!.price:0)+(bw?stakeB*b!.price:0)+
       (aw&&bw?stakeDouble*a!.price*b!.price:0))
     return{coreWins:[aw,bw] as [boolean,boolean],grossReturn,
       netVsBudget:cents(grossReturn+reserve-budget)}
-  }).filter(()=>matched)
+  }):[]
   const warnings=[
     'Solo simulación: no hay apuesta aceptada, probabilidad calibrada ni ventaja EV demostrada.',
     'Los escenarios de dos partidos no incluyen pagos del boleto largo salvo el caso de todos ganadores.',
