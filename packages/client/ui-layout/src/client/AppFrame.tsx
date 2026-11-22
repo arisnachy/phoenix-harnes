@@ -11,7 +11,6 @@
  * zero self-made hooks.
  */
 import { Component, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import type { CSSProperties, ErrorInfo, ReactNode } from 'react'
 import type { PropsRenderSlots, PropsRuntime, PropsStore } from '@phoenix-ai/dsh-client-ui-slots'
 import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAULT } from './columns.ts'
@@ -113,8 +112,8 @@ function SurfaceRender(props: { readonly render: () => ReactNode }): ReactNode {
 }
 
 /** Center column grid item (session-body building block). */
-function CenterColumn(props: { children?: ReactNode }) {
-  return <div className={css.centerCol}>{props.children}</div>
+function CenterColumn(props: { children?: ReactNode; adaptiveActive?: boolean }) {
+  return <div className={css.centerCol} data-adaptive-active={props.adaptiveActive || undefined}>{props.children}</div>
 }
 
 /** Details column grid item; width 0 keeps the subtree mounted (never unmount on close). */
@@ -437,22 +436,9 @@ export function AppFrame({
     return () => window.removeEventListener('phoenix:adaptive-self-inspect-request', inspect)
   }, [adaptiveApp,customApps,inspectRuntime])
 
-  // The adaptable workspace is rendered INTO the conversation scrollport.
-  // No reserved rail, fixed overlay or capped-height panel may push the composer.
-  const [inlineAppHost, setInlineAppHost] = useState<HTMLElement | null>(null)
-  useEffect(() => {
-    const root = frameRef.current
-    if (!root) return
-    const sync = (): void => {
-      const host = root.querySelector<HTMLElement>('[data-adaptive-chat-host]')
-      setInlineAppHost(previous => previous === host ? previous : host)
-    }
-    sync()
-    const observer = new MutationObserver(sync)
-    observer.observe(root, { childList: true, subtree: true })
-    return () => observer.disconnect()
-  }, [])
-
+  // App content occupies a structural, scrollable pane alongside the real chat.
+  // This is never mounted inside the conversation timeline or on document.body.
+  const adaptiveActive = adaptiveApp === 'healthia' || activeBlueprint !== undefined
 
   const lastSession = useRef(detailsSession)
   useLayoutEffect(() => {
@@ -565,7 +551,7 @@ export function AppFrame({
         })}
       </div>
       <>
-        <CenterColumn>
+        <CenterColumn adaptiveActive={adaptiveActive}>
           {search && (
             <div className={css.adaptiveSearch} aria-label="Búsqueda en aplicaciones">
               <div className={css.adaptiveSearchHeader}>
@@ -590,7 +576,9 @@ export function AppFrame({
               <button type="button" onClick={() => setMissionError(false)} aria-label="Cerrar aviso de App Studio">×</button>
             </div>
           )}
-          {inlineAppHost && (adaptiveApp === 'healthia' || activeBlueprint !== undefined) && createPortal(
+          <div className={css.adaptiveWorkspacePane} data-adaptive-workspace-host=""
+            aria-label="Aplicación activa de PHOENIX">
+          {adaptiveActive && (
           <SurfaceBoundary name="adaptive" resetKey={adaptiveApp}
             onRestore={() => {
               // Only restore local structural manifests. Clinical stores, chat,
@@ -624,12 +612,16 @@ export function AppFrame({
             )}
             </div>
           </SurfaceBoundary>
-            , inlineAppHost
           )}
+          </div>
+          <div className={css.browserWorkspacePane} data-browser-workspace-host=""
+            aria-label="Navegador integrado de PHOENIX" />
           <div data-shell-overlay>{renderSlot('shell.overlay', {})}</div>
-          <SurfaceBoundary name="conversation" resetKey={currentSession ?? 'none'}>
-            <SurfaceRender render={() => renderSlot('conversation', {})} />
-          </SurfaceBoundary>
+          <div className={css.conversationPane} data-conversation-pane="">
+            <SurfaceBoundary name="conversation" resetKey={currentSession ?? 'none'}>
+              <SurfaceRender render={() => renderSlot('conversation', {})} />
+            </SurfaceBoundary>
+          </div>
           <div data-shell-workspace>
             <SurfaceBoundary name="workspace" resetKey={currentSession ?? 'none'}>
               <SurfaceRender render={() => renderSlot('shell.workspace', {})} />
