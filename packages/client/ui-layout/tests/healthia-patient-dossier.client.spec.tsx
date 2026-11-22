@@ -45,10 +45,11 @@ describe('PHOENIX Healthia patient dossier',()=>{
     vi.stubGlobal('fetch',fetcher)
     const onPatientUpdated=vi.fn()
     render(<HealthiaPatientDossier session={session} patient={patient} onPatientUpdated={onPatientUpdated}/>)
-    await waitFor(()=>expect(screen.getByText('Asma documentada')).toBeTruthy())
+    await waitFor(()=>expect(screen.getByText('Asma')).toBeTruthy())
     expect(screen.getByText('Consulta inicial')).toBeTruthy()
     expect(screen.getByText('No existe revisión de alergias documentada.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button',{name:'Antecedentes'}))
+    expect(screen.getByDisplayValue('Asma documentada')).toBeTruthy()
     fireEvent.change(screen.getByRole('textbox',{name:'Enfermedades y antecedentes patológicos'}),{
       target:{value:'Asma persistente verificada'},
     })
