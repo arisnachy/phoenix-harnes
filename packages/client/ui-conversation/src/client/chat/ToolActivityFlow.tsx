@@ -346,7 +346,8 @@ export function isTradingPanelPrompt(text: string): boolean {
   // Kira must ask Testing/Real instead of silently selecting a wallet.
   if (!/\b(?:paper|simulacion|simulado|simulada)\b/u.test(normalized)) return false
   return /\b(?:binance|trading|cripto|criptomonedas)\b/u.test(normalized)
-    && /\b(?:visor|panel|dashboard|opera|operar|operaciones|inicia|iniciar|comienza|empezar|automat|muestra|mostrar|abre|abrir|hace|hacer|haz|deten|detener)\b/u.test(normalized)
+    && (/\b(?:visor|panel|dashboard|opera|operar|operaciones|inicia|iniciar|comienza|empezar|automat)\b/u.test(normalized)
+      || /\b(?:muestra|mostrar|abre|abrir|hace|hacer|haz|deten|detener)\b/u.test(normalized))
 }
 
 function userRequestsTrading(node: OrderedChatNode): boolean {
@@ -649,9 +650,11 @@ export function addBrowserCards(
 export function isDesktopPrompt(text: string): boolean {
   const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
   if (/\bdesktop[\s-]*live\b/u.test(normalized)) return true
-  const application = /\b(?:microsoft paint|paint|mspaint|bloc de notas|notepad|explorador de windows|calculadora|calculator|explorador de archivos|file explorer)\b/u
-  const action = /\b(?:abre|abres|abrir|entra|entrar|ingresa|ingresar|inicia|ejecuta|dibuja|dibujo|trazo|traza|trabaja|controla|muestra|open|draw|launch|use|usa)\b/u
-  return application.test(normalized) && action.test(normalized)
+  const application = /\b(?:microsoft paint|paint|mspaint|bloc de notas|notepad|explorador de windows)\b/u.test(normalized)
+    || /\b(?:calculadora|calculator|explorador de archivos|file explorer)\b/u.test(normalized)
+  const action = /\b(?:abre|abres|abrir|entra|entrar|ingresa|ingresar|inicia|ejecuta|dibuja|dibujo|trazo|traza)\b/u.test(normalized)
+    || /\b(?:trabaja|controla|muestra|open|draw|launch|use|usa)\b/u.test(normalized)
+  return application && action
 }
 
 function isDesktopRequest(node: OrderedChatNode): boolean {
@@ -1144,8 +1147,8 @@ function BrowserWorkspace({
   }
 
   const browserContent = (
-    <div className={css.browserWorkspace} data-browser-workspace-active={live || pinned ? '' : undefined}
-      data-browser-workspace-visible={visibleDock ? 'true' : undefined} data-browser-workspace={live ? '' : undefined}
+    <div className={css.browserWorkspace} data-browser-workspace-active={visibleDock && (live || pinned) ? '' : undefined}
+      data-browser-workspace-visible={visibleDock ? 'true' : undefined} data-browser-workspace={live && visibleDock ? '' : undefined}
       data-activity-open={showSidecar ? 'true' : undefined} data-chat-flow-kind="browser-workspace">
       <div className={css.browserPane}>
         <MiniBrowser key={sessionId} sessionId={sessionId} requested active={selected} compact
@@ -1168,7 +1171,9 @@ function BrowserWorkspace({
         {sourceUrl !== undefined && (
           <div className={css.pageInfo} role="status">
             <span className={css.pageCaption}>Fuente de investigación</span>
-            <span>La fuente consultada por fetch se abre por separado en Chromium. La vista no sustituye ni confirma el resultado de fetch.</span>
+            <span>
+              La fuente consultada por fetch se abre por separado en Chromium. La vista no sustituye ni confirma el resultado de fetch.
+            </span>
           </div>
         )}
         {page !== null && (
@@ -1244,8 +1249,13 @@ function BrowserWorkspace({
  * @param props - Ordered nodes plus the ordinary ChatNodeSeat owner/runtime props.
  * @returns The grouped transcript flow.
  */
-export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserTurnOpen, sessionId, inputActions, ...seatProps }: ToolActivityFlowProps) {
-  const ordinaryFlow = useMemo(() => addDesktopCards(addBrowserCards(buildAnchoredFlow(nodes, optimisticSubmit), nodes), nodes), [nodes, optimisticSubmit])
+export function ToolActivityFlow({
+  nodes, optimisticSubmit, turnStatus, browserTurnOpen, sessionId, inputActions, ...seatProps
+}: ToolActivityFlowProps) {
+  const ordinaryFlow = useMemo(
+    () => addDesktopCards(addBrowserCards(buildAnchoredFlow(nodes, optimisticSubmit), nodes), nodes),
+    [nodes, optimisticSubmit],
+  )
   const browserKeys = ordinaryFlow.filter(item => item.kind === 'browser').map(item => item.userKey)
   const [selectedBrowserKey, setSelectedBrowserKey] = useState<string | undefined>()
   const newestBrowserKey = browserKeys.at(-1)
@@ -1290,7 +1300,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
   }, [sessionId])
   // Side-by-side content lives inside the message flow; not AppFrame.
   const flow = useMemo(() => {
-    const grouped = activeBrowserTurn && newestBrowserKey !== undefined
+    const grouped = activeBrowserTurn && newestBrowserKey !== undefined && visibleBrowserKey === newestBrowserKey
       ? groupActiveBrowserFlow(ordinaryFlow, newestBrowserKey, nodes)
       : ordinaryFlow
     // Keep every browser mounted under the SAME React key as the sidecar opens
@@ -1300,7 +1310,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
         userKey: item.userKey, ...(item.tabId === undefined ? {} : { tabId: item.tabId }),
         ...(item.sourceUrl === undefined ? {} : { sourceUrl: item.sourceUrl }), live: false, items: [] }
       : item)
-  }, [ordinaryFlow, newestBrowserKey, nodes, activeBrowserTurn])
+  }, [ordinaryFlow, newestBrowserKey, nodes, activeBrowserTurn, visibleBrowserKey])
   const hasBrowserWorkspace = flow.some(item => item.kind === 'browser-workspace' && item.live)
   // The screenshot-like centered preparation state is confined to a blank
   // conversation's first pending answer, never to a continuing transcript.
@@ -1353,7 +1363,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
                 selected={item.userKey === visibleBrowserKey || item.userKey === (pinnedBrowserKey ?? activeBrowserKey)}
                 onActivate={() => { setSelectedBrowserKey(item.userKey) }}
                 pinned={pinnedBrowserKey === item.userKey}
-                onPinChange={value => {
+                            onPinChange={(value) => {
                   setPinnedBrowserKey(value ? item.userKey : undefined)
                   if (!value) {
                     if (!activeBrowserTurn) void releaseMiniBrowserSession(sessionId)

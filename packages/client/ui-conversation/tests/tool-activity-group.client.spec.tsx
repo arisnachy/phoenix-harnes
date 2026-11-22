@@ -15,6 +15,16 @@ import { ChatView } from '../src/client/chat/ChatView.tsx'
 import { buildFlow } from '../src/client/chat/ToolActivityFlow.tsx'
 import { chatSnapshotFixture } from './chat-snapshot-fixture.client.ts'
 
+vi.mock('../src/client/chat/MiniBrowser.tsx', () => ({
+  MiniBrowser: ({ onClose, onPageChange }: {
+    onClose: () => void
+    onPageChange: (page: { title: string; url: string }) => void
+  }) => <section aria-label="Navegador de Kira">
+    <button type="button" onClick={() => { onPageChange({ title: 'Página de prueba', url: 'https://example.org/' }) }}>Mostrar página</button>
+    <button type="button" onClick={onClose}>Cerrar navegador</button>
+  </section>,
+}))
+
 const SID = 'tool-activity' as SessionId
 
 function snapshot(
@@ -237,11 +247,21 @@ describe('trading and sports isolation', () => {
 })
 
 describe('chat tool activity grouping', () => {
-  it('renders the browser workspace for nested Chrome activity while Tools stays collapsed', () => {
-    renderChat([user(1, 'Investiga y completa el formulario en Chrome'), nestedChromeTool()])
+  it('splits only for a visible browser and restores replies when it closes during a turn', () => {
+    const { container } = renderChat(
+      [user(1, 'Abre una página en Chrome'), nestedChromeTool(), assistantWithReasoning(3)],
+      [runningTool()],
+    )
 
     expect(screen.getByRole('region', { name: 'Navegador de Kira' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Tools' })).toBeTruthy()
+    expect(container.querySelector('[data-browser-workspace]')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar página' }))
+    const dock = container.querySelector('[data-browser-workspace]')
+    expect(dock?.contains(screen.getByTestId('node-assistant-step'))).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar navegador' }))
+    expect(container.querySelector('[data-browser-workspace]')).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Navegador de Kira' })).toBeNull()
+    expect(screen.getByTestId('node-assistant-step')).toBeTruthy()
   })
 
   it('collapses consecutive context activity behind one Tools disclosure', () => {
@@ -400,7 +420,7 @@ describe('chat tool activity grouping', () => {
     expect(sports.textContent).toContain('Rays @ Brewers')
     expect(screen.getAllByRole('button',{name:'Tools'})).toHaveLength(1)
   })
-  it.each([5,6])('shows the actual %i-leg researched ticket even when Kira only says it is in a card',count=>{
+  it.each([5,6])('shows the actual %i-leg researched ticket even when Kira only says it is in a card',(count)=>{
     const ticket={component:'sports_ticket_card',version:1,props:{
       title:'PHOENIX · Ticket deportivo',source:'ESPN Site API',
       requestedLegs:count,combinedOdds:'No disponible',
@@ -484,7 +504,7 @@ describe('chat tool activity grouping', () => {
     'sports_chat_nba_intelligence','sports_chat_wnba_intelligence',
     'sports_chat_nhl_investigate','sports_chat_nfl_investigate',
     'sports_chat_tennis_investigate','sports_chat_ncaa_investigate'])
-  ('keeps %s rich UI visible outside collapsed Tools when Kira says the card is live',name=>{
+  ('keeps %s rich UI visible outside collapsed Tools when Kira says the card is live',(name)=>{
     const uiBlock={component:'sports_espn_dashboard',version:1,props:{
       view:'event',title:'EN VIVO · Encuentro comprobado',
       subtitle:'ESPN · ficha de investigación',source:'ESPN Site',

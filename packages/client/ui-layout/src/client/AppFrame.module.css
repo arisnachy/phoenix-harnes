@@ -254,6 +254,9 @@
 .conversationPane {
   order: 1;
   display: flex;
+  /* Slot wrappers are display: contents, so the actual root must stretch on
+     the cross axis instead of shrinking to its contents in a flex row. */
+  flex-direction: column;
   flex: 1 1 100%;
   width: 100%;
   min-width: 0;
