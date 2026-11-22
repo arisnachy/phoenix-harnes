@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react'
 import type { SubagentActivityProjection } from '@phoenix-ai/dsh-subagent'
+import { LIVING_TEAM_KINDS, readTeamPortrait, subscribeTeamProfiles, type LivingTeamKind } from './team-customization.ts'
 import type { KiraPortraitKey } from './KiraAgentPortraits.ts'
 import { KIRA_MODERN_STILL_PORTRAITS } from './KiraModernStillPortraits.ts'
 import css from './ModelActivityAvatar.module.css'
@@ -201,6 +203,29 @@ export function ModelActivityAvatar({
   const resolvedKind = kind
     ?? (agentId === undefined ? modelAvatarKind(activity?.model) : agentAvatarKind(agentId))
   const observedModel = model ?? activity?.model
+  const [personalPortrait, setPersonalPortrait] = useState<string>()
+  useEffect(() => {
+    if (!(LIVING_TEAM_KINDS as readonly string[]).includes(resolvedKind)) return
+    const profile = resolvedKind as LivingTeamKind
+    let alive = true
+    let owned: string | undefined
+    const update = () => {
+      void readTeamPortrait(profile).then(blob => {
+        if (!alive) return
+        const next = blob === undefined ? undefined : URL.createObjectURL(blob)
+        setPersonalPortrait(next)
+        if (owned !== undefined) URL.revokeObjectURL(owned)
+        owned = next
+      }).catch(() => { if (alive) setPersonalPortrait(undefined) })
+    }
+    update()
+    const unlisten = subscribeTeamProfiles(update)
+    return () => {
+      alive = false
+      unlisten()
+      if (owned !== undefined) URL.revokeObjectURL(owned)
+    }
+  }, [resolvedKind])
   const phase = running ? (activity?.phase ?? 'preparing') : 'idle'
   const state = pending
     ? 'pending'
@@ -220,7 +245,7 @@ export function ModelActivityAvatar({
       <span className={css.ring} />
       <img
         className={css.portraitImage}
-        src={portraitSrcForKind(resolvedKind)}
+        src={personalPortrait ?? portraitSrcForKind(resolvedKind)}
         alt=""
         draggable={false}
         decoding="async"
