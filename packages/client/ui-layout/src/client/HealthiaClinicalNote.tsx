@@ -125,10 +125,19 @@ export function formatClinicalNote(kind: ClinicalNoteKind, values: Readonly<Clin
   return lines.join('\n')
 }
 
-/** Native local-only draft; persistence requires a separate authenticated Host bridge. */
-export function HealthiaClinicalNote({ onReturn }: { onReturn?: () => void }) {
-  const [kind, setKind] = useState<ClinicalNoteKind>('first')
-  const [values, setValues] = useState<ClinicalNoteValues>({})
+/** Clinical values remain local to this React tree unless the authenticated
+ * Host-owned persistence callback is explicitly supplied and clicked. */
+export function HealthiaClinicalNote({
+  onReturn, initialValues = {}, initialKind = 'first', onSave,
+}: {
+  onReturn?: () => void
+  initialValues?: ClinicalNoteValues
+  initialKind?: ClinicalNoteKind
+  onSave?: (kind: ClinicalNoteKind, values: Readonly<ClinicalNoteValues>) => Promise<void>
+}) {
+  const [kind, setKind] = useState<ClinicalNoteKind>(initialKind)
+  const [values, setValues] = useState<ClinicalNoteValues>(() => ({ ...initialValues }))
+  const [saving, setSaving] = useState(false)
   const [section, setSection] = useState('interview')
   const [preview, setPreview] = useState(false)
   const [message, setMessage] = useState('')
@@ -143,7 +152,21 @@ export function HealthiaClinicalNote({ onReturn }: { onReturn?: () => void }) {
     setValues({})
     setPreview(false)
     setSection('interview')
-    setMessage('Borrador descartado de esta sesión.')
+    setMessage('Cambios de esta vista descartados. Los registros previamente guardados no se han modificado.')
+  }
+  const save = async (): Promise<void> => {
+    if (!onSave || !hasContent || saving) return
+    setSaving(true)
+    setMessage('')
+    try {
+      // The owning clinical session must recheck patient, role, version and CSRF.
+      await onSave(kind, { ...values })
+      setMessage('Borrador registrado en el servicio clínico protegido. Sin firmar.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo guardar la nota.')
+    } finally {
+      setSaving(false)
+    }
   }
   const copy = async (): Promise<void> => {
     if (!hasContent) return
@@ -165,7 +188,9 @@ export function HealthiaClinicalNote({ onReturn }: { onReturn?: () => void }) {
         <div>
           <span className={css.eyebrow}>CONSULTA · BORRADOR LOCAL TEMPORAL</span>
           <h3>Historia clínica</h3>
-          <p>La información permanece en esta vista hasta cerrarla. No hay guardado ni firma clínica habilitados desde este editor.</p>
+          <p>{onSave
+            ? 'Guardado explícito en el expediente cifrado, sujeto a sesión profesional y versión. Nunca firma automáticamente.'
+            : 'La información permanece en esta vista hasta cerrarla. No hay guardado ni firma clínica habilitados desde este editor.'}</p>
         </div>
         {onReturn && <button type="button" className={css.secondary} onClick={onReturn}>Volver</button>}
       </div>
@@ -201,7 +226,9 @@ export function HealthiaClinicalNote({ onReturn }: { onReturn?: () => void }) {
         </div>
         <div className={css.actions}>
           <button type="submit" className={css.primary} disabled={!hasContent}>Vista previa de nota</button>
-          <button type="button" className={css.secondary} onClick={reset} disabled={!hasContent}>Descartar borrador</button>
+          {onSave && <button type="button" className={css.primary} disabled={!hasContent || saving}
+            onClick={() => { void save() }}>{saving ? 'Guardando…' : 'Guardar borrador clínico'}</button>}
+          <button type="button" className={css.secondary} onClick={reset} disabled={!hasContent || saving}>Descartar cambios</button>
         </div>
       </form>
       {preview && hasContent && (
