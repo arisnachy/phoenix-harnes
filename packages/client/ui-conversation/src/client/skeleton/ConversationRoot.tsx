@@ -544,6 +544,9 @@ export function ConversationRoot({
         </div>
       </div>
       <div className={css.scrollBody} data-conversation-scroll="">
+        {/* This is the ONLY in-chat app host. The Host portals Healthia/App Studio
+            here, above the composer; opening an app never splits AppFrame. */}
+        <div className={css.adaptiveInlineHost} data-adaptive-inline-host="" />
         {settling && summaryBlank !== false && (
           <div className={css.recoveryStatus} role="status">{t('chat.loadingHistory')}</div>
         )}
