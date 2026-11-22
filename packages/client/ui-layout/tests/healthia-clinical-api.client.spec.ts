@@ -49,7 +49,7 @@ describe('PHOENIX clinical API boundary',()=>{
     const calls:Array<{path:string;body?:Record<string,unknown>}>=[]
     const api=new HealthiaClinicalApi(vi.fn(async (path:string,init?:RequestInit)=>{
       const body=init?.body?JSON.parse(String(init.body)) as Record<string,unknown>:undefined
-      calls.push({path,body})
+      calls.push({path,...(body===undefined?{}:{body})})
       return result(path.endsWith('/branding')?{logoDataUrl:null}:{initialized:true},200)
     }) as unknown as typeof fetch)
     await expect(api.setup('Clínica Alfa','doctor','12345')).rejects.toThrow('6 caracteres')
