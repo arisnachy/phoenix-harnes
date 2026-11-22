@@ -745,3 +745,20 @@
   max-width: 100%;
   transform: none;
 }
+
+
+/* Browser-only turns: ChatView owns the scroll while the composer remains
+   anchored by ConversationRoot, restoring normal flow after Chromium closes. */
+:global([data-conversation-scroll]:has([data-browser-workspace]):not(:has(> [data-adaptive-inline-host] > *))) > .root {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+:global([data-conversation-scroll]:has([data-browser-workspace]):not(:has(> [data-adaptive-inline-host] > *))) > .root > .scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
