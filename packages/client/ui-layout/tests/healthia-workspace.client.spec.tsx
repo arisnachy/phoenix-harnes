@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
-import { HealthiaWorkspace, type HealthiaRole } from '../src/client/HealthiaWorkspace.tsx'
+import { HealthiaWorkspace, HEALTHIA_NAV, type HealthiaRole } from '../src/client/HealthiaWorkspace.tsx'
 
 afterEach(() => cleanup())
 
@@ -15,31 +15,49 @@ function ScreenHarness() {
     onSectionChange={setSection} onReturn={onReturn} />
 }
 
-describe('Healthia adaptive surface', () => {
-  it('offers the authenticated clinical entry without putting patient data in chat', () => {
+describe('PHOENIX embedded Healthia', () => {
+  it('uses a minimal seven-item clinician menu without duplicate Healthia branding', () => {
+    expect(HEALTHIA_NAV.doctor.map(item => item.label)).toEqual([
+      'Inicio', 'Agenda', 'Pacientes', 'Consultas', 'Documentos', 'Gestión', 'Herramientas',
+    ])
     render(<ScreenHarness />)
-    const entry = screen.getByRole('link', { name: /Abrir servicio clínico protegido/ })
-    expect(entry.getAttribute('href')).toBe('/health')
-    expect(entry.getAttribute('rel')).toContain('noopener')
-    expect(screen.getByText(/Kira y el chat continúan disponibles/)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Inicio' })).toBeTruthy()
+    expect(screen.queryByText('Healthia')).toBeNull()
+    expect(screen.queryByText('Capacidades')).toBeNull()
+    expect(screen.queryByText('Intercambios')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Servicio clínico protegido' }).getAttribute('href')).toBe('/health')
   })
 
-  it('shows patient preview without claiming portal or medical record access', () => {
+  it('opens a native longitudinal clinical note in-place, not in an external browser', () => {
+    render(<ScreenHarness />)
+    fireEvent.click(screen.getByRole('button', { name: /Preparar consulta/ }))
+    expect(screen.getByRole('region', { name: 'Historia clínica estructurada' })).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: 'Tipo de consulta' })).toBeTruthy()
+    expect(screen.getByText(/Borradores temporales sin guardar/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Guardar consulta' })).toBeNull()
+  })
+
+  it('does not authorize the patient portal by a visual role switch', () => {
     render(<ScreenHarness />)
     fireEvent.click(screen.getByRole('button', { name: 'Paciente' }))
-    expect(screen.getByText('Portal no activado')).toBeTruthy()
-    expect(screen.queryByRole('link', { name: /Abrir servicio clínico protegido/ })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Mi espacio' })).toBeTruthy()
+    expect(screen.getByText(/no inicia sesión ni concede acceso/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Mi expediente' }))
+    expect(screen.getByText(/depende de la identidad autenticada/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Autorizaciones' }))
     expect(screen.getByText(/Ningún expediente se comparte/)).toBeTruthy()
   })
 
-  it('edits only local draft field labels and keeps future exchange disabled', () => {
+  it('moves the legacy editable form structure into Tools, not the main menu', () => {
     render(<ScreenHarness />)
-    fireEvent.click(screen.getByRole('button', { name: 'Formularios' }))
-    fireEvent.change(screen.getByRole('textbox', { name: 'Etiqueta de nuevo campo' }), { target: { value: 'Campo demostrativo' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Herramientas' }))
+    expect(screen.queryByRole('textbox', { name: 'Etiqueta de nuevo campo' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Editar estructura de formularios' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Etiqueta de nuevo campo' }), {
+      target: { value: 'Campo demostrativo' },
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Agregar campo' }))
     expect(screen.getByText('Campo demostrativo')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Intercambios' }))
-    expect(screen.getByText(/sin transmisión automática/)).toBeTruthy()
+    expect(screen.getByText(/borradores sin publicar/)).toBeTruthy()
   })
 })
