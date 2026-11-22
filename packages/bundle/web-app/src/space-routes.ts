@@ -1,0 +1,159 @@
+/** Private loopback API for PHOENIX Space. No LAN exposure, no CORS, no arbitrary paths. */
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { Context } from '@phoenix-ai/cordis'
+import type {} from '@phoenix-ai/dsh-host-webserver'
+import { PhoenixSpaceStore } from './space-store.ts'
+import { exportPptx, exportXlsx } from './space-office.ts'
+
+const HEADERS:Record<string,string>={
+  'content-type':'application/json; charset=utf-8','cache-control':'no-store, max-age=0',
+  'x-content-type-options':'nosniff','x-frame-options':'DENY',
+  'cross-origin-resource-policy':'same-origin','referrer-policy':'no-referrer',
+}
+function reply(res:ServerResponse,status:number,data:unknown):void {
+  res.writeHead(status,HEADERS);res.end(JSON.stringify(data))
+}
+export function spacePeer(req:IncomingMessage):boolean {
+  const address=req.socket.remoteAddress||''
+  const host=req.headers.host||''
+  return ['127.0.0.1','::1','::ffff:127.0.0.1'].includes(address)
+    && /^127\.0\.0\.1:\d{1,5}$/u.test(host)
+}
+function mutationAllowed(req:IncomingMessage):boolean {
+  return req.headers.origin==='http://'+(req.headers.host||'')
+    && req.headers['x-phoenix-space']==='1'
+    && req.headers['content-type']?.split(';',1)[0]?.trim()==='application/json'
+}
+async function body(req:IncomingMessage):Promise<Record<string,unknown>> {
+  let count=0;const chunks:Buffer[]=[]
+  for await(const raw of req){
+    const part=Buffer.isBuffer(raw)?raw:Buffer.from(raw)
+    count+=part.length
+    if(count>14_000_000)throw new Error('PAYLOAD_LIMIT')
+    chunks.push(part)
+  }
+  let parsed:unknown
+  try{parsed=JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{throw new Error('JSON inválido')}
+  if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))throw new Error('JSON inválido')
+  return parsed as Record<string,unknown>
+}
+function revision(value:unknown):number {
+  if(!Number.isInteger(value)||Number(value)<1||Number(value)>1000000)throw new Error('Revisión inválida')
+  return Number(value)
+}
+function preview(item:ReturnType<PhoenixSpaceStore['create']>) {
+  const {content,...rest}=item
+  return {...rest,excerpt:content.slice(0,150)}
+}
+function download(res:ServerResponse,bytes:Buffer,mime:string,name:string):void {
+  const safe=encodeURIComponent(name.slice(0,180))
+  res.writeHead(200,{...HEADERS,'content-type':mime,'content-length':String(bytes.length),
+    'content-security-policy':"default-src 'none'; sandbox",
+    'content-disposition':"attachment; filename*=UTF-8''"+safe})
+  res.end(bytes)
+}
+function statusFor(error:unknown):number {
+  const message=error instanceof Error?error.message:''
+  if(message==='CONFLICT')return 409
+  if(/no encontrado|no encontrada/u.test(message))return 404
+  if(/demasiado grande|PAYLOAD_LIMIT/u.test(message))return 413
+  if(/invalid|inválid|desconocid|demasiad|límite|Revisión/u.test(message))return 400
+  return 500
+}
+export function registerSpaceRoutes(ctx:Context):void {
+  if(ctx.webServer.host!=='127.0.0.1'){
+    ctx.logger.warn('PHOENIX Space solo está disponible en 127.0.0.1.')
+    return
+  }
+  let store:PhoenixSpaceStore|undefined
+  const open=():PhoenixSpaceStore=>store??(store=new PhoenixSpaceStore())
+  const dispose=ctx.webServer.register({
+    kind:'prefix',path:'/space-api',
+    handler:async(req:IncomingMessage,res:ServerResponse)=>{
+      if(!spacePeer(req)){reply(res,403,{error:'Acceso local requerido'});return}
+      const url=new URL(req.url||'/','http://127.0.0.1')
+      const path=url.pathname
+      const method=req.method||''
+      if(!['GET','POST','PUT'].includes(method)){res.writeHead(405,{...HEADERS,allow:'GET, POST, PUT'});res.end();return}
+      if(method!=='GET'&&!mutationAllowed(req)){reply(res,403,{error:'Origen y encabezados de seguridad requeridos'});return}
+      try{
+        const catalog=open()
+        if(path==='/space-api/items'&&method==='GET'){
+          const q=url.searchParams.get('q')||''
+          const kind=url.searchParams.get('kind')||'all'
+          const space=url.searchParams.get('space')||'all'
+          const deleted=url.searchParams.get('deleted')==='1'
+          reply(res,200,{items:catalog.list({q,kind,space,deleted}).map(preview)})
+          return
+        }
+        if(path==='/space-api/items'&&method==='POST'){
+          const data=await body(req)
+          const created=catalog.create(data)
+          reply(res,201,{item:created})
+          return
+        }
+        if(path==='/space-api/import'&&method==='POST'){
+          const data=await body(req)
+          if(typeof data.base64!=='string'||data.base64.length>13_400_000||
+            !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(data.base64))
+            throw new Error('Archivo inválido')
+          const bytes=Buffer.from(data.base64,'base64')
+          if(bytes.toString('base64')!==data.base64)throw new Error('Archivo inválido')
+          const item=catalog.importFile(data.title,data.mime,bytes,
+            typeof data.space==='string'?data.space:'personal')
+          reply(res,201,{item})
+          return
+        }
+        const match=/^\/space-api\/items\/([a-f0-9-]{36})(?:\/(file|export|history|restore))?$/u.exec(path)
+        if(!match){reply(res,404,{error:'Ruta desconocida'});return}
+        const id=match[1]!
+        const operation=match[2]||''
+        const item=catalog.get(id)
+        if(!item){reply(res,404,{error:'Elemento no encontrado'});return}
+        if(operation===''&&method==='GET'){reply(res,200,{item});return}
+        if(operation===''&&method==='PUT'){
+          const data=await body(req)
+          const expected=revision(data.revision)
+          const {revision:_,...change}=data
+          reply(res,200,{item:catalog.update(id,expected,change)})
+          return
+        }
+        if(operation==='history'&&method==='GET'){reply(res,200,{versions:catalog.history(id)});return}
+        if(operation==='restore'&&method==='POST'){
+          const data=await body(req)
+          reply(res,200,{item:catalog.restore(id,revision(data.restoreRevision),revision(data.revision))})
+          return
+        }
+        if(operation==='file'&&method==='GET'){
+          const bytes=catalog.importedBytes(id)
+          if(!bytes){reply(res,404,{error:'Archivo no disponible'});return}
+          download(res,bytes,item.mime,item.title)
+          return
+        }
+        if(operation==='export'&&method==='GET'&&!item.deleted){
+          const format=url.searchParams.get('format')
+          if(format==='pptx'&&item.kind==='slides'){
+            download(res,exportPptx(item.content),
+              'application/vnd.openxmlformats-officedocument.presentationml.presentation',item.title+'.pptx')
+            return
+          }
+          if(format==='xlsx'&&item.kind==='sheet'){
+            download(res,exportXlsx(item.content),
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',item.title+'.xlsx')
+            return
+          }
+          if(format==='json'){
+            download(res,Buffer.from(item.content,'utf8'),'application/json',item.title+'.json')
+            return
+          }
+        }
+        reply(res,404,{error:'Acción no disponible'})
+      }catch(error){
+        const status=statusFor(error)
+        reply(res,status,{error:status===500?'No se pudo completar la operación':
+          error instanceof Error?error.message:'Solicitud inválida'})
+      }
+    },
+  })
+  ctx.effect(()=>()=>{dispose();store?.close()},'PHOENIX Space private route and durable store')
+}
