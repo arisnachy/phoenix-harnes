@@ -5,6 +5,7 @@ import {
   TEAM_PERSONAS,
   TEAM_SKILL_POOLS,
   selectTeamPersonaName,
+  inferTeamSkill,
   teamPersonaGender,
   teamSocialStyle,
 } from '../src/personas.ts'
@@ -98,6 +99,28 @@ describe('KIRA Team social personalities', () => {
 
     const engineering = selectTeamPersonaName('debug and repair TypeScript implementation', [])
     expect(TEAM_SKILL_POOLS.engineering).toContain(engineering)
+  })
+
+  it('routes natural Spanish task descriptions to the intended expertise', () => {
+    const cases = [
+      ['Investigación clínica con revisión bibliográfica', 'research'],
+      ['Investigar evidencia científica publicada', 'research'],
+      ['Automatización de los procesos', 'automation'],
+      ['Automatizar despliegues repetitivos', 'automation'],
+      ['Optimización del rendimiento y consumo de memoria', 'performance'],
+      ['Optimizar la latencia', 'performance'],
+      ['Auditoría de calidad de una entrega', 'quality'],
+      ['Redactar una monografía', 'writing'],
+      ['Diseñar un formulario accesible', 'design'],
+      ['Análisis estadístico descriptivo', 'data'],
+      ['Revisar vulnerabilidades del sistema', 'security'],
+      ['Depurar código TypeScript', 'engineering'],
+    ] as const
+    for (const [request, skill] of cases) {
+      expect(inferTeamSkill(request)).toBe(skill)
+      expect(TEAM_SKILL_POOLS[skill]).toContain(selectTeamPersonaName(request, []))
+    }
+    expect(inferTeamSkill('Un pedido sin especialidad')).toBe('general')
   })
 
   it('keeps unknown worker names natural instead of inventing a persona', () => {
