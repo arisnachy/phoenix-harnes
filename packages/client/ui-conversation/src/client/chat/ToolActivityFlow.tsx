@@ -1096,9 +1096,10 @@ function BrowserWorkspace({
   const dockHost = typeof document === 'undefined' ? null
     : document.querySelector<HTMLElement>('[data-browser-workspace-host]')
   const showSidecar = dockHost === null && (live || savedAccessNotice !== null)
-  // Prepare Chromium invisibly; the shell splits only after an actual URL is
-  // verified. A pending about:blank never steals space from Kira's chat.
+  // Only a selected, verified Chromium page may occupy shell width.
+  // Historical, closed and empty tabs remain mounted without docking.
   const verifiedPage = hasNavigatedWebPage(page)
+  const visibleDock = verifiedPage && selected
   const activityRef = useRef<HTMLDivElement | null>(null)
   const followingRef = useRef(true)
   const [following, setFollowing] = useState(true)
@@ -1150,7 +1151,8 @@ function BrowserWorkspace({
   }
 
   const browserContent = (
-    <div className={css.browserWorkspace} data-browser-workspace-active={dockHost === null || verifiedPage ? '' : undefined} data-browser-workspace={live ? '' : undefined}
+    <div className={css.browserWorkspace} data-browser-workspace-active={dockHost === null || visibleDock ? '' : undefined}
+      data-browser-workspace-visible={visibleDock ? 'true' : undefined} data-browser-workspace={live ? '' : undefined}
       data-activity-open={showSidecar ? 'true' : undefined} data-chat-flow-kind="browser-workspace">
       <div className={css.browserPane}>
         <MiniBrowser key={sessionId} sessionId={sessionId} requested active={selected} compact
