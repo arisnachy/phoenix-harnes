@@ -153,7 +153,7 @@ export function HealthiaPatientDossier({
         <button type="button" key={item.id} aria-current={tab===item.id?'page':undefined}
           className={tab===item.id?css.active:css.tab} onClick={()=>setTab(item.id)}>{item.name}</button>)}
       </nav>
-      {loading&&<p role="status" className={css.notice}>Leyendo la historia clínica autorizada…</p>}
+      {loading&&<p aria-live="polite" className={css.notice}>Leyendo la historia clínica autorizada…</p>}
       {error&&<p role="alert" className={css.error}>{error}</p>}
       {notice&&<p role="status" className={css.notice}>{notice}</p>}
       {clinicianContext&&tab==='summary'&&<>
