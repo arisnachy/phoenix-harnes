@@ -3,13 +3,13 @@ import assert from 'node:assert/strict'
 import { Script } from 'node:vm'
 import { renderHealthPage } from '../src/health-ui.ts'
 
-test('master-password setup is easy to complete without weakening encrypted records',()=>{
+test('master-password setup accepts six characters and supports strong generated credentials',()=>{
  const html=renderHealthPage('clinic-password-nonce')
- assert.match(html,/Contraseña maestra \(16 caracteres o más\)/)
+ assert.match(html,/Contraseña maestra \(6 caracteres o más\)/)
  assert.match(html,/clinicGeneratePassword/)
  assert.match(html,/clinicTogglePassword/)
  assert.match(html,/clinicCopyPassword/)
- assert.match(html,/Contraseña inicial \(16\+\)/)
+ assert.match(html,/Contraseña inicial \(6\+\)/)
  assert.match(html,/status.initialized\?"Contraseña":"Contraseña maestra/)
  assert.match(html,/getRandomValues\(bytes\)/)
  assert.match(html,/new Uint8Array\(24\)/)
