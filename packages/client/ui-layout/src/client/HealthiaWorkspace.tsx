@@ -218,7 +218,7 @@ export function HealthiaWorkspace({
             </a>
             <span className={css.notice}>Funciona solo si el administrador habilita el piloto clínico local. El selector de rol no concede acceso.</span>
           </>}
-          <span className={css.chatHint}>Kira y el chat continúan disponibles debajo.</span>
+          <span className={css.chatHint}>Kira y el chat siguen disponibles en el panel de conversación.</span>
         </div>
       </div>
     </section>

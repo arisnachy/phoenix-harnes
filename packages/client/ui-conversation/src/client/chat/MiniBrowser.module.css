@@ -448,3 +448,39 @@
 @media(prefers-reduced-motion: reduce) {
   .browser, .titlebar, .viewport { transition: none !important; }
 }
+
+/* Fill the shell-owned browser workspace rather than painting a micro-window.
+   Expanded modal remains an explicit user-controlled exception. */
+:global([data-browser-workspace-active]) .inline {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+:global([data-browser-workspace-active]) .browser:not([data-expanded='true']) {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  border-radius: 12px;
+  box-shadow: none;
+}
+:global([data-browser-workspace-active]) .browser:not([data-expanded='true']) .viewport {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 180px;
+  place-items: center;
+}
+:global([data-browser-workspace-active]) .browser:not([data-expanded='true']) .screen {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+:global([data-browser-workspace-active]) .browser:not([data-expanded='true']) .loading,
+:global([data-browser-workspace-active]) .browser:not([data-expanded='true']) .empty {
+  width: 100%;
+  height: 100%;
+  min-height: 180px;
+  aspect-ratio: auto;
+}
