@@ -38,3 +38,9 @@
 .primary:disabled,.headerEnd button:disabled{opacity:.5;cursor:not-allowed;}
 .shell button:focus-visible,.shell select:focus-visible,.shell textarea:focus-visible{outline:2px solid var(--dsw-specific-phoenix-accent);outline-offset:2px;}
 @media(max-width:750px){.columns,.formGrid{grid-template-columns:1fr;}.kpis{grid-template-columns:repeat(2,minmax(0,1fr));}.header{flex-wrap:wrap;}.headerEnd{width:100%;display:flex;justify-content:space-between;align-items:center;}}
+
+.details{display:grid;gap:9px;margin:0;}
+.details>div{display:grid;gap:3px;min-width:0;padding-bottom:8px;border-bottom:1px solid var(--dsw-alias-border-l2);}
+.details>div:last-child{border-bottom:0;padding-bottom:0;}
+.details dt{font-size:10px;color:var(--dsw-alias-label-secondary);font-weight:600;}
+.details dd{font-size:12px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;}
