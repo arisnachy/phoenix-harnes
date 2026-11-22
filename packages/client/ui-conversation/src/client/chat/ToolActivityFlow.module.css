@@ -284,3 +284,13 @@
 @media (max-width: 950px) {
   .browserWorkspace[data-browser-workspace-active] { padding: 8px; }
 }
+
+/* The MiniBrowser fragment contains a hidden focus marker followed by its
+   visible root. Grow only the latter; the marker must reserve no space. */
+.browserWorkspace[data-browser-workspace-active] .browserPane > :nth-child(2) {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
