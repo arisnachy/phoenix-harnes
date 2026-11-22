@@ -6,7 +6,8 @@
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { HealthiaClinicalApi, ProtectedClinicError } from './HealthiaClinicalApi.ts'
-import type { ClinicalSession, ClinicalPatient, ClinicalEncounter } from './HealthiaClinicalApi.ts'
+import type { ClinicalSession, ClinicalPatient, ClinicalEncounter, ClinicalIntakeTemplate, ClinicalIdentityMatches } from './HealthiaClinicalApi.ts'
+import { HealthiaPatientDossier } from './HealthiaPatientDossier.tsx'
 import { HealthiaClinicalNote, formatClinicalNote, NOTE_KINDS } from './HealthiaClinicalNote.tsx'
 import type { ClinicalNoteValues, ClinicalNoteKind } from './HealthiaClinicalNote.tsx'
 import css from './HealthiaClinicOperations.module.css'
@@ -89,6 +90,15 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
   const [birthDate,setBirthDate]=useState('')
   const [email,setEmail]=useState('')
   const [phone,setPhone]=useState('')
+  const [patientSearch,setPatientSearch]=useState('')
+  const [documentType,setDocumentType]=useState<'cedula'|'passport'|'other'>('cedula')
+  const [documentNumber,setDocumentNumber]=useState('')
+  const [admissionNotes,setAdmissionNotes]=useState('')
+  const [customFields,setCustomFields]=useState<Record<string,string>>({})
+  const [intakeTemplate,setIntakeTemplate]=useState<ClinicalIntakeTemplate|null>(null)
+  const [identityMatches,setIdentityMatches]=useState<ClinicalIdentityMatches|null>(null)
+  const [confirmDistinct,setConfirmDistinct]=useState(false)
+  const [distinctReason,setDistinctReason]=useState('')
   const [specialty,setSpecialty]=useState('Medicina familiar')
   const [complaint,setComplaint]=useState('')
   const [busy,setBusy]=useState(false)
@@ -101,6 +111,10 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
   const canManagePatients=userRole==='admin'||userRole==='clinician'||userRole==='reception'
   const canManageEncounters=userRole==='clinician'||userRole==='psychologist'
   const selectedPatient=patients.find(p=>p.id===patientId)
+  const normalizedSearch=patientSearch.trim().toLocaleLowerCase('es')
+  const visiblePatients=patients.filter(p=>!normalizedSearch||
+    [p.name,p.dateOfBirth,p.phone,p.email,p.documentNumber].some(value=>
+      typeof value==='string'&&value.toLocaleLowerCase('es').includes(normalizedSearch)))
   const selectedEncounter=encounters.find(e=>e.id===encounterId&&e.patientId===patientId)
   const patientEncounters=encounters.filter(e=>e.patientId===patientId)
   const currentNote=selectedEncounter?restoreClinicalNote(selectedEncounter):undefined
@@ -109,6 +123,10 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
     // The Host filters by institution, assignment and authenticated role.
     const list=await api.patients(s)
     setPatients(list)
+    if(['admin','clinician','reception'].includes(s.actor.role)) {
+      try { setIntakeTemplate(await api.patientIntakeTemplate(s)) }
+      catch { setIntakeTemplate(null) }
+    } else setIntakeTemplate(null)
     if(['clinician','psychologist','admin','nurse'].includes(s.actor.role)) {
       const visits=await api.encounters(s)
       setEncounters(visits)
@@ -215,14 +233,37 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
         name:name.trim(),dateOfBirth:birthDate,
         ...(phone.trim()?{phone:phone.trim()}:{}),
         ...(email.trim()?{email:email.trim()}:{}),
+        ...(documentNumber.trim()?{documentType,documentNumber:documentNumber.trim()}:{}),
+        ...(admissionNotes.trim()?{notes:admissionNotes.trim()}:{}),
+        ...(intakeTemplate?{customFields}:{}),
+        ...(confirmDistinct?{confirmDistinct:true,distinctReason:distinctReason.trim()}:{}),
       })
       setPatients(prev=>[record,...prev])
       setPatientId(record.id)
       setEncounterId('')
       setName('');setBirthDate('');setEmail('');setPhone('')
+      setDocumentNumber('');setAdmissionNotes('');setCustomFields({})
+      setIdentityMatches(null);setConfirmDistinct(false);setDistinctReason('')
       setCreatingPatient(false)
       setNotice('Paciente registrado en el repositorio local cifrado.')
     } catch(err){setError(err instanceof Error?err.message:'No se pudo registrar al paciente')}
+    finally{setBusy(false)}
+  }
+  const checkPatientIdentity=async():Promise<void>=>{
+    if(!session||!canManagePatients||busy||!name.trim()||!birthDate)return
+    setBusy(true);setError('');setNotice('');setIdentityMatches(null)
+    try {
+      const result=await api.patientIdentityMatches(session,{
+        name:name.trim(),dateOfBirth:birthDate,
+        ...(documentNumber.trim()?{documentType,documentNumber:documentNumber.trim()}:{}),
+        ...(phone.trim()?{phone:phone.trim()}:{}),
+        ...(email.trim()?{email:email.trim()}:{}),
+      })
+      setIdentityMatches(result)
+      setNotice(result.matches.length||result.restrictedCount
+        ?'Se detectaron posibles coincidencias. Comprueba la identidad antes de registrar.'
+        :'Sin coincidencias detectadas. Se comprobará nuevamente al guardar.')
+    }catch(err){setError(err instanceof Error?err.message:'No se pudo verificar la identidad.')}
     finally{setBusy(false)}
   }
   const addEncounter=async(event:FormEvent<HTMLFormElement>):Promise<void>=>{
@@ -335,14 +376,33 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
     </div>}
     {!readyRef.current&&<p role="status" className={css.notice}>Cargando registros autorizados…</p>}
     {(error||notice)&&<p role={error?'alert':'status'} className={error?css.error:css.notice}>{error||notice}</p>}
+    {area==='patients'&&<div className={css.directoryHeader}>
+      <div><strong>Directorio de pacientes</strong><small>{patients.length} expedientes accesibles en esta institución · búsqueda local</small></div>
+      <label>Buscar por nombre, fecha, contacto o documento
+        <input aria-label="Buscar pacientes" type="search" value={patientSearch}
+          placeholder="Buscar paciente…" onChange={e=>setPatientSearch(e.currentTarget.value)}/>
+      </label>
+    </div>}
     <label className={css.selectPatient}>Paciente del expediente
       <select value={patientId} aria-label="Paciente del expediente"
         onChange={e=>{setPatientId(e.currentTarget.value);setEncounterId('');setError('');setNotice('')}}>
         <option value="">Seleccionar paciente</option>
-        {patients.map(item=><option key={item.id} value={item.id}>{item.name} · {item.dateOfBirth}</option>)}
+        {(area==='patients'?visiblePatients:patients).map(item=><option key={item.id} value={item.id}>{item.name} · {item.dateOfBirth}</option>)}
       </select>
     </label>
     {area==='patients'&&<>
+      <div className={css.patientResults} role="group" aria-label="Resultados del directorio">
+        {visiblePatients.slice(0,50).map(item=><button type="button" key={item.id}
+          className={patientId===item.id?css.patientResultActive:css.patientResult}
+          aria-pressed={patientId===item.id}
+          onClick={()=>{setPatientId(item.id);setEncounterId('');setError('');setNotice('')}}>
+          <span className={css.patientInitial} aria-hidden="true">{item.name.trim().slice(0,1).toUpperCase()}</span>
+          <span><strong>{item.name}</strong><small>Nacimiento: {item.dateOfBirth||'Sin fecha documentada'}</small></span>
+          <span className={css.patientRecordIndicator}>{patientId===item.id?'Abierto':'Abrir'}</span>
+        </button>)}
+        {!visiblePatients.length&&<p className={css.notice}>No hay pacientes que coincidan con esta búsqueda.</p>}
+        {visiblePatients.length>50&&<p className={css.notice}>Mostrando 50 de {visiblePatients.length}. Precisa la búsqueda.</p>}
+      </div>
       <div className={css.actionBar}>
         {canManagePatients&&<button type="button" onClick={()=>setCreatingPatient(x=>!x)}>
           {creatingPatient?'Cancelar registro':'Registrar paciente'}
