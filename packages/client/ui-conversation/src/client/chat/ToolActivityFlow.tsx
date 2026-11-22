@@ -1256,7 +1256,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
   const newestBrowserKey = browserKeys.at(-1)
   // A requested page or a fetch is NOT a Chromium session. Only a real
   // browser-tool invocation may open the dock automatically.
-  const newestToolBackedBrowserKey = ordinaryFlow.filter(item => item.kind === 'browser' && item.toolBacked).at(-1)?.userKey
+  const newestToolBackedBrowserKey = ordinaryFlow.flatMap(item => item.kind === 'browser' && item.toolBacked === true ? [item.userKey] : []).at(-1)
   const [lastBrowserKey, setLastBrowserKey] = useState<string | undefined>()
   useEffect(() => {
     if (newestBrowserKey !== lastBrowserKey) {
