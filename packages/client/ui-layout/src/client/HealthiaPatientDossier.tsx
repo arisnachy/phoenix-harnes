@@ -90,7 +90,7 @@ export function HealthiaPatientDossier({
   useEffect(()=>{
     if(!allowed){setContext(null);return}
     let active=true
-    setContext(null);setLoading(true);setError('');setTab('summary')
+    setContext(null);setLoading(true);setError('')
     void api.patientContext(session,patient.id).then(result=>{
       if(!active)return
       setContext(result)
