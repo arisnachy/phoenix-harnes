@@ -9,6 +9,17 @@ export const LIVING_TEAM_KINDS = [
 ] as const satisfies readonly ModelAvatarKind[]
 export type LivingTeamKind = typeof LIVING_TEAM_KINDS[number]
 export type TeamDisplayNames = Partial<Record<LivingTeamKind, string>>
+/** Canonical default labels, used only to guard against ambiguous @mentions. */
+export const DEFAULT_TEAM_NAMES: Readonly<Record<LivingTeamKind, string>> = {
+  kira: 'Kira', vortice:'Vórtice', aurora:'Aurora', atlas:'Atlas', nova:'Nova',
+  lumen:'Lumen', helix:'Helix', prisma:'Prisma', orion:'Orión', vega:'Vega',
+  eclipse:'Eclipse', argo:'Argo', solaria:'Solaria', nexo:'Nexo', astra:'Astra',
+  lyra:'Lyra', zenith:'Zenith', cobalto:'Cobalto', quasar:'Quasar', senda:'Senda', orbita:'Órbita',
+}
+function comparisonKey(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLocaleLowerCase().trim()
+}
+
 const DB_NAME = 'phoenix-living-team-profiles-v1'
 const STORE = 'members'
 const EVENT = 'phoenix:living-team-profiles-changed'
@@ -70,6 +81,14 @@ export async function saveTeamNames(changes: TeamDisplayNames): Promise<void> {
     return [id, normalizeTeamName(raw)] as const
   })
   if (pairs.length === 0) return
+  const previous = await readTeamNames()
+  const merged: TeamDisplayNames = { ...previous, ...Object.fromEntries(pairs) }
+  const labels = new Set<string>()
+  for (const kind of LIVING_TEAM_KINDS) {
+    const normalized = comparisonKey(merged[kind] ?? DEFAULT_TEAM_NAMES[kind])
+    if (labels.has(normalized)) throw new Error('Dos integrantes no pueden compartir el mismo nombre visible.')
+    labels.add(normalized)
+  }
   const db = await openDatabase()
   try {
     const tx = db.transaction(STORE, 'readwrite')
