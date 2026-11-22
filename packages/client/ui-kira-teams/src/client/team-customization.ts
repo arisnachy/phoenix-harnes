@@ -98,16 +98,10 @@ export async function saveTeamNames(changes: TeamDisplayNames): Promise<void> {
   } finally { db.close() }
   notify()
 }
-/** Reset a customized name to its public default, without touching the avatar. */
+/** Restore the public name, still checking collisions with other custom aliases. */
 export async function resetTeamName(kind: LivingTeamKind): Promise<void> {
   validKind(kind)
-  const db = await openDatabase()
-  try {
-    const tx = db.transaction(STORE, 'readwrite')
-    tx.objectStore(STORE).delete(kind + ':name')
-    await complete(tx)
-  } finally { db.close() }
-  notify()
+  await saveTeamNames({ [kind]: DEFAULT_TEAM_NAMES[kind] })
 }
 export async function readTeamPortrait(kind: LivingTeamKind): Promise<Blob | undefined> {
   validKind(kind)
