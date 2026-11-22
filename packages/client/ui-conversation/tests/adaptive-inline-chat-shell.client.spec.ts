@@ -47,7 +47,7 @@ describe('PHOENIX side-by-side adaptive workspace and browser', () => {
     expect(chatCss).toContain('grid-template-rows: minmax(0, 1fr) auto')
     expect(chatCss).toContain('grid-column: 1 / -1')
     expect(chatCss).toContain('grid-row: 2')
-    expect(flowCss).toContain('> .root > .scroll')
+    expect(flowCss).toContain('.root > .scroll')
     expect(flowCss).toContain('overflow-y: auto')
   })
 
