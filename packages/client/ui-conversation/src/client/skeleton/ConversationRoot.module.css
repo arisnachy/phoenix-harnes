@@ -829,7 +829,3 @@
 @media (max-width:720px) {.appMenu{right:-45px;max-height:65vh;border-radius:16px;}}
 /* This card participates in the SAME chat scrollport as Kira's messages;
    it is never positioned over the header or composer. */
-.adaptiveChatHost {box-sizing:border-box;width:min(100%,var(--dsh-chat-content-width,768px));margin:0 auto 20px;padding:0 14px;min-width:0;scroll-margin-block:20px;}
-.adaptiveChatHost:empty {display:none;}
-.adaptiveChatHost > * {min-width:0;}
-@media (max-width:720px){.adaptiveChatHost{padding:0 12px;}}
