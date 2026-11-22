@@ -4,6 +4,14 @@ English | [中文](README.zh.md)
 
 Native chat-only sports tools for Kira: sports_chat_catalog, sports_chat_discover, sports_chat_games, sports_chat_mlb_pitchers, sports_chat_odds, and sports_chat_ticket. Sports questions use the existing conversation, not a menu. The assistant receives attributed data and declarative sports_game_card or sports_ticket_card blocks to show inside validated generative-ui fences.
 
+### Portafolio deportivo simulado (sin apuestas)
+
+La herramienta `sports_chat_portfolio_plan` exige dos eventos centrales seleccionados por Kira tras investigación bilateral. Verifica sus cuotas ESPN por evento, horario, mercado y operador, y devuelve una simulación de **30% + 30% en individuales, 15% en doble y 25% sin apostar**. El operador debe ser único, la observación tener menos de quince minutos y los identificadores no pueden repetirse.
+
+`fullTicketPercent` permite asignar entre cero y diez puntos del presupuesto, tomados de la reserva, a una combinada de cinco o seis eventos **solo si todas las cuotas se verifican**. Si falta una cotización central, no se compromete dinero simulado. Los cuatro escenarios de aciertos centrales no incluyen pagos hipotéticos de la combinada larga; el retorno de ganar todos se presenta por separado.
+
+Es un cálculo de retornos condicionales, no una predicción: no valida probabilidades, EV, independencia, lesiones ni reglas de liquidación. El resultado nunca coloca una apuesta y el presupuesto es hipotético.
+
 ## ESPN Core / historial de cuotas
 
 Manual de las 14 rutas, movimiento, históricos y procedimientos de Kira: [ESPN_HISTORICOS.md](ESPN_HISTORICOS.md). El recuperador por fecha usa sports_chat_espn_historical_odds y nunca mezcla cuotas antiguas con apuestas vigentes.

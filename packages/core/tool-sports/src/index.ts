@@ -40,6 +40,7 @@ import { investigateEventDeep } from './sports-deep-context.ts'
 import { discoverAutonomousSportsSources,planIndependentSportsFallback } from './sports-autonomous-source-discovery.ts'
 import { progressiveSportsStage,type ResearchStage } from './sports-progressive-chat.ts'
 import { quoteKiraChosenTicket,type ModelChosenLeg } from './sports-model-picked-ticket.ts'
+import { simulateSportsPortfolio } from './sports-portfolio.ts'
 import { auditUniversalMatchup } from './universal-matchup-factors.ts'
 import { estimateEvidenceForecast } from './sports-forecast.ts'
 import { extendedEspnRoutes,readExtendedEspn,type ExtendedEspnMode } from './espn-extra-intelligence.ts'
@@ -115,6 +116,7 @@ const GUIDANCE = [
   'SONDEO RÁPIDO DE FUENTES GRATUITAS: cuando una consulta deportiva dé 0 datos o el usuario solicite diagnóstico, llama sports_chat_free_sources_probe para comprobar seis endpoints públicos ESPN NBA/NFL/Liga MX, MLB StatsAPI, NHL Web API y TheSportsDB, sin claves ni scraping no autorizado. Un día sin partidos indica empty y NO proveedor caído. Los endpoints públicos aportan datos deportivos, NO cuotas comerciales ni disponibilidad médica. Para OddsHarvester MLB/NFL usa home_away (ganador incluyendo prórroga), nunca market moneyline como argumento CLI; 1x2 es un mercado distinto. ',
   'LESIONES ESPN COMO EVIDENCIA: usar sports_chat_espn_injuries cuando un expediente NBA/WNBA/NFL/NHL/MLB indique lesiones no verificadas. Consultar el JSON público ESPN por liga y equipos con fecha y fuente, no limitarse a la página espn.com.do/basquetbol/nba/lesiones. El estado reported, questionable, out, active o day-to-day es solo lo publicado; no convertirlo en quinteto, portero, QB titular ni confirmación de inactivos. Para NBA, cotejar en la página oficial de reportes antes de afirmar disponibilidad definitiva. Una fuente vacía/no actualizada no equivale a equipo sano, ni impide mostrar un ticket CONDICIONAL con cuotas reales; no inventar bajas. ',
   'RECUPERACIÓN DE DATOS: si ESPN publica estadística vacía o histórico HTTP 400, usar recuperación por mes/día y calendario de equipo; para eventos concretos consultar sports_chat_source_resilience y sus fuentes independientes. Fuentes del catálogo o enlaces no equivalen a consulta real, ni calendario equivale a lesiones, alineación o cuota. Nunca eludir 401/403/429 ni inventar resultados. ',
+  'PORTAFOLIO DE INVESTIGACIÓN: cuando el usuario pida ticket diario, crear también el portafolio de simulación si existen dos núcleos con expediente contrastado; si solicita estrategia 2+2 aplica la misma regla. Tras el expediente bilateral elegir explícitamente dos núcleos; llamar sports_chat_portfolio_plan con los eventos, ID ESPN, razones y presupuesto SIMULADO. La herramienta coteja nuevas cuotas; genera dos individuales de 30%, una doble de 15% y reserva de 25%, con combinada de 5/6 opcional de 0-10% solo cotizada. Explicar cuatro escenarios de retorno, exposición y pérdidas; no recomendar apuestas sin ventaja EV calibrada ni considerar cuotas como probabilidades propias. ',
   'AUDITORÍA DE RIESGO DEL TICKET: la ruta automática primero clasifica candidatos por evidencia deportiva y revisa disponibilidad, forma, contexto y señales contrarias. Las cuotas se usan después para validar el mercado y el mismo operador; no son la fuente de la elección. El ticket de investigación muestra por pata la evidencia favorable, adversa y pendiente. Sin modelo calibrado, no infieras probabilidad ni EV desde el precio.',
   'REGLA DE TICKETS GANADORES: los boletos diarios muestran cinco o seis elecciones justificadas por Kira únicamente cuando las fuentes y las cuotas auténticas del mismo operador lo permiten. Priorizar la secuencia de tablas sports_chat_research_stage; la vía automática solo propone un BORRADOR. Verificar titulares, QB, porteros, abridores y partes publicados sin asignar pesos de confianza. Si faltan precios ESPN para los picks del modelo, informar los faltantes sin rellenar. Nunca garantizar un resultado ni confundir ticket de análisis con apuesta colocada. ',
   'MERCADOS DE TOTAL Y HÁNDICAP: ganar un partido no demuestra cubrir -1.5/+1.5 o una línea over/under. Antes de considerar un total o spread con sports_chat_daily_market_shortlist(deep=true), coteja la línea EXACTA contra resultados previos de AMBOS clubes, separa aciertos, fallos y pushes, y exige dirección consistente en los dos historiales. Si marketOutcomeDiagnostic.status es mixed, insufficient o adverse, etiquetar CONDICIONAL/CONTRAINDICADA y no ponerla como pata cotizada; nunca conviertas frecuencia histórica en probabilidad futura o EV. Para NHL añade portero y reglas OT/SO; para NBA pace, eficiencia y lesiones siguen pendientes si no fueron medidos. La meta de 5–6 patas no autoriza inventar una probabilidad ni rellenar selecciones sin respaldo. ',
@@ -2156,6 +2158,62 @@ export function apply(ctx: Context): void {
         ].join(' ') })
     },
     presentCall:()=>({ card:'generic',title:'Kira · Cotizar selecciones elegidas tras la investigación',kind:'read' as const }),
+  }))
+  ctx.tools.register(defineTool({
+    name:'sports_chat_portfolio_plan',
+    description:'SIMULADOR DE CARTERA DEPORTIVA: después de investigar eventos, Kira elige EXPLÍCITAMENTE dos partidos centrales y esta función coteja de nuevo sus cuotas ESPN contra el evento exacto. Muestra dos individuales, una doble y 25% de reserva, con combinada de cinco/seis opcional. Nunca apuesta, asigna probabilidades imaginarias ni asegura ganancia.',
+    parameters:{
+      budget:{ type:'number',description:'Presupuesto TOTAL hipotético en pesos dominicanos, defecto 1000. No es dinero apostado.' },
+      fullTicketPercent:{ type:'number',description:'Porcentaje adicional de 0 a 10 para combinada 5/6 verificada, tomado de la reserva. Defecto 0.' },
+      coreEventIds:{ type:'array',required:true,description:'Dos eventId ESPN distintos elegidos por Kira DESPUÉS del expediente bilateral, no automáticamente por precio.',items:{ type:'string' } },
+      legs:{ type:'array',required:true,description:'Dos a seis decisiones ya investigadas por Kira; se vuelven a cotizar de ESPN, nunca enviar cuotas creadas por el modelo.',items:{
+        type:'object',additionalProperties:false,properties:{
+          sport:{ type:'string',required:true },league:{ type:'string',required:true },
+          eventId:{ type:'string',required:true },date:{ type:'string',required:true },
+          home:{ type:'string',required:true },away:{ type:'string',required:true },
+          kickoff:{ type:'string',required:true },pick:{ type:'string',required:true },
+          reason:{ type:'string',required:true,description:'Fundamento contrastado del pick, no un porcentaje implícito.' },
+          sourceUrls:{ type:'array',items:{ type:'string' } },
+          counterEvidence:{ type:'string' },
+          criticalPending:{ type:'array',items:{ type:'string' } },
+          researchEvidence:{ type:'object',additionalProperties:false,properties:{
+            eventId:{ type:'string',required:true },
+            homeRosterCount:{ type:'integer',required:true },
+            awayRosterCount:{ type:'integer',required:true },
+            reviewedStages:{ type:'array',required:true,items:{ type:'string' } },
+            observedFacts:{ type:'array',required:true,items:{ type:'string' } },
+          } },
+        },
+      } },
+    },
+    output:{ schema:{ type:'string' },render:(_a,v)=>[{ type:'text' as const,text:v }] },
+    isConcurrencySafe:()=>true,
+    async execute(args,exec){
+      const now=Date.now(),legs=args.legs as ModelChosenLeg[]
+      if(!Array.isArray(legs)||legs.length<2||legs.length>6)
+        throw Error('La cartera exige dos a seis partidos investigados.')
+      const session=exec.agent?.session
+      const quotes=await quoteKiraChosenTicket(legs,fetch,now,legs.length,
+        leg=>session?[...(stageAuditFor(session,leg,now)?.stages??[])]:[])
+      const plan=simulateSportsPortfolio(quotes.quotes,args.coreEventIds,
+        args.budget??1000,args.fullTicketPercent??0,now)
+      return JSON.stringify({
+        portfolio:plan,quoteStatus:quotes.ticketStatus,
+        researchEvidenceStatus:quotes.researchEvidenceStatus,
+        quotedLegs:quotes.quotes.length,missingQuotes:quotes.missing,
+        pendingResearch:quotes.finalizationMissing,
+        instruction:[
+          'Mostrar TODA la cartera y cada escenario con inversión total y reserva separada.',
+          'Los cálculos son retornos condicionales, nunca probabilidad real ni EV demostrado.',
+          'No asignar automáticamente los dos núcleos por cuota: Kira debe justificarlos con los expedientes.',
+          'Si los precios no corresponden, son antiguos o mezclan casas: capital completo en reserva.',
+          'Una combinada larga solo entra si sus cinco o seis cuotas se validan simultáneamente.',
+          'Sin modelo independiente calibrado y ventaja demostrada, presentar SIMULACIÓN, NO recomendación de apostar.',
+          'Sin apuestas realizadas. Verificar reglas de void/push y aceptación del operador.',
+        ].join(' '),
+      })
+    },
+    presentCall:()=>({ card:'generic',title:'PHOENIX · Portafolio de individuales y doble',kind:'read' as const }),
   }))
   ctx.tools.register(defineTool({
     name:'sports_chat_ticket_evidence_priced_auto',
