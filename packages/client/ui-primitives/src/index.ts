@@ -58,3 +58,6 @@ export * from './icons/index.tsx'
 export { PhoenixUiIcon, PhoenixStatusPill, PhoenixAgentLine, isPhoenixUiIconName, isPhoenixUiIconTone,
   isPhoenixUiHexColor, choosePhoenixUiIcon, choosePhoenixUiTone } from './SmartUi.tsx'
 export type { PhoenixUiIconName, PhoenixUiIconTone, PhoenixStatusTone } from './SmartUi.tsx'
+export { PHOENIX_NAVIGATION_ICON_CHOICES, choosePhoenixNavigationIcon, phoenixNavigationIconScope,
+  readPhoenixNavigationIcons, writePhoenixNavigationIcon } from './NavigationIcons.ts'
+export type { PhoenixNavigationIconOverrides } from './NavigationIcons.ts'
