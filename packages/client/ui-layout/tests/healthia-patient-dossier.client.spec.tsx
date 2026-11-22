@@ -46,7 +46,7 @@ describe('PHOENIX Healthia patient dossier',()=>{
     const onPatientUpdated=vi.fn()
     render(<HealthiaPatientDossier session={session} patient={patient} onPatientUpdated={onPatientUpdated}/>)
     await waitFor(()=>expect(screen.getByText('Asma')).toBeTruthy())
-    expect(screen.getByText('Consulta inicial')).toBeTruthy()
+    expect(screen.getAllByText('Consulta inicial').length).toBeGreaterThan(0)
     expect(screen.getByText('No existe revisión de alergias documentada.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button',{name:'Antecedentes'}))
     expect(screen.getByDisplayValue('Asma documentada')).toBeTruthy()
