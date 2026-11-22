@@ -15,6 +15,18 @@ function fixture(t) {
   const admin=db.login('clinicaladmin',PASSWORD)
   return {db,admin,root}
 }
+test('the clinical encryption passphrase cannot be replaced with a six-character password',t=>{
+ const root=mkdtempSync(join(tmpdir(),'phoenix-health-weak-master-test-'))
+ const db=new HealthClinicStore(join(root,'clinic.sqlite'))
+ t.after(()=>{db.close();rmSync(root,{recursive:true,force:true})})
+ assert.throws(()=>db.initialize('clinicaladmin','123456','Hospital de pruebas'),/16 caracteres/)
+ assert.throws(()=>db.initialize('clinicaladmin','123456789012345','Hospital de pruebas'),/16 caracteres/)
+ assert.equal(db.initialized(),false)
+ db.initialize('clinicaladmin',PASSWORD,'Hospital de pruebas')
+ const admin=db.login('clinicaladmin',PASSWORD)
+ assert.throws(()=>db.createStaff(admin.actor,{username:'doctor1',password:'123456',role:'clinician'}),/16 caracteres/)
+})
+
 test('real SQLite encrypted record persists across restart and plaintext is absent',t=>{
   const f=fixture(t)
   const actor=f.admin.actor
