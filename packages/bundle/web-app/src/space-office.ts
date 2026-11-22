@@ -50,9 +50,9 @@ function packageRel(type:string,target:string):string {
   return XML+'<Relationships xmlns="'+PR+'"><Relationship Id="rId1" Type="'+OD+'/'+type+'" Target="'+target+'"/></Relationships>'
 }
 function shape(id:number,title:string,x:number,y:number,w:number,h:number,size:number,bold=false):string {
-  const lines=title.split(/\r?\n/u).slice(0,16).map(line=>
+  const lines=title.split(/\r?\n/u).map(line=>
     '<a:p><a:pPr/><a:r><a:rPr lang="es-DO" sz="'+size+'"'+(bold?' b="1"':'')+'/>'+
-    '<a:t>'+xml(line.slice(0,500))+'</a:t></a:r><a:endParaRPr lang="es-DO"/></a:p>').join('')
+    '<a:t>'+xml(line)+'</a:t></a:r><a:endParaRPr lang="es-DO"/></a:p>').join('')
   return '<p:sp><p:nvSpPr><p:cNvPr id="'+id+'" name="Text '+id+'"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>'+
     '<p:spPr><a:xfrm><a:off x="'+x+'" y="'+y+'"/><a:ext cx="'+w+'" cy="'+h+'"/></a:xfrm>'+
     '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>'+
@@ -131,7 +131,7 @@ function cellXml(value:string,r:number,c:number):string {
     && !/\b(?:EXEC|CMD|WEBSERVICE|HYPERLINK|DDE)\b/iu.test(value)) {
     return '<c r="'+addr+'"><f>'+xml(value.slice(1))+'</f><v>0</v></c>'
   }
-  if(value!==''&&/^-?(?:\d+(?:\.\d+)?|\.\d+)$/u.test(value)&&Number.isFinite(Number(value)))
+  if(value!==''&&!/^-?0\d/u.test(value)&&/^-?(?:\d+(?:\.\d+)?|\.\d+)$/u.test(value)&&Number.isFinite(Number(value)))
     return '<c r="'+addr+'"><v>'+xml(value)+'</v></c>'
   return '<c r="'+addr+'" t="inlineStr"><is><t xml:space="preserve">'+xml(value)+'</t></is></c>'
 }
