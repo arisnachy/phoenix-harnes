@@ -221,7 +221,7 @@ export class HealthiaClinicalApi {
       prescriptions:lists.prescriptions!,observations:lists.observations!,
       followups:lists.followups!,appointments:lists.appointments!,
       attachments:lists.attachments!,timeline:lists.timeline!,
-      pending:pending as ClinicalPatientContext['pending']}
+      pending:{orders:pending.orders as number,followups:pending.followups as number,attachments:pending.attachments as number}}
   }
   /** Medical history is submitted directly to the encrypted EHR, never to chat. */
   async updatePatientHistory(session:ClinicalSession,patient:ClinicalPatient,
@@ -258,7 +258,7 @@ export class HealthiaClinicalApi {
         &&typeof entry.id==='string'&&typeof entry.label==='string'
         &&typeof entry.kind==='string'&&typeof entry.required==='boolean'))
       throw Error('Formulario de admisión no verificable')
-    return template as ClinicalIntakeTemplate
+    return template as unknown as ClinicalIntakeTemplate
   }
   async patientIdentityMatches(session:ClinicalSession,input:{
     name:string;dateOfBirth:string;documentType?:string;documentNumber?:string;
@@ -269,7 +269,11 @@ export class HealthiaClinicalApi {
     if(!Array.isArray(result.matches)||result.matches.length>8
       ||!Number.isSafeInteger(result.restrictedCount))
       throw Error('Resultado de identidades inválido')
-    return result as ClinicalIdentityMatches
+    if(!result.matches.every(item=>item&&typeof item==='object'&&!Array.isArray(item)
+      &&typeof item.id==='string'&&typeof item.name==='string'
+      &&typeof item.dateOfBirth==='string'&&typeof item.reason==='string'))
+      throw Error('Coincidencias de identidad inválidas')
+    return result as unknown as ClinicalIdentityMatches
   }
 
   async encounters(session:ClinicalSession):Promise<readonly ClinicalEncounter[]> {
