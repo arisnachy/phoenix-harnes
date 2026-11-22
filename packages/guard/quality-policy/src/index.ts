@@ -40,12 +40,14 @@ export const Config: z<Config> = z.object({
   maxStopNudges: z.number().step(1).min(0).max(3).default(1),
 })
 
-const MUTATION_NAME = /^(?:write|edit|str_replace_editor|apply_patch|create_file|update_file|delete_file|move_file|rename_file|upload(?:_.*)?|deploy(?:_.*)?|publish(?:_.*)?)$/
+// Match operation families rather than only file-specific names. Otherwise a
+// successful GitHub merge or ref update can be mistaken for an inert tool call.
+const MUTATION_NAME = /^(?:(?:write|edit|str_replace_editor|apply_patch|create|update|delete|move|rename|upload|deploy|publish|merge|commit|push|save|set|add|remove|install|uninstall)(?:_.*)?|manage_library|enable_auto_merge|disable_auto_merge|reply_to_review_comment|label_pr)$/
 const VERIFICATION_NAME = /^(?:verify(?:_.*)?|check(?:_.*)?|test(?:_.*)?|lint(?:_.*)?|typecheck(?:_.*)?|build(?:_.*)?|smoke(?:_.*)?)$/
 const INSPECTION_NAME = /^(?:read|grep|glob|search|find|fetch|web_fetch|screenshot(?:_.*)?)$/
 const SHELL_NAME = /^(?:bash|pwsh|run_code)$/
 const SHELL_VERIFY = /\b(?:vitest|pytest|unittest|jest|mocha|tsc|oxlint|eslint|ruff|mypy|cargo\s+test|go\s+test|dotnet\s+test|pnpm\s+(?:run\s+)?(?:test|check|lint|typecheck|build|verify)|npm\s+(?:run\s+)?(?:test|check|lint|build|verify)|yarn\s+(?:test|check|lint|build)|python\s+-m\s+pytest)\b/i
-const SHELL_MUTATE = /(?:^|[\s;&|])(?:rm|mv|cp|mkdir|touch|git\s+(?:add|commit|merge|rebase|cherry-pick|reset|checkout|switch)|npm\s+(?:install|i)|pnpm\s+(?:install|add|remove)|pip\s+install|Set-Content|Add-Content|Out-File|Remove-Item|Move-Item|Copy-Item|New-Item|Rename-Item)\b|(?:>>?|\b(?:sed\s+-i|tee)\b)/i
+const SHELL_MUTATE = /(?:^|[\s;&|])(?:rm|mv|cp|mkdir|touch|git\s+(?:add|commit|merge|rebase|cherry-pick|reset|checkout|switch|push|tag|restore|revert|clean)|gh\s+(?:pr\s+(?:create|merge|edit|close|reopen)|release\s+(?:create|edit|delete))|npm\s+(?:install|i)|pnpm\s+(?:install|add|remove)|pip\s+install|Set-Content|Add-Content|Out-File|Remove-Item|Move-Item|Copy-Item|New-Item|Rename-Item)\b|(?:>>?|\b(?:sed\s+-i|tee)\b)/i
 
 const DOMAIN_PATTERNS: ReadonlyArray<readonly [QualityDomain, RegExp]> = [
   ['web', /\.(?:html?|css|scss|sass|less|tsx|jsx|vue|svelte)\b/i],
@@ -95,8 +97,10 @@ export function classifyQualityActivity(toolName: string, argumentsValue: unknow
   if (INSPECTION_NAME.test(normalized)) return 'inspection'
   if (!SHELL_NAME.test(normalized)) return 'other'
   const text = argumentText(argumentsValue)
-  if (SHELL_VERIFY.test(text)) return 'verification'
+  // Mixed commands can mutate after tests (or before them); do not accept a
+  // combined shell call as independent proof that its final state was checked.
   if (SHELL_MUTATE.test(text)) return 'mutation'
+  if (SHELL_VERIFY.test(text)) return 'verification'
   return 'other'
 }
 
