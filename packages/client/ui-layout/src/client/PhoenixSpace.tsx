@@ -151,8 +151,9 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
     setEditor(e=>e?{...e,...change,dirty:true}:e)
     setStatus('Cambios pendientes')
   }
-  const persist=async(snapshot:Editor):Promise<void>=>{
-    if(saving.current||!snapshot.dirty)return
+  const persist=async(snapshot:Editor):Promise<boolean>=>{
+    if(saving.current)return false
+    if(!snapshot.dirty)return true
     saving.current=true
     setStatus('Guardando…')
     try{
@@ -166,9 +167,11 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
       })
       setRevisionCounter(n=>n+1)
       setStatus('Guardado')
+      return true
     }catch(e){
       setStatus('Sin guardar')
       setError(e instanceof Error?e.message:String(e))
+      return false
     }finally{saving.current=false}
   }
   useEffect(()=>{
@@ -176,8 +179,16 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
     const timer=window.setTimeout(()=>{void persist(editor)},1100)
     return ()=>window.clearTimeout(timer)
   },[editor])
+  const closeSpace=():void=>{
+    if(editor?.dirty){void persist(editor).then(saved=>{if(saved)onClose()})}
+    else onClose()
+  }
+  const backToLibrary=():void=>{
+    if(editor?.dirty){void persist(editor).then(saved=>{if(saved)setEditor(null)})}
+    else setEditor(null)
+  }
   const openItem=async(id:string):Promise<void>=>{
-    if(editor?.dirty)await persist(editor)
+    if(editor?.dirty&&!(await persist(editor)))return
     setBusy(true);setError('');setPreviewGame(false);setHistory([])
     try{
       const {item}=await api<{item:Item}>('/items/'+id)
@@ -265,7 +276,7 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
     <div className={css.main}>
       <header className={css.topbar}>
         <div><strong>PHOENIX · Espacio</strong><span>Biblioteca, editores y proyectos</span></div>
-        <button type="button" className={css.close} onClick={onClose} aria-label="Cerrar Biblioteca">×</button>
+        <button type="button" className={css.close} onClick={closeSpace} aria-label="Cerrar Biblioteca">×</button>
       </header>
       {error&&<div className={css.alert} role="alert">{error}<button type="button" onClick={()=>setError('')}>Cerrar</button></div>}
       {!editor?<>
@@ -297,7 +308,7 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
         </div>
       </>:<>
         <div className={css.editHeader}>
-          <button type="button" onClick={()=>{if(editor.dirty)void persist(editor);setEditor(null)}}>← Biblioteca</button>
+          <button type="button" onClick={backToLibrary}>← Biblioteca</button>
           <span>{LABEL[editor.item.kind]} · versión {editor.item.revision}</span>
           <button type="button" disabled={!editor.dirty||busy} onClick={()=>{void persist(editor)}}>Guardar</button>
           <button type="button" onClick={()=>{void loadHistory()}}>Versiones</button>
