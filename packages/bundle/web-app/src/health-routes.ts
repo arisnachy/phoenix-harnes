@@ -133,8 +133,15 @@ export function registerHealthRoutes(ctx:Context):void {
   const failures=new Map<string,{ count:number;until:number }>()
   const route=ctx.webServer.register({ kind:'prefix',path:'/health',handler:async(req,res)=>{
     if(!peer(req)){reply(res,403,{ error:'Acceso local requerido' });return}
+    // Startup must reply with a controlled HTTP status even if SQLite fails
+    // to load in a packaged runtime; an uncaught rejection leaves setup hanging.
+    let store:HealthClinicStore
+    try{store=getStore()}
+    catch{
+      reply(res,503,{error:'No se pudo abrir el almacén clínico cifrado. Verifica permisos y runtime local de PHOENIX.'})
+      return
+    }
     // Authenticated clinical methods still require login, session and CSRF.
-    const store=getStore()
     const patientPortal=createPatientPortalHandler(store)
     // On a shared browser, opening the patient portal invalidates any
     // professional login token. Patient mode must never inherit clinician rights.
