@@ -3,6 +3,22 @@ import assert from 'node:assert/strict'
 import { Script } from 'node:vm'
 import { renderHealthPage } from '../src/health-ui.ts'
 
+test('master-password setup is easy to complete without weakening encrypted records',()=>{
+ const html=renderHealthPage('clinic-password-nonce')
+ assert.match(html,/Contraseña maestra \(16 caracteres o más\)/)
+ assert.match(html,/clinicGeneratePassword/)
+ assert.match(html,/clinicTogglePassword/)
+ assert.match(html,/clinicCopyPassword/)
+ assert.match(html,/Contraseña inicial \(16\+\)/)
+ assert.match(html,/status.initialized\?"Contraseña":"Contraseña maestra/)
+ assert.match(html,/getRandomValues\(bytes\)/)
+ assert.match(html,/new Uint8Array\(24\)/)
+ assert.match(html,/bytes.fill\(0\)/)
+ const script=/<script nonce="clinic-password-nonce">([\s\S]+?)<\/script>/u.exec(html)?.[1]
+ assert.ok(script)
+ assert.doesNotThrow(()=>new Script(script,{filename:'clinical-password-generator.js'}))
+})
+
 test('PHOENIX clinic page renders a real clinical workbench with valid inline JavaScript',()=>{
  const html=renderHealthPage('test-nonce-opaque')
  assert.match(html, /PHOENIX Health/)
