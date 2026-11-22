@@ -4,6 +4,7 @@
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  container: conversation-root / inline-size;
   height: 100%;
   min-width: 0;
   background: var(--dsw-alias-bg-base);
@@ -879,7 +880,7 @@
   border-top: 1px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-base);
 }
-@media (max-width: 980px) {
+@container conversation-root (max-width: 920px) {
   .root .scrollBody:has(> .adaptiveInlineHost > *) {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) minmax(160px, 30vh) auto;
@@ -897,6 +898,62 @@
     grid-column: 1;
     grid-row: 3;
   }
+}
+
+/* The portal is an in-chat surface. Its legacy workspace shell still carries
+   a rail border, which would draw a false seam beside the live transcript. */
+.root .adaptiveInlineHost :global([data-adaptive-workspace-host]) {
+  border-right: 0;
+}
+
+/* A hero with no session header still owns the global search/app/profile
+   controls. Keep that rail compact on the right instead of reserving an empty
+   title column when the header is explicitly expanded. */
+.root[data-phase='hero'] .unifiedHeader,
+.root:not([data-phase='hero']):not(:has(.sessionChrome .header)) .unifiedHeader {
+  align-self: flex-end;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  min-height: 54px;
+  margin: 8px 12px 0 auto;
+  padding: 5px 9px;
+  grid-template-columns: auto;
+  grid-template-rows: auto;
+  column-gap: 0;
+  border-radius: 19px;
+}
+
+.root[data-phase='hero'] .unifiedHeader .sessionChrome,
+.root:not([data-phase='hero']):not(:has(.sessionChrome .header)) .unifiedHeader .sessionChrome {
+  display: none;
+}
+
+.root[data-phase='hero'] .unifiedHeader .headerGlobal,
+.root:not([data-phase='hero']):not(:has(.sessionChrome .header)) .unifiedHeader .headerGlobal {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: end;
+}
+
+/* With no live session outlet there is no transcript to justify an empty
+   right rail. Let the mounted app use the full content area until a session
+   body arrives. The slot anchor is display:contents, so inspect its children. */
+.root .scrollBody:has(> .adaptiveInlineHost > *):not(:has(> [data-slot='conversation.session'] > *)) {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.root .scrollBody:has(> .adaptiveInlineHost > *):not(:has(> [data-slot='conversation.session'] > *)) > .adaptiveInlineHost {
+  grid-column: 1;
+}
+
+.root .scrollBody:has(> .adaptiveInlineHost > *):not(:has(> [data-slot='conversation.session'] > *)) > .composerSeat {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.root .scrollBody:has(> .adaptiveInlineHost > *):not(:has(> [data-slot='conversation.session'] > *)) > [data-slot='conversation.session'] {
+  display: none;
 }
 
 

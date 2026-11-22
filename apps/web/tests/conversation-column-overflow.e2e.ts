@@ -58,6 +58,8 @@ interface ColumnMetrics {
   width: number
   /** The column's content width. Not committed to the golden — it is what settles after a resize, and what the sweep waits on. */
   columnWidth: number
+  /** The rendered conversation root fills the pane through the display: contents slot. */
+  conversationFillsPane: boolean
   /** Resolved `overflow-x` on the conversation scroll container. */
   overflowX: string
   /**
@@ -87,6 +89,9 @@ function measureColumn(page: Page, width: number): Promise<ColumnMetrics> {
   return page.evaluate((viewportWidth) => {
     const scroller = document.querySelector<HTMLElement>('[data-conversation-scroll]')
     if (scroller === null) throw new Error('conversation scroll container not in the DOM')
+    const pane = scroller.closest('[data-conversation-pane]')
+    const conversation = scroller.parentElement
+    if (pane === null || conversation === null) throw new Error('conversation shell not in the DOM')
     const glow = scroller.querySelector<SVGElement>('[class*="heroGlow"]')
     if (glow === null) throw new Error('hero glow not in the DOM — the boot state is not the hero')
     const box = scroller.getBoundingClientRect()
@@ -94,6 +99,7 @@ function measureColumn(page: Page, width: number): Promise<ColumnMetrics> {
     return {
       width: viewportWidth,
       columnWidth: scroller.clientWidth,
+      conversationFillsPane: Math.abs(conversation.getBoundingClientRect().width - pane.getBoundingClientRect().width) < 1,
       overflowX: getComputedStyle(scroller).overflowX,
       // `clientWidth` is the content edge, which is what the scrollable
       // overflow region is measured against; either side counts as a bleed,
@@ -272,6 +278,7 @@ describe('web e2e: the conversation column scrolls on one axis', () => {
       expect(stop.bleedRange, `viewport ${String(stop.width)}`).toBeGreaterThan(0)
     }
     for (const stop of stops) {
+      expect(stop.conversationFillsPane, `viewport ${String(stop.width)}`).toBe(true)
       expect(stop.overflowX, `viewport ${String(stop.width)}`).toBe('hidden')
       // The reported symptom, stated directly: a horizontal wheel over the
       // column moves nothing, at every stop.
