@@ -136,10 +136,10 @@ describe('SidebarRoot shell', () => {
         }))
       })
       expect(screen.getByRole('navigation', { name: 'Navegación Healthia' })).toBeTruthy()
-      expect(screen.getByRole('button', { name: 'Capacidades' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Herramientas' })).toBeTruthy()
       expect(screen.queryByRole('button', { name: 'Scheduled tasks' })).toBeNull()
       fireEvent.click(screen.getByRole('button', { name: 'Capacidades' }))
-      expect(intents.at(-1)).toEqual({ app: 'healthia', role: 'doctor', section: 'capabilities' })
+      expect(intents.at(-1)).toEqual({ app: 'healthia', role: 'doctor', section: 'tools' })
       fireEvent.click(screen.getByRole('button', { name: 'PHOENIX · General' }))
       expect(intents.at(-1)?.app).toBe('general')
       act(() => {
