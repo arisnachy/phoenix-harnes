@@ -19,6 +19,7 @@ afterEach(() => {
   cleanup()
   vi.unstubAllEnvs()
   vi.useRealTimers()
+  window.localStorage.removeItem('phoenix.navigation-icons.v1')
 })
 
 // The shell never reads the global hooks itself, but they ride the standard
@@ -82,6 +83,46 @@ function mountShell({ collapsed = false, width = 300 }: { collapsed?: boolean; w
 }
 
 describe('SidebarRoot shell', () => {
+
+  it('renders semantic Healthia icons and saves the user-selected glyph', () => {
+    mountShell()
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoenix:adaptive-workspace-state', {
+        detail: { app: 'healthia', role: 'patient', section: 'overview' },
+      }))
+    })
+    const appointment = screen.getByRole('button', { name: 'Citas' })
+    const records = screen.getByRole('button', { name: 'Mi expediente' })
+    expect(appointment.getAttribute('data-navigation-icon')).toBe('calendar-days')
+    expect(records.getAttribute('data-navigation-icon')).toBe('clipboard-list')
+    expect(screen.getByRole('button', { name: 'Autorizaciones' }).getAttribute('data-navigation-icon')).toBe('shield-check')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Personalizar iconos' }))
+    fireEvent.change(screen.getByRole('combobox', { name: 'Icono de Citas' }), {
+      target: { value: 'trophy' },
+    })
+    expect(screen.getByRole('button', { name: 'Citas' }).getAttribute('data-navigation-icon')).toBe('trophy')
+    expect(JSON.parse(window.localStorage.getItem('phoenix.navigation-icons.v1') ?? '{}').icons?.['healthia.patient.appointments']).toBe('trophy')
+    fireEvent.change(screen.getByRole('combobox', { name: 'Icono de Citas' }), {
+      target: { value: 'auto' },
+    })
+    expect(screen.getByRole('button', { name: 'Citas' }).getAttribute('data-navigation-icon')).toBe('calendar-days')
+  })
+
+  it('gives Kira-generated apps semantic menu icons without executing arbitrary SVG', () => {
+    mountShell()
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoenix:adaptive-workspace-state', {
+        detail: {
+          app: 'app-tienda', role: 'doctor', section: 'ventas',
+          sections: [{ id: 'ventas', label: 'Ventas y ganancias' }, { id: 'other', label: 'XYZ' }],
+        },
+      }))
+    })
+    expect(screen.getByRole('button', { name: 'Ventas y ganancias' }).getAttribute('data-navigation-icon')).toBe('wallet')
+    expect(screen.getByRole('button', { name: 'XYZ' }).getAttribute('data-navigation-icon')).toBe('layout-grid')
+  })
+
 
   it('switches contextual navigation without losing the original PHOENIX menu', () => {
     mountShell()
