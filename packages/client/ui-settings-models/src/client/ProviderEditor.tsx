@@ -216,7 +216,11 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     && (props.provider === 'openai' || isCodex)
   const supportsAccount = isCodex || oauth?.methods.some(method => method.id === 'oauth') === true
     || openAiPaired
+  // A registered OAuth-only pi-ai provider (e.g. a CLI or account adapter)
+  // must not get a fabricated API-key form. Dual-mode registrations can show both.
   const supportsApiKey = !isChatGptWeb && (!isCodex || openAiPaired)
+    && (openAiPaired || oauth === undefined
+      || oauth.methods.some(method => method.id === 'api-key'))
   const defaultMethod = isCodex || (!openAiPaired && oauth?.methods.some(method => method.id === 'oauth') === true)
     ? 'oauth' : 'api-key'
   const selectedMethod = preferredMethod === 'auto' ? defaultMethod
