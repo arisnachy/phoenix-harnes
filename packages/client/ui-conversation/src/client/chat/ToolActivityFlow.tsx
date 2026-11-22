@@ -1,5 +1,4 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import type { ComponentProps } from 'react'
 import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
 import type { ToolCallBlock } from '@phoenix-ai/dsh-client-runtime/client'
@@ -1090,15 +1089,10 @@ function BrowserWorkspace({
     setSavedAccessNotice(previous => previous?.origin === next?.origin && previous?.phase === next?.phase
       ? previous : next)
   }, [])
-  // A real sibling pane owned by AppFrame replaces the legacy body overlay.
-  // Live assistant messages remain in the canonical left-hand transcript;
-  // they must never be cloned into a second activity feed.
-  const dockHost = typeof document === 'undefined' ? null
-    : document.querySelector<HTMLElement>('[data-browser-workspace-host]')
-  const showSidecar = dockHost === null && (live || savedAccessNotice !== null)
-  // Prepare Chromium invisibly; the shell splits only after an actual URL is
-  // verified. A pending about:blank never steals space from Kira's chat.
-  const verifiedPage = hasNavigatedWebPage(page)
+  // The browser and Kira replies share ONLY the conversation response area.
+  // The composer and the PHOENIX shell never move or reserve a second column.
+  const showSidecar = live || savedAccessNotice !== null
+  const visibleDock = hasNavigatedWebPage(page) && selected
   const activityRef = useRef<HTMLDivElement | null>(null)
   const followingRef = useRef(true)
   const [following, setFollowing] = useState(true)
@@ -1150,7 +1144,8 @@ function BrowserWorkspace({
   }
 
   const browserContent = (
-    <div className={css.browserWorkspace} data-browser-workspace-active={dockHost === null || verifiedPage ? '' : undefined} data-browser-workspace={live ? '' : undefined}
+    <div className={css.browserWorkspace} data-browser-workspace-active={live || pinned ? '' : undefined}
+      data-browser-workspace-visible={visibleDock ? 'true' : undefined} data-browser-workspace={live ? '' : undefined}
       data-activity-open={showSidecar ? 'true' : undefined} data-chat-flow-kind="browser-workspace">
       <div className={css.browserPane}>
         <MiniBrowser key={sessionId} sessionId={sessionId} requested active={selected} compact
@@ -1238,7 +1233,7 @@ function BrowserWorkspace({
     </div>
 
   )
-  return dockHost === null ? browserContent : createPortal(browserContent, dockHost)
+  return browserContent
 }
 
 /**
@@ -1293,10 +1288,9 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
     setDismissedBrowserKey(undefined)
     previouslyActiveBrowser.current = undefined
   }, [sessionId])
-  const dockedBrowser = typeof document !== 'undefined'
-    && document.querySelector('[data-browser-workspace-host]') !== null
+  // Side-by-side content lives inside the message flow; not AppFrame.
   const flow = useMemo(() => {
-    const grouped = !dockedBrowser && activeBrowserTurn && newestBrowserKey !== undefined
+    const grouped = activeBrowserTurn && newestBrowserKey !== undefined
       ? groupActiveBrowserFlow(ordinaryFlow, newestBrowserKey, nodes)
       : ordinaryFlow
     // Keep every browser mounted under the SAME React key as the sidecar opens
@@ -1306,8 +1300,8 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
         userKey: item.userKey, ...(item.tabId === undefined ? {} : { tabId: item.tabId }),
         ...(item.sourceUrl === undefined ? {} : { sourceUrl: item.sourceUrl }), live: false, items: [] }
       : item)
-  }, [ordinaryFlow, newestBrowserKey, nodes, activeBrowserTurn, dockedBrowser])
-  const hasBrowserWorkspace = !dockedBrowser && flow.some(item => item.kind === 'browser-workspace' && item.live)
+  }, [ordinaryFlow, newestBrowserKey, nodes, activeBrowserTurn])
+  const hasBrowserWorkspace = flow.some(item => item.kind === 'browser-workspace' && item.live)
   // The screenshot-like centered preparation state is confined to a blank
   // conversation's first pending answer, never to a continuing transcript.
   const centeredPreparing = turnStatus?.progress?.phase === 'preparing'
