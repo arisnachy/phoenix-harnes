@@ -133,8 +133,15 @@ export function registerHealthRoutes(ctx:Context):void {
   const failures=new Map<string,{ count:number;until:number }>()
   const route=ctx.webServer.register({ kind:'prefix',path:'/health',handler:async(req,res)=>{
     if(!peer(req)){reply(res,403,{ error:'Acceso local requerido' });return}
+    // Startup must reply with a controlled HTTP status even if SQLite fails
+    // to load in a packaged runtime; an uncaught rejection leaves setup hanging.
+    let store:HealthClinicStore
+    try{store=getStore()}
+    catch{
+      reply(res,503,{error:'No se pudo abrir el almacén clínico cifrado. Verifica permisos y runtime local de PHOENIX.'})
+      return
+    }
     // Authenticated clinical methods still require login, session and CSRF.
-    const store=getStore()
     const patientPortal=createPatientPortalHandler(store)
     // On a shared browser, opening the patient portal invalidates any
     // professional login token. Patient mode must never inherit clinician rights.
@@ -192,10 +199,14 @@ export function registerHealthRoutes(ctx:Context):void {
       if(operation==='status'&&method==='GET'){
         reply(res,200,{ initialized:store.initialized(),enabled:true });return
       }
+      // Public branding contains no clinical records; no external image URLs or SVG.
+      if(operation==='branding'&&method==='GET'&&id===undefined){
+        reply(res,200,{logoDataUrl:store.brandingLogo()});return
+      }
       if(operation==='setup'&&method==='POST'&&id===undefined){
         if(store.initialized())throw new Error('Ya configurado')
-        const value=await readBody(req)
-        store.initialize(value.username,value.password,value.organization)
+        const value=await readBody(req,300_000)
+        store.initialize(value.username,value.password,value.organization,value.logoDataUrl)
         reply(res,201,{ initialized:true });return
       }
       if(operation==='login'&&method==='POST'){
@@ -218,6 +229,10 @@ export function registerHealthRoutes(ctx:Context):void {
       const valid=store.session(cookie(req),typeof req.headers['x-phoenix-csrf']==='string'?req.headers['x-phoenix-csrf']:undefined,method!=='GET')
       const actor:ClinicActor=valid.actor
       if(operation==='session'&&method==='GET'){reply(res,200,{ actor,csrf:valid.csrf });return}
+      if(operation==='branding'&&method==='POST'&&id===undefined){
+        const body=await readBody(req,300_000)
+        reply(res,200,{logoDataUrl:store.setBranding(actor,body.logoDataUrl)});return
+      }
       if(operation==='patient-portal-invite'&&method==='POST'&&id===undefined){
         if(process.env.PHOENIX_HEALTH_PATIENT_PORTAL_ENABLED!=='1')throw Error('Portal no habilitado')
         const body=await readBody(req,2048)

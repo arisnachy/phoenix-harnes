@@ -15,17 +15,36 @@ function fixture(t) {
   const admin=db.login('clinicaladmin',PASSWORD)
   return {db,admin,root}
 }
-test('the clinical encryption passphrase cannot be replaced with a six-character password',t=>{
- const root=mkdtempSync(join(tmpdir(),'phoenix-health-weak-master-test-'))
+test('six-character passwords work for clinic administrators and clinical staff',t=>{
+ const root=mkdtempSync(join(tmpdir(),'phoenix-health-password-min-test-'))
  const db=new HealthClinicStore(join(root,'clinic.sqlite'))
  t.after(()=>{db.close();rmSync(root,{recursive:true,force:true})})
- assert.throws(()=>db.initialize('clinicaladmin','123456','Hospital de pruebas'),/16 caracteres/)
- assert.throws(()=>db.initialize('clinicaladmin','123456789012345','Hospital de pruebas'),/16 caracteres/)
+ assert.throws(()=>db.initialize('clinicaladmin','12345','Hospital de pruebas'),/6 caracteres/)
  assert.equal(db.initialized(),false)
- db.initialize('clinicaladmin',PASSWORD,'Hospital de pruebas')
- const admin=db.login('clinicaladmin',PASSWORD)
- assert.throws(()=>db.createStaff(admin.actor,{username:'doctor1',password:'123456',role:'clinician'}),/16 caracteres/)
+ db.initialize('clinicaladmin','123456','Hospital de pruebas')
+ const admin=db.login('clinicaladmin','123456')
+ assert.equal(admin.actor.role,'admin')
+ assert.throws(()=>db.createStaff(admin.actor,{username:'doctor1',password:'12345',role:'clinician'}),/6 caracteres/)
+ db.createStaff(admin.actor,{username:'doctor1',password:'abcdef',role:'clinician'})
+ assert.equal(db.login('doctor1','abcdef').actor.role,'clinician')
 })
+test('institution logo is validated, saved on setup and configurable only by admin',t=>{
+ const root=mkdtempSync(join(tmpdir(),'phoenix-health-brand-test-'))
+ const db=new HealthClinicStore(join(root,'clinic.sqlite'))
+ t.after(()=>{db.close();rmSync(root,{recursive:true,force:true})})
+ const logo="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLqJwAAAABJRU5ErkJggg=="
+ assert.throws(()=>db.initialize('clinicaladmin','abcdef','Hospital de pruebas','data:image/svg+xml;base64,PHN2Zz4='),/Logo/i)
+ db.initialize('clinicaladmin','abcdef','Hospital de pruebas',logo)
+ assert.equal(db.brandingLogo(),logo)
+ const admin=db.login('clinicaladmin','abcdef').actor
+ db.createStaff(admin,{username:'doctor1',password:'abcdef',role:'clinician'})
+ const doctor=db.login('doctor1','abcdef').actor
+ assert.throws(()=>db.setBranding(doctor,null),/administrativo/)
+ assert.throws(()=>db.setBranding(admin,'data:image/png;base64,ZmFrZQ=='),/Logo/i)
+ assert.equal(db.setBranding(admin,null),null)
+ assert.equal(db.brandingLogo(),null)
+})
+
 
 test('real SQLite encrypted record persists across restart and plaintext is absent',t=>{
   const f=fixture(t)

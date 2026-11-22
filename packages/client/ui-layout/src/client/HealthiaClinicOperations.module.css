@@ -18,5 +18,15 @@
 .identity{display:grid;gap:2px;}.identity strong{font-size:12px;}.identity small{font-size:11px;color:var(--dsw-alias-label-secondary);}
 .notice,.error{font-size:12px;line-height:1.5;margin:0;padding:9px 11px;border-radius:10px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary);}
 .error{color:var(--dsw-alias-state-error-primary);border:1px solid var(--dsw-alias-state-error-primary);background:transparent;}
+.brand{display:flex;align-items:center;min-height:45px;max-width:280px;min-width:0;}
+.brandImage{max-height:62px;max-width:250px;width:auto;height:auto;object-fit:contain;}
+.brandFallback{display:inline-flex;align-items:center;gap:9px;font-size:18px;font-weight:750;letter-spacing:-.035em;color:var(--dsw-alias-label-primary);}
+.brandSymbol{width:35px;height:35px;display:inline-grid;place-items:center;border-radius:10px;background:var(--dsw-specific-phoenix-accent);color:white;font-size:20px;line-height:1;}
+.brandSettings{display:flex;align-items:end;flex-wrap:wrap;gap:8px;padding:10px;border:1px solid var(--dsw-alias-border-l2);border-radius:12px;}
+.brandSettings label{display:flex;flex-direction:column;gap:5px;font-size:12px;min-width:180px;flex:1;}
+.brandSettings input{max-width:100%;font-size:12px;}
+.brandSettings button{padding:8px 11px;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;background:var(--dsw-alias-bg-layer-1);color:inherit;cursor:pointer;}
+.brandSettings button:disabled{opacity:.5;cursor:not-allowed;}
+.form small{font-size:11px;font-weight:400;color:var(--dsw-alias-label-secondary);}
 .encounter{padding:12px;}
 @media(max-width:660px){.toolbar{align-items:flex-start;}.encounter{padding:8px;}}
