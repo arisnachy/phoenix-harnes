@@ -300,7 +300,7 @@
   border-left: 0;
 }
 /* Browser mode differs from app mode: Kira's chat is LEFT and Chromium
-   is RIGHT, both in normal document/focus order. */ 
+   is RIGHT, both in normal document/focus order. */
 .centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-active]) > .conversationPane {
   order: 0;
   flex: 1 1 46%;
