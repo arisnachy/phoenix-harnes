@@ -30,3 +30,26 @@
 .form small{font-size:11px;font-weight:400;color:var(--dsw-alias-label-secondary);}
 .encounter{padding:12px;}
 @media(max-width:660px){.toolbar{align-items:flex-start;}.encounter{padding:8px;}}
+
+.directoryHeader{display:flex;align-items:end;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:12px 13px;border:1px solid var(--dsw-alias-border-l2);border-radius:14px;background:var(--dsw-alias-bg-layer-1);}
+.directoryHeader>div{display:grid;gap:4px;}.directoryHeader strong{font-size:14px;}.directoryHeader small{font-size:11px;color:var(--dsw-alias-label-secondary);}
+.directoryHeader label{display:grid;gap:5px;font-size:11px;color:var(--dsw-alias-label-secondary);flex:1;min-width:210px;max-width:380px;}
+.directoryHeader input{width:100%;box-sizing:border-box;min-height:38px;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;padding:8px 10px;background:var(--dsw-alias-bg-layer-1);color:inherit;font:inherit;font-size:12px;}
+.directoryHeader input:focus-visible{outline:2px solid var(--dsw-specific-phoenix-accent);outline-offset:2px;}
+.patientResults{display:grid;grid-template-columns:repeat(auto-fit,minmax(225px,1fr));gap:8px;}
+.patientResult,.patientResultActive{display:flex;gap:10px;align-items:center;min-width:0;text-align:left;padding:11px;border:1px solid var(--dsw-alias-border-l2);border-radius:12px;background:var(--dsw-alias-bg-layer-1);color:inherit;cursor:pointer;font:inherit;}
+.patientResultActive{border-color:var(--dsw-specific-phoenix-accent);background:var(--dsw-alias-interactive-bg-hover);}
+.patientResult>span:nth-child(2),.patientResultActive>span:nth-child(2){display:grid;gap:3px;min-width:0;flex:1;}
+.patientResult strong,.patientResultActive strong{font-size:12px;overflow-wrap:anywhere;}
+.patientResult small,.patientResultActive small{font-size:11px;color:var(--dsw-alias-label-secondary);}
+.patientInitial{display:grid;place-items:center;width:33px;height:33px;flex:0 0 33px;border-radius:11px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-specific-phoenix-accent);font-weight:750;}
+.patientRecordIndicator{font-size:10px;color:var(--dsw-alias-label-secondary);}
+.admissionGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;}
+.admissionFields{border:1px solid var(--dsw-alias-border-l2);border-radius:12px;padding:12px;min-width:0;}
+.admissionFields legend{font-size:12px;font-weight:700;padding:0 6px;}
+.form select,.admissionGrid select{box-sizing:border-box;width:100%;min-height:39px;padding:9px 11px;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;background:var(--dsw-alias-bg-layer-1);color:inherit;font:inherit;font-size:12px;}
+.identityResults{display:grid;gap:8px;padding:10px;border:1px solid var(--dsw-alias-border-l2);border-radius:11px;font-size:12px;}
+.candidate{display:block;text-align:left;padding:9px 11px;border-radius:9px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:inherit;cursor:pointer;}
+.override{display:flex!important;flex-direction:row!important;align-items:center;gap:8px;}
+.override input{width:auto!important;min-height:auto!important;}
+@media(max-width:660px){.admissionGrid{grid-template-columns:1fr;}.directoryHeader label{max-width:none;}}
