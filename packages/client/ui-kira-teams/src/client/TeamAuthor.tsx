@@ -3,9 +3,11 @@ import type { PropsLocale } from '@phoenix-ai/dsh-client-ui-slots'
 import { NS } from './locales.ts'
 import { ModelActivityAvatar, ModelEngineBadge } from './ModelActivityAvatar.tsx'
 import css from './TeamChatMessage.module.css'
+import { useLivingTeamNames, teamVisibleName } from './team-customization-react.ts'
 export function TeamAuthor({ t, provenance }: PropsLocale<typeof NS> & {
   provenance?: { provider: string; model: string }
 }) {
+  const names = useLivingTeamNames()
   return <div className={css.meta} data-team-author="kira">
     <span className={css.avatar}
       {...provenance === undefined ? {} : {
@@ -16,7 +18,7 @@ export function TeamAuthor({ t, provenance }: PropsLocale<typeof NS> & {
         model={provenance?.model} modelProvider={provenance?.provider}
         showEngineBadge={false} variant="card" />
     </span>
-    <strong title={t('skill.orchestration')}>Kira</strong>
+    <strong title={t('skill.orchestration')}>{teamVisibleName(names, 'kira', 'Kira')}</strong>
     <ModelEngineBadge model={provenance?.model} provider={provenance?.provider} placement="header" />
     <span className={css.role}>{t('skill.orchestration')}</span>
     <span className={css.audience} data-team-audience="user">{t('chat.forYou')}</span>
