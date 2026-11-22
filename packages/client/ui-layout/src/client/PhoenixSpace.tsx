@@ -179,10 +179,35 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
     const timer=window.setTimeout(()=>{void persist(editor)},1100)
     return ()=>window.clearTimeout(timer)
   },[editor])
+  const closing=useRef(false)
   const closeSpace=():void=>{
-    if(editor?.dirty){void persist(editor).then(saved=>{if(saved)onClose()})}
-    else onClose()
+    if(closing.current)return
+    if(editor?.dirty){
+      closing.current=true
+      void persist(editor).then(saved=>{
+        closing.current=false
+        if(saved)onClose()
+        else setError('Hay cambios pendientes. Vuelve a guardar o utiliza «Salir sin guardar» para regresar al chat.')
+      })
+    }else onClose()
   }
+  // Escape and external navigation must work even when the floating PHOENIX
+  // header overlaps the right edge of this view.
+  useEffect(()=>{
+    const requestClose=():void=>{closeSpace()}
+    const onEscape=(event:KeyboardEvent):void=>{
+      if(event.key!=='Escape'||event.defaultPrevented||event.isComposing)return
+      event.preventDefault()
+      event.stopPropagation()
+      closeSpace()
+    }
+    window.addEventListener('phoenix:space-request-close',requestClose)
+    window.addEventListener('keydown',onEscape,true)
+    return ()=>{
+      window.removeEventListener('phoenix:space-request-close',requestClose)
+      window.removeEventListener('keydown',onEscape,true)
+    }
+  },[editor,onClose])
   const backToLibrary=():void=>{
     if(editor?.dirty){void persist(editor).then(saved=>{if(saved)setEditor(null)})}
     else setEditor(null)
@@ -261,7 +286,7 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
   const updateSheet=(newSheet:Sheet):void=>mutate({content:JSON.stringify(newSheet)})
   const currentSlide=deck.slides[slideIndex]
   const filteredSpaces=[...new Set(items.map(x=>x.space))]
-  return <section className={css.root} role="dialog" aria-label="PHOENIX Espacio" aria-modal="true" data-phoenix-space="">
+  return <section className={css.root} role="region" aria-label="PHOENIX Espacio" data-phoenix-space="">
     <aside className={css.rail}>
       <div className={css.railTitle}>Espacio</div>
       <button className={css.railAction} type="button" onClick={()=>{setEditor(null);setTrash(false);setKind('all');setSpace('all')}}>Todo</button>
@@ -275,8 +300,14 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
     </aside>
     <div className={css.main}>
       <header className={css.topbar}>
-        <div><strong>PHOENIX · Espacio</strong><span>Biblioteca, editores y proyectos</span></div>
-        <button type="button" className={css.close} onClick={closeSpace} aria-label="Cerrar Biblioteca">×</button>
+        <div className={css.topbarTitle}>
+          <button type="button" className={css.backToChat} onClick={closeSpace} aria-label="Volver al chat de PHOENIX">← Volver al chat</button>
+          <strong>PHOENIX · Espacio</strong><span>Biblioteca, editores y proyectos</span>
+        </div>
+        <div className={css.exitActions}>
+          {editor?.dirty&&<button type="button" className={css.discardExit} onClick={onClose}>Salir sin guardar</button>}
+          <button type="button" className={css.close} onClick={closeSpace} aria-label="Cerrar Biblioteca">×</button>
+        </div>
       </header>
       {error&&<div className={css.alert} role="alert">{error}<button type="button" onClick={()=>setError('')}>Cerrar</button></div>}
       {!editor?<>

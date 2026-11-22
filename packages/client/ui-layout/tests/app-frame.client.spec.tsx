@@ -138,6 +138,36 @@ afterEach(() => {
 
 describe('AppFrame', () => {
 
+  it('routes Biblioteca only to PHOENIX Space and leaves the original conversation accessible', () => {
+    const view = mountFrame()
+    expect(view.queryByRole('region', { name: 'PHOENIX Espacio' })).toBeNull()
+
+    // The old session-library event belongs to WorkspaceBrowser, not PHOENIX Space.
+    fireEvent(window, new Event('phoenix:open-workspace-library'))
+    expect(view.queryByRole('region', { name: 'PHOENIX Espacio' })).toBeNull()
+
+    fireEvent(window, new Event('phoenix:open-space'))
+    expect(view.getByRole('region', { name: 'PHOENIX Espacio' })).toBeTruthy()
+    expect(view.getByRole('button', { name: 'Volver al chat de PHOENIX' })).toBeTruthy()
+    expect(view.getByTestId('center-content')).toBeTruthy()
+
+    fireEvent.click(view.getByRole('button', { name: 'Volver al chat de PHOENIX' }))
+    expect(view.queryByRole('region', { name: 'PHOENIX Espacio' })).toBeNull()
+    expect(view.getByTestId('center-content')).toBeTruthy()
+
+    fireEvent(window, new Event('phoenix:open-space'))
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(view.queryByRole('region', { name: 'PHOENIX Espacio' })).toBeNull()
+
+    fireEvent(window, new Event('phoenix:open-space'))
+    fireEvent(window, new Event('phoenix:close-space'))
+    expect(view.queryByRole('region', { name: 'PHOENIX Espacio' })).toBeNull()
+
+    fireEvent(window, new Event('phoenix:open-space'))
+    fireEvent(window, new CustomEvent('phoenix:adaptive-workspace', { detail: { app: 'general' } }))
+    expect(view.queryByRole('region', { name: 'PHOENIX Espacio' })).toBeNull()
+  })
+
   it('starts a real App Studio chat mission instead of a local wizard', () => {
     const intents: unknown[] = []
     const onMission = (event: Event) => intents.push((event as CustomEvent<unknown>).detail)
