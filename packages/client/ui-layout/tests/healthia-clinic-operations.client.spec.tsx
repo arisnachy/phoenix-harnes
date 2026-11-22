@@ -69,6 +69,36 @@ describe('Native clinic inside PHOENIX (protected Host ownership)',()=>{
     expect(window.localStorage.getItem('clinical-record')).toBeNull()
   })
 
+  it('creates the local administrator with a six-character password and Healthia fallback',async()=>{
+    const calls:Array<{path:string;method:string;body?:Record<string,unknown>}>=[]
+    const fetcher=vi.fn(async(input:string,init?:RequestInit)=>{
+      const path=String(input).split('/health/api/')[1]!
+      const method=init?.method??'GET'
+      const body=init?.body?JSON.parse(String(init.body)) as Record<string,unknown>:undefined
+      calls.push({path,method,...(body===undefined?{}:{body})})
+      if(path==='session')return answer({error:'requires login'},401)
+      if(path==='status')return answer({initialized:false,enabled:true})
+      if(path==='branding')return answer({logoDataUrl:null})
+      if(path==='setup'&&method==='POST')return answer({initialized:true},201)
+      if(path==='login')return answer({actor:{username:'doctor1',role:'admin',org:'Hospital demo'},csrf:'a'.repeat(48)})
+      if(path==='patients')return answer({items:[]})
+      if(path==='encounters')return answer({items:[]})
+      throw Error('Unexpected request: '+path)
+    })
+    vi.stubGlobal('fetch',fetcher)
+    render(<HealthiaClinicOperations area="patients"/>)
+    await waitFor(()=>expect(screen.getByRole('heading',{name:'Inicializar clínica local'})).toBeTruthy())
+    expect(screen.getByText('Healthia')).toBeTruthy()
+    fireEvent.change(screen.getByRole('textbox',{name:'Centro o institución'}),{target:{value:'Hospital demo'}})
+    fireEvent.change(screen.getByRole('textbox',{name:'Usuario profesional'}),{target:{value:'doctor1'}})
+    fireEvent.change(screen.getByLabelText('Contraseña'),{target:{value:'123456'}})
+    fireEvent.click(screen.getByRole('button',{name:'Crear clínica local'}))
+    await waitFor(()=>expect(screen.getByText('Sesión profesional activa')).toBeTruthy())
+    expect(calls.find(x=>x.path==='setup'&&x.method==='POST')?.body).toMatchObject({
+      organization:'Hospital demo',username:'doctor1',password:'123456',
+    })
+  })
+
   it('restores a generated note without treating missing fields as negative findings',()=>{
     const entry:ClinicalEncounter={...baseVisit,history:[
       'Primera consulta · BORRADOR SIN FIRMAR','',

@@ -168,9 +168,9 @@ async function splash(){
  '<p class="notice warning">Servicio local con base de datos cifrada. No acceda desde un equipo compartido. El administrador debe conservar una copia segura de la contraseña maestra: sin ella no podrán recuperarse los expedientes.</p>'+
  (status.initialized?'':field("org","Centro / Institución"))+
  field("user","Usuario")+
- field("pass",status.initialized?"Contraseña":"Contraseña maestra (16 caracteres o más)","password")+
+ field("pass",status.initialized?"Contraseña":"Contraseña maestra (6 caracteres o más)","password")+
  (status.initialized?'<p class="muted">Introduce tu contraseña existente. No es necesario crear otra.</p>':
- '<p class="muted">Esta contraseña también cifra los expedientes. Puedes generarla con un clic (24 caracteres aleatorios) y guardarla en tu gestor de contraseñas. No se almacenará en el navegador ni se enviará al chat.</p>'+
+ '<p class="muted">Esta contraseña también cifra los expedientes. Se recomiendan al menos 12 caracteres, aunque el mínimo permitido es 6. Puedes generar una clave fuerte con un clic (24 caracteres aleatorios) y guardarla en tu gestor de contraseñas. No se almacenará en el navegador ni se enviará al chat.</p>'+
  button("clinicGeneratePassword","Generar contraseña segura","secondary")+
  button("clinicCopyPassword","Copiar para guardar","secondary"))+
  button("clinicTogglePassword","Mostrar / ocultar contraseña","secondary")+
@@ -602,7 +602,7 @@ function render(){
  if(tab==="followups")form=p+field("assignedTo","Asignado a")+field("dueAt","Fecha y hora","datetime-local")+area("description","Tarea de seguimiento")+button("create","Crear seguimiento");
  if(tab==="backups")form='<p class="notice warning">Copia SQLite consistente y verificada. Resguárdela mediante un procedimiento institucional y pruebe restauración fuera del Host.</p>'+button("backup","Crear respaldo verificado");
  if(tab==="assignments")form=pick("patientId","Paciente",patients,x=>x.name)+field("staffId","Usuario profesional")+field("purpose","Motivo de atención")+button("grantPatient","Autorizar atención");
- if(tab==="staff")form=field("username","Usuario")+field("password","Contraseña inicial (16+)","password")+
+ if(tab==="staff")form=field("username","Usuario")+field("password","Contraseña inicial (6+)","password")+
  button("clinicGeneratePassword","Generar contraseña segura","secondary")+
  button("clinicTogglePassword","Mostrar / ocultar contraseña","secondary")+
  '<label>Rol</label><select id="role">'+["clinician","psychologist","nurse","reception","lab","radiology","pharmacy","billing"].map(x=>'<option>'+x+'</option>').join('')+'</select>'+button("create","Crear personal");

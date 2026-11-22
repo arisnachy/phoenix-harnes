@@ -18,7 +18,7 @@ export async function refineProtectedHistoryLocal(
   if(!config.enabled)throw Error('CLINICAL_LOCAL_AI_DISABLED')
   const model=config.model
   if(typeof model!=='string'||!model.trim()
-    ||model.length>100||!/^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/u.test(model)
+    ||model.length>100||model.includes('://')||!/^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/u.test(model)
     ||/(?:^|[/:.-])cloud(?:$|[/:.-])/iu.test(model))
     throw Error('CLINICAL_LOCAL_AI_MODEL_NOT_CONFIGURED')
   if(!original||original.source!=='local-recorded-facts'
