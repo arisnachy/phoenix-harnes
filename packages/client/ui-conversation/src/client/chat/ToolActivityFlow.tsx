@@ -1356,7 +1356,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
                 items={item.items}
                 {...item.tabId === undefined || !activeBrowserTurn ? {} : { tabId: item.tabId }}
                 {...item.sourceUrl === undefined ? {} : { sourceUrl: item.sourceUrl }}
-                selected={item.userKey === (pinnedBrowserKey ?? activeBrowserKey)}
+                selected={item.userKey === visibleBrowserKey || item.userKey === (pinnedBrowserKey ?? activeBrowserKey)}
                 onActivate={() => { setSelectedBrowserKey(item.userKey) }}
                 pinned={pinnedBrowserKey === item.userKey}
                 onPinChange={value => {
