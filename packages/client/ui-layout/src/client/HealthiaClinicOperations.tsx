@@ -63,7 +63,7 @@ export function restoreClinicalNote(encounter:ClinicalEncounter):{
       if(['sys','dia','hr','rr','temp','sat','weight','height'].includes(id))
         value=value.replace(/\s(?:mmHg|lpm|rpm|°C|%|kg|cm)$/u,'')
       values[id]=value
-    } else if(current&&line.trim()) values[current]+='\n'+line
+    } else if(current&&line.trim()) values[current]=(values[current]??'')+'\n'+line
   }
   return {kind,values}
 }
@@ -199,9 +199,9 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
     // Full note is kept losslessly inside the encrypted encounter. Do not
     // truncate or silently drop user-entered clinical observations.
     const record=await api.saveEncounter(session,selectedEncounter,{
-      history,exam:(values.physical??'').slice(0,4000),
-      assessment:(values.assessment??'').slice(0,4000),
-      plan:(values.plan??'').slice(0,4000),
+      history,exam:values.physical??'',
+      assessment:values.assessment??'',
+      plan:values.plan??'',
     })
     if(record.patientId!==selectedPatient.id)throw new Error('No coincide la identidad clínica.')
     setEncounters(prev=>prev.map(e=>e.id===record.id?record:e))
@@ -251,9 +251,16 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
       <div className={css.identity}><strong>Sesión profesional activa</strong><small>{session?.actor.username} · {session?.actor.role}</small></div>
       <div className={css.toolbarActions}>
         <button type="button" disabled={busy} onClick={()=>{void reload()}}>Actualizar</button>
-        <button type="button" onClick={()=>{if(!session)return;void api.logout(session).finally(()=>{
-          setSession(null);setPatients([]);setEncounters([]);setPatientId('');setEncounterId('');setMode('login')
-        })}}>Cerrar sesión clínica</button>
+        <button type="button" onClick={()=>{
+          if(!session||busy)return
+          setBusy(true);setError('')
+          void api.logout(session).then(()=>{
+            setSession(null);setPatients([]);setEncounters([])
+            setPatientId('');setEncounterId('');setMode('login')
+          }).catch(()=>{
+            setError('No se pudo cerrar la sesión en el Host. Reintenta antes de abandonar el equipo.')
+          }).finally(()=>setBusy(false))
+        }}>Cerrar sesión clínica</button>
       </div>
     </div>
     {!readyRef.current&&<p role="status" className={css.notice}>Cargando registros autorizados…</p>}
