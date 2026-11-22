@@ -139,12 +139,15 @@ export function exportXlsx(content:string):Buffer {
   let decoded:unknown
   try{decoded=JSON.parse(content)}catch{throw new Error('Hoja inválida')}
   const obj=decoded as {columns?:unknown;rows?:unknown}
-  if(!obj||!Array.isArray(obj.columns)||!Array.isArray(obj.rows)||
-    obj.columns.length<1||obj.columns.length>40||obj.rows.length>1000 ||
-    !obj.columns.every(x=>typeof x==='string'&&x.length<=120)||
-    !obj.rows.every(row=>Array.isArray(row)&&row.length===obj.columns!.length&&
+  if(!obj)throw new Error('Tabla inválida')
+  const columns=obj.columns
+  const dataRows=obj.rows
+  if(!Array.isArray(columns)||!Array.isArray(dataRows)||
+    columns.length<1||columns.length>40||dataRows.length>1000 ||
+    !columns.every(x=>typeof x==='string'&&x.length<=120)||
+    !dataRows.every(row=>Array.isArray(row)&&row.length===columns.length&&
       row.every(x=>typeof x==='string'&&x.length<=1000)))throw new Error('Tabla inválida')
-  const rows=[obj.columns,...obj.rows] as string[][]
+  const rows=[columns,...dataRows] as string[][]
   const body=rows.map((cells,i)=>'<row r="'+(i+1)+'">'+cells.map((value,c)=>cellXml(value,i+1,c)).join('')+'</row>').join('')
   return zipOffice([
     {name:'[Content_Types].xml',data:XML+'<Types xmlns="'+CT+'"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'+
