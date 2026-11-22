@@ -437,8 +437,8 @@ export function AppFrame({
     return () => window.removeEventListener('phoenix:adaptive-self-inspect-request', inspect)
   }, [adaptiveApp,customApps,inspectRuntime])
 
-  // App content occupies a structural, scrollable pane alongside the real chat.
-  // This is never mounted inside the conversation timeline or on document.body.
+  // Adaptive UI occupies a scrollable surface WITHIN the conversation body.
+  // It must never replace the chat or claim width from the input/PHOENIX shell.
   const adaptiveActive = adaptiveApp === 'healthia' || activeBlueprint !== undefined
   // The app belongs to the conversation's CONTENT scroll region, never to a
   // sibling shell column: composer remains mounted at the bottom full width.
@@ -458,6 +458,7 @@ export function AppFrame({
     }
     // A session switch can recreate the conversation seat before its host
     // appears. Retry only while the host is missing; no timer or reflow polling.
+    setAdaptiveInlineHost(null)
     const observer = new MutationObserver(() => {
       const next = findHost()
       if (next) {
