@@ -61,3 +61,43 @@
 
 /* The contextual sidebar already owns desktop section navigation. */
 @media (min-width:761px){.tabs{display:none;}}
+
+/* PHOENIX hosts Healthia. No second logo, brand bar, or duplicate shell. */
+.shell {
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  min-height:100%;
+  padding:0 0 18px;
+}
+.shell > .titleRow {padding:0 0 11px;border-bottom:1px solid var(--dsw-alias-border-l2);}
+.shell > .titleRow h2 {font-size:21px;margin:3px 0 0;letter-spacing:-.025em;}
+.shell .eyebrow {color:var(--dsw-alias-label-secondary);letter-spacing:.07em;}
+.sessionStrip {display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.sessionStrip .notice {max-width:62ch;line-height:1.5;}
+.shell .body {flex:1 1 auto;min-width:0;padding-top:0;}
+.quickGrid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0;}
+.quickCard {
+  display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;
+  min-width:0;gap:7px;border:1px solid var(--dsw-alias-border-l2);
+  border-radius:15px;padding:15px;background:var(--dsw-alias-bg-layer-1);
+  color:var(--dsw-alias-label-primary);text-align:left;font:inherit;
+}
+button.quickCard {cursor:pointer;}
+button.quickCard:hover,button.quickCard:focus-visible {border-color:var(--dsw-specific-phoenix-accent);background:var(--dsw-alias-interactive-bg-hover);}
+button.quickCard:focus-visible {outline:2px solid var(--dsw-specific-phoenix-accent);outline-offset:2px;}
+.quickCard strong {font-size:13px;font-weight:650;}
+.quickCard span {font-size:12px;line-height:1.5;color:var(--dsw-alias-label-secondary);}
+.modulePlaceholder {display:grid;gap:9px;padding:19px 17px;min-height:150px;
+  border:1px solid var(--dsw-alias-border-l2);border-radius:15px;
+  background:var(--dsw-alias-bg-layer-1);}
+.modulePlaceholder strong {font-size:15px;}
+.modulePlaceholder p {margin:0;font-size:12px;line-height:1.6;color:var(--dsw-alias-label-secondary);}
+.tools {display:grid;gap:14px;}
+.tools > button {justify-self:start;}
+.formPreview {display:grid;gap:12px;min-width:0;}
+.formPreview .builder {padding:12px;border:1px solid var(--dsw-alias-border-l2);border-radius:12px;}
+.footer {margin-top:auto;padding-top:15px;border-top:1px solid var(--dsw-alias-border-l2);}
+.openClinical {background:transparent;color:var(--dsw-specific-phoenix-accent);border-color:var(--dsw-alias-border-l2);}
+.openClinical:hover {background:var(--dsw-alias-interactive-bg-hover);}
+@media (max-width:650px) {.quickGrid{grid-template-columns:1fr;}.shell>.titleRow{align-items:flex-start;gap:9px;}}
