@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { HealthiaClinicOperations, restoreClinicalNote } from '../src/client/HealthiaClinicOperations.tsx'
+import { formatClinicalNote } from '../src/client/HealthiaClinicalNote.tsx'
 import type { ClinicalEncounter } from '../src/client/HealthiaClinicalApi.ts'
 
 afterEach(()=>{cleanup();vi.unstubAllGlobals()})
@@ -81,6 +82,18 @@ describe('Native clinic inside PHOENIX (protected Host ownership)',()=>{
     expect(result.values.weight).toBe('75')
     expect(result.values.height).toBe('175')
     expect(result.values.allergies).toBeUndefined()
+  })
+
+  it('round-trips multiline illness histories without turning their prose into separate facts',()=>{
+    const text='Inicio de cefalea.\\nDiagnósticos diferenciales o incertidumbres: texto relatado por el paciente.\\n\\nSegunda descripción sin hallazgos confirmados.'
+    const encounter:ClinicalEncounter={
+      ...baseVisit,
+      history:formatClinicalNote('first',{chief:'Cefalea',hea:text,allergies:'No documentadas'}),
+    }
+    const restored=restoreClinicalNote(encounter)
+    expect(restored.values.hea).toBe(text)
+    expect(restored.values.differential).toBeUndefined()
+    expect(restored.values.allergies).toBe('No documentadas')
   })
 
   it('returns no editable clinical history from a signed record without a session',()=>{
