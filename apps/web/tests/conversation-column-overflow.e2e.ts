@@ -46,7 +46,7 @@ const CONTROL_VIEWPORT = 600
  * Viewport widths bracketing the glow: the narrow stops retain the reported
  * bleed while the widest stop proves the relation can also be false.
  */
-const WIDTHS = [1680, 1200, 1000, 800, CONTROL_VIEWPORT]
+const WIDTHS = [1920, 1200, 1000, 800, CONTROL_VIEWPORT]
 /** Element id of the mutation control's injected sheet, so the test can take it back out. */
 const CONTROL_STYLE_ID = 'dsh-column-overflow-control'
 /** Horizontal wheel delta per gesture; must exceed the widest bleed the sweep can produce. */
