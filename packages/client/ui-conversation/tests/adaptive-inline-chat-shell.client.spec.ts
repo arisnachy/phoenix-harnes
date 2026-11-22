@@ -24,13 +24,13 @@ describe('PHOENIX side-by-side adaptive workspace and browser', () => {
     expect(layout).toContain('restorePreviousAdaptiveForms()')
   })
 
-  it('renders the app to the LEFT and the one real chat transcript and composer to the RIGHT', () => {
+  it('keeps Healthia left/chat right, but browser right/chat left in the same shell', () => {
     const appHost = layout.indexOf('data-adaptive-workspace-host=""')
     const browserHost = layout.indexOf('data-browser-workspace-host=""')
     const chatHost = layout.indexOf('data-conversation-pane=""')
     expect(appHost).toBeGreaterThan(0)
-    expect(browserHost).toBeGreaterThan(appHost)
-    expect(chatHost).toBeGreaterThan(browserHost)
+    expect(chatHost).toBeGreaterThan(appHost)
+    expect(browserHost).toBeGreaterThan(chatHost)
     expect(layout).toContain('<HealthiaWorkspace')
     expect(layout).toContain('<AdaptiveAppPreview')
     expect(layout).toContain('adaptiveActive={adaptiveActive}')
@@ -55,6 +55,13 @@ describe('PHOENIX side-by-side adaptive workspace and browser', () => {
     expect(browserCss).toContain('data-browser-workspace-active')
     expect(miniCss).toContain(':global([data-browser-workspace-active]) .browser:not([data-expanded=\'true\']) .viewport')
     expect(layoutCss).toContain('.browserWorkspacePane')
+    expect(layoutCss).toContain('/* Browser mode differs from app mode: Kira\'s chat is LEFT and Chromium')
+    expect(layoutCss).toContain('border-left: 1px solid var(--dsw-alias-border-l2)')
+    expect(browser).toContain('newestToolBackedBrowserKey')
+    expect(browser).toContain('data-browser-workspace-active={dockHost === null || verifiedPage')
+    expect(browser).toContain('hasNavigatedWebPage(page)')
+    expect(browser).not.toContain('data-browser-receipt="true"')
+    expect(browserCss).toContain('overflow: hidden;')
     expect(layoutCss).toContain('@media (max-width: 980px)')
   })
 
