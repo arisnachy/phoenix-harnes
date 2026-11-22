@@ -17,7 +17,9 @@ import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
   IconAgentPresetOutline16, IconFolderOpenOutline16, IconNewChatOutline16,
-  IconPanelLeftOutline16, IconPlugOutline16, PhoenixLogo, Tooltip,
+  IconPanelLeftOutline16, IconPlugOutline16, PhoenixLogo, PhoenixUiIcon, Tooltip,
+  PHOENIX_NAVIGATION_ICON_CHOICES, choosePhoenixNavigationIcon,
+  phoenixNavigationIconScope, readPhoenixNavigationIcons, writePhoenixNavigationIcon,
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { SidebarRootComponentProps } from './contract/slots.ts'
 import { TaskCenter } from './TaskCenter.tsx'
@@ -58,6 +60,20 @@ export function SidebarRoot({
     title?: string; palette?: 'pearl'|'ocean'|'sage'|'iris'|'amber'
     sections: readonly { id: string; label: string }[]
   }>({ app: 'general', role: 'doctor', section: 'overview', sections: [] })
+  const [iconOverrides, setIconOverrides] = useState(() => readPhoenixNavigationIcons())
+  const [customizeIcons, setCustomizeIcons] = useState(false)
+  const [iconError, setIconError] = useState('')
+  const navigationItems = adaptive.app === 'healthia' ? HEALTHIA_NAV[adaptive.role] : adaptive.sections
+  const setSectionIcon = (section: string, selected: string): void => {
+    try {
+      setIconOverrides(writePhoenixNavigationIcon(
+        adaptive.app, adaptive.role, section, selected === 'auto' ? undefined : selected,
+      ))
+      setIconError('')
+    } catch {
+      setIconError('No se pudo guardar el icono. La selección anterior permanece intacta.')
+    }
+  }
   useEffect(() => {
     const onState = (event: Event): void => {
       const detail = (event as CustomEvent<{ app?: string; role?: string; section?: string; title?: string; sections?: unknown; palette?: string }>).detail
@@ -233,11 +249,19 @@ export function SidebarRoot({
           <button type="button" className={css.navLink} onClick={() => navigateAdaptive('general')} aria-label="Volver a PHOENIX General" title={!wide ? 'PHOENIX General' : undefined}>
             <IconPanelLeftOutline16 size={19} />{wide && <span>PHOENIX · General</span>}
           </button>
-          {(adaptive.app === 'healthia' ? HEALTHIA_NAV[adaptive.role] : adaptive.sections).map(item => (
-            <button key={item.id} type="button" className={css.navLink} aria-current={item.id === adaptive.section ? 'page' : undefined} title={!wide ? item.label : undefined} onClick={() => navigateAdaptive(adaptive.app, adaptive.role, item.id)}>
-              <IconFolderOpenOutline16 size={19}/>{wide && <span>{item.label}</span>}
-            </button>
-          ))}
+          {navigationItems.map(item => {
+            const icon = choosePhoenixNavigationIcon(adaptive.app, adaptive.role, item.id, item.label, iconOverrides)
+            return (
+              <button key={item.id} type="button" className={css.navLink}
+                data-navigation-icon={icon}
+                aria-current={item.id === adaptive.section ? 'page' : undefined}
+                aria-label={item.label} title={!wide ? item.label : undefined}
+                onClick={() => navigateAdaptive(adaptive.app, adaptive.role, item.id)}>
+                <PhoenixUiIcon name={icon} size={19} tone="neutral" label={item.label} />
+                {wide && <span>{item.label}</span>}
+              </button>
+            )
+          })}
         </nav>
       ) : (
       <nav className={css.primaryNavigation} aria-label="Navegación principal">
@@ -276,6 +300,28 @@ export function SidebarRoot({
                 <button type="button" aria-pressed={adaptive.role === 'patient'} onClick={() => navigateAdaptive('healthia', 'patient')}>Paciente</button>
               </div>}
               <p>{adaptive.app === 'healthia' ? 'Chat con Kira disponible. Los datos clínicos se manejan en el servicio protegido.' : 'Vista temporal de la aplicación. No tiene conectores ni almacenamiento habilitados.'}</p>
+              <button type="button" className={css.iconCustomize} aria-pressed={customizeIcons}
+                onClick={() => { setCustomizeIcons(value => !value); setIconError('') }}>
+                {customizeIcons ? 'Terminar personalización' : 'Personalizar iconos'}
+              </button>
+              {customizeIcons && (
+                <div className={css.iconEditor} aria-label="Personalización de iconos">
+                  {navigationItems.map(item => (
+                    <label key={item.id} className={css.iconField}>
+                      <span>{item.label}</span>
+                      <select aria-label={`Icono de ${item.label}`}
+                        value={iconOverrides[phoenixNavigationIconScope(adaptive.app, adaptive.role, item.id)] ?? 'auto'}
+                        onChange={event => setSectionIcon(item.id, event.target.value)}>
+                        <option value="auto">Automático</option>
+                        {PHOENIX_NAVIGATION_ICON_CHOICES.map(choice => (
+                          <option key={choice.name} value={choice.name}>{choice.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+                  {iconError && <p role="alert">{iconError}</p>}
+                </div>
+              )}
             </>}
           </div>
         ) : renderSlot('sidebar.workspaces', {
