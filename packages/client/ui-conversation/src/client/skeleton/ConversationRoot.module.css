@@ -857,7 +857,7 @@
   height: 100%;
   overflow: hidden;
 }
-.root .scrollBody:has(> .adaptiveInlineHost > *) > :not(.adaptiveInlineHost):not(.composerSeat) {
+.root .scrollBody:has(> .adaptiveInlineHost > *) > :global([data-slot='conversation.session']) > .viewArea {
   grid-column: 2;
   grid-row: 1;
   width: 100%;
@@ -889,7 +889,7 @@
     grid-column: 1;
     grid-row: 1;
   }
-  .root .scrollBody:has(> .adaptiveInlineHost > *) > :not(.adaptiveInlineHost):not(.composerSeat) {
+  .root .scrollBody:has(> .adaptiveInlineHost > *) > :global([data-slot='conversation.session']) > .viewArea {
     grid-column: 1;
     grid-row: 2;
     border-top: 1px solid var(--dsw-alias-border-l2);
