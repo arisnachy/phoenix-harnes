@@ -96,6 +96,19 @@ function rerender(b: ReturnType<typeof mount>, overrides: Partial<WorkspaceBrows
 }
 
 describe('WorkspaceBrowser', () => {
+  it('never mounts the old sessions modal alongside PHOENIX Space', () => {
+    mount()
+    act(() => { window.dispatchEvent(new Event('phoenix:open-workspace-library')) })
+    expect(screen.getByRole('dialog', { name: '资料库' })).toBeTruthy()
+
+    act(() => { window.dispatchEvent(new Event('phoenix:open-space')) })
+    expect(screen.queryByRole('dialog', { name: '资料库' })).toBeNull()
+
+    // The new Space event is not an alias for opening WorkspaceLibraryModal.
+    act(() => { window.dispatchEvent(new Event('phoenix:open-space')) })
+    expect(screen.queryByRole('dialog', { name: '资料库' })).toBeNull()
+  })
+
   it('opens the Library directory and launches an existing saved session', () => {
     const open = vi.fn()
     mount({

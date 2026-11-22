@@ -943,16 +943,23 @@ export function WorkspaceBrowser({
         expandSidebar()
       }
     }
-    // A single click displays saved workspaces and sessions, with open/create actions.
+    // Legacy sessions library remains available from "Ver todas"; opening
+    // PHOENIX Space must dismiss it, not mount a second modal underneath.
     const openLibrary = (): void => {
       setWsPickerOpen(false)
       setLibraryOpen(true)
     }
+    const openSpace = (): void => {
+      setWsPickerOpen(false)
+      setLibraryOpen(false)
+    }
     window.addEventListener('phoenix:open-workspace-search', openSearch)
     window.addEventListener('phoenix:open-workspace-library', openLibrary)
+    window.addEventListener('phoenix:open-space', openSpace)
     return () => {
       window.removeEventListener('phoenix:open-workspace-search', openSearch)
       window.removeEventListener('phoenix:open-workspace-library', openLibrary)
+      window.removeEventListener('phoenix:open-space', openSpace)
     }
   }, [wide, expandSidebar])
   useEffect(() => {

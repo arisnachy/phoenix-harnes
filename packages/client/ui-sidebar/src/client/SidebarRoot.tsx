@@ -102,11 +102,13 @@ export function SidebarRoot({
     window.dispatchEvent(new CustomEvent('phoenix:adaptive-workspace', { detail: { app, role, section } }))
   }
   // Navigation destinations open an actionable, focused surface — never the Settings menu.
+  const closeSpace = (): void => { window.dispatchEvent(new Event('phoenix:close-space')) }
   const openFeature = (destination: 'connectors' | 'team', label: string): void => {
+    closeSpace()
     window.dispatchEvent(new CustomEvent('phoenix:open-feature', { detail: { destination, label } }))
   }
   const openLibrary = (): void => {
-    window.dispatchEvent(new Event('phoenix:open-workspace-library'))
+    window.dispatchEvent(new Event('phoenix:open-space'))
   }
 
   // Rail-in only crossfades a live collapse: a refresh straight into the
@@ -189,7 +191,7 @@ export function SidebarRoot({
             type="button"
             className={clsx(css.brand, css.wide)}
             aria-label={t('session.new.label')}
-            onClick={() => { startSession() }}
+            onClick={() => { closeSpace(); startSession() }}
           >
             <span className={css.brandIdentity} aria-hidden="true">
               <span className={css.brandMark}>
@@ -236,7 +238,7 @@ export function SidebarRoot({
           type="button"
           className={css.newSession}
           aria-label={t('session.new.label')}
-          onClick={() => { startSession() }}
+          onClick={() => { closeSpace(); startSession() }}
         >
           <IconNewChatOutline16 size={wide ? 14 : 18} />
           {wide && <span className={clsx(css.newSessionLabel, css.wide)}>{t('session.new')}</span>}
@@ -265,13 +267,13 @@ export function SidebarRoot({
         </nav>
       ) : (
       <nav className={css.primaryNavigation} aria-label="Navegación principal">
-        <button type="button" className={css.navLink} aria-label={t('nav.home')} title={wide ? undefined : t('nav.home')} onClick={() => { startSession() }}>
+        <button type="button" className={css.navLink} aria-label={t('nav.home')} title={wide ? undefined : t('nav.home')} onClick={() => { closeSpace(); startSession() }}>
           <svg viewBox="0 0 24 24" width={wide ? 19 : 18} height={wide ? 19 : 18}
             fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z" />
           </svg>{wide && <span>{t('nav.home')}</span>}
         </button>
-        <button type="button" className={css.navLink} aria-label={t('nav.tasks')} title={wide ? undefined : t('nav.tasks')} onClick={() => { setTasksOpen(true) }}>
+        <button type="button" className={css.navLink} aria-label={t('nav.tasks')} title={wide ? undefined : t('nav.tasks')} onClick={() => { closeSpace(); setTasksOpen(true) }}>
           <svg viewBox="0 0 24 24" width={wide ? 19 : 18} height={wide ? 19 : 18}
             fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="9" /><path d="M12 6v6l4 2" />
@@ -280,7 +282,7 @@ export function SidebarRoot({
         <button type="button" className={css.navLink} aria-label={t('nav.connectors')} title={wide ? undefined : t('nav.connectors')} onClick={() => { openFeature('connectors', t('nav.connectors')) }}>
           <IconPlugOutline16 size={wide ? 19 : 18} />{wide && <span>{t('nav.connectors')}</span>}
         </button>
-        <button type="button" className={css.navLink} aria-label={t('nav.team')} title={wide ? undefined : t('nav.team')} onClick={() => { window.dispatchEvent(new Event('phoenix:toggle-team-directory')) }}>
+        <button type="button" className={css.navLink} aria-label={t('nav.team')} title={wide ? undefined : t('nav.team')} onClick={() => { closeSpace(); window.dispatchEvent(new Event('phoenix:toggle-team-directory')) }}>
           <IconAgentPresetOutline16 size={wide ? 19 : 18} />{wide && <span>{t('nav.team')}</span>}
         </button>
         <button type="button" className={css.navLink} aria-label={t('nav.library')} title={wide ? undefined : t('nav.library')} onClick={openLibrary}>
