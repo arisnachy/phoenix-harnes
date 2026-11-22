@@ -255,10 +255,11 @@
 .conversationPane {
   order: 1;
   display: flex;
-  flex: 1 1 100%;
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
   height: 100%;
+  width: 100%;
   overflow: hidden;
 }
 .conversationPane > * {
@@ -281,40 +282,57 @@
   background: var(--dsw-alias-bg-layer-1);
 }
 .centerCol[data-adaptive-active],
-.centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-active]) {
+.centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-visible='true']) {
   flex-direction: row;
 }
 .centerCol[data-adaptive-active] > .adaptiveWorkspacePane {
   display: flex;
   flex-direction: column;
 }
-.centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-active]) > .adaptiveWorkspacePane {
+.centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-visible='true']) > .adaptiveWorkspacePane {
   display: none;
 }
-.centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-active]) > .browserWorkspacePane {
+.centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-visible='true']) > .browserWorkspacePane {
   display: flex;
   flex-direction: column;
 }
-.centerCol:is([data-adaptive-active], :has(> [data-browser-workspace-host] > [data-browser-workspace-active])) > .conversationPane {
+.centerCol:is([data-adaptive-active], :has(> [data-browser-workspace-host] > [data-browser-workspace-visible='true'])) > .conversationPane {
   flex: 1 1 44%;
   border-left: 0;
 }
 /* Browser mode differs from app mode: Kira's chat is LEFT and Chromium
    is RIGHT, both in normal document/focus order. */
-.centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-active]) > .conversationPane {
+.centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-visible='true']) > .conversationPane {
   order: 0;
   flex: 1 1 46%;
 }
-.centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-active]) > .browserWorkspacePane {
+.centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-visible='true']) > .browserWorkspacePane {
   order: 1;
   flex: 0 1 54%;
   border-right: 0;
   border-left: 1px solid var(--dsw-alias-border-l2);
   overflow: hidden;
 }
+/* On the welcome screen there is no live tab to dock. Even a stale,
+   orphaned portal must never squeeze the hero or reserve empty space. */
+.centerCol:has(> .conversationPane [data-phase='hero']) {
+  flex-direction: column;
+}
+.centerCol:has(> .conversationPane [data-phase='hero']) > .conversationPane {
+  order: 1;
+  flex: 1 1 100%;
+  width: 100%;
+}
+.centerCol:has(> .conversationPane [data-phase='hero']) > .browserWorkspacePane {
+  display: none;
+  flex: 0 0 0;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
 /* Remove the previous centered transcript offset when Kira works next to a
    surface: content aligns to the center of its own column. */
-.centerCol:is([data-adaptive-active], :has(> [data-browser-workspace-host] > [data-browser-workspace-active])) {
+.centerCol:is([data-adaptive-active], :has(> [data-browser-workspace-host] > [data-browser-workspace-visible='true'])) {
   --dsh-chat-floating-overlay-axis-shift: 0px;
 }
 .adaptiveWorkspacePane > [data-surface-recovery='adaptive'] { min-height: 100%; }
@@ -336,11 +354,11 @@
 }
 @media (max-width: 980px) {
   .centerCol[data-adaptive-active],
-  .centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-active]) {
+  .centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-visible='true']) {
     flex-direction: column;
   }
   .centerCol[data-adaptive-active] > .adaptiveWorkspacePane,
-  .centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-active]) > .browserWorkspacePane {
+  .centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-visible='true']) > .browserWorkspacePane {
     order: 0;
     flex: 0 0 min(46vh, 460px);
     height: min(46vh, 460px);
@@ -348,17 +366,17 @@
     border-right: 0;
     border-bottom: 1px solid var(--dsw-alias-border-l2);
   }
-  .centerCol:is([data-adaptive-active], :has(> [data-browser-workspace-host] > [data-browser-workspace-active])) > .conversationPane {
+  .centerCol:is([data-adaptive-active], :has(> [data-browser-workspace-host] > [data-browser-workspace-visible='true'])) > .conversationPane {
     order: 1;
     flex: 1 1 auto;
     min-height: 0;
     width: 100%;
   }
   /* Mobile reading order: chat/composer first, browser below it. */
-  .centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-active]) > .conversationPane {
+  .centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-visible='true']) > .conversationPane {
     order: 0;
   }
-  .centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-active]) > .browserWorkspacePane {
+  .centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-visible='true']) > .browserWorkspacePane {
     order: 1;
     border-left: 0;
   }
