@@ -192,18 +192,35 @@ export function AppFrame({
   const [adaptiveApp, setAdaptiveApp] = useState<string>('general')
   const [spaceOpen, setSpaceOpen] = useState(false)
   const [customApps, setCustomApps] = useState<readonly AdaptiveAppBlueprint[]>(readAdaptiveApps)
-  // PHOENIX Space is an overlay of the existing center viewport. Chat and its
-  // composer stay mounted, with no permanent side column or input movement.
+  // The sidebar's document library and the session/workspace library are
+  // different destinations. Never subscribe both to the legacy event:
+  // it opened a native Modal *and* PHOENIX Space on the same click.
+  // Keep the conversation/composer mounted; ask Space to flush edits before exit.
   useEffect(() => {
-    const open = (): void => { setSpaceOpen(true) }
-    const close = (): void => { setSpaceOpen(false) }
-    window.addEventListener('phoenix:open-workspace-library', open)
-    window.addEventListener('phoenix:adaptive-workspace', close)
+    const openSpace = (): void => { setSpaceOpen(true) }
+    const requestClose = (): void => {
+      window.dispatchEvent(new Event('phoenix:space-request-close'))
+    }
+    window.addEventListener('phoenix:open-space', openSpace)
+    window.addEventListener('phoenix:close-space', requestClose)
+    window.addEventListener('phoenix:open-workspace-library', requestClose)
+    window.addEventListener('phoenix:adaptive-workspace', requestClose)
     return () => {
-      window.removeEventListener('phoenix:open-workspace-library', open)
-      window.removeEventListener('phoenix:adaptive-workspace', close)
+      window.removeEventListener('phoenix:open-space', openSpace)
+      window.removeEventListener('phoenix:close-space', requestClose)
+      window.removeEventListener('phoenix:open-workspace-library', requestClose)
+      window.removeEventListener('phoenix:adaptive-workspace', requestClose)
     }
   }, [])
+  // Switching conversations must never leave the previous session's Space
+  // in front of the newly selected conversation.
+  const previousSpaceSession = useRef(currentSession)
+  useEffect(() => {
+    if (previousSpaceSession.current !== currentSession) {
+      window.dispatchEvent(new Event('phoenix:space-request-close'))
+    }
+    previousSpaceSession.current = currentSession
+  }, [currentSession])
   // Mirror nonclinical, configuration-only app blueprints by stable origin ID.
   // The store refuses duplicates; no EHR content or provider tokens are copied.
   useEffect(() => {
