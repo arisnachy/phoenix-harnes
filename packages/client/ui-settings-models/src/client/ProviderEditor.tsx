@@ -59,6 +59,8 @@ export interface ProviderEditorProps {
   hideTitle?: boolean
   /** Present connection, configuration and verification as guided steps. */
   guided?: boolean
+  /** Switches between separate OpenAI API and native Codex routes. */
+  onSelectOpenAiRoute?: (provider: 'openai' | 'openai-codex') => void
   /**
    * Whether the adapter reports this route as hand-declared — absent from its
    * installed catalog. Such a route carries its own wire protocol, chosen when
@@ -210,11 +212,16 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   const oauth = props.oauth
   /** An account-only flow replaces the key field with its sign-in buttons. */
   const isCodex = props.provider === 'openai-codex'
+  const openAiPaired = props.onSelectOpenAiRoute !== undefined
+    && (props.provider === 'openai' || isCodex)
   const supportsAccount = isCodex || oauth?.methods.some(method => method.id === 'oauth') === true
-  const supportsApiKey = !isCodex && !isChatGptWeb
-  const selectedMethod = supportsAccount && preferredMethod === 'auto'
-    ? 'oauth'
-    : supportsApiKey ? (preferredMethod === 'oauth' && supportsAccount ? 'oauth' : 'api-key') : 'oauth'
+    || openAiPaired
+  const supportsApiKey = !isChatGptWeb && (!isCodex || openAiPaired)
+  const defaultMethod = isCodex || (!openAiPaired && oauth?.methods.some(method => method.id === 'oauth') === true)
+    ? 'oauth' : 'api-key'
+  const selectedMethod = preferredMethod === 'auto' ? defaultMethod
+    : preferredMethod === 'oauth' && supportsAccount ? 'oauth'
+      : supportsApiKey ? 'api-key' : 'oauth'
   const oauthOnly = isCodex || (props.guided === true && selectedMethod === 'oauth')
   const accountReady = oauth?.connected === true || authorizedDuringEdit
   const { attempt, answer, setAnswer, failure: authFailure, begin, submitAnswer, cancel } =
@@ -642,8 +649,12 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
                   <input type="radio" name={`method-${props.provider}`} value="api-key"
                     checked={selectedMethod === 'api-key'}
                     disabled={disabled}
-                    onChange={() => { setPreferredMethod('api-key'); setProbeFeedback(undefined) }} />
-                  <span><strong>{t('wizardApi')}</strong><small>{t('wizardApiDesc')}</small></span>
+                    onChange={() => {
+                      if (openAiPaired && isCodex) props.onSelectOpenAiRoute?.('openai')
+                      else { setPreferredMethod('api-key'); setProbeFeedback(undefined) }
+                    }} />
+                  <span><strong>{t(openAiPaired ? 'wizardOpenAiApi' : 'wizardApi')}</strong>
+                    <small>{t(openAiPaired ? 'wizardOpenAiApiDesc' : 'wizardApiDesc')}</small></span>
                 </label>
               ) : null}
               {supportsAccount ? (
@@ -651,13 +662,18 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
                   <input type="radio" name={`method-${props.provider}`} value="oauth"
                     checked={selectedMethod === 'oauth'}
                     disabled={disabled}
-                    onChange={() => { setPreferredMethod('oauth'); setProbeFeedback(undefined) }} />
-                  <span><strong>{t('wizardAuth')}</strong><small>{t('wizardAuthDesc')}</small></span>
+                    onChange={() => {
+                      if (openAiPaired && !isCodex) props.onSelectOpenAiRoute?.('openai-codex')
+                      else { setPreferredMethod('oauth'); setProbeFeedback(undefined) }
+                    }} />
+                  <span><strong>{t(openAiPaired ? 'wizardOpenAiAuth' : 'wizardAuth')}</strong>
+                    <small>{t(openAiPaired ? 'wizardOpenAiAuthDesc' : 'wizardAuthDesc')}</small></span>
                 </label>
               ) : null}
               {!supportsApiKey && !supportsAccount ? (
                 <p className={styles['advancedHint']}>{t('wizardAutomatic')}</p>
               ) : null}
+              {openAiPaired ? <p className={styles['advancedHint']}>{t('wizardOpenAiSeparateRoutes')}</p> : null}
             </fieldset>
           ) : null}
         </>
