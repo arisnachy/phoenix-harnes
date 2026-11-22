@@ -6,6 +6,7 @@ import { ModelActivityAvatar } from './ModelActivityAvatar.tsx'
 import { teamIdentityOf } from './TeamChatMessage.tsx'
 import { NS } from './locales.ts'
 import css from './TeamChatMessage.module.css'
+import { useLivingTeamNames, teamVisibleName } from './team-customization-react.ts'
 
 const INACTIVE = new Set(['done', 'completed', 'failed', 'inactive', 'idle'])
 
@@ -54,6 +55,7 @@ type Props = PropsRuntime<'conversation.input.dock'> & InjectFace<TeamMentionDoc
 
 /** Suggest Kira and currently active teammates for a trailing @ mention. */
 export function TeamMentionDock({ input, sessionId, useProjection, setDraft, t }: Props) {
+  const names = useLivingTeamNames()
   const query = mentionQueryOf(input.draft)
   const participants = useProjection('teamChatParticipants') ?? {}
   if (query === undefined) return null
@@ -61,10 +63,11 @@ export function TeamMentionDock({ input, sessionId, useProjection, setDraft, t }
   const rows = Object.values(participants)
     .filter(activeParticipant)
     .map(mentionRowOf)
-  if (!rows.some(row => row.name.toLocaleLowerCase() === 'kira')) {
+    .map(row => ({ ...row, name: teamVisibleName(names, row.avatar, row.name) }))
+  if (!rows.some(row => row.avatar === 'kira')) {
     rows.unshift({
       id: String(sessionId),
-      name: 'Kira',
+      name: teamVisibleName(names, 'kira', 'Kira'),
       role: t('skill.orchestration'),
       status: 'running',
       avatar: 'kira',
@@ -73,7 +76,7 @@ export function TeamMentionDock({ input, sessionId, useProjection, setDraft, t }
   const filtered = rows
     .filter((row, index, all) => all.findIndex(candidate => candidate.name.toLocaleLowerCase() === row.name.toLocaleLowerCase()) === index)
     .filter(row => query.text === '' || row.name.toLocaleLowerCase().includes(query.text))
-    .sort((left, right) => left.name === 'Kira' ? -1 : right.name === 'Kira' ? 1 : left.name.localeCompare(right.name))
+    .sort((left, right) => left.avatar === 'kira' ? -1 : right.avatar === 'kira' ? 1 : left.name.localeCompare(right.name))
     .slice(0, 8)
   if (filtered.length === 0) return null
 

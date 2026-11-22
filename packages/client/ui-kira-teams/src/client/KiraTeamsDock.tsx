@@ -11,6 +11,9 @@ import {
 } from './ModelActivityAvatar.tsx'
 import css from './KiraTeamsDock.module.css'
 import directoryCss from './KiraTeamDirectory.module.css'
+import { readTeamNames, subscribeTeamProfiles, type LivingTeamKind, type TeamDisplayNames } from './team-customization.ts'
+import { TeamProfileEditor, TeamBulkNames } from './TeamProfileEditor.tsx'
+import type { LivingTeamRpc } from './team-avatar-rpc.ts'
 
 /** Sessions face plus business actions supplied by the slot registration. */
 export interface KiraTeamsInjected {
@@ -21,6 +24,7 @@ export interface KiraTeamsInjected {
   layout: Pick<ILayout, 'setWorkspaceOccupant'>
   openChild: (address: SubagentAddress) => void
   refresh: (parentSessionId: SessionId) => void
+  teamRpc: LivingTeamRpc
 }
 
 export type KiraTeamsDockProps =
@@ -401,13 +405,31 @@ function openAgent(card: KiraRosterCard, openChild: (address: SubagentAddress) =
  * The rail is presence/navigation only, so a subagent response can never appear here
  * before its durable chat message is available to the user.
  */
-export function KiraTeamsDock({ useList, openChild, t, layout }: KiraTeamsDockProps) {
+export function KiraTeamsDock({ useList, openChild, t, layout, teamRpc }: KiraTeamsDockProps) {
   const state = useList(value => value)
   const { root, rows } = lineageMembers(state)
   const cards = liveCardsOf(rows, root?.projectionValues?.teamChatParticipants)
   const [selectedId, setSelectedId] = useState<string>()
   const [teamOpen, setTeamOpen] = useState(false)
   const [selectedPersona, setSelectedPersona] = useState<ModelAvatarKind>('kira')
+  const [editingProfile, setEditingProfile] = useState(false)
+  const [displayNames, setDisplayNames] = useState<TeamDisplayNames>({})
+  useEffect(() => {
+    let alive = true
+    const reload = () => { void readTeamNames().then(names => { if (alive) setDisplayNames(names) }).catch(() => {}) }
+    reload()
+    const unsubscribe = subscribeTeamProfiles(reload)
+    return () => { alive = false; unsubscribe() }
+  }, [])
+  const displayName = (kind: LivingTeamKind, original: string): string => displayNames[kind] ?? original
+  const memberNames = [
+    { kind: 'kira' as const, name: displayName('kira', 'Kira'), specialty: 'Liderazgo y coordinación' },
+    ...KIRA_ROSTER.map(person => ({
+      kind: person.kind as LivingTeamKind,
+      name: displayName(person.kind as LivingTeamKind, person.name),
+      specialty: person.tagline,
+    })),
+  ]
   useEffect(() => {
     const toggle = () => { setTeamOpen(previous => !previous) }
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setTeamOpen(false) }
@@ -432,7 +454,7 @@ export function KiraTeamsDock({ useList, openChild, t, layout }: KiraTeamsDockPr
     <aside className={directoryCss.directory} aria-label="Directorio del equipo" data-kira-team-directory>
       <header className={directoryCss.header}>
         <div><span className={directoryCss.eyebrow}>PHOENIX LIVING TEAM</span>
-          <h2>Equipo de Kira</h2><p>Una líder y 20 especialistas.</p></div>
+          <h2>Equipo de {displayName('kira', 'Kira')}</h2><p>Una líder y 20 especialistas.</p></div>
         <button type="button" className={directoryCss.close} aria-label="Cerrar equipo"
           onClick={() => { setTeamOpen(false) }}>×</button>
       </header>
@@ -444,7 +466,7 @@ export function KiraTeamsDock({ useList, openChild, t, layout }: KiraTeamsDockPr
           running={actual?.running ?? false} pending={actual?.pendingInteraction !== undefined}
           ready={actual === undefined} variant="card" />
         <div className={directoryCss.profileText}>
-          <strong>{selected?.name ?? 'Kira'}</strong><span>{selected?.tagline ?? 'Liderazgo y coordinación'}</span>
+          <strong>{displayName(selectedPersona as LivingTeamKind, selected?.name ?? 'Kira')}</strong><span>{selected?.tagline ?? 'Liderazgo y coordinación'}</span>
         </div>
         <p className={directoryCss.biography}>{selected === undefined
           ? 'Kira coordina especialistas, asigna trabajos y orienta el equipo hacia resultados verificables.'
@@ -454,16 +476,27 @@ export function KiraTeamsDock({ useList, openChild, t, layout }: KiraTeamsDockPr
         <span className={directoryCss.status}>{selectedPersona === 'kira'
           ? root?.running ? 'Kira trabajando' : 'Kira disponible'
           : actual?.running ? 'Trabajando en una sesión real' : 'Sin tarea activa'}</span>
+        <button type="button" className={directoryCss.editToggle}
+          onClick={() => { setEditingProfile(value => !value) }} aria-expanded={editingProfile}>
+          {editingProfile ? 'Cerrar personalización' : 'Personalizar nombre y avatar'}
+        </button>
         {actual !== undefined && active !== undefined && <button type="button" className={directoryCss.jump}
           onClick={() => { openAgent(active, openChild); setTeamOpen(false) }}>Ver conversación →</button>}
       </div>
+      {editingProfile && <div className={directoryCss.editorScroll} data-team-customization>
+        <TeamProfileEditor key={selectedPersona} kind={selectedPersona as LivingTeamKind}
+          name={displayName(selectedPersona as LivingTeamKind, selected?.name ?? 'Kira')}
+          originalName={selected?.name ?? 'Kira'} specialty={selected?.tagline ?? 'Liderazgo y coordinación'}
+          rpc={teamRpc} />
+        {selectedPersona === 'kira' && <TeamBulkNames members={memberNames} rpc={teamRpc} />}
+      </div>}
       <div className={directoryCss.listHead}><span>Especialistas</span><span>21 perfiles</span></div>
       <div className={directoryCss.list} role="list" aria-label="Especialistas de Phoenix">
         <button type="button" className={directoryCss.person} data-selected={selectedPersona === 'kira'}
-          onClick={() => { setSelectedPersona('kira') }}>
+          onClick={() => { setSelectedPersona('kira'); setEditingProfile(false) }}>
           <ModelActivityAvatar kind="kira" activity={undefined} running={root?.running ?? false}
             pending={false} ready={!root?.running} />
-          <span className={directoryCss.personText}><strong>Kira</strong><small>Líder y coordinadora</small></span>
+          <span className={directoryCss.personText}><strong>{displayName('kira','Kira')}</strong><small>Líder y coordinadora</small></span>
           <span className={directoryCss.personState}>✦</span>
         </button>
         {KIRA_ROSTER.map(person => {
@@ -472,14 +505,14 @@ export function KiraTeamsDock({ useList, openChild, t, layout }: KiraTeamsDockPr
           return (
             <button key={person.kind} type="button" className={directoryCss.person}
               data-selected={selectedPersona === person.kind}
-              onClick={() => { setSelectedPersona(person.kind) }} aria-label={person.name + ': ' + person.tagline}>
+              onClick={() => { setSelectedPersona(person.kind); setEditingProfile(false) }} aria-label={displayName(person.kind as LivingTeamKind,person.name) + ': ' + person.tagline}>
               <ModelActivityAvatar kind={person.kind}
                 model={summary === undefined ? undefined : root?.projectionValues?.teamChatParticipants?.[summary.id]?.model}
                 modelProvider={summary === undefined ? undefined : root?.projectionValues?.teamChatParticipants?.[summary.id]?.modelProvider}
                 activity={summary === undefined ? undefined : activityOf(summary)}
                 running={summary?.running ?? false} pending={summary?.pendingInteraction !== undefined}
                 ready={summary === undefined} />
-              <span className={directoryCss.personText}><strong>{person.name}</strong><small>{person.tagline}</small></span>
+              <span className={directoryCss.personText}><strong>{displayName(person.kind as LivingTeamKind,person.name)}</strong><small>{person.tagline}</small></span>
               <span className={directoryCss.personState} data-active={summary?.running ?? false}
                 title={summary?.running ? 'Trabajando' : 'Sin tarea activa'} />
             </button>
@@ -520,9 +553,9 @@ export function KiraTeamsDock({ useList, openChild, t, layout }: KiraTeamsDockPr
                 key={String(summary.id)}
                 type="button"
                 className={`${css.railAgent} ${selected ? css.railAgentSelected : ''}`}
-                aria-label={`${card.name} · ${t(actionKey)}`}
+                aria-label={`${displayName(card.kind as LivingTeamKind,card.name)} · ${t(actionKey)}`}
                 aria-pressed={selected}
-                title={`${card.name} · ${t(actionKey)}`}
+                title={`${displayName(card.kind as LivingTeamKind,card.name)} · ${t(actionKey)}`}
                 data-kira-agent-rail
                 data-agent-kind={card.kind}
                 data-agent-id={String(summary.id)}

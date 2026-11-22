@@ -14,6 +14,7 @@ import type {
 } from '@phoenix-ai/dsh-client-ui-conversation/client'
 import { NS, type KiraTeamsKey } from './locales.ts'
 import css from './TeamChatMessage.module.css'
+import { useLivingTeamNames, teamVisibleName } from './team-customization-react.ts'
 import { formatTeamMarkdown } from './team-markdown.ts'
 
 interface TeamIdentity {
@@ -131,6 +132,7 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
   node, t, useProjection, messageActions,
 }: KiraTeamMessageViewProps) {
   const data: KiraTeamMessageChatData = node.data
+  const displayNames = useLivingTeamNames()
   const participants = useProjection('teamChatParticipants') ?? {}
   const identityFor = (name: string, id: string): TeamIdentity => {
     const base = teamIdentityOf(name, id)
@@ -143,14 +145,18 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
   const identity = identityFor(data.senderName, data.senderId)
   const avatar = data.senderKind === 'kira' ? 'kira'
     : KIRA_ROSTER.find(persona => persona.kind === data.avatar)?.kind ?? identity.kind
-  const sender = data.senderKind === 'user' ? { name: t?.('chat.user') ?? 'User', role: t?.('chat.userRole') ?? 'Team collaborator', kind: 'aurora' as const } : { ...identity, name: data.senderKind === 'kira' ? 'Kira'
+  const senderBase = data.senderKind === 'user' ? { name: t?.('chat.user') ?? 'User', role: t?.('chat.userRole') ?? 'Team collaborator', kind: 'aurora' as const } : { ...identity, name: data.senderKind === 'kira' ? 'Kira'
     : participants[data.senderId]?.name ?? (data.missionId === undefined ? identity.name : data.senderName), kind: data.senderKind === 'kira' ? 'kira' : avatar }
+  const sender = data.senderKind === 'user' ? senderBase
+    : { ...senderBase, name: teamVisibleName(displayNames, senderBase.kind, senderBase.name) }
   // Durable metadata wins over guessing audience from the message prose.
   // Genuine child speech addresses the owning Lead, even in older snapshots.
   const targetName = data.targetName
     ?? (data.missionId !== undefined && data.targetId === data.missionId
       && data.senderKind === 'agent' ? 'Kira' : participants[data.targetId]?.name)
-  const target = targetName === undefined ? undefined : identityFor(targetName, data.targetId)
+  const targetBase = targetName === undefined ? undefined : identityFor(targetName, data.targetId)
+  const target = targetBase === undefined ? undefined
+    : { ...targetBase, name: teamVisibleName(displayNames, targetBase.kind, targetBase.name) }
   // Direct child replies to a human question carry replyTo without an agent target.
   // Never label them "Equipo interno"; all other directed peer speech stays internal.
   const audience = data.senderKind === 'user'

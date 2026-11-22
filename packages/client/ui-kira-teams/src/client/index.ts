@@ -1,6 +1,8 @@
 /** Web KIRA teams overlay: center-column activity-strip and agent-rail registration. */
 import type { ClientContext, ISessions, SessionId, SubagentAddress } from '@phoenix-ai/dsh-client-runtime/client'
 import { KiraTeamsDock } from './KiraTeamsDock.tsx'
+import type { LivingTeamRpc } from './team-avatar-rpc.ts'
+import { readTeamNames, type LivingTeamKind } from './team-customization.ts'
 import type {} from '@phoenix-ai/dsh-api-remotes/client'
 import type { TeamChatReplyRequest } from '@phoenix-ai/dsh-agent-team/chat-types'
 import { TeamReplyDock, type TeamReplyChoice } from './TeamReplyDock.tsx'
@@ -23,7 +25,7 @@ declare module '@phoenix-ai/dsh-client-ui-slots' {
 export type { KiraTeamsDockProps, KiraTeamsInjected } from './KiraTeamsDock.tsx'
 
 /** Required services for the KIRA mission-control overlay contribution. */
-export const inject = ['sessions', 'slots', 'locale', 'layout', 'conversation', 'remote', 'remote.agentTeams']
+export const inject = ['sessions', 'slots', 'locale', 'layout', 'conversation', 'remote', 'remote.agentTeams', 'connection']
 
 /** Register the KIRA activity strip and rail inside the center-column overlay so agents never consume chat width or cover the sidebar. */
 export function apply(ctx: ClientContext): void {
@@ -96,9 +98,13 @@ export function apply(ctx: ClientContext): void {
         const names = [...request.text.matchAll(/@(?:"([^"]{1,128})"|([\p{L}\p{N}_-]+))/gu)]
           .map(match => (match[1] ?? match[2])?.toLowerCase())
         const participants = new Map<string, string>()
+        const customNames = await readTeamNames().catch(() => ({} as Partial<Record<LivingTeamKind, string>>))
         for (const person of read.value.participants) {
           participants.set(person.name.toLowerCase(), person.id)
-          participants.set(teamIdentityOf(person.name, person.id).name.toLowerCase(), person.id)
+          const canonical = teamIdentityOf(person.name, person.id)
+          participants.set(canonical.name.toLowerCase(), person.id)
+          const alias = customNames[canonical.kind as LivingTeamKind]
+          if (alias !== undefined) participants.set(alias.toLowerCase(), person.id)
         }
         for (const message of read.value.messages) {
           if (message.senderKind === 'agent') participants.set(teamIdentityOf(message.senderName, message.senderId).name.toLowerCase(), message.senderId)
@@ -154,7 +160,9 @@ export function apply(ctx: ClientContext): void {
     ensureChat()
     return () => { stop(); backfilled.clear(); loading.clear() }
   }, 'ui-kira-teams: existing conversation')
+  const teamConnection = (ctx.get as (key: string) => unknown)('connection') as { rpc: LivingTeamRpc }
   const dockActions = () => ({
+    teamRpc: teamConnection.rpc,
     hooks: { list: sessions.list },
     layout: ctx.layout,
     openChild(address: SubagentAddress) {
