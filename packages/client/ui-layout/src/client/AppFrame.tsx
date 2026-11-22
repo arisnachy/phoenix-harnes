@@ -614,14 +614,14 @@ export function AppFrame({
           </SurfaceBoundary>
           )}
           </div>
-          <div className={css.browserWorkspacePane} data-browser-workspace-host=""
-            aria-label="Navegador integrado de PHOENIX" />
           <div data-shell-overlay>{renderSlot('shell.overlay', {})}</div>
           <div className={css.conversationPane} data-conversation-pane="">
             <SurfaceBoundary name="conversation" resetKey={currentSession ?? 'none'}>
               <SurfaceRender render={() => renderSlot('conversation', {})} />
             </SurfaceBoundary>
           </div>
+          <div className={css.browserWorkspacePane} data-browser-workspace-host=""
+            aria-label="Navegador integrado de PHOENIX" />
           <div data-shell-workspace>
             <SurfaceBoundary name="workspace" resetKey={currentSession ?? 'none'}>
               <SurfaceRender render={() => renderSlot('shell.workspace', {})} />
