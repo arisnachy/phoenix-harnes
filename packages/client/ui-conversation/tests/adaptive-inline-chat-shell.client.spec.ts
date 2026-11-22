@@ -42,7 +42,6 @@ describe('PHOENIX side-by-side adaptive workspace and browser', () => {
     expect(layoutCss).toContain('.adaptiveWorkspacePane')
     expect(layoutCss).toContain('flex: 1 1 100%')
     expect(layoutCss).not.toContain('.centerCol[data-adaptive-active] > .conversationPane')
-    expect(layoutCss).not.toContain('.centerCol[data-adaptive-active] > .conversationPane')
     expect(chatCss).toContain('grid-template-columns: minmax(0, 1.85fr) minmax(320px, .95fr)')
     expect(chatCss).toContain('grid-template-rows: minmax(0, 1fr) auto')
     expect(chatCss).toContain('grid-column: 1 / -1')
