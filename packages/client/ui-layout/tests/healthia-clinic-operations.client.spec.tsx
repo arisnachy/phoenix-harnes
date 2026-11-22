@@ -85,7 +85,7 @@ describe('Native clinic inside PHOENIX (protected Host ownership)',()=>{
   })
 
   it('round-trips multiline illness histories without turning their prose into separate facts',()=>{
-    const text='Inicio de cefalea.\\nDiagnósticos diferenciales o incertidumbres: texto relatado por el paciente.\\n\\nSegunda descripción sin hallazgos confirmados.'
+    const text='Inicio de cefalea.\nDiagnósticos diferenciales o incertidumbres: texto relatado por el paciente.\n\nSegunda descripción sin hallazgos confirmados.'
     const encounter:ClinicalEncounter={
       ...baseVisit,
       history:formatClinicalNote('first',{chief:'Cefalea',hea:text,allergies:'No documentadas'}),
