@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { addBrowserCards, releaseMiniBrowserSession, groupActiveBrowserFlow, isAtActivityTail, isBrowserPrompt, isEmbeddedNavigationTool, hasNavigatedWebPage, visibleResearchSourceUrl, isSecureAskDismissed, setSecureAskDismissed } from '../src/client/chat/ToolActivityFlow.tsx'
+import { addBrowserCards, releaseMiniBrowserSession, groupActiveBrowserFlow, isAtActivityTail, isBrowserPrompt, isEmbeddedNavigationTool, hasNavigatedWebPage, visibleResearchSourceUrl, isSecureAskDismissed, setSecureAskDismissed, isMediaPlaybackPrompt } from '../src/client/chat/ToolActivityFlow.tsx'
 
 type BrowserFlowNode = { key: string; kind: string; data: unknown }
 const user = (key: string, text: string): BrowserFlowNode => ({
@@ -26,6 +26,7 @@ describe('MiniBrowser chronological conversation cards', () => {
     expect(isBrowserPrompt('¿Puedes entrar a la página de Listín Diario?')).toBe(true)
     expect(isBrowserPrompt('puedes ingresar al sitio listindiario.com')).toBe(true)
     expect(isBrowserPrompt('Abre YouTube')).toBe(true)
+    expect(isBrowserPrompt('Play this YouTube video')).toBe(true)
     expect(isBrowserPrompt('Abre la carpeta del proyecto')).toBe(false)
     expect(isBrowserPrompt('No abras el navegador')).toBe(false)
     expect(isBrowserPrompt('Hola, ¿cómo va todo?')).toBe(false)
@@ -35,6 +36,14 @@ describe('MiniBrowser chronological conversation cards', () => {
     expect(isBrowserPrompt('Abre el Bloc de notas')).toBe(false)
     expect(isBrowserPrompt('Abre la calculadora de Windows')).toBe(false)
     expect(isBrowserPrompt('Analiza este tutorial de Godot en YouTube')).toBe(true)
+  })
+
+  it('retains only an explicitly requested YouTube video, not the homepage or search', () => {
+    expect(isMediaPlaybackPrompt('Reproduce este video de YouTube')).toBe(true)
+    expect(isMediaPlaybackPrompt('Pon https://www.youtube.com/watch?v=dQw4w9WgXcQ')).toBe(true)
+    expect(isMediaPlaybackPrompt('Abre YouTube')).toBe(false)
+    expect(isMediaPlaybackPrompt('Busca videos en YouTube')).toBe(false)
+    expect(isMediaPlaybackPrompt('Abre https://www.youtube.com/')).toBe(false)
   })
 
   it('keeps the chat full-width for pending/blank Chromium, and recognizes a real page', () => {

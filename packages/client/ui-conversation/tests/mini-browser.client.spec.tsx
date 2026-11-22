@@ -137,7 +137,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     expect(used).toBe(1)
   })
 
-  it('requests the sidebar Secure Ask for a saved login even if Chrome CDP is unavailable', async () => {
+  it('offers the saved-access card for a saved login even if Chrome CDP is unavailable', async () => {
     const request = vi.fn()
     const onSite = { ...state, url: 'https://example.org/login', title: 'Iniciar sesión',
       tabs: [{ id: 'shared-tab', title: 'Iniciar sesión', url: 'https://example.org/login' }] }
@@ -257,14 +257,17 @@ describe('MiniBrowser in Phoenix conversation', () => {
 
   it('does not offer invented credential fields when manual detection observes no form', async () => {
     const request = vi.fn()
+    let detections = 0
     const onSite = { ...state, url: 'https://example.org/home', title: 'Inicio',
       tabs: [{ id: 'shared-tab', title: 'Inicio', url: 'https://example.org/home' }] }
     vi.stubGlobal('fetch', vi.fn(async (raw: string) => {
       const input = String(raw)
       if (input.startsWith('/phoenix-secure-login/status')) return new Response(
         JSON.stringify({ saved: false, automatic: false }), { status: 200 })
-      if (input.startsWith('/phoenix-secure-login/detect')) return new Response(
-        JSON.stringify({ required: true, formVisible: false, fields: [] }), { status: 200 })
+      if (input.startsWith('/phoenix-secure-login/detect')) {
+        detections++
+        return new Response(JSON.stringify({ required: true, formVisible: false, fields: [] }), { status: 200 })
+      }
       if (input.startsWith('/phoenix-mini-browser/frame')) return new Response(
         new Uint8Array([255, 216, 255, 217]), { status: 200, headers: { 'content-type': 'image/jpeg' } })
       return new Response(JSON.stringify(onSite), { status: 200,
@@ -274,6 +277,8 @@ describe('MiniBrowser in Phoenix conversation', () => {
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
     render(<MiniBrowser sessionId="test-chat" requested onSecureLoginRequest={request} />)
     const button = await screen.findByRole('button', { name: 'Abrir acceso seguro' })
+    await waitFor(() => expect(detections).toBeGreaterThan(0))
+    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ saved: false }))
     fireEvent.click(button)
     await waitFor(() => expect(request).toHaveBeenCalledWith(expect.objectContaining({
       origin: 'https://example.org', tabId: 'shared-tab', formObserved: false,
@@ -768,13 +773,17 @@ describe('MiniBrowser in Phoenix conversation', () => {
       ...state,
       url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     })
-    render(<MiniBrowser sessionId="test-chat" />)
+    const view = render(<MiniBrowser sessionId="test-chat" />)
     await screen.findByRole('region', { name: 'Navegador de Kira' })
     expect(screen.getByTitle('Reproductor YouTube').getAttribute('src'))
       .toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=0&playsinline=1')
     fireEvent.click(screen.getByRole('button', { name: /Reproducir con audio/ }))
     expect(screen.getByTitle('Reproductor YouTube').getAttribute('src'))
       .toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1&playsinline=1')
+    const player = screen.getByTitle('Reproductor YouTube')
+    view.rerender(<MiniBrowser sessionId="test-chat" active={false} />)
+    expect(screen.getByTitle('Reproductor YouTube')).toBe(player)
+    expect(player.getAttribute('src')).toContain('autoplay=1')
     fireEvent.click(screen.getByRole('button', { name: /Ver navegador de Kira/ }))
     expect(screen.queryByTitle('Reproductor YouTube')).toBeNull()
   })
@@ -890,7 +899,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     render(<MiniBrowser sessionId="saved-auto" requested onSecureLoginRequest={request} onSavedAccessNotice={notice} />)
     await waitFor(() => expect(submitted).toBe(1))
     expect(notice).toHaveBeenCalledWith({ origin: 'https://example.org', phase: 'using' })
-    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ saved: false }))
+    expect(request.mock.calls.flat().every(value => value === null)).toBe(true)
   })
 
   it('shows saved manual-only access without silently using credentials', async () => {
