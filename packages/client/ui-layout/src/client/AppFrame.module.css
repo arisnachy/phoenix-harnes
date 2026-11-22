@@ -249,9 +249,9 @@
 .adaptiveChatChrome button:hover {color:var(--dsw-alias-label-primary);}
 @media (max-width:760px) {.adaptiveChatCard{padding:12px;border-radius:16px;}}
 
-/* PHOENIX native split workspace: an app or active browser on the left,
-   the ONE live conversation + composer on the right. Nothing is floated over
-   chat, and the conversation's own scrollport remains independent. */
+/* PHOENIX native split workspace: apps on the left, browser on the right
+   only while a real page is visible. The ONE chat and composer stay mounted
+   on their own independent scrollport, without floating overlays. */
 .conversationPane {
   order: 1;
   display: flex;
@@ -299,8 +299,21 @@
   flex: 1 1 44%;
   border-left: 0;
 }
+/* Browser mode differs from app mode: Kira's chat is LEFT and Chromium
+   is RIGHT, both in normal document/focus order. */
+.centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-active]) > .conversationPane {
+  order: 0;
+  flex: 1 1 46%;
+}
+.centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-active]) > .browserWorkspacePane {
+  order: 1;
+  flex: 0 1 54%;
+  border-right: 0;
+  border-left: 1px solid var(--dsw-alias-border-l2);
+  overflow: hidden;
+}
 /* Remove the previous centered transcript offset when Kira works next to a
-   surface: content aligns to the center of its actual right-hand column. */
+   surface: content aligns to the center of its own column. */
 .centerCol:is([data-adaptive-active], :has(> [data-browser-workspace-host] > [data-browser-workspace-active])) {
   --dsh-chat-floating-overlay-axis-shift: 0px;
 }
@@ -340,5 +353,13 @@
     flex: 1 1 auto;
     min-height: 0;
     width: 100%;
+  }
+  /* Mobile reading order: chat/composer first, browser below it. */
+  .centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-active]) > .conversationPane {
+    order: 0;
+  }
+  .centerCol:has(> [data-browser-workspace-host] > [data-browser-workspace-active]) > .browserWorkspacePane {
+    order: 1;
+    border-left: 0;
   }
 }
