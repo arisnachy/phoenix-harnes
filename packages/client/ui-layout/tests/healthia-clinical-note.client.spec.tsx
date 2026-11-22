@@ -52,7 +52,7 @@ describe('Healthia clinical note from the supplied legacy intake concepts', () =
     })
     fireEvent.click(screen.getByRole('button', { name: 'Vista previa de nota' }))
     expect(screen.getByRole('region', { name: 'Vista previa clínica' }).textContent).toContain('Dolor abdominal')
-    fireEvent.click(screen.getByRole('button', { name: 'Descartar borrador' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Descartar cambios' }))
     expect(screen.queryByRole('region', { name: 'Vista previa clínica' })).toBeNull()
     expect((screen.getByRole('textbox', { name: 'Motivo de consulta' }) as HTMLInputElement).value).toBe('')
   })
