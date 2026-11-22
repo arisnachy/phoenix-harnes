@@ -40,7 +40,7 @@ function actorOf(value: unknown): ClinicalActor {
   const actor=object(value)
   if(typeof actor.username!=='string' || typeof actor.org!=='string' || !roles.has(String(actor.role)))
     throw Error('Identidad clínica no verificable')
-  return actor as ClinicalActor
+  return {username:actor.username as string,role:actor.role as ClinicalActor['role'],org:actor.org as string}
 }
 function sessionOf(value: unknown): ClinicalSession {
   const data=object(value)
@@ -72,7 +72,7 @@ function encounterOf(item: unknown): item is ClinicalEncounter {
 }
 
 export class HealthiaClinicalApi {
-  constructor(private readonly requester: Requester = fetch) {}
+  constructor(private readonly requester?: Requester) {}
 
   private async request(path:string,method:ApiMethod='GET',session?:ClinicalSession,
     body?:Record<string, unknown>):Promise<unknown> {
@@ -85,7 +85,7 @@ export class HealthiaClinicalApi {
     }
     let response:Response
     try {
-      response=await this.requester('/health/api/'+path, {
+      response=await (this.requester ?? fetch)('/health/api/'+path, {
         method,headers,credentials:'same-origin',cache:'no-store',
         ...(body===undefined?{}:{body:JSON.stringify(body)}),
         signal:AbortSignal.timeout(10000),
