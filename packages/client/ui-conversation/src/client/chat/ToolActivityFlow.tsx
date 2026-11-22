@@ -209,6 +209,18 @@ export function isEmbeddedNavigationTool(name: string): boolean {
   return /(?:^|[_:./-])(?:browser|chrome)(?:[_:./-]|$)/u.test(value)
 }
 
+/** A pending or blank Chromium tab does not deserve a workspace column.
+ * @param page - Last page independently confirmed by the Chromium state endpoint.
+ * @returns True only when Chromium reports a navigated HTTP(S) web page.
+ */
+export function hasNavigatedWebPage(page: { readonly url: string } | null): boolean {
+  if (page === null) return false
+  try {
+    const target = new URL(page.url)
+    return (target.protocol === 'http:' || target.protocol === 'https:') && target.hostname !== ''
+  } catch { return false }
+}
+
 interface EmbeddedBrowserUse {
   readonly found: boolean
   readonly tabId?: string
@@ -1086,7 +1098,7 @@ function BrowserWorkspace({
   const showSidecar = dockHost === null && (live || savedAccessNotice !== null)
   // Prepare Chromium invisibly; the shell splits only after an actual URL is
   // verified. A pending about:blank never steals space from Kira's chat.
-  const verifiedPage = page !== null && /^https?:\/\//u.test(page.url)
+  const verifiedPage = hasNavigatedWebPage(page)
   const activityRef = useRef<HTMLDivElement | null>(null)
   const followingRef = useRef(true)
   const [following, setFollowing] = useState(true)
