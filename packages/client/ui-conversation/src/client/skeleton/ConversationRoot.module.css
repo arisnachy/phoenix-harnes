@@ -829,3 +829,89 @@
 @media (max-width:720px) {.appMenu{right:-45px;max-height:65vh;border-radius:16px;}}
 /* This card participates in the SAME chat scrollport as Kira's messages;
    it is never positioned over the header or composer. */
+
+
+/* PHOENIX in-chat application mode. The app/form occupies the left side of
+   the CONTENT AREA, and the existing transcript occupies the right side.
+   The original composer is one full-width bottom row, never a narrow rail.
+   Without portal children these rules do nothing: Start stays full width. */
+.adaptiveInlineHost { display: none; }
+.root .scrollBody:has(> .adaptiveInlineHost > *) {
+  display: grid;
+  grid-template-columns: minmax(0, 1.85fr) minmax(320px, .95fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 0;
+  min-height: 0;
+  overflow: hidden;
+  scrollbar-gutter: auto;
+  align-items: stretch;
+}
+.root .scrollBody:has(> .adaptiveInlineHost > *) > .adaptiveInlineHost {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.root .scrollBody:has(> .adaptiveInlineHost > *) > :not(.adaptiveInlineHost):not(.composerSeat) {
+  grid-column: 2;
+  grid-row: 1;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.root .scrollBody:has(> .adaptiveInlineHost > *) > .composerSeat {
+  position: relative;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  align-self: end;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 10px 0 max(8px, env(safe-area-inset-bottom));
+  transform: none;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
+}
+@media (max-width: 980px) {
+  .root .scrollBody:has(> .adaptiveInlineHost > *) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(160px, 30vh) auto;
+  }
+  .root .scrollBody:has(> .adaptiveInlineHost > *) > .adaptiveInlineHost {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .root .scrollBody:has(> .adaptiveInlineHost > *) > :not(.adaptiveInlineHost):not(.composerSeat) {
+    grid-column: 1;
+    grid-row: 2;
+    border-top: 1px solid var(--dsw-alias-border-l2);
+  }
+  .root .scrollBody:has(> .adaptiveInlineHost > *) > .composerSeat {
+    grid-column: 1;
+    grid-row: 3;
+  }
+}
+
+
+/* Browser-only mode also keeps the ONE composer at the bottom. Its content
+   scrolls independently; an active MiniBrowser is an inline conversation
+   surface, never a column in AppFrame. App mode takes precedence if present. */
+.root .scrollBody:has([data-browser-workspace]):not(:has(> .adaptiveInlineHost > *)) {
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
+.root .scrollBody:has([data-browser-workspace]):not(:has(> .adaptiveInlineHost > *)) > .composerSeat {
+  position: relative;
+  bottom: auto;
+  flex: 0 0 auto;
+  margin-top: auto;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  background: var(--dsw-alias-bg-base);
+}
