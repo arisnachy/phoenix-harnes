@@ -28,6 +28,7 @@ import {
 } from './AdaptiveWorkspaceControl.ts'
 import { isVisualOperation, restoreVisualBoard, readVisualBoard } from './AdaptiveVisualKit.ts'
 import { AdaptiveAppPreview } from './AdaptiveAppPreview.tsx'
+import { PhoenixSpace } from './PhoenixSpace.tsx'
 import type { AdaptiveLiveSnapshot } from './AdaptiveLiveSlots.ts'
 
 /** Full composed props: runtime share + child-slot render share + store share. */
@@ -189,7 +190,36 @@ export function AppFrame({
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState(() => window.innerWidth)
   const [adaptiveApp, setAdaptiveApp] = useState<string>('general')
+  const [spaceOpen, setSpaceOpen] = useState(false)
   const [customApps, setCustomApps] = useState<readonly AdaptiveAppBlueprint[]>(readAdaptiveApps)
+  // PHOENIX Space is an overlay of the existing center viewport. Chat and its
+  // composer stay mounted, with no permanent side column or input movement.
+  useEffect(() => {
+    const open = (): void => { setSpaceOpen(true) }
+    const close = (): void => { setSpaceOpen(false) }
+    window.addEventListener('phoenix:open-workspace-library', open)
+    window.addEventListener('phoenix:adaptive-workspace', close)
+    return () => {
+      window.removeEventListener('phoenix:open-workspace-library', open)
+      window.removeEventListener('phoenix:adaptive-workspace', close)
+    }
+  }, [])
+  // Mirror nonclinical, configuration-only app blueprints by stable origin ID.
+  // The store refuses duplicates; no EHR content or provider tokens are copied.
+  useEffect(() => {
+    for (const app of customApps) {
+      void fetch('/space-api/items', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-phoenix-space': '1' },
+        body: JSON.stringify({
+          kind: 'app', space: 'aplicaciones', title: app.title,
+          mime: 'application/vnd.phoenix.app+json', content: JSON.stringify(app),
+          sourceKey: 'adaptive-app:' + app.id,
+        }),
+      }).catch(() => { /* PHOENIX remains usable when Space is unavailable. */ })
+    }
+  }, [customApps])
+
   const [customSection, setCustomSection] = useState('overview')
   const activeBlueprint = customApps.find(app => app.id === adaptiveApp)
   const [healthiaRole, setHealthiaRole] = useState<HealthiaRole>('doctor')
@@ -582,6 +612,7 @@ export function AppFrame({
       </div>
       <>
         <CenterColumn adaptiveActive={adaptiveActive}>
+          {spaceOpen && <PhoenixSpace onClose={() => setSpaceOpen(false)} />}
           {search && (
             <div className={css.adaptiveSearch} aria-label="Búsqueda en aplicaciones">
               <div className={css.adaptiveSearchHeader}>

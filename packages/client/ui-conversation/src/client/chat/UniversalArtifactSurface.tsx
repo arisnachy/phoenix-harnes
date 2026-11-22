@@ -87,6 +87,26 @@ export function UniversalArtifactSurface({ artifact, renderMessageImages, loadIm
     onStop()
   }
   const serialized = typeof artifact.data === 'string' ? artifact.data : JSON.stringify(artifact.data, null, 2)
+  // Only explicitly typed, nonclinical generative content is indexed
+  // automatically. A generic document/image may contain health records or
+  // credentials, so it requires intentional import instead of auto-mirroring.
+  useEffect(() => {
+    const kind = artifact.mime === 'application/vnd.phoenix.game+html' ? 'game'
+      : artifact.mime === 'application/vnd.phoenix.comic+html' ? 'document'
+      : artifact.mime === 'application/vnd.phoenix.canvas+html' ? 'app'
+      : null
+    if (!kind || serialized.length > 650_000) return
+    void fetch('/space-api/items', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-phoenix-space': '1' },
+      body: JSON.stringify({
+        kind, space: kind === 'game' ? 'juegos' : 'personal',
+        title: artifact.title, mime: artifact.mime, content: serialized,
+        sourceKey: 'artifact:' + artifact.id,
+      }),
+    }).catch(() => { /* Rendering must not depend on optional library intake. */ })
+  }, [artifact.id, artifact.mime, artifact.title, serialized])
+
   const clipboard = typeof navigator === 'undefined' ? undefined
     : Reflect.get(navigator, 'clipboard') as { writeText?: (value: string) => Promise<void> } | undefined
   const canCopy = typeof clipboard?.writeText === 'function'
