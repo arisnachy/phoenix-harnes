@@ -53,7 +53,7 @@ describe('PHOENIX side-by-side adaptive workspace and browser', () => {
     expect(browser).not.toContain('data-browser-floating="true"')
     expect(browserCss).not.toContain('position: fixed;')
     expect(browserCss).toContain('data-browser-workspace-active')
-    expect(miniCss).toContain(':global([data-browser-workspace-active]) .viewport')
+    expect(miniCss).toContain(':global([data-browser-workspace-active]) .browser:not([data-expanded=\'true\']) .viewport')
     expect(layoutCss).toContain('.browserWorkspacePane')
     expect(layoutCss).toContain('@media (max-width: 980px)')
   })
