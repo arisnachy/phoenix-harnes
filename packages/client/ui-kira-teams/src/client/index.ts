@@ -1,6 +1,7 @@
 /** Web KIRA teams overlay: center-column activity-strip and agent-rail registration. */
 import type { ClientContext, ISessions, SessionId, SubagentAddress } from '@phoenix-ai/dsh-client-runtime/client'
 import { KiraTeamsDock } from './KiraTeamsDock.tsx'
+import type { LivingTeamRpc } from './team-avatar-rpc.ts'
 import type {} from '@phoenix-ai/dsh-api-remotes/client'
 import type { TeamChatReplyRequest } from '@phoenix-ai/dsh-agent-team/chat-types'
 import { TeamReplyDock, type TeamReplyChoice } from './TeamReplyDock.tsx'
@@ -23,7 +24,7 @@ declare module '@phoenix-ai/dsh-client-ui-slots' {
 export type { KiraTeamsDockProps, KiraTeamsInjected } from './KiraTeamsDock.tsx'
 
 /** Required services for the KIRA mission-control overlay contribution. */
-export const inject = ['sessions', 'slots', 'locale', 'layout', 'conversation', 'remote', 'remote.agentTeams']
+export const inject = ['sessions', 'slots', 'locale', 'layout', 'conversation', 'remote', 'remote.agentTeams', 'connection']
 
 /** Register the KIRA activity strip and rail inside the center-column overlay so agents never consume chat width or cover the sidebar. */
 export function apply(ctx: ClientContext): void {
@@ -154,7 +155,9 @@ export function apply(ctx: ClientContext): void {
     ensureChat()
     return () => { stop(); backfilled.clear(); loading.clear() }
   }, 'ui-kira-teams: existing conversation')
+  const teamConnection = (ctx.get as (key: string) => unknown)('connection') as { rpc: LivingTeamRpc }
   const dockActions = () => ({
+    teamRpc: teamConnection.rpc,
     hooks: { list: sessions.list },
     layout: ctx.layout,
     openChild(address: SubagentAddress) {
