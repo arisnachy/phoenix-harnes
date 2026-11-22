@@ -2,58 +2,67 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-function source(relative: string): string {
-  return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8')
-}
+const source = (relative: string): string =>
+  readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8')
 
 const chat = source('../src/client/skeleton/ConversationRoot.tsx')
-const chatCss = source('../src/client/skeleton/ConversationRoot.module.css')
 const layout = source('../../ui-layout/src/client/AppFrame.tsx')
 const layoutCss = source('../../ui-layout/src/client/AppFrame.module.css')
+const browser = source('../src/client/chat/ToolActivityFlow.tsx')
+const browserCss = source('../src/client/chat/ToolActivityFlow.module.css')
+const miniCss = source('../src/client/chat/MiniBrowser.module.css')
 const healthCss = source('../../ui-layout/src/client/HealthiaWorkspace.module.css')
 
-describe('PHOENIX adaptive workspace lives in chat, not as a fixed window', () => {
-  it('reuses the real nine-dot top-bar control and keeps existing plugin access', () => {
+describe('PHOENIX side-by-side adaptive workspace and browser', () => {
+  it('keeps the existing nine-dot launcher and all Kira/Healthia actions', () => {
     expect(chat).toContain('aria-label="Aplicaciones PHOENIX"')
     expect(chat).toContain('aria-expanded={appMenuOpen}')
-    expect(chat).toContain('className={css.appMenu}')
-    expect(chat).toContain('appSearchRef')
-    expect(chat).toContain("openSettingsSection('plugins')")
-    expect(layout).not.toContain('className={css.appLauncher}')
-    expect(layoutCss).not.toContain('.appLauncherButton')
-  })
-
-  it('places the app host in the conversation scrollport ahead of its composer', () => {
-    const body = chat.indexOf('<SessionBodyOutlet sessionId={sessionId}')
-    const host = chat.indexOf('data-adaptive-chat-host=""')
-    const composer = chat.indexOf('{composerSeat}', host)
-    expect(body).toBeGreaterThanOrEqual(0)
-    expect(host).toBeGreaterThan(body)
-    expect(composer).toBeGreaterThan(host)
-    expect(layout).toContain("querySelector<HTMLElement>('[data-adaptive-chat-host]')")
-    expect(layout).toContain('createPortal(')
-    expect(layout).toContain('inlineAppHost')
-    expect(layout).toContain('<HealthiaWorkspace')
-    expect(layout).toContain('<AdaptiveAppPreview')
-    expect(chatCss).toContain('.adaptiveChatHost:empty {display:none;}')
-  })
-
-  it('does not cap form height or push the conversation under a detached panel', () => {
-    expect(healthCss).not.toContain('max-height: min(48vh, 390px)')
-    expect(healthCss).not.toContain('margin: 54px 26px 0')
-    expect(healthCss).toContain('max-height:none')
-    expect(layoutCss).toContain('.adaptiveChatCard')
-    expect(chatCss).toContain('.adaptiveChatHost')
-  })
-
-  it('keeps role selection, user-directed Kira actions and metadata-only inspection', () => {
     expect(chat).toContain("navigateApp('healthia','doctor')")
     expect(chat).toContain("navigateApp('healthia','patient')")
-    expect(chat).toContain("phoenix:adaptive-app-mission")
-    expect(chat).toContain("phoenix:adaptive-self-inspect-request")
-    expect(chat).toContain("phoenix:adaptive-workspace-state-request")
-    expect(layout).toContain("phoenix:adaptive-self-inspect")
+    expect(chat).toContain('phoenix:adaptive-app-mission')
     expect(layout).toContain('inspectRuntime?.().slots.map')
+    expect(layout).toContain('restorePreviousAdaptiveForms()')
+  })
+
+  it('renders the app to the LEFT and the one real chat transcript and composer to the RIGHT', () => {
+    const appHost = layout.indexOf('data-adaptive-workspace-host=""')
+    const browserHost = layout.indexOf('data-browser-workspace-host=""')
+    const chatHost = layout.indexOf('data-conversation-pane=""')
+    expect(appHost).toBeGreaterThan(0)
+    expect(browserHost).toBeGreaterThan(appHost)
+    expect(chatHost).toBeGreaterThan(browserHost)
+    expect(layout).toContain('<HealthiaWorkspace')
+    expect(layout).toContain('<AdaptiveAppPreview')
+    expect(layout).toContain('adaptiveActive={adaptiveActive}')
+    expect(layout).not.toContain('inlineAppHost')
+    expect(layout).not.toContain('createPortal(')
+    expect(chat).not.toContain('data-adaptive-chat-host')
+    expect(chat.indexOf('<SessionBodyOutlet')).toBeLessThan(chat.indexOf('{composerSeat}'))
+    expect(layoutCss).toContain('.conversationPane')
+    expect(layoutCss).toContain('.adaptiveWorkspacePane')
+    expect(layoutCss).toContain('flex-direction: row;')
+    expect(layoutCss).toContain('overflow: auto;')
+  })
+
+  it('docks the MiniBrowser beside the original agent chat, not over the messages', () => {
+    expect(browser).toContain("document.querySelector<HTMLElement>('[data-browser-workspace-host]')")
+    expect(browser).toContain('createPortal(browserContent, dockHost)')
+    expect(browser).toContain('const showSidecar = dockHost === null')
+    expect(browser).toContain('const grouped = !dockedBrowser && activeBrowserTurn')
+    expect(browser).toContain('const hasBrowserWorkspace = !dockedBrowser')
+    expect(browser).not.toContain('data-browser-floating="true"')
+    expect(browserCss).not.toContain('position: fixed;')
+    expect(browserCss).toContain('data-browser-workspace-active')
+    expect(miniCss).toContain(':global([data-browser-workspace-active]) .viewport')
+    expect(layoutCss).toContain('.browserWorkspacePane')
+    expect(layoutCss).toContain('@media (max-width: 980px)')
+  })
+
+  it('preserves clinical access guards and bounded form height in the separate workspace', () => {
+    expect(healthCss).toContain('max-height:none')
+    expect(healthCss).not.toContain('max-height: min(48vh, 390px)')
+    expect(layout).toContain('name="adaptive"')
+    expect(layout).toContain('restorePreviousAdaptiveApps()')
     expect(layout).toContain('restorePreviousAdaptiveForms()')
     expect(chat).not.toContain('patientValues:')
   })
