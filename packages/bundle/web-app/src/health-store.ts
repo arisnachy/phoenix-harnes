@@ -61,9 +61,28 @@ function obj(x:unknown):RecordData {
   if(!x||typeof x!=='object'||Array.isArray(x))fail('Datos inválidos')
   return x as RecordData
 }
+export const CLINIC_MIN_PASSWORD_LENGTH=6
 function safePassword(p:unknown):string {
-  if(typeof p!=='string'||p.length<16||p.length>256)fail('La contraseña requiere al menos 16 caracteres')
+  if(typeof p!=='string'||p.length<CLINIC_MIN_PASSWORD_LENGTH||p.length>256)
+    fail('La contraseña requiere al menos 6 caracteres')
   return p
+}
+/** Branding is public, but untrusted image data must never become executable HTML or SVG. */
+function safeClinicLogo(value:unknown):string|null {
+  if(value===undefined||value===null)return null
+  if(typeof value!=='string'||value.length>220_000)fail('Logo institucional inválido o demasiado grande')
+  const match=/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/u.exec(value)
+  if(!match)fail('Logo institucional: solo PNG, JPG o WebP')
+  const bytes=Buffer.from(match[2]!, 'base64')
+  if(bytes.length<16||bytes.length>160_000||bytes.toString('base64')!==match[2])
+    fail('Logo institucional inválido o demasiado grande (máximo 160 KB)')
+  const valid=match[1]==='png'
+    ? bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))
+    : match[1]==='jpeg'
+      ? bytes[0]===255&&bytes[1]===216&&bytes[2]===255
+      : bytes.toString('ascii',0,4)==='RIFF'&&bytes.toString('ascii',8,12)==='WEBP'
+  if(!valid)fail('El contenido no corresponde al formato de imagen declarado')
+  return value
 }
 function hash(password:string,salt:string):string {return scryptSync(password,Buffer.from(salt,'hex'),32).toString('hex')}
 function eq(a:string,b:string):boolean {
@@ -267,6 +286,20 @@ export class HealthClinicStore {
    * @returns The operation result, restricted to this authorized clinical context.
    */
   initialized():boolean {return this.meta('salt')!==undefined}
+  /** Nonclinical institution branding, served only by the loopback clinical Host. */
+  brandingLogo():string|null {return this.meta('branding-logo')??null}
+  setBranding(actor:ClinicActor,logoDataUrl:unknown):string|null {
+    if(actor.role!=='admin')fail('Acceso administrativo requerido')
+    const logo=safeClinicLogo(logoDataUrl)
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      if(logo===null)this.db.prepare("DELETE FROM health_meta WHERE name='branding-logo'").run()
+      else this.db.prepare("INSERT INTO health_meta(name,value) VALUES ('branding-logo',?) ON CONFLICT(name) DO UPDATE SET value=excluded.value").run(logo)
+      this.audit(actor,'clinic.branding.update','branding')
+      this.db.exec('COMMIT')
+    }catch(error){this.db.exec('ROLLBACK');throw error}
+    return logo
+  }
   /** Bootstrap must be accepted only from a loopback peer on a loopback-bound Host. */
   /**
    * Perform initialize within the isolated clinical workflow.
@@ -274,10 +307,11 @@ export class HealthClinicStore {
    * @param password - Validated password input for this clinical operation.
    * @param organization - Validated organization input for this clinical operation.
    */
-  initialize(username:unknown,password:unknown,organization:unknown):void {
+  initialize(username:unknown,password:unknown,organization:unknown,logoDataUrl?:unknown):void {
     if(this.initialized())fail('La clínica ya fue configurada')
     const user=str(username,'Usuario',80);if(!/^[a-zA-Z][a-zA-Z0-9._-]{2,79}$/u.test(user))fail('Usuario inválido')
     const pass=safePassword(password),org=str(organization,'Institución',100)
+    const logo=safeClinicLogo(logoDataUrl)
     const salt=randomBytes(16).toString('hex'), staffSalt=randomBytes(16).toString('hex')
     const key=scryptSync(pass,Buffer.from(salt,'hex'),32)
     const verify=createHmac('sha256',key).update('PHOENIX-HEALTH-v1').digest('hex')
@@ -287,6 +321,7 @@ export class HealthClinicStore {
       this.db.prepare('INSERT INTO health_meta VALUES (?,?)').run('salt',salt)
       this.db.prepare('INSERT INTO health_meta VALUES (?,?)').run('verify',verify)
       this.db.prepare('INSERT INTO health_staff VALUES (?,?,?,?,?)').run(user,org,'admin',staffSalt,hash(pass,staffSalt))
+      if(logo!==null)this.db.prepare("INSERT INTO health_meta(name,value) VALUES ('branding-logo',?)").run(logo)
       this.db.exec('COMMIT');this.key=key
     }catch(e){this.db.exec('ROLLBACK');key.fill(0);throw e}
   }
