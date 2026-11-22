@@ -64,6 +64,7 @@ interface EditorTarget extends ProviderIdentity {
 interface ProviderEditorRenderProps extends Pick<
   ProviderEditorProps,
   'namespace' | 'schema' | 'api' | 't' | 'readOnly' | 'onClose' | 'oauth' | 'onAuthorized'
+  | 'onSelectOpenAiRoute'
 > {
   target: EditorTarget
 }
@@ -80,10 +81,13 @@ interface AccountFlow {
 const NATIVE_CODEX_ACCOUNT_KEY = 'subagent-codex/account'
 const CODEX_PROVIDER = 'openai-codex'
 
-function accountProviderId(entry: AccountFlow): string {
+/** Prevent unrelated OAuth connectors from spoofing a model provider's AUTH. */
+export function accountProviderId(entry: AccountFlow): string | undefined {
   if (entry.key === NATIVE_CODEX_ACCOUNT_KEY) return CODEX_PROVIDER
-  const slash = entry.key.indexOf('/')
-  return slash < 0 ? entry.key : entry.key.slice(slash + 1)
+  const scope = 'llm-pi-ai/'
+  if (!entry.key.startsWith(scope)) return undefined
+  const provider = entry.key.slice(scope.length)
+  return provider.length > 0 && !provider.includes('/') ? provider : undefined
 }
 
 function accountFlowConnected(flow: AccountFlow): boolean {
@@ -100,6 +104,7 @@ function renderProviderEditor({ target, ...props }: ProviderEditorRenderProps): 
       provider={target.provider}
       displayName={target.displayName}
       settingsPath={target.settingsPath}
+      hideTitle
       guided
       {...target.declared === true ? { declared: true } : {}}
       {...props}
@@ -216,6 +221,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
   // Registered account flows, keyed by the provider id after the scope slash
   // (`llm-pi-ai/openai-codex` → `openai-codex`): the same join the cards use.
   const [accountFlows, setAccountFlows] = useState<ReadonlyMap<string, AccountFlow>>(() => new Map())
+  const [accountRegistryStatus, setAccountRegistryStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading')
   const [authRefresh, setAuthRefresh] = useState(0)
   // Codex's native sign-in remains available even when a stale marker reports
   // connected: authorization.begin performs the authoritative refresh check.
@@ -231,17 +237,38 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
   const [organizing, setOrganizing] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [orderFailure, setOrderFailure] = useState<string | undefined>(undefined)
+  const editingProviderId = editing?.provider
+
+  // The authorization service and pi-ai flows may initialize after the model
+  // directory. Opening a wizard must refresh capabilities instead of freezing
+  // the empty first registry response for the entire Settings session.
+  useEffect(() => {
+    if (editingProviderId !== undefined && api.authorization !== undefined) {
+      setAuthRefresh(value => value + 1)
+    }
+  }, [editingProviderId, api.authorization])
 
   useEffect(() => {
-    if (api.authorization === undefined) return
+    if (api.authorization === undefined) {
+      setAccountRegistryStatus('unavailable')
+      return
+    }
     let stale = false
+    setAccountRegistryStatus('loading')
     void api.authorization.list({}).then((response) => {
-      if (stale || !response.result.ok) return
-      setAccountFlows(new Map(response.result.value.entries.map(entry => [
-        accountProviderId(entry),
-        entry,
-      ])))
-    }, () => undefined)
+      if (stale) return
+      if (!response.result.ok) {
+        setAccountRegistryStatus('unavailable')
+        return
+      }
+      setAccountFlows(new Map(response.result.value.entries.flatMap(entry => {
+        const provider = accountProviderId(entry)
+        return provider === undefined ? [] : [[provider, entry] as const]
+      })))
+      setAccountRegistryStatus('ready')
+    }, () => {
+      if (!stale) setAccountRegistryStatus('unavailable')
+    })
     return () => { stale = true }
   }, [api.authorization, authRefresh])
 
@@ -328,6 +355,15 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
     `${row.entry.displayName} ${row.entry.provider}`.toLocaleLowerCase()
       .includes(searchQuery.trim().toLocaleLowerCase()))
   const addable = state.rows.filter(row => !row.configured && row.entry.settingsNs !== '')
+  const openAiPairReady = state.rows.some(row => row.entry.provider === 'openai')
+    && state.rows.some(row => row.entry.provider === CODEX_PROVIDER)
+  const changeOpenAiRoute = (provider: 'openai' | 'openai-codex'): void => {
+    const next = state.rows.find(row => row.entry.provider === provider)
+    if (next === undefined || state.namespaces.get(next.entry.settingsNs) === undefined) return
+    setEditing(targetOf(next))
+    // A configured sibling can be edited; a dormant sibling first needs adoption.
+    setAdding(!next.configured)
+  }
   const addTarget = adding ? editing : undefined
   const addNamespace = addTarget === undefined ? undefined : state.namespaces.get(addTarget.settingsNs)
   // Hand-declared routes live in the pi-ai namespace, which is also the only
@@ -357,6 +393,18 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
         </button>
       </div>
       {organizing ? <p className={styles['intro']}>{t('providerOrder')}</p> : null}
+      {accountRegistryStatus !== 'ready' ? (
+        <div className={styles['authorizationPrompt']} role="status">
+          <span>{t(accountRegistryStatus === 'loading' ? 'wizardAuthRegistryLoading' : 'wizardAuthRegistryUnavailable')}</span>
+          {accountRegistryStatus === 'unavailable' ? (
+            <button className={styles['secondaryButton']} type="button"
+              disabled={api.authorization === undefined}
+              onClick={() => { setAuthRefresh(current => current + 1) }}>
+              {t('retry')}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <h3 className={styles['catalogHeading']}>{t('catalogTitle')}</h3>
       {!state.writable && state.status === 'ready' ? <p className={styles['notice']}>{t('readOnly')}</p> : null}
       {savedIdentity === undefined
@@ -394,7 +442,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
               <div className={styles['rowHead']}>
                 <span className={styles['rowIdentity']}>
                   <span className={styles['rowName']}>{isCodex && row.entry.displayName === CODEX_PROVIDER ? 'OpenAI Codex' : row.entry.displayName}</span>
-                  {isCodex ? (
+                  {(isCodex || accountFlowFor(row.entry.provider)?.methods.some(method => method.id === 'oauth') === true) ? (
                     <span role="img" className={styles['rowTag']}
                       aria-label={t(accountConnected ? 'accountAuthConnected' : 'accountAuthMissing')}
                       title={t(accountConnected ? 'accountAuthConnected' : 'accountAuthMissing')}>
@@ -427,7 +475,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                       )
                       : null}
                   <span className={styles['providerStatus']}>
-                    {accountConnected ? t('statusConnected') : credentialConfigured ? t('statusConnected')
+                    {accountConnected ? t('statusAccount') : credentialConfigured ? t('statusConnected')
                       : credentialMissing ? t('statusUnconfigured') : isCodex ? t('statusAccount') : t('statusUnconfigured')}
                   </span>
                 </span>
@@ -528,7 +576,10 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
       <Modal
         open={editing !== undefined || declaring}
         onClose={() => { setEditing(undefined); setAdding(false); setDeclaring(false) }}
-        title={declaring ? t('customTitle') : editing?.displayName ?? ''}
+        title={declaring ? t('customTitle')
+          : editing?.provider === 'openai' ? t('wizardOpenAiApi')
+            : editing?.provider === CODEX_PROVIDER ? t('wizardOpenAiAuth')
+              : editing?.displayName ?? ''}
         closeLabel={t('close')}
         className={styles['modelWizardDialog'] as string}
       >
@@ -542,7 +593,9 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                 if (row !== undefined) setEditing(targetOf(row))
               }}>
               {addable.map(row => <option key={row.entry.provider}
-                value={row.entry.provider}>{row.entry.displayName}</option>)}
+                value={row.entry.provider}>{row.entry.provider === CODEX_PROVIDER
+                  ? t('wizardOpenAiAuth')
+                  : row.entry.provider === 'openai' ? t('wizardOpenAiApi') : row.entry.displayName}</option>)}
             </select>
           </label>
         ) : null}
@@ -553,6 +606,8 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
               target: editing, namespace, schema, api, t,
               readOnly: !state.writable,
               oauth: accountFlowFor(editing.provider),
+              ...(openAiPairReady && (editing.provider === 'openai' || editing.provider === CODEX_PROVIDER)
+                ? { onSelectOpenAiRoute: changeOpenAiRoute } : {}),
               onAuthorized: () => { setAuthRefresh(value => value + 1); void controller.load() },
               onClose: changed => { closeEditor(changed, editing) },
             })

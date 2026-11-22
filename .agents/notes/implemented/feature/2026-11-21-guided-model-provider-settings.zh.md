@@ -31,3 +31,7 @@ Status: implemented
 ## 后续：真实 OAuth 和本地 Ollama 管理
 
 模型设置使用遵循主题的响应式分步弹窗，不再内嵌编辑卡片。认证选择基于 Host 实际注册的方法；Codex 保持账号认证，API-only 提供方和浏览器会话保持独立。可信 Host 从 localhost /api/tags 枚举 Ollama 模型，并经 /api/show 获取上下文上限。按内存保守限制实际上下文、输入与输出预算，通过脱敏 Remote 提供数据。用户明确请求时才用 /api/pull 下载并显示进度；解除关联不会删除共享文件，永久删除必须单独确认。超出分配上下文的本地请求直接报错。公共仓库不保存私密目录或凭据；发布仍需 CI 通过。
+
+## OpenAI 路由选择的后续修正
+
+最初弹窗在 `openai` 条目下仅显示 API，尽管用户会自然预期还有 ChatGPT/Codex 账户认证。这里不是 OpenAI API 缺失 OAuth，而是两条独立路由：`openai` 使用 API，`openai-codex` 使用原生 Codex 账户会话。修正后的弹窗在两条路由可用时统一呈现 API 与 AUTH，用户选择后切换实际路由，不混用订阅凭据与 API 密钥。其他提供方的 OAuth 仍来自 pi-ai 实际注册的授权方法，绝不虚构登录方式。授权列表只接受 `llm-pi-ai/` 范围或原生 Codex 的精确键，避免其他连接器被误认为模型登录。认证列表加载失败时显式提示并允许重试。
