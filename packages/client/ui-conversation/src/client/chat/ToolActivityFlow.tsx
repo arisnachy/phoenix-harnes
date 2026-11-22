@@ -10,7 +10,7 @@ import { ChatNodeSeat } from './ChatNodeSeat.tsx'
 import { PendingSteeringBubble } from './MessageItem.tsx'
 import { formatRunDuration } from './message-chrome.ts'
 import { ReasoningRow } from './ReasoningRow.tsx'
-import { MiniBrowser, type SavedAccessNotice, type SecureLoginTarget } from './MiniBrowser.tsx'
+import { MiniBrowser, type SavedAccessNotice, type SecureLoginTarget, youtubeId } from './MiniBrowser.tsx'
 import { DesktopLive } from './DesktopLive.tsx'
 import { SecureAsk } from './SecureAsk.tsx'
 import { GenerativeUi, type GenerativeUiBlock } from './GenerativeUi.tsx'
@@ -65,8 +65,8 @@ type ActivityItem =
 
 type FlowItem =
   | { readonly kind: 'desktop'; readonly key: string; readonly userKey: string }
-  | { readonly kind: 'browser'; readonly key: string; readonly userKey: string; readonly tabId?: string; readonly sourceUrl?: string; readonly toolBacked?: boolean }
-  | { readonly kind: 'browser-workspace'; readonly key: string; readonly userKey: string; readonly tabId?: string; readonly sourceUrl?: string; readonly live: boolean; readonly items: readonly FlowItem[] }
+  | { readonly kind: 'browser'; readonly key: string; readonly userKey: string; readonly tabId?: string; readonly sourceUrl?: string; readonly toolBacked?: boolean; readonly retainMedia?: boolean }
+  | { readonly kind: 'browser-workspace'; readonly key: string; readonly userKey: string; readonly tabId?: string; readonly sourceUrl?: string; readonly retainMedia?: boolean; readonly live: boolean; readonly items: readonly FlowItem[] }
   | { readonly kind: 'node'; readonly key: string }
   | { readonly kind: 'optimistic'; readonly key: string; readonly text: string }
   | {
@@ -85,6 +85,17 @@ type FlowItem =
   | { readonly kind: 'oracle'; readonly key: string; readonly blocks: readonly GenerativeUiBlock[] }
   | { readonly kind: 'trading'; readonly key: string; readonly snapshot?: TradingDashboardSnapshot }
   | { readonly kind: 'trading-market'; readonly key: string; readonly selection: TradingMarketSelection }
+
+interface SecureAskState {
+  readonly browserKey: string
+  readonly target: SecureLoginTarget
+}
+
+function sameSecureAskState(left: SecureAskState, right: SecureAskState): boolean {
+  return left.browserKey === right.browserKey
+    && left.target.origin === right.target.origin
+    && left.target.tabId === right.target.tabId
+}
 
 function imageActivity(node: OrderedChatNode): readonly { readonly attachment: ImageAttachmentRef }[] {
   if (node.kind !== 'tool-call') return []
@@ -183,6 +194,34 @@ export function isBrowserPrompt(text: string): boolean {
     || ((verb.test(normalized) || verb2.test(normalized) || englishVerb.test(normalized))
       && (webContext.test(normalized) || !localObject.test(normalized)))
 }
+
+/**
+ * Detect an explicit request to keep a YouTube video playing after the agent turn.
+ *
+ * Homepage, channel, and search navigation deliberately do not retain a browser
+ * card because they have no user-requested media playback to preserve.
+ * @param text - Plain text from the user's request.
+ * @returns Whether the request names a playable YouTube video and a playback action.
+ */
+export function isMediaPlaybackPrompt(text: string): boolean {
+  const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+  const watchUrl = /https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?[^\s]*\bv=[a-z0-9_-]{11}\b|youtu\.be\/[a-z0-9_-]{11}\b)/u.test(normalized)
+  if (watchUrl) return true
+  if (!/\b(?:youtube|youtu\.be)\b/u.test(normalized)) return false
+  if (/\b(?:busca|buscar|search|resultados|homepage|inicio|canal|playlist|lista)\b/u.test(normalized)) return false
+  return /\b(?:video|tutorial|clip|stream)\b/u.test(normalized)
+    && /\b(?:abre|abrir|mira|mirar|ver|ve|pon|poner|reproduce|reproducir|play|watch|escucha|escuchar|reanuda|reanudar)\b/u.test(normalized)
+}
+
+function isMediaPlaybackRequest(node: OrderedChatNode): boolean {
+  if (node.kind !== 'user' && node.kind !== 'steering') return false
+  const content = (node.data as { content?: unknown }).content
+  if (!Array.isArray(content)) return false
+  return isMediaPlaybackPrompt(content.map((block: unknown) =>
+    block !== null && typeof block === 'object' && 'text' in block
+      && typeof block.text === 'string' ? block.text : '').join(' '))
+}
+
 function isBrowserRequest(node: OrderedChatNode): boolean {
   if (node.kind !== 'user' && node.kind !== 'steering') return false
   const payload = node.data as { content?: unknown }
@@ -603,6 +642,7 @@ export function addBrowserCards(
 ): FlowItem[] {
   const desktopRequests = new Set(nodes.filter(isDesktopRequest).map(node => node.key))
   const requests = new Set(nodes.filter(node => !desktopRequests.has(node.key) && isBrowserRequest(node)).map(node => node.key))
+  const mediaRequests = new Set(nodes.filter(isMediaPlaybackRequest).map(node => node.key))
   const browserTabIds = new Map<string, string>()
   const researchUrls = new Map<string, string>()
   const directChromeTurns = new Set<string>()
@@ -634,10 +674,14 @@ export function addBrowserCards(
       || item.kind === 'optimistic' && isBrowserPrompt(item.text)) {
       const tabId = browserTabIds.get(item.key)
       const sourceUrl = directChromeTurns.has(item.key) ? undefined : researchUrls.get(item.key)
+      const retainMedia = item.kind === 'optimistic'
+        ? isMediaPlaybackPrompt(item.text)
+        : mediaRequests.has(item.key)
       result.push({ kind: 'browser', key: 'browser:' + item.key, userKey: item.key,
         ...(directChromeTurns.has(item.key) ? { toolBacked: true } : {}),
         ...(tabId === undefined ? {} : { tabId }),
-        ...(sourceUrl === undefined ? {} : { sourceUrl }) })
+        ...(sourceUrl === undefined ? {} : { sourceUrl }),
+        ...(retainMedia ? { retainMedia: true } : {}) })
     }
   }
   return result
@@ -707,11 +751,13 @@ export function groupActiveBrowserFlow(
   const browser = flow[index]
   const tabId = browser?.kind === 'browser' ? browser.tabId : undefined
   const sourceUrl = browser?.kind === 'browser' ? browser.sourceUrl : undefined
+  const retainMedia = browser?.kind === 'browser' && browser.retainMedia === true
   return [
     ...flow.slice(0, index),
     { kind: 'browser-workspace', key: 'browser-workspace:' + userKey, userKey,
       ...(tabId === undefined ? {} : { tabId }),
       ...(sourceUrl === undefined ? {} : { sourceUrl }),
+      ...(retainMedia ? { retainMedia: true } : {}),
       live: true, items: flow.slice(index + 1) },
   ]
 }
@@ -1043,16 +1089,21 @@ export async function releaseMiniBrowserSession(sessionId: string): Promise<bool
 
 /** Same real transcript seats as the ordinary chat, inside the temporary sidecar. */
 function BrowserWorkspace({
-  items, live, selected, onActivate, seatProps, turnStatus, tabId, sourceUrl, sessionId, inputActions,
+  items, live, active, selected, onActivate, seatProps, turnStatus, tabId, sourceUrl, sessionId, inputActions,
+  onSecureLoginRequest, secureLoginRequestEpoch, onPageChange,
   pinned, onPinChange, onClose,
 }: {
   readonly items: readonly FlowItem[]
   readonly sessionId: string
   readonly inputActions: ChatViewSlotProps['inputActions']
   readonly live: boolean
+  readonly active: boolean
   readonly selected: boolean
   readonly tabId?: string
   readonly sourceUrl?: string
+  readonly onSecureLoginRequest: (request: SecureLoginTarget | null) => boolean
+  readonly secureLoginRequestEpoch: number
+  readonly onPageChange: (page: { title: string; url: string } | null) => void
   readonly onActivate: () => void
   readonly pinned: boolean
   readonly onPinChange: (value: boolean) => void
@@ -1061,37 +1112,19 @@ function BrowserWorkspace({
   readonly turnStatus: ToolActivityFlowProps['turnStatus']
 }) {
   const [page, setPage] = useState<{ title: string; url: string } | null>(null)
-  const [secureRequest, setSecureRequest] = useState<SecureLoginTarget | null>(null)
-  const secureRequestRef = useRef<SecureLoginTarget | null>(null)
-  const [secureRequestEpoch, setSecureRequestEpoch] = useState(0)
   const [savedAccessNotice, setSavedAccessNotice] = useState<SavedAccessNotice | null>(null)
   const handleSecureRequest = useCallback((request: SecureLoginTarget | null) => {
-    if (request === null) {
-      const hadRequest = secureRequestRef.current !== null
-      secureRequestRef.current = null
-      if (hadRequest) setSecureRequestEpoch(value => value + 1)
-      setSecureRequest(null)
-      return
-    }
-    if (request.explicit) setSecureAskDismissed(sessionId, request.origin, false)
-    else if (isSecureAskDismissed(sessionId, request.origin)) return
-    if (request.explicit || (request.formObserved === true && !request.automatic)) onPinChange(true)
-    secureRequestRef.current = request
-    setSecureRequest(request)
-  }, [sessionId,onPinChange])
-  const dismissSecureRequest = useCallback(() => {
-    const current = secureRequestRef.current
-    if (current !== null) {
-      setSecureAskDismissed(sessionId, current.origin, true)
-      secureRequestRef.current = null
-      setSecureRequestEpoch(value => value + 1)
-    }
-    setSecureRequest(null)
-  }, [sessionId])
+    const accepted = onSecureLoginRequest(request)
+    if (accepted && request !== null && (request.explicit || (request.formObserved === true && !request.automatic))) onPinChange(true)
+  }, [onPinChange, onSecureLoginRequest])
   const handleSavedAccessNotice = useCallback((next: SavedAccessNotice | null) => {
     setSavedAccessNotice(previous => previous?.origin === next?.origin && previous?.phase === next?.phase
       ? previous : next)
   }, [])
+  const handlePageChange = useCallback((next: { title: string; url: string } | null): void => {
+    setPage(next)
+    onPageChange(next)
+  }, [onPageChange])
   // The browser and Kira replies share ONLY the conversation response area.
   // The composer and the PHOENIX shell never move or reserve a second column.
   const showSidecar = live || savedAccessNotice !== null
@@ -1151,17 +1184,14 @@ function BrowserWorkspace({
       data-browser-workspace-visible={visibleDock ? 'true' : undefined} data-browser-workspace={live && visibleDock ? '' : undefined}
       data-activity-open={showSidecar ? 'true' : undefined} data-chat-flow-kind="browser-workspace">
       <div className={css.browserPane}>
-        <MiniBrowser key={sessionId} sessionId={sessionId} requested active={selected} compact
+        <MiniBrowser key={sessionId} sessionId={sessionId} requested active={active} compact
           pinned={pinned} onPinChange={onPinChange} onClose={onClose}
           {...sourceUrl === undefined ? {} : { sourceUrl }}
           {...tabId === undefined ? {} : { initialTabId: tabId }}
-          onActivate={onActivate} autoScroll={false} onPageChange={setPage}
+          onActivate={onActivate} autoScroll={false}
           onSecureLoginRequest={handleSecureRequest} onSavedAccessNotice={handleSavedAccessNotice}
-          secureLoginRequestEpoch={secureRequestEpoch} />
-        {secureRequest !== null && <SecureAsk key={secureRequest.origin + ':' + secureRequest.tabId}
-          target={secureRequest}
-          onClose={dismissSecureRequest}
-          onSaved={dismissSecureRequest} />}
+          onPageChange={handlePageChange}
+          secureLoginRequestEpoch={secureLoginRequestEpoch} />
       </div>
       {showSidecar && <aside className={css.activityPane} aria-label="Actividad del agente">
         <header className={css.activityHeader}>
@@ -1263,6 +1293,7 @@ export function ToolActivityFlow({
   // browser-tool invocation may open the dock automatically.
   const newestToolBackedBrowserKey = ordinaryFlow.flatMap(item => item.kind === 'browser' && item.toolBacked === true ? [item.userKey] : []).at(-1)
   const [lastBrowserKey, setLastBrowserKey] = useState<string | undefined>()
+  const [verifiedMediaBrowserKey, setVerifiedMediaBrowserKey] = useState<string | undefined>()
   useEffect(() => {
     if (newestBrowserKey !== lastBrowserKey) {
       setLastBrowserKey(newestBrowserKey)
@@ -1282,21 +1313,73 @@ export function ToolActivityFlow({
   const [dismissedBrowserKey, setDismissedBrowserKey] = useState<string | undefined>()
   const previouslyActiveBrowser = useRef<string | undefined>(undefined)
   const visibleBrowserKey = activeBrowserTurn && dismissedBrowserKey !== newestBrowserKey
-    ? newestBrowserKey : pinnedBrowserKey
+    ? newestBrowserKey : pinnedBrowserKey ?? verifiedMediaBrowserKey
+  // Secure Ask is a local human-only surface. Keep its state with the chat
+  // flow so the form is a sibling of the browser workspace, never a child of
+  // the browser image or the activity sidebar. It is not a ChatNode and is
+  // never forwarded through inputActions or the ordinary transcript.
+  const [secureRequest, setSecureRequest] = useState<SecureAskState | null>(null)
+  const secureRequestRef = useRef<SecureAskState | null>(null)
+  const [secureRequestEpoch, setSecureRequestEpoch] = useState(0)
+  const clearSecureRequest = useCallback((dismiss: boolean): void => {
+    const current = secureRequestRef.current
+    if (current === null) {
+      setSecureRequest(null)
+      return
+    }
+    if (dismiss) setSecureAskDismissed(sessionId, current.target.origin, true)
+    secureRequestRef.current = null
+    setSecureRequestEpoch(value => value + 1)
+    setSecureRequest(null)
+  }, [sessionId])
+  const handleBrowserSecureRequest = useCallback((browserKey: string, request: SecureLoginTarget | null): boolean => {
+    if (request === null) {
+      if (secureRequestRef.current?.browserKey === browserKey) clearSecureRequest(false)
+      return false
+    }
+    if (request.explicit) setSecureAskDismissed(sessionId, request.origin, false)
+    else if (isSecureAskDismissed(sessionId, request.origin)) return false
+    const next = { browserKey, target: request } satisfies SecureAskState
+    secureRequestRef.current = next
+    setSecureRequest(next)
+    return true
+  }, [clearSecureRequest, sessionId])
+  const handleBrowserPageChange = useCallback((browserKey: string, page: { title: string; url: string } | null): void => {
+    setVerifiedMediaBrowserKey((current) => {
+      if (page !== null && youtubeId(page.url) !== undefined) return browserKey
+      return current === browserKey ? undefined : current
+    })
+  }, [])
   useEffect(() => {
-    if (activeBrowserTurn) previouslyActiveBrowser.current = newestBrowserKey
+    const current = secureRequestRef.current
+    if (current !== null && current.browserKey !== visibleBrowserKey) clearSecureRequest(false)
+  }, [clearSecureRequest, visibleBrowserKey])
+  useEffect(() => {
+    if (activeBrowserTurn) {
+      // Optimistic admission alone does not replace a retained player because
+      // the new browser has not become active yet.
+      if (verifiedMediaBrowserKey !== undefined && verifiedMediaBrowserKey !== newestBrowserKey)
+        setVerifiedMediaBrowserKey(undefined)
+      previouslyActiveBrowser.current = newestBrowserKey
+    }
     else if (!browserTurnRunning && previouslyActiveBrowser.current !== undefined) {
       // A genuine completed browser turn: the host frees this conversation's
-      // process unless the person explicitly pinned the navigator.
-      if (pinnedBrowserKey === undefined)
+      // process unless the person explicitly pinned the navigator or explicitly
+      // asked to keep a YouTube video playing in the chat.
+      const retainedMedia = previouslyActiveBrowser.current === verifiedMediaBrowserKey
+      if (pinnedBrowserKey === undefined && !retainedMedia)
         void releaseMiniBrowserSession(sessionId)
       previouslyActiveBrowser.current = undefined
     }
-  }, [activeBrowserTurn, browserTurnRunning, newestBrowserKey, pinnedBrowserKey, sessionId])
+  }, [activeBrowserTurn, browserTurnRunning, newestBrowserKey, pinnedBrowserKey, sessionId, verifiedMediaBrowserKey])
   useEffect(() => {
     setPinnedBrowserKey(undefined)
     setDismissedBrowserKey(undefined)
+    setVerifiedMediaBrowserKey(undefined)
     previouslyActiveBrowser.current = undefined
+    secureRequestRef.current = null
+    setSecureRequest(null)
+    setSecureRequestEpoch(value => value + 1)
   }, [sessionId])
   // Side-by-side content lives inside the message flow; not AppFrame.
   const flow = useMemo(() => {
@@ -1308,7 +1391,8 @@ export function ToolActivityFlow({
     return grouped.map(item => item.kind === 'browser'
       ? { kind: 'browser-workspace' as const, key: 'browser-workspace:' + item.userKey,
         userKey: item.userKey, ...(item.tabId === undefined ? {} : { tabId: item.tabId }),
-        ...(item.sourceUrl === undefined ? {} : { sourceUrl: item.sourceUrl }), live: false, items: [] }
+        ...(item.sourceUrl === undefined ? {} : { sourceUrl: item.sourceUrl }),
+        ...(item.retainMedia === true ? { retainMedia: true } : {}), live: false, items: [] }
       : item)
   }, [ordinaryFlow, newestBrowserKey, nodes, activeBrowserTurn, visibleBrowserKey])
   const hasBrowserWorkspace = flow.some(item => item.kind === 'browser-workspace' && item.live)
@@ -1357,21 +1441,29 @@ export function ToolActivityFlow({
                 sessionId={sessionId}
                 inputActions={inputActions}
                 live={item.live}
+                            active={activeBrowserTurn || pinnedBrowserKey === item.userKey}
                 items={item.items}
-                {...item.tabId === undefined || !activeBrowserTurn ? {} : { tabId: item.tabId }}
+                            {...item.tabId === undefined ? {} : { tabId: item.tabId }}
                 {...item.sourceUrl === undefined ? {} : { sourceUrl: item.sourceUrl }}
                 selected={item.userKey === visibleBrowserKey || item.userKey === (pinnedBrowserKey ?? activeBrowserKey)}
                 onActivate={() => { setSelectedBrowserKey(item.userKey) }}
                 pinned={pinnedBrowserKey === item.userKey}
                             onPinChange={(value) => {
                   setPinnedBrowserKey(value ? item.userKey : undefined)
-                  if (!value) {
-                    if (!activeBrowserTurn) void releaseMiniBrowserSession(sessionId)
-                  }
+                              if (!value && !activeBrowserTurn && item.userKey !== verifiedMediaBrowserKey)
+                                void releaseMiniBrowserSession(sessionId)
+                            }}
+                            onSecureLoginRequest={request => handleBrowserSecureRequest(item.userKey, request)}
+                            secureLoginRequestEpoch={secureRequestEpoch}
+                            onPageChange={(page) => {
+                              // Prompt intent is an eligibility guard; the page callback
+                              // must still verify that Chromium reached a real watch URL.
+                              if (item.retainMedia === true) handleBrowserPageChange(item.userKey, page)
                 }}
                 onClose={() => {
                   setPinnedBrowserKey(undefined)
                   setDismissedBrowserKey(item.userKey)
+                              setVerifiedMediaBrowserKey(current => current === item.userKey ? undefined : current)
                   void releaseMiniBrowserSession(sessionId)
                 }}
                 seatProps={seatProps}
@@ -1403,6 +1495,18 @@ export function ToolActivityFlow({
                   )}
         </Fragment>
       ))}
+      {secureRequest !== null && secureRequest.browserKey === visibleBrowserKey && (
+        <div className={css.secureAskSlot} data-chat-flow-kind="secure-ask">
+          <SecureAsk key={secureRequest.target.origin + ':' + secureRequest.target.tabId}
+            target={secureRequest.target}
+            onClose={() => {
+              if (secureRequestRef.current !== null && sameSecureAskState(secureRequestRef.current, secureRequest)) clearSecureRequest(true)
+            }}
+            onSaved={() => {
+              if (secureRequestRef.current !== null && sameSecureAskState(secureRequestRef.current, secureRequest)) clearSecureRequest(true)
+            }} />
+        </div>
+      )}
       {!hasBrowserWorkspace && turnStatus !== undefined && turnStatus.progress !== null && statusBeforeIndex === -1 && (
         <TurnStatus
           startTime={turnStatus.startTime}

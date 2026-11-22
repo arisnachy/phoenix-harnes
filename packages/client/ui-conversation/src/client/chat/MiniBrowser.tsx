@@ -218,8 +218,11 @@ function point(element: HTMLImageElement, clientX: number, clientY: number) {
   if (x < 0 || y < 0 || x > 1280 || y > 720) return null
   return { x, y }
 }
-/** Only official YouTube watch URLs qualify for the native video/audio player. */
-function youtubeId(raw: string | undefined): string | undefined {
+/** Only official YouTube watch URLs qualify for the native video/audio player.
+ * @param raw - The URL reported for the current browser tab.
+ * @returns The verified video ID, if the URL is a YouTube watch page.
+ */
+export function youtubeId(raw: string | undefined): string | undefined {
   if (!raw) return undefined
   try {
     const url = new URL(raw)
@@ -489,7 +492,14 @@ export function MiniBrowser({
           })
           return
         }
-        if (!stopped) secureLoginCallbackRef.current?.(request)
+        // Only ask for new credentials after observing a complete sign-in form.
+        // Saved manual access and related identities remain consent actions.
+        const hasCredentialFields = request.formObserved
+          && request.fields?.some(field => field.role === 'account')
+          && request.fields.some(field => field.role === 'secret')
+        if (!stopped) {
+          secureLoginCallbackRef.current?.(status.saved || status.relatedSaved || hasCredentialFields ? request : null)
+        }
       } finally {
         checking = false
       }
@@ -915,8 +925,8 @@ export function MiniBrowser({
           onClick={() => { setExpanded(value => !value); setCollapsed(false) }}>
           {expanded ? compact ? 'Reducir' : '↙ Volver al chat' : compact ? 'Ampliar' : '⛶ Ampliar'}
         </button>
-        <button type="button" aria-label={compact ? "Cerrar navegador y volver al chat" : undefined}
-          title={compact ? "Cerrar navegador y liberar recursos" : "Ocultar microventana"}
+        <button type="button" aria-label={compact ? 'Cerrar navegador y volver al chat' : undefined}
+          title={compact ? 'Cerrar navegador y liberar recursos' : 'Ocultar microventana'}
           onClick={() => {
             setDismissed(true); setEnabled(false); setCollapsed(true); setExpanded(false)
             onClose?.()
@@ -944,7 +954,7 @@ export function MiniBrowser({
             value={address} onChange={(event) => { setAddress(event.currentTarget.value) }} />
           <button type="submit">Ir</button>
           {siteOrigin && snapshot.tabId && onSecureLoginRequest && <button type="button"
-            aria-label="Abrir acceso seguro" title="Acceso seguro de Kira debajo del navegador"
+            aria-label="Abrir acceso seguro" title="Abrir acceso seguro en el chat"
             onClick={() => { const currentTab = snapshot.tabId; if (currentTab) void requestSecureLogin(siteOrigin, currentTab) }}>
             🔐 Acceso seguro</button>}
         </form>}

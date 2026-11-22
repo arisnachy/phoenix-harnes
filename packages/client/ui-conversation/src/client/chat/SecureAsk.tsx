@@ -1,4 +1,4 @@
-/** Human-only credential card below the browser; values never enter ordinary Ask or model output. */
+/** Human-only credential card in the chat flow; values never enter ordinary transcript or model output. */
 import { useEffect, useState, type FormEvent } from 'react'
 import { secureApi, type SecureLoginTarget, type SecureStatus, type SecureLoginProfile, type SecureProfileInfo } from './MiniBrowser.tsx'
 import css from './SecureAsk.module.css'
