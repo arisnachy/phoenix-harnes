@@ -592,12 +592,12 @@ export function AppFrame({
               
             }}>
             <div className={css.adaptiveChatCard}>
-              <div className={css.adaptiveChatChrome}>
+              {activeBlueprint && <div className={css.adaptiveChatChrome}>
                 <span aria-hidden="true" className={css.adaptiveChatSpark}>✦</span>
-                <strong>Kira · Espacio interactivo</strong>
-                <span className={css.adaptiveChatBadge}>{adaptiveApp === 'healthia' ? 'Healthia' : 'App Studio'}</span>
+                <strong>Espacio interactivo</strong>
+                <span className={css.adaptiveChatBadge}>App Studio</span>
                 <button type="button" aria-label="Cerrar espacio interactivo" onClick={() => setAdaptiveApp('general')}>Cerrar</button>
-              </div>
+              </div>}
             {activeBlueprint && (
               <AdaptiveAppPreview key={activeBlueprint.id} app={activeBlueprint} section={customSection}
                 palette={readAdaptivePalette(activeBlueprint.id)}

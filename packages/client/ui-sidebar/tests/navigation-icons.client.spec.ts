@@ -16,7 +16,8 @@ describe('PHOENIX semantic navigation icons', () => {
     expect(choosePhoenixNavigationIcon('healthia', 'patient', 'consent', 'Autorizaciones')).toBe('shield-check')
     expect(choosePhoenixNavigationIcon('healthia', 'doctor', 'patients', 'Pacientes')).toBe('users')
     expect(choosePhoenixNavigationIcon('healthia', 'doctor', 'encounters', 'Consultas')).toBe('stethoscope')
-    expect(choosePhoenixNavigationIcon('healthia', 'doctor', 'prescriptions', 'Recetas')).toBe('file-text')
+    expect(choosePhoenixNavigationIcon('healthia', 'doctor', 'documents', 'Documentos')).toBe('files')
+    expect(choosePhoenixNavigationIcon('healthia', 'doctor', 'tools', 'Herramientas')).toBe('wrench')
   })
 
   it('classifies generated sections semantically with a bundled safe fallback', () => {
@@ -36,12 +37,12 @@ describe('PHOENIX semantic navigation icons', () => {
   })
 
   it('rejects arbitrary icon code and malformed stored overrides', () => {
-    expect(() => writePhoenixNavigationIcon('healthia', 'doctor', 'records', '<svg onload=alert(1)>')).toThrow('NAVIGATION_ICON_INVALID_NAME')
+    expect(() => writePhoenixNavigationIcon('healthia', 'doctor', 'tools', '<svg onload=alert(1)>')).toThrow('NAVIGATION_ICON_INVALID_NAME')
     expect(() => writePhoenixNavigationIcon('invalid.app', 'doctor', 'records', 'users')).toThrow('NAVIGATION_ICON_INVALID_SCOPE')
     window.localStorage.setItem('phoenix.navigation-icons.v1', JSON.stringify({
-      version: 1, icons: { 'healthia.doctor.records': 'not-an-icon-or-svg' },
+      version: 1, icons: { 'healthia.doctor.tools': 'not-an-icon-or-svg' },
     }))
     expect(readPhoenixNavigationIcons()).toEqual({})
-    expect(choosePhoenixNavigationIcon('healthia', 'doctor', 'records', 'Historia clínica')).toBe('clipboard-list')
+    expect(choosePhoenixNavigationIcon('healthia', 'doctor', 'tools', 'Herramientas')).toBe('wrench')
   })
 })

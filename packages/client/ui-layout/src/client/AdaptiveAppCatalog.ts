@@ -53,9 +53,9 @@ export interface AdaptiveFormDraft {
 const HEALTHIA_CAPABILITIES: readonly AdaptiveCapability[] = [
   { id: 'phoenix.chat', label: 'Chat y modelos de PHOENIX', state: 'ui-ready', explanation: 'Conserva la conversación general; los datos clínicos no se insertan automáticamente en el contexto.', sensitive: false },
   { id: 'phoenix.adaptive-ui', label: 'Interfaz y formularios declarativos', state: 'ui-ready', explanation: 'Vista adaptativa y edición de estructura en borrador local.', sensitive: false },
-  { id: 'healthia.clinical-ui', label: 'Historia clínica protegida', state: 'requires-authentication', explanation: 'Abrir /health y autenticar; la disponibilidad del backend se debe verificar en ejecución.', sensitive: true },
+  { id: 'healthia.clinical-ui', label: 'Historia clínica protegida', state: 'requires-authentication', explanation: 'El Host clínico local cifrado permite registro de pacientes, consultas y borradores tras autenticación. La interfaz comprueba disponibilidad, permisos y sesión en ejecución.', sensitive: true },
   { id: 'healthia.patient-portal', label: 'Acceso del paciente', state: 'not-connected', explanation: 'No hay portal del paciente autenticado vinculado a este espacio.', sensitive: true },
-  { id: 'healthia.api-actions', label: 'Acciones clínicas y conectores', state: 'not-connected', explanation: 'Requieren adaptadores declarados, permisos, auditoría y consentimiento; no se ejecutan desde el editor.', sensitive: true },
+  { id: 'healthia.api-actions', label: 'Acciones clínicas y conectores', state: 'requires-authentication', explanation: 'Paciente, consulta y nota nativa utilizan únicamente el Host clínico con rol, relación asistencial, CSRF y control de versiones. El chat no recibe estos permisos ni datos.', sensitive: true },
   { id: 'healthia.phoenix-exchange', label: 'Intercambio PHOENIX a PHOENIX', state: 'disabled', explanation: 'Contrato de intenciones solamente; no existe transmisión de expedientes.', sensitive: true },
 ]
 export const ADAPTIVE_APP_PRESETS: readonly AdaptiveAppPreset[] = [
