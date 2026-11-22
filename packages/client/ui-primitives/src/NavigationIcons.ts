@@ -18,14 +18,13 @@ const MAX_BYTES = 12000
 /** Stable IDs take precedence over translated labels and AI-generated wording. */
 const HEALTHIA_DEFAULTS: Record<Role, Readonly<Record<string, PhoenixUiIconName>>> = {
   doctor: {
-    overview: 'layout-dashboard', patients: 'users', encounters: 'stethoscope',
-    records: 'clipboard-list', prescriptions: 'file-text', forms: 'list-checks',
-    capabilities: 'blocks', exchange: 'share-2',
+    overview: 'house', appointments: 'calendar-days', patients: 'users',
+    encounters: 'stethoscope', documents: 'files', management: 'briefcase',
+    tools: 'wrench',
   },
   patient: {
     overview: 'house', appointments: 'calendar-days', records: 'clipboard-list',
-    documents: 'files', consent: 'shield-check', capabilities: 'blocks',
-    exchange: 'share-2',
+    documents: 'files', consent: 'shield-check',
   },
 }
 
