@@ -548,8 +548,6 @@ export function ConversationRoot({
           <div className={css.recoveryStatus} role="status">{t('chat.loadingHistory')}</div>
         )}
         <SessionBodyOutlet sessionId={sessionId} renderSlot={renderSlot} />
-        {/* Native in-flow mount for the shell's adaptable UI, before composer. */}
-        <div className={css.adaptiveChatHost} data-adaptive-chat-host="" />
         {composerSeat}
       </div>
     </div>
