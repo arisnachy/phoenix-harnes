@@ -214,6 +214,7 @@ export function SpreadsheetSurface({ spec }: { readonly spec: SpreadsheetSpec })
   const [active, setActive] = useState('')
   const [undo, setUndo] = useState<string[][][]>([])
   const [error, setError] = useState('')
+  const [libraryStatus, setLibraryStatus] = useState('')
   const key = 'phoenix:sheet:' + spec.props.id
   useEffect(() => {
     try {
@@ -248,6 +249,25 @@ export function SpreadsheetSurface({ spec }: { readonly spec: SpreadsheetSpec })
     anchor.download = spec.props.id + '.csv'
     anchor.click()
     URL.revokeObjectURL(url)
+  }
+  const saveToLibrary = async (): Promise<void> => {
+    setLibraryStatus('Guardando en Espacio…')
+    try {
+      const response = await fetch('/space-api/items', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-phoenix-space': '1' },
+        body: JSON.stringify({
+          kind: 'sheet', space: 'personal', title: spec.props.title,
+          mime: 'application/vnd.phoenix.sheet+json',
+          content: JSON.stringify({columns: spec.props.columns, rows}),
+          sourceKey: 'spreadsheet:' + spec.props.id,
+        }),
+      })
+      if (!response.ok) throw new Error('No se pudo guardar en PHOENIX Space')
+      setLibraryStatus('Guardado en Espacio. Si ya existía, se conserva la versión editada allí.')
+    } catch {
+      setLibraryStatus('Espacio no disponible; la copia local del navegador sigue intacta.')
+    }
   }
   const importCsv = (event: ChangeEvent<HTMLInputElement>): void => {
     const file = event.currentTarget.files?.[0]
@@ -298,7 +318,9 @@ export function SpreadsheetSurface({ spec }: { readonly spec: SpreadsheetSpec })
       <label className={css.fileButton}><PhoenixUiIcon name="file" size={15}/> Importar CSV
         <input type="file" accept=".csv,text/csv" onChange={importCsv} /></label>
       <button type="button" onClick={download}><PhoenixUiIcon name="download" size={15} /> CSV</button>
+      <button type="button" onClick={() => { void saveToLibrary() }}>Guardar en Espacio</button>
     </div>
+    {libraryStatus && <p role="status" className={css.disclaimer}>{libraryStatus}</p>}
     <p className={css.disclaimer}>Fórmulas permitidas: referencias A2:P201, + − × ÷, SUM, AVERAGE, MIN, MAX.
       Los cambios se guardan solo en este navegador. CSV no conserva las fórmulas como Excel;
       importar/exportar XLSX requiere el motor de libros de trabajo.</p>
