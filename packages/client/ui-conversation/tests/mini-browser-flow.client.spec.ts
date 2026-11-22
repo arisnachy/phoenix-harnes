@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { addBrowserCards, releaseMiniBrowserSession, groupActiveBrowserFlow, isAtActivityTail, isBrowserPrompt, isEmbeddedNavigationTool, visibleResearchSourceUrl, isSecureAskDismissed, setSecureAskDismissed } from '../src/client/chat/ToolActivityFlow.tsx'
+import { addBrowserCards, releaseMiniBrowserSession, groupActiveBrowserFlow, isAtActivityTail, isBrowserPrompt, isEmbeddedNavigationTool, hasNavigatedWebPage, visibleResearchSourceUrl, isSecureAskDismissed, setSecureAskDismissed } from '../src/client/chat/ToolActivityFlow.tsx'
 
 type BrowserFlowNode = { key: string; kind: string; data: unknown }
 const user = (key: string, text: string): BrowserFlowNode => ({
@@ -37,6 +37,15 @@ describe('MiniBrowser chronological conversation cards', () => {
     expect(isBrowserPrompt('Analiza este tutorial de Godot en YouTube')).toBe(true)
   })
 
+  it('keeps the chat full-width for pending/blank Chromium, and recognizes a real page', () => {
+    expect(hasNavigatedWebPage(null)).toBe(false)
+    expect(hasNavigatedWebPage({ url: 'about:blank' })).toBe(false)
+    expect(hasNavigatedWebPage({ url: 'chrome://newtab/' })).toBe(false)
+    expect(hasNavigatedWebPage({ url: 'https://' })).toBe(false)
+    expect(hasNavigatedWebPage({ url: 'https://example.org/patient-info' })).toBe(true)
+    expect(hasNavigatedWebPage({ url: 'http://localhost:3000/' })).toBe(true)
+  })
+
   it('exposes actual Chromium navigation even when the user requested research rather than opening a browser', () => {
     expect(isEmbeddedNavigationTool('mcp__browser__navigate')).toBe(true)
     expect(isEmbeddedNavigationTool('mcp__chrome__youtube_video_inspect')).toBe(true)
@@ -49,6 +58,7 @@ describe('MiniBrowser chronological conversation cards', () => {
     ]
     const output = addBrowserCards(flowNodes('user-1', 'tool-1'), nodes)
     expect(output.map(item => item.key)).toEqual(['user-1', 'browser:user-1', 'tool-1'])
+    expect(output[1]).toMatchObject({ toolBacked: true })
   })
 
   it('mirrors a public research fetch as a distinct real Chromium navigation', () => {
@@ -62,6 +72,7 @@ describe('MiniBrowser chronological conversation cards', () => {
     const cards = addBrowserCards(flowNodes('research', 'fetch'), nodes)
     expect(cards.map(item => item.key)).toEqual(['research', 'browser:research', 'fetch'])
     expect(cards[1]).toMatchObject({ sourceUrl: source })
+    expect(cards[1]).not.toHaveProperty('toolBacked')
     const live = groupActiveBrowserFlow(cards, 'research', nodes)
     expect(live[1]).toMatchObject({ kind: 'browser-workspace', sourceUrl: source })
   })
@@ -194,6 +205,7 @@ describe('MiniBrowser chronological conversation cards', () => {
       { kind: 'optimistic', key: 'optimistic-user:43', text: 'Abre una página nueva' },
     ], [])
     expect(result.map(item => item.key)).toEqual(['optimistic-user:43', 'browser:optimistic-user:43'])
+    expect(result[1]).not.toHaveProperty('toolBacked')
   })
 
   it('puts real running messages beside the newest browser without cloning them', () => {
