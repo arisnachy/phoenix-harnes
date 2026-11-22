@@ -724,3 +724,53 @@
 }
 .root[data-app-palette] .healthiaRegion strong {color:var(--adaptive-side-accent);}
 .root[data-app-palette] .healthiaRoles button[aria-pressed='true'] {background:var(--adaptive-side-tint);color:var(--adaptive-side-ink);}
+
+/* The optional icon editor lives in the contextual region; navigation height stays stable. */
+.iconCustomize {
+  margin-top: 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--phoenix-side-outline);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.iconCustomize:hover, .iconCustomize:focus-visible {
+  background: var(--phoenix-side-peach);
+}
+.iconCustomize:focus-visible, .iconField select:focus-visible {
+  outline: 2px solid var(--dsw-specific-phoenix-accent);
+  outline-offset: 2px;
+}
+.iconEditor {
+  display: grid;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 10px;
+  max-height: min(42vh, 300px);
+  overflow-y: auto;
+  border: 1px solid var(--phoenix-side-outline);
+  border-radius: 12px;
+  background: var(--dsw-specific-sidebar-fill);
+}
+.iconField {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+}
+.iconField span { overflow-wrap: anywhere; }
+.iconField select {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--phoenix-side-outline);
+  border-radius: 8px;
+  background: var(--dsw-specific-sidebar-fill);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  cursor: pointer;
+}
