@@ -81,6 +81,10 @@ test('local AI refinement is opt-in, loopback-only, and cannot sign clinical rec
   assert.equal(calls,0)
   await assert.rejects(refineProtectedHistoryLocal(source,{enabled:true,model:'https://remote.example.com',fetcher:mock}),/MODEL_NOT_CONFIGURED/)
   assert.equal(calls,0)
+  for(const invalid of ['http://remote.example.com','https://remote.example.com','http://127.0.0.1:11434','/absolute/model','team//model']) {
+    await assert.rejects(refineProtectedHistoryLocal(source,{enabled:true,model:invalid,fetcher:mock}),/MODEL_NOT_CONFIGURED/)
+    assert.equal(calls,0,'invalid model must never invoke network fetcher')
+  }
   const proposal=await refineProtectedHistoryLocal(source,{enabled:true,model:'gemma4:e2b',fetcher:mock})
   assert.equal(calls,1)
   assert.equal(proposal.source,'ollama-local-unverified')
