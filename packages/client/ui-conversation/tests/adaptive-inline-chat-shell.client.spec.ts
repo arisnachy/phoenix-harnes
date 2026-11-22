@@ -6,6 +6,8 @@ const source = (relative: string): string =>
   readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8')
 
 const chat = source('../src/client/skeleton/ConversationRoot.tsx')
+const chatCss = source('../src/client/skeleton/ConversationRoot.module.css')
+const flowCss = source('../src/client/chat/ChatView.module.css')
 const layout = source('../../ui-layout/src/client/AppFrame.tsx')
 const layoutCss = source('../../ui-layout/src/client/AppFrame.module.css')
 const browser = source('../src/client/chat/ToolActivityFlow.tsx')
@@ -24,22 +26,33 @@ describe('PHOENIX side-by-side adaptive workspace and browser', () => {
     expect(layout).toContain('restorePreviousAdaptiveForms()')
   })
 
-  it('keeps Healthia separate but leaves the base chat and composer in their original position', () => {
-    const appHost = layout.indexOf('data-adaptive-workspace-host=""')
-    const chatHost = layout.indexOf('data-conversation-pane=""')
-    expect(appHost).toBeGreaterThan(0)
-    expect(chatHost).toBeGreaterThan(appHost)
+  it('mounts apps INSIDE chat content without reserving a shell column or moving the composer', () => {
+    expect(layout).toContain("frame.querySelector<HTMLElement>('[data-adaptive-inline-host]')")
+    expect(layout).toContain('createPortal(')
+    expect(layout).toContain('adaptiveInlineHost)')
+    expect(layout).toContain('data-adaptive-workspace-host=""')
     expect(layout).toContain('<HealthiaWorkspace')
     expect(layout).toContain('<AdaptiveAppPreview')
     expect(layout).toContain('adaptiveActive={adaptiveActive}')
     expect(layout).not.toContain('data-browser-workspace-host=""')
-    expect(layout).not.toContain('inlineAppHost')
-    expect(layout).not.toContain('createPortal(')
-    expect(chat).not.toContain('data-adaptive-chat-host')
+    expect(chat).toContain('data-adaptive-inline-host=""')
+    expect(chat.indexOf('data-adaptive-inline-host=""')).toBeLessThan(chat.indexOf('<SessionBodyOutlet'))
     expect(chat.indexOf('<SessionBodyOutlet')).toBeLessThan(chat.indexOf('{composerSeat}'))
     expect(layoutCss).toContain('.conversationPane')
     expect(layoutCss).toContain('.adaptiveWorkspacePane')
     expect(layoutCss).toContain('flex: 1 1 100%')
+    expect(layoutCss).not.toContain('.centerCol[data-adaptive-active] > .conversationPane')
+    expect(chatCss).toContain('grid-template-columns: minmax(0, 1.85fr) minmax(320px, .95fr)')
+    expect(chatCss).toContain('grid-template-rows: minmax(0, 1fr) auto')
+    expect(chatCss).toContain('grid-column: 1 / -1')
+    expect(chatCss).toContain('grid-row: 2')
+    expect(flowCss).toContain('.root > .scroll')
+    expect(flowCss).toContain('overflow-y: auto')
+  })
+
+  it('never splits Home when the application host is empty', () => {
+    expect(chatCss).toContain('.adaptiveInlineHost { display: none; }')
+    expect(chatCss).toContain('.scrollBody:has(> .adaptiveInlineHost > *)')
     expect(layoutCss).not.toContain('.browserWorkspacePane')
     expect(layoutCss).not.toContain('[data-browser-workspace-visible')
   })
@@ -60,7 +73,7 @@ describe('PHOENIX side-by-side adaptive workspace and browser', () => {
     expect(layoutCss).toContain('@media (max-width: 980px)')
   })
 
-  it('preserves clinical access guards and bounded form height in the separate workspace', () => {
+  it('preserves clinical access guards and the app scrolling inside the chat', () => {
     expect(healthCss).toContain('max-height:none')
     expect(healthCss).not.toContain('max-height: min(48vh, 390px)')
     expect(layout).toContain('name="adaptive"')

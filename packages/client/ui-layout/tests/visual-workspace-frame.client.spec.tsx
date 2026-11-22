@@ -99,6 +99,52 @@ describe('AppFrame visual workspace', () => {
     expect(overlay?.contains(kira)).toBe(false)
   })
 
+  it('portals Healthia inside the chat content while preserving one composer and no shell split', async () => {
+    const store = createLayoutStore().create()
+    const useSessions = ((selector: (state: SessionListState) => unknown) => selector({
+      ids: [], byId: {}, current: undefined, phase: 'ready',
+      subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
+    } as unknown as SessionListState)) as never
+    const renderSlot = ((key: string) => key === 'conversation'
+      ? <div data-test-chat-shell>
+          <div data-adaptive-inline-host="" />
+          <div data-test-chat-transcript />
+          <div data-composer-seat="" />
+        </div>
+      : null) as AppFrameProps['renderSlot']
+    const props = { useStore: hookOf(store), actions: store.actions, useSessions, renderSlot } as unknown as AppFrameProps
+    const view = render(<AppFrame {...props} />)
+    const composer = view.container.querySelector('[data-composer-seat]')
+    expect(composer).not.toBeNull()
+    expect(view.container.querySelector('[data-adaptive-workspace-host]')).toBeNull()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoenix:adaptive-workspace', {
+        detail: { app: 'healthia', role: 'doctor' },
+      }))
+    })
+    await waitFor(() => {
+      const app = view.container.querySelector('[data-adaptive-workspace-host]')
+      const host = view.container.querySelector('[data-adaptive-inline-host]')
+      const conversation = view.container.querySelector('[data-conversation-pane]')
+      expect(app).not.toBeNull()
+      expect(host?.contains(app)).toBe(true)
+      expect(conversation?.contains(app)).toBe(true)
+      expect(view.container.querySelector('[data-composer-seat]')).toBe(composer)
+      expect(view.container.querySelector('[data-test-chat-transcript]')).not.toBeNull()
+    })
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoenix:adaptive-workspace', {
+        detail: { app: 'general' },
+      }))
+    })
+    await waitFor(() => {
+      expect(view.container.querySelector('[data-adaptive-workspace-host]')).toBeNull()
+      expect(view.container.querySelector('[data-composer-seat]')).toBe(composer)
+    })
+  })
+
   it('contains a repeatedly crashing workspace surface without blanking the conversation or shell', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const instance = createLayoutStore().create()

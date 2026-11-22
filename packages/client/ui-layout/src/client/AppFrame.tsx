@@ -11,6 +11,7 @@
  * zero self-made hooks.
  */
 import { Component, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { CSSProperties, ErrorInfo, ReactNode } from 'react'
 import type { PropsRenderSlots, PropsRuntime, PropsStore } from '@phoenix-ai/dsh-client-ui-slots'
 import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAULT } from './columns.ts'
@@ -436,9 +437,38 @@ export function AppFrame({
     return () => window.removeEventListener('phoenix:adaptive-self-inspect-request', inspect)
   }, [adaptiveApp,customApps,inspectRuntime])
 
-  // App content occupies a structural, scrollable pane alongside the real chat.
-  // This is never mounted inside the conversation timeline or on document.body.
+  // Adaptive UI occupies a scrollable surface WITHIN the conversation body.
+  // It must never replace the chat or claim width from the input/PHOENIX shell.
   const adaptiveActive = adaptiveApp === 'healthia' || activeBlueprint !== undefined
+  // The app belongs to the conversation's CONTENT scroll region, never to a
+  // sibling shell column: composer remains mounted at the bottom full width.
+  const [adaptiveInlineHost, setAdaptiveInlineHost] = useState<HTMLElement | null>(null)
+  useLayoutEffect(() => {
+    if (!adaptiveActive) {
+      setAdaptiveInlineHost(null)
+      return
+    }
+    const frame = frameRef.current
+    if (!frame) return
+    const findHost = (): HTMLElement | null => frame.querySelector<HTMLElement>('[data-adaptive-inline-host]')
+    const host = findHost()
+    if (host) {
+      setAdaptiveInlineHost(host)
+      return
+    }
+    // A session switch can recreate the conversation seat before its host
+    // appears. Retry only while the host is missing; no timer or reflow polling.
+    setAdaptiveInlineHost(null)
+    const observer = new MutationObserver(() => {
+      const next = findHost()
+      if (next) {
+        setAdaptiveInlineHost(next)
+        observer.disconnect()
+      }
+    })
+    observer.observe(frame, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [adaptiveActive, currentSession])
 
   const lastSession = useRef(detailsSession)
   useLayoutEffect(() => {
@@ -576,9 +606,9 @@ export function AppFrame({
               <button type="button" onClick={() => setMissionError(false)} aria-label="Cerrar aviso de App Studio">×</button>
             </div>
           )}
+          {adaptiveActive && adaptiveInlineHost && createPortal(
           <div className={css.adaptiveWorkspacePane} data-adaptive-workspace-host=""
             aria-label="Aplicación activa de PHOENIX">
-          {adaptiveActive && (
           <SurfaceBoundary name="adaptive" resetKey={adaptiveApp}
             onRestore={() => {
               // Only restore local structural manifests. Clinical stores, chat,
@@ -612,8 +642,8 @@ export function AppFrame({
             )}
             </div>
           </SurfaceBoundary>
-          )}
-          </div>
+          </div>,
+          adaptiveInlineHost)}
           <div data-shell-overlay>{renderSlot('shell.overlay', {})}</div>
           <div className={css.conversationPane} data-conversation-pane="">
             <SurfaceBoundary name="conversation" resetKey={currentSession ?? 'none'}>
