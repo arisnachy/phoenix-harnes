@@ -28,7 +28,7 @@ export function AdaptiveAppPreview({
       </nav>
       {active && <AdaptiveVisualStudio key={active.id} appId={app.id} sectionId={active.id}/>}
       {active && <AdaptiveFormPanel key={active.id} appId={app.id} sectionId={active.id}/>}
-      <div className={css.footer}><span className={css.notice}>App genérica local. Las API y la IA requieren adaptadores autorizados; no guardar información sensible.</span><span className={css.chatHint}>Kira continúa disponible en el chat inferior.</span></div>
+      <div className={css.footer}><span className={css.notice}>App genérica local. Las API y la IA requieren adaptadores autorizados; no guardar información sensible.</span><span className={css.chatHint}>Kira continúa disponible en el panel de conversación.</span></div>
     </div>
   </section>
 }
