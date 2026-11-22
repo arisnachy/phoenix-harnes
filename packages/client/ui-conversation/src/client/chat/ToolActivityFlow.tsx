@@ -1077,9 +1077,12 @@ function BrowserWorkspace({
     setSavedAccessNotice(previous => previous?.origin === next?.origin && previous?.phase === next?.phase
       ? previous : next)
   }, [])
-  // Secure Ask belongs below MiniBrowser. Only real activity or a saved-access
-  // notice should allocate the adjacent transcript pane.
-  const showSidecar = live || savedAccessNotice !== null
+  // A real sibling pane owned by AppFrame replaces the legacy body overlay.
+  // Live assistant messages remain in the canonical right-hand transcript;
+  // they must never be cloned into a second activity feed.
+  const dockHost = typeof document === 'undefined' ? null
+    : document.querySelector<HTMLElement>('[data-browser-workspace-host]')
+  const showSidecar = dockHost === null && (live || savedAccessNotice !== null)
   const activityRef = useRef<HTMLDivElement | null>(null)
   const followingRef = useRef(true)
   const [following, setFollowing] = useState(true)
@@ -1130,8 +1133,8 @@ function BrowserWorkspace({
     deliveredTopRef.current = scrollport.scrollTop
   }
 
-  return typeof document === 'undefined' ? null : createPortal(
-    <div className={css.browserWorkspace} data-browser-floating="true" data-browser-workspace={live ? '' : undefined}
+  const browserContent = (
+    <div className={css.browserWorkspace} data-browser-workspace-active="" data-browser-workspace={live ? '' : undefined}
       data-activity-open={showSidecar ? 'true' : undefined} data-chat-flow-kind="browser-workspace">
       <div className={css.browserPane}>
         <MiniBrowser key={sessionId} sessionId={sessionId} requested active={selected} compact
@@ -1218,7 +1221,8 @@ function BrowserWorkspace({
       </aside>}
     </div>
 
-  , document.body)
+  )
+  return dockHost === null ? browserContent : createPortal(browserContent, dockHost)
 }
 
 /**
@@ -1271,8 +1275,10 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
     setDismissedBrowserKey(undefined)
     previouslyActiveBrowser.current = undefined
   }, [sessionId])
+  const dockedBrowser = typeof document !== 'undefined'
+    && document.querySelector('[data-browser-workspace-host]') !== null
   const flow = useMemo(() => {
-    const grouped = activeBrowserTurn && newestBrowserKey !== undefined
+    const grouped = !dockedBrowser && activeBrowserTurn && newestBrowserKey !== undefined
       ? groupActiveBrowserFlow(ordinaryFlow, newestBrowserKey, nodes)
       : ordinaryFlow
     // Keep every browser mounted under the SAME React key as the sidecar opens
@@ -1282,8 +1288,8 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
         userKey: item.userKey, ...(item.tabId === undefined ? {} : { tabId: item.tabId }),
         ...(item.sourceUrl === undefined ? {} : { sourceUrl: item.sourceUrl }), live: false, items: [] }
       : item)
-  }, [ordinaryFlow, newestBrowserKey, nodes, activeBrowserTurn])
-  const hasBrowserWorkspace = flow.some(item => item.kind === 'browser-workspace' && item.live)
+  }, [ordinaryFlow, newestBrowserKey, nodes, activeBrowserTurn, dockedBrowser])
+  const hasBrowserWorkspace = !dockedBrowser && flow.some(item => item.kind === 'browser-workspace' && item.live)
   // The screenshot-like centered preparation state is confined to a blank
   // conversation's first pending answer, never to a continuing transcript.
   const centeredPreparing = turnStatus?.progress?.phase === 'preparing'
