@@ -1,6 +1,11 @@
-/** Healthia adaptive workspace. Never handles patient-identifiable form values. */
+/**
+ * PHOENIX clinical workspace: one contextual app surface, never another branded
+ * application shell. The protected local record remains Host-owned.
+ * No patient record is read or written from chat, UI events or localStorage.
+ */
 import { useEffect, useState, type FormEvent } from 'react'
 import css from './HealthiaWorkspace.module.css'
+import { HealthiaClinicalNote } from './HealthiaClinicalNote.tsx'
 import type { AdaptiveLiveSnapshot } from './AdaptiveLiveSlots.ts'
 import { probeClinicalSession, type ClinicalRouteStatus } from './HealthiaClinicalBridge.ts'
 import {
@@ -11,16 +16,16 @@ import {
 
 export type HealthiaRole = 'doctor' | 'patient'
 
+/** Seven clinician destinations; editing, calculators and advanced features live inside Tools. */
 export const HEALTHIA_NAV: Record<HealthiaRole, readonly { id: string; label: string }[]> = {
   doctor: [
-    { id: 'overview', label: 'Inicio clínico' },
+    { id: 'overview', label: 'Inicio' },
+    { id: 'appointments', label: 'Agenda' },
     { id: 'patients', label: 'Pacientes' },
     { id: 'encounters', label: 'Consultas' },
-    { id: 'records', label: 'Historia clínica' },
-    { id: 'prescriptions', label: 'Recetas e informes' },
-    { id: 'forms', label: 'Formularios' },
-    { id: 'capabilities', label: 'Capacidades' },
-    { id: 'exchange', label: 'Intercambios' },
+    { id: 'documents', label: 'Documentos' },
+    { id: 'management', label: 'Gestión' },
+    { id: 'tools', label: 'Herramientas' },
   ],
   patient: [
     { id: 'overview', label: 'Mi espacio' },
@@ -28,21 +33,16 @@ export const HEALTHIA_NAV: Record<HealthiaRole, readonly { id: string; label: st
     { id: 'records', label: 'Mi expediente' },
     { id: 'documents', label: 'Documentos' },
     { id: 'consent', label: 'Autorizaciones' },
-    { id: 'capabilities', label: 'Capacidades' },
-    { id: 'exchange', label: 'Compartir con mi médico' },
   ],
 }
 
-const CLINICAL_DESCRIPTIONS: Record<string, string> = {
-  overview: 'El copiloto permanece abajo. Los datos del expediente solo se consultan en el servicio clínico autenticado.',
-  patients: 'Búsqueda, identificación y conciliación supervisada de pacientes desde el registro clínico protegido.',
-  encounters: 'Apertura de consulta, anamnesis, exploración, signos vitales y revisión profesional.',
-  records: 'Información longitudinal y documentos restringidos según identidad, función y relación asistencial.',
-  prescriptions: 'Borradores clínicos, revisión del profesional, firma y entrega documentada.',
-  appointments: 'Agenda y solicitudes de citas. Pendiente de conexión al portal autenticado del paciente.',
-  documents: 'Documentos y resultados que un profesional haya autorizado a visualizar.',
-  consent: 'Autorizaciones granulares con vigencia, finalidad, destinatario y posibilidad de revocación.',
-  exchange: 'Solicitudes entre instancias PHOENIX: sin transmisión automática ni acceso por defecto.',
+const MODULES: Readonly<Record<string, { title: string; detail: string }>> = {
+  patients: { title: 'Registro longitudinal', detail: 'Identidad, contacto, alergias, medicamentos y antecedentes. La escritura clínica solo podrá ocurrir desde el repositorio protegido.' },
+  appointments: { title: 'Agenda de consultas', detail: 'Citas, seguimiento y recordatorios. La agenda necesita un servicio autenticado antes de mostrar datos o confirmar una cita.' },
+  documents: { title: 'Documentación clínica', detail: 'Recetas, solicitudes, indicaciones, certificados y resultados se generarán a partir de una consulta registrada y revisada.' },
+  management: { title: 'Operación administrativa', detail: 'Facturación, inventario e informes operativos se habilitarán según permisos, sin exponer historias clínicas.' },
+  records: { title: 'Expediente del paciente', detail: 'El acceso depende de la identidad autenticada y de los permisos de divulgación del profesional.' },
+  consent: { title: 'Autorizaciones', detail: 'Ningún expediente se comparte desde esta vista. Los permisos deberán ser explícitos, verificables y revocables.' },
 }
 
 export function HealthiaWorkspace({
@@ -55,26 +55,33 @@ export function HealthiaWorkspace({
   onReturn: () => void
   inspectRuntime?: (() => AdaptiveLiveSnapshot) | undefined
 }) {
-  // Only field METADATA is edited in this view; never place patient values in chat/events.
-  const [fieldLabel, setFieldLabel] = useState('')
   const [draft, setDraft] = useState<AdaptiveFormDraft>(HEALTHIA_DOCTOR_FORM)
   const [history, setHistory] = useState<readonly AdaptiveFormDraft[]>([])
+  const [fieldLabel, setFieldLabel] = useState('')
   const [kind, setKind] = useState<AdaptiveInputKind>('text')
   const [destination, setDestination] = useState<AdaptiveDestination>('local')
   const [output, setOutput] = useState<AdaptiveOutput>('inline')
   const [draftError, setDraftError] = useState('')
+  const [showEditor, setShowEditor] = useState(false)
   const [clinical, setClinical] = useState<ClinicalRouteStatus>({
-    status:'unavailable',role:null,patientPortal:'not-verified',
+    status: 'unavailable', role: null, patientPortal: 'not-verified',
   })
   const [clinicalRefresh, setClinicalRefresh] = useState(0)
+  const [liveStatus, setLiveStatus] = useState<AdaptiveLiveSnapshot | null>(null)
+  const isPatient = role === 'patient'
+  const active = HEALTHIA_NAV[role].some(item => item.id === section) ? section : 'overview'
+  const capabilities = describeAdaptiveApp('healthia')?.capabilities ?? []
   useEffect(() => {
     let mounted = true
-    void probeClinicalSession().then(status => {
-      if (mounted) setClinical(status)
-    })
+    void probeClinicalSession().then(status => { if (mounted) setClinical(status) })
     return () => { mounted = false }
   }, [clinicalRefresh])
-  const capabilities = describeAdaptiveApp('healthia')?.capabilities ?? []
+  useEffect(() => {
+    if (active !== 'tools' || !showEditor || inspectRuntime === undefined) return
+    try { setLiveStatus(inspectRuntime()) }
+    catch { setLiveStatus(null) }
+  }, [active, showEditor, inspectRuntime])
+
   const addField = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
     try {
@@ -84,7 +91,7 @@ export function HealthiaWorkspace({
       setFieldLabel('')
       setDraftError('')
     } catch {
-      setDraftError('No se pudo validar el cambio del formulario; no se modificó el borrador.')
+      setDraftError('El campo no pasó la validación. El borrador anterior sigue intacto.')
     }
   }
   const removeField = (id: string): void => {
@@ -94,132 +101,150 @@ export function HealthiaWorkspace({
       setDraft(next)
       setDraftError('')
     } catch {
-      setDraftError('El campo está protegido o el borrador requiere revisión.')
+      setDraftError('El campo está protegido o el borrador necesita revisión.')
     }
   }
-  const undo = (): void => {
-    const previous = history[history.length - 1]
-    if (!previous) return
-    setDraft(previous)
-    setHistory(items => items.slice(0, -1))
-    setDraftError('')
-  }
-  const active = HEALTHIA_NAV[role].some(item => item.id === section) ? section : 'overview'
-  const isPatient = role === 'patient'
-  const [liveStatus, setLiveStatus] = useState<AdaptiveLiveSnapshot | null>(null)
-  useEffect(() => {
-    if (active !== 'capabilities' || inspectRuntime === undefined) return
-    try { setLiveStatus(inspectRuntime()) }
-    catch { setLiveStatus(null) }
-  }, [active, inspectRuntime])
 
   return (
-    <section className={css.shell} aria-label="Healthia: espacio de trabajo adaptativo">
-      <div className={css.header}>
-        <div className={css.identity}>
-          <span className={css.symbol} aria-hidden="true">✚</span>
-          <div><strong>Healthia</strong><small>{isPatient ? 'Espacio del paciente · vista preliminar' : 'Entorno médico · PHOENIX'}</small></div>
+    <section className={css.shell} aria-label="Espacio clínico de PHOENIX">
+      <div className={css.titleRow}>
+        <div>
+          <span className={css.eyebrow}>ESPACIO CLÍNICO</span>
+          <h2>{HEALTHIA_NAV[role].find(item => item.id === active)?.label}</h2>
         </div>
         <div className={css.actions}>
-          <button className={role === 'doctor' ? css.selected : css.action} type="button" onClick={() => onRoleChange('doctor')} aria-pressed={role === 'doctor'}>Médico</button>
-          <button className={role === 'patient' ? css.selected : css.action} type="button" onClick={() => onRoleChange('patient')} aria-pressed={role === 'patient'}>Paciente</button>
-          <button className={css.action} type="button" onClick={onReturn}>Volver a PHOENIX</button>
+          <button className={role === 'doctor' ? css.selected : css.action} type="button"
+            aria-pressed={role === 'doctor'}
+            onClick={() => onRoleChange('doctor')}>Médico</button>
+          <button className={role === 'patient' ? css.selected : css.action} type="button"
+            aria-pressed={role === 'patient'}
+            onClick={() => onRoleChange('patient')}>Paciente</button>
+          <button className={css.action} type="button" onClick={onReturn}>Salir del espacio</button>
         </div>
       </div>
-      <div className={css.body}>
-        <div className={css.draftHeader}>
-          <span className={css.notice}>{isPatient
-            ? 'La selección de Paciente no concede acceso al expediente; falta el portal autenticado.'
+      <div className={css.sessionStrip}>
+        <span className={css.notice}>
+          {isPatient
+            ? 'Vista del paciente. Cambiar la vista no inicia sesión ni concede acceso a datos.'
             : clinical.status === 'authenticated'
-              ? `Sesión real verificada en /health · rol: ${clinical.role}. Sin exponer el expediente al chat.`
-              : 'La vista adaptable no inicia sesión ni conserva credenciales clínicas.'}</span>
-          <button className={css.action} type="button" onClick={() => setClinicalRefresh(v => v + 1)}>
-            Verificar sesión clínica
-          </button>
-        </div>
-        <div className={css.titleRow}>
-          <div><span className={css.eyebrow}>PHOENIX / HEALTHIA</span><h2>{HEALTHIA_NAV[role].find(item => item.id === active)?.label}</h2></div>
-          <span className={css.status}>{isPatient ? 'Portal sujeto a autenticación y habilitación'
-            : clinical.status === 'authenticated' ? 'Sesión clínica autenticada'
-            : clinical.status === 'locked' ? 'Inicio de sesión requerido'
-            : 'Servicio clínico no disponible'}</span>
-        </div>
-        <nav className={css.tabs} aria-label="Secciones Healthia">
-          {HEALTHIA_NAV[role].map(item => <button key={item.id} type="button" aria-current={item.id === active ? 'page' : undefined} className={item.id === active ? css.activeTab : css.tab} onClick={() => onSectionChange(item.id)}>{item.label}</button>)}
-        </nav>
-        {active === 'forms' && !isPatient ? (
-          <div className={css.formPreview}>
-            <p><strong>Editor adaptable · solo estructura.</strong> Campos, destinos y formatos configurables sin ejecutar código ni enviar datos clínicos. Los cambios están en memoria y requieren un publicador clínico autorizado para ser persistentes.</p>
-            <div className={css.draftHeader}><span>Plantilla de consulta · revisión {draft.revision}</span>
-              <button type="button" className={css.action} disabled={history.length === 0} onClick={undo}>Deshacer cambio</button>
-            </div>
-            <div className={css.fieldList}>
-              {draft.fields.map(field => (
-                <div key={field.id} className={css.fieldRow}>
-                  <span><strong>{field.label}</strong><small>{field.kind} · {field.binding.destination.toUpperCase()} → {field.binding.output} · {isBindingConnected(field.binding, capabilities) ? 'Vista local' : 'Conector pendiente'}</small></span>
-                  {field.protected ? <span className={css.locked}>Protegido</span> : <button type="button" className={css.removeField} aria-label={`Quitar campo ${field.label}`} onClick={() => removeField(field.id)}>×</button>}
-                </div>
+              ? `Servicio clínico autenticado · función: ${clinical.role}`
+              : clinical.status === 'locked'
+                ? 'Servicio clínico protegido: requiere autenticación.'
+                : 'Repositorio clínico no conectado a esta vista. Borradores temporales sin guardar.'}
+        </span>
+        <button className={css.action} type="button" onClick={() => setClinicalRefresh(v => v + 1)}>
+          Comprobar conexión
+        </button>
+      </div>
+      <nav className={css.tabs} aria-label="Secciones del espacio clínico">
+        {HEALTHIA_NAV[role].map(item => (
+          <button key={item.id} type="button" aria-current={item.id === active ? 'page' : undefined}
+            className={item.id === active ? css.activeTab : css.tab}
+            onClick={() => onSectionChange(item.id)}>{item.label}</button>
+        ))}
+      </nav>
+      <div className={css.body}>
+        {active === 'overview' && (
+          <div className={css.dashboard}>
+            <p className={css.description}>
+              {isPatient
+                ? 'Tus citas y documentos solo se mostrarán después de verificar una cuenta vinculada.'
+                : 'Organiza la consulta sin abandonar PHOENIX. Kira permanece en el panel derecho.'}
+            </p>
+            <div className={css.quickGrid}>
+              {(isPatient ? [
+                { id: 'appointments', title: 'Mis citas', detail: 'Solicitudes y próximas visitas' },
+                { id: 'records', title: 'Mi expediente', detail: 'Información autorizada' },
+                { id: 'documents', title: 'Mis documentos', detail: 'Recetas e informes compartidos' },
+              ] : [
+                { id: 'encounters', title: 'Preparar consulta', detail: 'Historia, anamnesis y exploración' },
+                { id: 'patients', title: 'Pacientes', detail: 'Directorio clínico protegido' },
+                { id: 'appointments', title: 'Agenda', detail: 'Citas y seguimiento' },
+                { id: 'documents', title: 'Documentos', detail: 'Recetas e indicaciones' },
+              ]).map(item => (
+                <button key={item.id} className={css.quickCard} type="button" onClick={() => onSectionChange(item.id)}>
+                  <strong>{item.title}</strong><span>{item.detail}</span>
+                </button>
               ))}
             </div>
-            <form className={css.builder} onSubmit={addField}>
-              <input maxLength={60} aria-label="Etiqueta de nuevo campo" value={fieldLabel} onChange={e => setFieldLabel(e.target.value)} placeholder="Nombre del campo" />
-              <label className={css.formSelect}>Tipo
-                <select aria-label="Tipo de campo" value={kind} onChange={e => setKind(e.currentTarget.value as AdaptiveInputKind)}>
-                  <option value="text">Texto</option><option value="number">Número</option><option value="date">Fecha</option><option value="select">Selector</option><option value="textarea">Texto extenso</option>
-                </select>
-              </label>
-              <label className={css.formSelect}>Acción
-                <select aria-label="Destino de campo" value={destination} onChange={e => setDestination(e.currentTarget.value as AdaptiveDestination)}>
-                  <option value="local">Local</option><option value="api">API autorizada (pendiente)</option><option value="chat">Chat (pendiente)</option><option value="ai">IA (pendiente)</option>
-                </select>
-              </label>
-              <label className={css.formSelect}>Salida
-                <select aria-label="Formato de salida" value={output} onChange={e => setOutput(e.currentTarget.value as AdaptiveOutput)}>
-                  <option value="inline">En pantalla</option><option value="table">Tabla</option><option value="document">Documento</option><option value="chat">Chat</option>
-                </select>
-              </label>
-              <button type="submit" disabled={!fieldLabel.trim()}>Agregar campo</button>
-            </form>
-            {draftError && <p role="alert">{draftError}</p>}
-            <p className={css.notice}>Las conexiones API, Chat e IA son propuestas declarativas: ejecutar, almacenar, compartir o publicar requiere permisos y un adaptador validado.</p>
           </div>
-        ) : active === 'capabilities' ? (
-          <div className={css.capabilityList}>
-            <p>Autoconocimiento declarativo: las funciones se anuncian en un catálogo limitado, sin revelar contraseñas ni considerar conectadas las API por el mero hecho de existir.</p>
-            {liveStatus && <>
-              <p><strong>Componentes observados en este PHOENIX</strong> · registro real de vistas, no autorización para usar datos o servicios.</p>
-              {liveStatus.slots.map(slot => (
-                <div className={css.fieldRow} key={slot.id}>
-                  <span><strong>{slot.id}</strong><small>Registro de interfaz · {slot.registrations} instancia(s)</small></span>
-                  <span className={css.status}>{slot.state === 'registered' ? 'Registrado' : 'No encontrado'}</span>
-                </div>
-              ))}
-            </>}
-            {capabilities.map(capability => (
-              <div className={css.fieldRow} key={capability.id}>
-                <span><strong>{capability.label}</strong><small>{capability.explanation}</small></span>
-                <span className={css.status}>{capability.state === 'ui-ready' ? 'Interfaz lista' : capability.state === 'requires-authentication' ? 'Requiere acceso' : capability.state === 'disabled' ? 'Deshabilitado' : 'Sin conectar'}</span>
-              </div>
-            ))}
-          </div>
-        ) : active === 'exchange' || (active === 'consent' && isPatient) ? (
-          <div className={css.exchange}>
-            <p><strong>Intercambio futuro, con aprobación explícita.</strong> Solicitud → autenticación del destinatario → revisión de alcance → consentimiento/autorización → entrega cifrada → comprobante y revocación.</p>
-            <p>Salidas previstas: resumen clínico, recursos FHIR R4 y documentos autorizados. Ningún expediente se comparte desde esta vista.</p>
-          </div>
-        ) : (
-          <p className={css.description}>{CLINICAL_DESCRIPTIONS[active] ?? CLINICAL_DESCRIPTIONS.overview}</p>
         )}
-        <div className={css.footer}>
-          {!isPatient && <a className={css.openClinical} href="/health" target="_blank" rel="noopener noreferrer">Abrir servicio clínico protegido ↗</a>}
-          {isPatient && <>
-            <a className={css.openClinical} href="/health/patient" target="_blank" rel="noopener noreferrer">
-              Abrir portal paciente protegido
-            </a>
-            <span className={css.notice}>Funciona solo si el administrador habilita el piloto clínico local. El selector de rol no concede acceso.</span>
-          </>}
-          <span className={css.chatHint}>Kira y el chat siguen disponibles en el panel de conversación.</span>
-        </div>
+        {!isPatient && active === 'encounters' && <HealthiaClinicalNote />}
+        {active !== 'overview' && active !== 'encounters' && active !== 'tools' && (
+          <div className={css.modulePlaceholder}>
+            <strong>{MODULES[active]?.title ?? HEALTHIA_NAV[role].find(item => item.id === active)?.label}</strong>
+            <p>{MODULES[active]?.detail}</p>
+            <span className={css.notice}>Sin datos ficticios ni acciones clínicas simuladas. El acceso se habilitará desde el proveedor autorizado.</span>
+          </div>
+        )}
+        {active === 'tools' && !isPatient && (
+          <div className={css.tools}>
+            <div className={css.quickGrid}>
+              <div className={css.quickCard}><strong>Calculadoras</strong><span>IMC incorporado a la historia clínica cuando se registra peso y talla. Otras escalas requieren validación.</span></div>
+              <div className={css.quickCard}><strong>Plantillas</strong><span>Primera consulta, evolución, SOAP, pediatría y gineco-obstetricia.</span></div>
+              <div className={css.quickCard}><strong>Configuración de datos</strong><span>Almacenamiento local cifrado existente. Conexión a nube opcional todavía no configurada.</span></div>
+            </div>
+            <button type="button" className={css.action} aria-expanded={showEditor}
+              onClick={() => setShowEditor(value => !value)}>
+              {showEditor ? 'Cerrar editor de plantillas' : 'Editar estructura de formularios'}
+            </button>
+            {showEditor && (
+              <div className={css.formPreview}>
+                <p><strong>Editor de estructura.</strong> Solo modifica nombres y tipos de campos, nunca valores del expediente. Los cambios son borradores sin publicar.</p>
+                <div className={css.draftHeader}><span>Plantilla de consulta · revisión {draft.revision}</span>
+                  <button type="button" className={css.action} disabled={!history.length}
+                    onClick={() => { const last = history.at(-1); if (last) setDraft(last); setHistory(items => items.slice(0, -1)) }}>Deshacer cambio</button>
+                </div>
+                <div className={css.fieldList}>
+                  {draft.fields.map(field => (
+                    <div className={css.fieldRow} key={field.id}>
+                      <span><strong>{field.label}</strong><small>{field.kind} · {isBindingConnected(field.binding, capabilities) ? 'Local' : 'Conector pendiente'}</small></span>
+                      {field.protected ? <span className={css.locked}>Protegido</span> : (
+                        <button type="button" className={css.removeField} aria-label={`Quitar campo ${field.label}`}
+                          onClick={() => removeField(field.id)}>×</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <form className={css.builder} onSubmit={addField}>
+                  <input maxLength={60} value={fieldLabel} aria-label="Etiqueta de nuevo campo"
+                    onChange={event => setFieldLabel(event.currentTarget.value)} placeholder="Nuevo campo" />
+                  <label className={css.formSelect}>Tipo
+                    <select value={kind} aria-label="Tipo de campo" onChange={event => setKind(event.target.value as AdaptiveInputKind)}>
+                      <option value="text">Texto</option><option value="number">Número</option>
+                      <option value="date">Fecha</option><option value="select">Selector</option>
+                      <option value="textarea">Texto extenso</option>
+                    </select>
+                  </label>
+                  <label className={css.formSelect}>Destino
+                    <select value={destination} aria-label="Destino de campo" onChange={event => setDestination(event.target.value as AdaptiveDestination)}>
+                      <option value="local">Local</option><option value="api">API autorizada</option>
+                      <option value="chat">Chat (pendiente)</option><option value="ai">IA (pendiente)</option>
+                    </select>
+                  </label>
+                  <label className={css.formSelect}>Salida
+                    <select value={output} aria-label="Formato de salida" onChange={event => setOutput(event.target.value as AdaptiveOutput)}>
+                      <option value="inline">En pantalla</option><option value="table">Tabla</option>
+                      <option value="document">Documento</option><option value="chat">Chat</option>
+                    </select>
+                  </label>
+                  <button type="submit" disabled={!fieldLabel.trim()}>Agregar campo</button>
+                </form>
+                {draftError && <p role="alert">{draftError}</p>}
+                {liveStatus && <p className={css.notice}>Componentes UI inspeccionados: {liveStatus.slots.length}. Este recuento no concede permisos clínicos.</p>}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      <div className={css.footer}>
+        <span className={css.chatHint}>Kira continúa en el chat del panel derecho; los borradores clínicos no se envían automáticamente.</span>
+        {!isPatient && <a className={css.openClinical} href="/health" target="_blank" rel="noopener noreferrer">
+          Servicio clínico protegido
+        </a>}
+        {isPatient && <a className={css.openClinical} href="/health/patient" target="_blank" rel="noopener noreferrer">
+          Portal protegido del paciente
+        </a>}
       </div>
     </section>
   )
