@@ -898,3 +898,20 @@
     grid-row: 3;
   }
 }
+
+
+/* Browser-only mode also keeps the ONE composer at the bottom. Its content
+   scrolls independently; an active MiniBrowser is an inline conversation
+   surface, never a column in AppFrame. App mode takes precedence if present. */
+.root .scrollBody:has([data-browser-workspace]):not(:has(> .adaptiveInlineHost > *)) {
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
+.root .scrollBody:has([data-browser-workspace]):not(:has(> .adaptiveInlineHost > *)) > .composerSeat {
+  position: relative;
+  bottom: auto;
+  flex: 0 0 auto;
+  margin-top: auto;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  background: var(--dsw-alias-bg-base);
+}
