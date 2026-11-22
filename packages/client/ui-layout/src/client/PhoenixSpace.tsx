@@ -301,11 +301,13 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
     <div className={css.main}>
       <header className={css.topbar}>
         <div className={css.topbarTitle}>
-          <button type="button" className={css.backToChat} onClick={closeSpace} aria-label="Volver al chat de PHOENIX">← Volver al chat</button>
+          <div className={css.leadingActions}>
+            <button type="button" className={css.backToChat} onClick={closeSpace} aria-label="Volver al chat de PHOENIX">← Volver al chat</button>
+            {editor?.dirty&&<button type="button" className={css.discardExit} onClick={onClose}>Salir sin guardar</button>}
+          </div>
           <strong>PHOENIX · Espacio</strong><span>Biblioteca, editores y proyectos</span>
         </div>
         <div className={css.exitActions}>
-          {editor?.dirty&&<button type="button" className={css.discardExit} onClick={onClose}>Salir sin guardar</button>}
           <button type="button" className={css.close} onClick={closeSpace} aria-label="Cerrar Biblioteca">×</button>
         </div>
       </header>
