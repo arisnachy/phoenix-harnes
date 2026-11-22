@@ -74,6 +74,18 @@
   padding-left: 26px;
 }
 
+/* Secure Ask is a chat interaction, not browser chrome. Keep it on the same
+   transcript axis while leaving the browser and activity sidebar independent. */
+.secureAskSlot {
+  width: 100%;
+  max-width: var(--dsh-chat-content-width);
+  margin: 0 auto;
+}
+.secureAskSlot :global([data-secure-ask]) {
+  margin-top: 0;
+  border-radius: 20px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .chevronIcon {
     transition: none;
