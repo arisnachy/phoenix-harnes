@@ -237,10 +237,12 @@ describe('trading and sports isolation', () => {
 })
 
 describe('chat tool activity grouping', () => {
-  it('renders the browser workspace for nested Chrome activity while Tools stays collapsed', () => {
+  it('keeps nested Chrome activity as a compact browser receipt while Tools stays collapsed', () => {
     renderChat([user(1, 'Investiga y completa el formulario en Chrome'), nestedChromeTool()])
 
-    expect(screen.getByRole('region', { name: 'Navegador de Kira' })).toBeTruthy()
+    expect(screen.getByText('Fuente web consultada')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Abrir navegador' })).toBeTruthy()
+    expect(screen.queryByRole('region', { name: 'Navegador de Kira' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Tools' })).toBeTruthy()
   })
 
