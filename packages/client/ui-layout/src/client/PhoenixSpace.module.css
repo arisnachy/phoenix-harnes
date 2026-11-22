@@ -14,10 +14,11 @@
 .topbarTitle{display:flex;flex-direction:column;gap:4px;min-width:0}
 .topbarTitle strong{font-size:23px;font-weight:690}
 .topbarTitle span{font-size:12px;color:var(--dsw-alias-label-secondary,#777)}
+.leadingActions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}
 .backToChat{display:inline-flex;align-self:flex-start;align-items:center;min-height:34px;padding:6px 10px!important;margin:0 0 8px -8px;border:1px solid var(--dsw-alias-border-l2,#dedad5)!important;border-radius:10px!important;background:var(--dsw-alias-bg-layer-1,#fff)!important;font-size:13px!important;font-weight:650!important;white-space:nowrap;position:relative;z-index:2}
 .backToChat:hover{background:var(--dsw-alias-bg-layer-2,#edeae6)!important}
 .exitActions{display:flex;align-items:center;gap:8px;flex-shrink:0;padding-right:clamp(0px,11vw,170px)}
-.discardExit{font-size:11px!important;white-space:nowrap;text-decoration:underline}
+.discardExit{font-size:11px!important;white-space:nowrap;text-decoration:underline;align-self:center;margin-bottom:8px}
 .close{width:36px;height:36px;border-radius:50%!important;font-size:24px!important;background:var(--dsw-alias-bg-layer-1,#f1efec)!important}
 .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 0 20px}
 .toolbar input,.editFields input{min-height:40px;border-radius:12px;border:1px solid var(--dsw-alias-border-l2,#dbd9d6);background:var(--dsw-alias-bg-layer-1,#fff);padding:0 12px;color:inherit}
