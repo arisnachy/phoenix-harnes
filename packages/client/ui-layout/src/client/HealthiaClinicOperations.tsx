@@ -465,7 +465,8 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
         <p className={css.notice}>La clínica realiza nuevamente la detección de duplicados al guardar y registra cualquier excepción justificada.</p>
       </form>}
       {selectedPatient&&session&&<HealthiaPatientDossier key={selectedPatient.id}
-        session={session} patient={selectedPatient}
+
+        session={session} patient={selectedPatient} intakeTemplate={intakeTemplate}
         onPatientUpdated={updated=>setPatients(previous=>previous.map(p=>p.id===updated.id?updated:p))}/>}
 
     </>}
