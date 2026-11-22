@@ -21,6 +21,7 @@ export type ClinicalEncounter = {
   readonly signedBy?: string|null; readonly signedAt?: string|null
 }
 export type ClinicalStatus = {readonly initialized:boolean;readonly enabled:boolean}
+export type ClinicalBranding = {readonly logoDataUrl:string|null}
 type Requester = typeof fetch
 type ApiMethod = 'GET'|'POST'|'PATCH'
 const roles: ReadonlySet<string> = new Set([
@@ -88,10 +89,13 @@ export class HealthiaClinicalApi {
       response=await (this.requester ?? fetch)('/health/api/'+path, {
         method,headers,credentials:'same-origin',cache:'no-store',
         ...(body===undefined?{}:{body:JSON.stringify(body)}),
-        signal:AbortSignal.timeout(10000),
+        signal:AbortSignal.timeout(path==='setup'||path==='login'?30000:10000),
       })
-    } catch {
-      throw new ProtectedClinicError('El servicio clínico local no responde.',503)
+    } catch (cause) {
+      const timedOut=cause instanceof Error && /timeout|aborted/i.test(cause.name+' '+cause.message)
+      throw new ProtectedClinicError(timedOut
+        ? 'La conexión clínica agotó el tiempo de respuesta. Comprueba el Host y reintenta.'
+        : 'No se pudo conectar con el servicio clínico local. Comprueba que PHOENIX esté activo y reintenta.',503)
     }
     // Error bodies may contain data; never copy response details into logs.
     if(!response.ok) {
@@ -115,8 +119,22 @@ export class HealthiaClinicalApi {
   async session():Promise<ClinicalSession> {
     return sessionOf(await this.request('session'))
   }
-  async setup(organization:string,username:string,password:string):Promise<void> {
-    await this.request('setup','POST',undefined,{organization,username,password})
+  async branding():Promise<string|null> {
+    const value=object(await this.request('branding'))
+    if(value.logoDataUrl!==null && (typeof value.logoDataUrl!=='string'
+      || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/u.test(value.logoDataUrl)))
+      throw Error('Logo clínico inválido')
+    return value.logoDataUrl
+  }
+  async setup(organization:string,username:string,password:string,logoDataUrl?:string|null):Promise<void> {
+    if(password.length<6||password.length>256)throw Error('La contraseña requiere al menos 6 caracteres')
+    await this.request('setup','POST',undefined,{organization,username,password,
+      ...(logoDataUrl?{logoDataUrl}:{})})
+  }
+  async updateBranding(session:ClinicalSession,logoDataUrl:string|null):Promise<string|null> {
+    const value=object(await this.request('branding','POST',session,{logoDataUrl}))
+    if(value.logoDataUrl!==null && typeof value.logoDataUrl!=='string')throw Error('Logo clínico inválido')
+    return value.logoDataUrl
   }
   async login(username:string,password:string):Promise<ClinicalSession> {
     return sessionOf(await this.request('login','POST',undefined,{username,password}))

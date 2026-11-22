@@ -45,6 +45,21 @@ describe('PHOENIX clinical API boundary',()=>{
     expect(JSON.stringify(requests)).not.toContain('password')
   })
 
+  it('creates the administrator with six characters and supports safe institution branding',async()=>{
+    const calls:Array<{path:string;body?:Record<string,unknown>}>=[]
+    const api=new HealthiaClinicalApi(vi.fn(async (path:string,init?:RequestInit)=>{
+      const body=init?.body?JSON.parse(String(init.body)) as Record<string,unknown>:undefined
+      calls.push({path,body})
+      return result(path.endsWith('/branding')?{logoDataUrl:null}:{initialized:true},200)
+    }) as unknown as typeof fetch)
+    await expect(api.setup('Clínica Alfa','doctor','12345')).rejects.toThrow('6 caracteres')
+    await api.setup('Clínica Alfa','doctor','123456')
+    expect(calls.find(x=>x.path.endsWith('/setup'))?.body?.password).toBe('123456')
+    expect(await api.branding()).toBeNull()
+    expect(await api.updateBranding(session,null)).toBeNull()
+    expect(calls.some(x=>x.path.endsWith('/branding')&&x.body?.logoDataUrl===null)).toBe(true)
+  })
+
   it('requires authentic CSRF and authorized identity; never trusts a visual role',async()=>{
     const api=new HealthiaClinicalApi(vi.fn(async()=>result({actor,csrf:'invalid'})) as unknown as typeof fetch)
     await expect(api.session()).rejects.toThrow('CSRF')

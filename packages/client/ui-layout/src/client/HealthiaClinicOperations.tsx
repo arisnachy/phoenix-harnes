@@ -81,6 +81,10 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
   const [user,setUser]=useState('')
   const [password,setPassword]=useState('')
   const [organization,setOrganization]=useState('')
+  const [logo,setLogo]=useState<string|null>(null)
+  const [logoDraft,setLogoDraft]=useState<string|null>(null)
+  const [logoError,setLogoError]=useState('')
+  const [connectionRetry,setConnectionRetry]=useState(0)
   const [name,setName]=useState('')
   const [birthDate,setBirthDate]=useState('')
   const [email,setEmail]=useState('')
@@ -113,6 +117,7 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
   useEffect(()=>{
     let mounted=true
     readyRef.current=false
+    void api.branding().then(value=>{if(mounted)setLogo(value)}).catch(()=>{/* Keep the Healthia fallback */})
     void (async()=>{
       try {
         const s=await api.session()
@@ -137,18 +142,60 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
       }
     })()
     return()=>{mounted=false}
-  },[])
+  },[connectionRetry])
+
+  const readLogo=async(file?:File):Promise<void>=>{
+    if(!file){setLogoDraft(null);setLogoError('');return}
+    if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>160_000||file.size===0){
+      setLogoDraft(null)
+      setLogoError('El logo debe ser PNG, JPG o WebP y no superar 160 KB.')
+      return
+    }
+    try {
+      const encoded=await new Promise<string>((resolve,reject)=>{
+        const reader=new FileReader()
+        reader.onload=()=>resolve(typeof reader.result==='string'?reader.result:'')
+        reader.onerror=()=>reject(new Error('Lectura de imagen fallida'))
+        reader.readAsDataURL(file)
+      })
+      if(!/^data:image\/(png|jpeg|webp);base64,/u.test(encoded))throw Error('Formato inválido')
+      setLogoDraft(encoded);setLogoError('')
+    }catch{setLogoDraft(null);setLogoError('No se pudo leer el logo institucional.')}
+  }
+  const saveBranding=async(next:string|null):Promise<void>=>{
+    if(!session||session.actor.role!=='admin'||busy)return
+    setBusy(true);setError('');setNotice('')
+    try{
+      setLogo(await api.updateBranding(session,next))
+      setLogoDraft(null)
+      setNotice(next?'Logo institucional guardado en la clínica local.':'Se restauró el logo de Healthia.')
+    }catch(err){setError(err instanceof Error?err.message:'No se pudo actualizar el logo')}
+    finally{setBusy(false)}
+  }
+  const brandMark=<div className={css.brand} aria-label="Identidad visual clínica">
+    {(logoDraft??logo)?<img src={(logoDraft??logo)!} alt="Logo de la institución" className={css.brandImage}/>:
+      <span className={css.brandFallback}><span className={css.brandSymbol} aria-hidden="true">✚</span>Healthia</span>}
+  </div>
 
   const authenticated=async(event:FormEvent<HTMLFormElement>):Promise<void>=>{
     event.preventDefault()
     if(busy)return
     setBusy(true);setError('');setNotice('')
     try {
-      if(mode==='setup')await api.setup(organization.trim(),user.trim(),password)
+      if(mode==='setup'){
+        try{await api.setup(organization.trim(),user.trim(),password,logoDraft)}
+        catch(err){
+          // A slow Host may commit a new clinic before the transport times out.
+          // Verify server state; login below still proves ownership of the new admin.
+          if(!(err instanceof ProtectedClinicError&&err.status===503
+            &&(await api.status().catch(()=>null))?.initialized))throw err
+        }
+      }
       const s=await api.login(user.trim(),password)
       setPassword('')
       setSession(s)
       setMode('ready')
+      if(logoDraft!==null){setLogo(logoDraft);setLogoDraft(null)}
       await refreshLists(s)
       readyRef.current=true
     } catch(err) {
@@ -222,35 +269,47 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
 
   if(mode==='loading')return <div className={css.status} role="status">Comprobando la sesión clínica local…</div>
   if(mode==='unavailable')return <div className={css.panel} role="status">
+    {brandMark}
     <h3>Servicio clínico local no disponible</h3>
-    <p>Para proteger el expediente, este panel no creará un almacén alternativo ni guardará datos clínicos sin el Host autorizado.</p>
-    <a href="/health" target="_blank" rel="noopener noreferrer">Comprobar servicio clínico protegido</a>
+    <p>El Host clínico no respondió. Comprueba la conexión y reintenta; los expedientes no se trasladarán a un almacén sin protección.</p>
+    <div className={css.toolbarActions}>
+      <button type="button" className={css.primary} onClick={()=>{setMode('loading');setConnectionRetry(v=>v+1)}}>Reintentar conexión</button>
+      <a href="/health" target="_blank" rel="noopener noreferrer">Diagnóstico del servicio protegido</a>
+    </div>
   </div>
   if(mode==='login'||mode==='setup')return <section className={css.panel} aria-label="Acceso clínico protegido">
+    {brandMark}
     <h3>{mode==='setup'?'Inicializar clínica local':'Inicio de sesión profesional'}</h3>
     <p>{mode==='setup'
-      ? 'La clínica es local y cifrada. Define un administrador y una contraseña maestra de al menos 16 caracteres. Conserva esa contraseña fuera de PHOENIX.'
+      ? 'La clínica es local y cifrada. Crea el administrador con una contraseña de 6 caracteres o más; recomendamos 12 o más. Guárdala fuera de PHOENIX: también protege el cifrado del expediente.'
       : 'La misma identidad profesional del servicio /health; nunca uses las credenciales en el chat de Kira.'}</p>
     <form className={css.form} autoComplete="off" onSubmit={event=>{void authenticated(event)}}>
       {mode==='setup'&&<label>Centro o institución
         <input required maxLength={120} value={organization} onChange={e=>setOrganization(e.target.value)}/>
       </label>}
+      {mode==='setup'&&<label>Logo institucional (opcional)
+        <input type="file" accept="image/png,image/jpeg,image/webp" onChange={event=>{void readLogo(event.currentTarget.files?.[0])}}/>
+        <small>PNG, JPG o WebP · máximo 160 KB. Sin imagen se utilizará el logo de Healthia.</small>
+      </label>}
       <label>Usuario profesional
         <input required maxLength={80} value={user} onChange={e=>setUser(e.target.value)}/>
       </label>
       <label>Contraseña
-        <input required type="password" minLength={16} maxLength={256} value={password}
+        <input required type="password" minLength={6} maxLength={256} value={password}
           autoComplete="off" onChange={e=>setPassword(e.target.value)}/>
       </label>
-      <button className={css.primary} type="submit" disabled={busy||password.length<16}>
+      <button className={css.primary} type="submit" disabled={busy||password.length<6}>
         {busy?'Verificando…':mode==='setup'?'Crear clínica local':'Acceder'}
       </button>
     </form>
+    {logoError&&<p className={css.error} role="alert">{logoError}</p>}
     {error&&<p className={css.error} role="alert">{error}</p>}
+    {error&&<button type="button" onClick={()=>{setMode('loading');setConnectionRetry(v=>v+1)}}>Comprobar conexión</button>}
   </section>
 
   return <section className={css.root} aria-label={area==='patients'?'Pacientes clínicos':'Consultas clínicas'}>
     <div className={css.toolbar}>
+      {brandMark}
       <div className={css.identity}><strong>Sesión profesional activa</strong><small>{session?.actor.username} · {session?.actor.role}</small></div>
       <div className={css.toolbarActions}>
         <button type="button" disabled={busy} onClick={()=>{void reload()}}>Actualizar</button>
@@ -266,6 +325,14 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
         }}>Cerrar sesión clínica</button>
       </div>
     </div>
+    {userRole==='admin'&&<div className={css.brandSettings}>
+      <label>Logo de la institución
+        <input type="file" accept="image/png,image/jpeg,image/webp" onChange={event=>{void readLogo(event.currentTarget.files?.[0])}}/>
+      </label>
+      <button type="button" disabled={busy||logoDraft===null||!!logoError} onClick={()=>{void saveBranding(logoDraft)}}>Guardar logo</button>
+      <button type="button" disabled={busy||(!logo&&!logoDraft)} onClick={()=>{void saveBranding(null)}}>Usar logo de Healthia</button>
+      {logoError&&<p role="alert" className={css.error}>{logoError}</p>}
+    </div>}
     {!readyRef.current&&<p role="status" className={css.notice}>Cargando registros autorizados…</p>}
     {(error||notice)&&<p role={error?'alert':'status'} className={error?css.error:css.notice}>{error||notice}</p>}
     <label className={css.selectPatient}>Paciente del expediente
