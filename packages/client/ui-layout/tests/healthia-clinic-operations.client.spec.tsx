@@ -27,7 +27,7 @@ describe('Native clinic inside PHOENIX (protected Host ownership)',()=>{
       const method=init?.method??'GET'
       const body=init?.body?JSON.parse(String(init.body)) as Record<string,unknown>:undefined
       const headers=init?.headers as Record<string,string>|undefined
-      calls.push({path,method,...body===undefined?{}:{body},csrf:headers?.['x-phoenix-csrf']})
+      calls.push({path,method,...(body===undefined?{}:{body}),...(headers?.['x-phoenix-csrf']===undefined?{}:{csrf:headers['x-phoenix-csrf']})})
       if(path==='session')return answer({actor,csrf:'a'.repeat(48)})
       if(path==='patients'&&method==='GET')return answer({items:createdPatient?[patient]:[]})
       if(path==='patients'&&method==='POST') {createdPatient=true;return answer({record:patient},201)}
