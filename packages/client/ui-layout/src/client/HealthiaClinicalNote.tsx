@@ -113,7 +113,7 @@ export function formatClinicalNote(kind: ClinicalNoteKind, values: Readonly<Clin
         const description = describeVital(field, value)
         return description ? [description] : []
       }
-      return [`${field.label}: ${value}`]
+      return [`${field.label}: ${value.replace(/\r\n|\r|\n/gu, '\n  ')}`]
     })
     if (section.id === 'exam') {
       const bmi = clinicalBmi(values)
