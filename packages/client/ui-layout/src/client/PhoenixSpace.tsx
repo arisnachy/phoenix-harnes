@@ -223,7 +223,7 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
   const changeDeletion=async(deleted:boolean):Promise<void>=>{
     if(!editor)return
     try{
-      const {item}=await api<{item:Item}>('/items/'+editor.item.id,{revision:editor.item.revision,deleted},'PUT')
+      await api<{item:Item}>('/items/'+editor.item.id,{revision:editor.item.revision,deleted},'PUT')
       setEditor(null);setRevisionCounter(n=>n+1);setStatus(deleted?'Movido a Papelera':'Recuperado')
     }catch(e){setError(String(e))}
   }
