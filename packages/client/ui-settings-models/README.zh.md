@@ -60,3 +60,9 @@ Fénix Eclipse 提供两个模型及推理选项：Kira 协调器与子代理。
 Notion（包括使用生成服务器名称的注册表安装）在连接器卡片内准备 OAuth，仅打开提供方同意 URL。如果浏览器阻止该延迟窗口，卡片会保留直接授权链接，不会打开 PHOENIX 等待页面。
 
 2026 年 11 月：编辑、添加和自定义模型使用同一个响应式主题分步弹窗。只有 Host 真正注册 OAuth 的提供方才显示账号登录。Phoenix Local 显示已安装 Ollama 模型，支持显式下载，区分解绑与确认后删除，并从 Host 获取真实运行输入与输出限制。
+
+## OpenAI API / ChatGPT Codex：经过验证的认证路由（2026 年 11 月）
+
+设置 → 模型把 `openai` API 路由和 `openai-codex` ChatGPT 订阅认证路由放在同一个连接方式步骤中。选择 API 会保留单独计费的 OpenAI API 路由和凭据；选择 AUTH 切换编辑器至 `openai-codex`，使用真正注册的 `subagent-codex/account` 登录流程。ChatGPT 账户令牌绝不会被当成 OpenAI API 密钥，保存前还可从 AUTH 切回 API。对话框标题及提供方下拉框明确标注当前路由，不再重复内部标题。
+
+其他提供方依赖真实能力检测，不做 OAuth 猜测：`llm-pi-ai/login.ts` 通过 pi-ai 内置目录公布每个提供方确实支持的登录方法。Anthropic 可以提供 OAuth 和 API 密钥登录；仅支持 API 的 DeepSeek 不显示 OAuth。模型设置只信任 `llm-pi-ai/<provider>` 和原生 `subagent-codex/account` 授权键，禁止同名 GitHub/MCP 连接器冒充模型账号。授权服务加载中或失败时显示真实状态和重试按钮。AUTH 徽标来自已经注册的授权流程或独立的原生 Codex 路由，而非推测。
