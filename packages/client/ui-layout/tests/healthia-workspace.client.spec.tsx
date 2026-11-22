@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { HealthiaWorkspace, HEALTHIA_NAV, type HealthiaRole } from '../src/client/HealthiaWorkspace.tsx'
 
-afterEach(() => cleanup())
+afterEach(() => {cleanup();vi.unstubAllGlobals()})
 
 function ScreenHarness() {
   const [role, setRole] = useState<HealthiaRole>('doctor')
@@ -28,13 +28,16 @@ describe('PHOENIX embedded Healthia', () => {
     expect(screen.getByRole('link', { name: 'Servicio clínico protegido' }).getAttribute('href')).toBe('/health')
   })
 
-  it('opens a native longitudinal clinical note in-place, not in an external browser', () => {
+  it('never opens a real clinical encounter without a verified professional session', () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+      if (input.endsWith('/health/api/session')) return new Response(JSON.stringify({error:'locked'}), {status:401,headers:{'content-type':'application/json'}})
+      if (input.endsWith('/health/api/status')) return new Response(JSON.stringify({initialized:true,enabled:true}), {status:200,headers:{'content-type':'application/json'}})
+      throw Error('Unexpected clinical request')
+    }))
     render(<ScreenHarness />)
     fireEvent.click(screen.getByRole('button', { name: /Preparar consulta/ }))
-    expect(screen.getByRole('region', { name: 'Historia clínica estructurada' })).toBeTruthy()
-    expect(screen.getByRole('combobox', { name: 'Tipo de consulta' })).toBeTruthy()
-    expect(screen.getByText(/Borradores temporales sin guardar/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Guardar consulta' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Historia clínica estructurada' })).toBeNull()
   })
 
   it('does not authorize the patient portal by a visual role switch', () => {
