@@ -237,6 +237,16 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
   const [organizing, setOrganizing] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [orderFailure, setOrderFailure] = useState<string | undefined>(undefined)
+  const editingProviderId = editing?.provider
+
+  // The authorization service and pi-ai flows may initialize after the model
+  // directory. Opening a wizard must refresh capabilities instead of freezing
+  // the empty first registry response for the entire Settings session.
+  useEffect(() => {
+    if (editingProviderId !== undefined && api.authorization !== undefined) {
+      setAuthRefresh(value => value + 1)
+    }
+  }, [editingProviderId, api.authorization])
 
   useEffect(() => {
     if (api.authorization === undefined) {
