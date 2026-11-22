@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   ConversationNode, ConversationSnapshot, RunningToolCall, SessionId, SessionListState,
@@ -15,13 +15,28 @@ import { ChatView } from '../src/client/chat/ChatView.tsx'
 import { buildFlow } from '../src/client/chat/ToolActivityFlow.tsx'
 import { chatSnapshotFixture } from './chat-snapshot-fixture.client.ts'
 
-vi.mock('../src/client/chat/MiniBrowser.tsx', () => ({
-  MiniBrowser: ({ onClose, onPageChange }: {
+vi.mock('../src/client/chat/MiniBrowser.tsx', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/client/chat/MiniBrowser.tsx')>(),
+  MiniBrowser: ({ onClose, onPageChange, onSecureLoginRequest }: {
     onClose: () => void
     onPageChange: (page: { title: string; url: string }) => void
+    onSecureLoginRequest: (target: import('../src/client/chat/MiniBrowser.tsx').SecureLoginTarget) => void
   }) => <section aria-label="Navegador de Kira">
     <button type="button" onClick={() => { onPageChange({ title: 'Página de prueba', url: 'https://example.org/' }) }}>Mostrar página</button>
+    <button type="button" onClick={() => {
+      onPageChange({ title: 'Video de prueba', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' })
+    }}>Mostrar video de prueba</button>
+    <iframe title="Reproductor de prueba" src="about:blank" />
     <button type="button" onClick={onClose}>Cerrar navegador</button>
+    <button type="button" onClick={() => {
+      onSecureLoginRequest({
+        origin: 'https://example.org', tabId: 'test-tab', automatic: false, saved: false, formObserved: true,
+        fields: [
+          { key: 'account', role: 'account', label: 'Usuario del sitio', placeholder: '', inputType: 'text', required: true },
+          { key: 'secret', role: 'secret', label: 'Contraseña del sitio', placeholder: '', inputType: 'password', required: true },
+        ],
+      })
+    }}>Solicitar acceso de prueba</button>
   </section>,
 }))
 
@@ -209,7 +224,7 @@ function renderChat(
     fileMentions: () => undefined,
     t,
   } as unknown as ChatViewSlotProps
-  return render(<ChatView {...props} />)
+  return { ...render(<ChatView {...props} />), source }
 }
 
 function expectBefore(first: HTMLElement, second: HTMLElement): void {
@@ -262,6 +277,42 @@ describe('chat tool activity grouping', () => {
     expect(container.querySelector('[data-browser-workspace]')).toBeNull()
     expect(screen.queryByRole('region', { name: 'Navegador de Kira' })).toBeNull()
     expect(screen.getByTestId('node-assistant-step')).toBeTruthy()
+  })
+
+  it('places the secure Ask in the chat flow outside the temporary browser split', () => {
+    const { container } = renderChat(
+      [user(1, 'Abre una página en Chrome'), nestedChromeTool(), assistantWithReasoning(3)],
+      [runningTool()],
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar página' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Solicitar acceso de prueba' }))
+    const input = screen.getByLabelText('Contraseña del sitio')
+    expect(input.getAttribute('type')).toBe('password')
+    expect(input.closest('[data-chat-flow]')).not.toBeNull()
+    expect(container.querySelector('[data-browser-workspace]')?.contains(input)).toBe(false)
+  })
+
+  it('keeps the video iframe mounted after the browser turn and closes only the temporary split', () => {
+    const browserNodes = [
+      user(1, 'Reproduce este video de YouTube'),
+      nestedChromeTool(),
+      assistantWithReasoning(3),
+    ]
+    const { container, source } = renderChat(browserNodes, [runningTool()])
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar video de prueba' }))
+    const player = screen.getByTitle('Reproductor de prueba')
+    expect(container.querySelector('[data-browser-workspace]')?.contains(player)).toBe(true)
+
+    act(() => { source.set(snapshot(browserNodes)) })
+    expect(container.querySelector('[data-browser-workspace]')).toBeNull()
+    expect(screen.getByTitle('Reproductor de prueba')).toBe(player)
+
+    act(() => { source.set(snapshot([...browserNodes, user(4, 'Gracias')], [runningTool()])) })
+    expect(screen.getByTitle('Reproductor de prueba')).toBe(player)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar navegador' }))
+    expect(screen.queryByTitle('Reproductor de prueba')).toBeNull()
   })
 
   it('collapses consecutive context activity behind one Tools disclosure', () => {
