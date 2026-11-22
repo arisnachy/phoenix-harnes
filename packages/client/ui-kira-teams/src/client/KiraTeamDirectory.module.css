@@ -32,3 +32,10 @@
 .personState[data-active='true']{background:#389b66;box-shadow:0 0 0 3px rgb(56 155 102 / 15%)}
 @keyframes kira-team-enter{from{opacity:.4;transform:translateX(-9px)}to{opacity:1;transform:translateX(0)}}
 @media(prefers-reduced-motion:reduce){.directory{animation:none}}
+
+.editToggle{grid-column:1/-1;width:100%;border:1px solid var(--dsw-alias-border-l2,#e7dbc9);
+ border-radius:9px;background:var(--dsw-alias-bg-base,#fff);color:inherit;padding:9px;
+ font-size:11px;font-weight:700;cursor:pointer}
+.editToggle:hover,.editToggle:focus-visible{background:var(--dsw-alias-interactive-bg-hover,#f0e9df)}
+.editorScroll{flex:0 1 auto;min-height:0;max-height:min(43dvh,440px);overflow-y:auto;overscroll-behavior:contain;
+ display:flex;flex-direction:column;gap:8px;padding:0 1px 8px}
