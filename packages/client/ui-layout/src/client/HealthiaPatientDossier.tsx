@@ -4,7 +4,7 @@
  */
 import { useEffect, useState, type FormEvent } from 'react'
 import { HealthiaClinicalApi } from './HealthiaClinicalApi.ts'
-import type { ClinicalPatient, ClinicalPatientContext, ClinicalChartItem, ClinicalSession } from './HealthiaClinicalApi.ts'
+import type { ClinicalPatient, ClinicalPatientContext, ClinicalChartItem, ClinicalSession, ClinicalIntakeTemplate } from './HealthiaClinicalApi.ts'
 import css from './HealthiaPatientDossier.module.css'
 
 const api = new HealthiaClinicalApi()
@@ -67,10 +67,11 @@ function Records({label,items}:{label:string;items:readonly ClinicalChartItem[]}
   </section>
 }
 export function HealthiaPatientDossier({
-  session, patient, onPatientUpdated,
+  session, patient, onPatientUpdated, intakeTemplate,
 }:{
   session:ClinicalSession
   patient:ClinicalPatient
+  intakeTemplate?:ClinicalIntakeTemplate|null
   onPatientUpdated:(patient:ClinicalPatient)=>void
 }) {
   const allowed=['clinician','psychologist'].includes(session.actor.role)
@@ -174,6 +175,23 @@ export function HealthiaPatientDossier({
           <section className={css.tile}><h4>Problemas documentados</h4><p className={css.paragraph}>{safeValue(chart.medicalHistory?.problems)}</p></section>
           <section className={css.tile}><h4>Última consulta</h4>
             <p className={css.paragraph}>{clinicianContext.encounters.length?recordName(clinicianContext.encounters[0]):'No hay consultas documentadas.'}</p>
+          </section>
+          <section className={css.tile}><h4>Identidad y contacto</h4>
+            <dl className={css.details}>
+              <div><dt>Documento</dt><dd>{chart.documentNumber
+                ?(chart.documentType==='cedula'?'Cédula':chart.documentType==='passport'?'Pasaporte':'Documento')+' · '+chart.documentNumber
+                :'No documentado'}</dd></div>
+              <div><dt>Teléfono</dt><dd>{safeValue(chart.phone)}</dd></div>
+              <div><dt>Correo</dt><dd>{safeValue(chart.email)}</dd></div>
+            </dl>
+          </section>
+          <section className={css.tile}><h4>Admisión y cobertura</h4>
+            {Object.keys(chart.customFields??{}).length
+              ?<dl className={css.details}>{Object.entries(chart.customFields??{}).filter(([,value])=>!!value).map(([key,value])=>
+                <div key={key}><dt>{intakeTemplate?.fields.find(field=>field.id===key)?.label??key.replace(/^custom_/u,'').replaceAll('_',' ')}</dt>
+                  <dd>{value}</dd></div>)}</dl>
+              :<p className={css.paragraph}>Sin datos adicionales de admisión.</p>}
+            <small>Consentimiento de contacto: {chart.emailConsent===true?'Registrado': 'No consta autorización confirmada'}</small>
           </section>
         </div>
         <Records label="Actividad reciente" items={clinicianContext.timeline.slice(0,12)}/>
