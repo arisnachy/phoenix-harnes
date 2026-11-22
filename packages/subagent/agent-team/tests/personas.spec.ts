@@ -103,7 +103,7 @@ describe('KIRA Team social personalities', () => {
 
   it('routes natural Spanish task descriptions to the intended expertise', () => {
     const cases = [
-      ['Investigación clínica con revisión bibliográfica', 'research'],
+      ['Investigación clínica y literatura científica', 'research'],
       ['Investigar evidencia científica publicada', 'research'],
       ['Automatización de los procesos', 'automation'],
       ['Automatizar despliegues repetitivos', 'automation'],
