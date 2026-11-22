@@ -19,7 +19,7 @@ maxStopNudges 是延迟预算，不是质量评分。0 关闭停止纠正；有�
 
 ## 活动分类
 
-guard 只根据工具名称和 JSON 参数在本地分类。原生文件修改工具，例如 write、edit、str_replace_editor，以及常见 create/update/delete/move/upload/deploy 名称，算作修改。Shell、PowerShell 和 Code 调用使用有界命令模式分类：常见 test/build/lint/typecheck 命令算作验证，常见文件系统、包管理和 git 修改命令算作修改。read/search/fetch/screenshot 算作检查。
+guard 只根据工具名称和 JSON 参数在本地分类。write、edit、str_replace_editor 及 create/update/delete/move/upload/deploy/merge/引用变更等操作族均算作修改，包括带命名空间的 GitHub 操作。Shell、PowerShell 和 Code 调用使用有界命令模式分类：仅当同一调用不包含修改时，test/build/lint/typecheck 命令才算验证；文件系统、包管理、git 和 GitHub CLI 修改优先于验证。混合编辑与测试的命令仍保持待验证状态，直到观察到独立成功的验证。read/search/fetch/screenshot 算作检查。
 
 产物领域根据触碰的路径推断为 code、web、docs、data、config 或 generic。code、web 和 config 需要自动化证据；docs、data 和 generic 可以由检查满足。策略刻意保持保守和便宜：它不会为了分类而解析源码树或启动另一个评审模型。
 
