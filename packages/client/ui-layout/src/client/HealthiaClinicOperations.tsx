@@ -409,19 +409,65 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
         </button>}
       </div>
       {creatingPatient&&canManagePatients&&<form className={css.form} onSubmit={event=>{void addPatient(event)}} autoComplete="off">
-        <h3>Registro protegido</h3>
-        <label>Nombre completo<input required maxLength={160} value={name} onChange={e=>setName(e.target.value)}/></label>
-        <label>Fecha de nacimiento<input type="date" required value={birthDate} onChange={e=>setBirthDate(e.target.value)}/></label>
-        <label>Teléfono (opcional)<input maxLength={35} value={phone} onChange={e=>setPhone(e.target.value)}/></label>
-        <label>Correo (opcional)<input type="email" maxLength={254} value={email} onChange={e=>setEmail(e.target.value)}/></label>
-        <button className={css.primary} type="submit" disabled={busy||!name.trim()||!birthDate}>Guardar paciente</button>
-        <p className={css.notice}>La clínica verifica posibles identidades duplicadas; una coincidencia no se resuelve automáticamente.</p>
+        <h3>Registro de paciente · admisión protegida</h3>
+        <p>Identidad, contacto y datos de admisión. El expediente interno se asigna al guardar; documento y teléfono no son su identificador principal.</p>
+        <div className={css.admissionGrid}>
+          <label>Nombre completo<input required maxLength={160} value={name} onChange={e=>{setName(e.target.value);setIdentityMatches(null)}}/></label>
+          <label>Fecha de nacimiento<input type="date" required value={birthDate} max={new Date().toISOString().slice(0,10)}
+            onChange={e=>{setBirthDate(e.target.value);setIdentityMatches(null)}}/></label>
+          <label>Tipo de documento<select value={documentType} onChange={e=>{setDocumentType(e.target.value as typeof documentType);setIdentityMatches(null)}}>
+            <option value="cedula">Cédula dominicana</option><option value="passport">Pasaporte</option><option value="other">Otro documento</option>
+          </select></label>
+          <label>Número de documento (opcional)<input maxLength={32} value={documentNumber}
+            onChange={e=>{setDocumentNumber(e.target.value);setIdentityMatches(null)}}/></label>
+          <label>Teléfono (opcional)<input maxLength={35} type="tel" value={phone}
+            onChange={e=>{setPhone(e.target.value);setIdentityMatches(null)}}/></label>
+          <label>Correo (opcional)<input type="email" maxLength={254} value={email}
+            onChange={e=>{setEmail(e.target.value);setIdentityMatches(null)}}/></label>
+        </div>
+        {intakeTemplate&&<fieldset className={css.admissionFields}><legend>Datos complementarios de admisión</legend>
+          <div className={css.admissionGrid}>{intakeTemplate.fields.map(field=>
+            <label key={field.id}>{field.label}
+              {field.kind==='select'?<select required={field.required} value={customFields[field.id]??''}
+                onChange={e=>setCustomFields(x=>({...x,[field.id]:e.target.value}))}>
+                  <option value="">Sin registrar</option>
+                  {(field.choices??[]).map(choice=><option key={choice} value={choice}>{choice}</option>)}
+                </select>:<input required={field.required} maxLength={250}
+                  type={field.kind==='number'?'number':field.kind==='email'?'email':field.kind==='tel'?'tel':field.kind==='date'?'date':'text'}
+                  value={customFields[field.id]??''}
+                  onChange={e=>setCustomFields(x=>({...x,[field.id]:e.target.value}))}/>}
+            </label>)}</div>
+        </fieldset>}
+        <label>Observaciones de admisión (opcional)<textarea maxLength={4000} value={admissionNotes}
+          onChange={e=>setAdmissionNotes(e.target.value)} placeholder="Información administrativa facilitada y su procedencia"/></label>
+        <div className={css.actionBar}>
+          <button type="button" disabled={busy||!name.trim()||!birthDate}
+            onClick={()=>{void checkPatientIdentity()}}>Comprobar identidad</button>
+        </div>
+        {identityMatches&&<div className={css.identityResults} role="status">
+          {identityMatches.matches.length===0&&identityMatches.restrictedCount===0
+            ?'Sin coincidencias en los registros autorizados.'
+            :'Posibles duplicados: revisa si el paciente ya tiene expediente. No se fusionan automáticamente.'}
+          {identityMatches.matches.map(match=><button key={match.id} type="button"
+            onClick={()=>{setPatientId(match.id);setCreatingPatient(false)}}
+            className={css.candidate}>Abrir existente: {match.name} · {match.dateOfBirth} · {match.reason}</button>)}
+          {identityMatches.restrictedCount>0&&<p>Hay coincidencias restringidas. Solicita revisión de admisión antes de crear una ficha.</p>}
+        </div>}
+        {identityMatches?.matches.some(item=>item.reason!=='document')&&<label className={css.override}>
+          <input type="checkbox" checked={confirmDistinct} onChange={e=>setConfirmDistinct(e.target.checked)}/>
+          He verificado que se trata de una persona diferente
+        </label>}
+        {confirmDistinct&&<label>Justificación de identidad distinta
+          <textarea required minLength={12} maxLength={300} value={distinctReason} onChange={e=>setDistinctReason(e.target.value)}/>
+        </label>}
+        <button className={css.primary} type="submit"
+          disabled={busy||!name.trim()||!birthDate||(confirmDistinct&&distinctReason.trim().length<12)}>Guardar paciente</button>
+        <p className={css.notice}>La clínica realiza nuevamente la detección de duplicados al guardar y registra cualquier excepción justificada.</p>
       </form>}
-      {selectedPatient&&<div className={css.panel}>
-        <h3>{selectedPatient.name}</h3>
-        <p>Nacimiento: {selectedPatient.dateOfBirth}. Registro cifrado · versión {selectedPatient.version}.</p>
-        <p>La historia longitudinal se consulta desde el servicio clínico autorizado, no desde la memoria de Kira.</p>
-      </div>}
+      {selectedPatient&&session&&<HealthiaPatientDossier key={selectedPatient.id}
+        session={session} patient={selectedPatient}
+        onPatientUpdated={updated=>setPatients(previous=>previous.map(p=>p.id===updated.id?updated:p))}/>}
+
     </>}
     {area==='encounters'&&<>
       {!selectedPatient&&<p className={css.notice}>Selecciona un paciente para abrir o recuperar sus consultas.</p>}
