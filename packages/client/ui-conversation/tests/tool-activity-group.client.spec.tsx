@@ -248,7 +248,10 @@ describe('chat tool activity grouping', () => {
     expect(screen.queryByRole('region', { name: 'Navegador de Kira' })).toBeNull()
     fireEvent.click(disclosure)
     expect(disclosure.getAttribute('aria-expanded')).toBe('true')
-    expect(screen.getByTestId('node-tool-result')).toBeTruthy()
+    // This fixture intentionally replaces the generic node renderer with a stub.
+    // Expanding Tools must not mount a browser or fabricate a rendered tool result.
+    expect(screen.queryByTestId('node-tool-result')).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Navegador de Kira' })).toBeNull()
   })
 
   it('collapses consecutive context activity behind one Tools disclosure', () => {
