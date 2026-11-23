@@ -106,6 +106,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
   const [connectionRetry,setConnectionRetry]=useState(0)
   const [name,setName]=useState('')
   const [birthDate,setBirthDate]=useState('')
+  const [sexAtBirth,setSexAtBirth]=useState<''|'female'|'male'|'intersex'|'unknown'>('')
   const [email,setEmail]=useState('')
   const [phone,setPhone]=useState('')
   const [patientSearch,setPatientSearch]=useState('')
@@ -253,6 +254,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
     try {
       const record=await api.createPatient(session,{
         name:name.trim(),dateOfBirth:birthDate,
+        ...(sexAtBirth?{sexAtBirth}:{}),
         ...(phone.trim()?{phone:phone.trim()}:{}),
         ...(email.trim()?{email:email.trim()}:{}),
         ...(documentNumber.trim()?{documentType,documentNumber:documentNumber.trim()}:{}),
@@ -263,7 +265,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
       setPatients(prev=>[record,...prev])
       setPatientId(record.id)
       setEncounterId('')
-      setName('');setBirthDate('');setEmail('');setPhone('')
+      setName('');setBirthDate('');setEmail('');setPhone('');setSexAtBirth('')
       setDocumentNumber('');setAdmissionNotes('');setCustomFields({})
       setIdentityMatches(null);setConfirmDistinct(false);setDistinctReason('')
       setCreatingPatient(false)
@@ -494,6 +496,13 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
           <label>Nombre completo<input required maxLength={160} value={name} onChange={e=>{setName(e.target.value);setIdentityMatches(null)}}/></label>
           <label>Fecha de nacimiento<input type="date" required value={birthDate} max={new Date().toISOString().slice(0,10)}
             onChange={e=>{setBirthDate(e.target.value);setIdentityMatches(null)}}/></label>
+          <label>Sexo registrado al nacer (opcional)
+            <select value={sexAtBirth} onChange={e=>setSexAtBirth(e.target.value as typeof sexAtBirth)}>
+              <option value="">No documentado</option>
+              <option value="female">Femenino</option><option value="male">Masculino</option>
+              <option value="intersex">Intersexual</option><option value="unknown">Desconocido</option>
+            </select>
+          </label>
           <label>Tipo de documento<select value={documentType} onChange={e=>{setDocumentType(e.target.value as typeof documentType);setIdentityMatches(null)}}>
             <option value="cedula">Cédula dominicana</option><option value="passport">Pasaporte</option><option value="other">Otro documento</option>
           </select></label>
