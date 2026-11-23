@@ -713,6 +713,15 @@ export class HealthClinicStore {
    * No model, chat, persistence or external connector is involved. The output
    * may be used only inside the same authenticated /health clinical session.
    */
+  /** Authorize a transient field refinement without reading unrelated patient fields. */
+  assertClinicalEditorModel(actor:Actor,id:string,version:number):void {
+    if(actor.role!=='clinician')fail('Profesional clínico requerido')
+    const target=this.find(actor,'encounters',str(id,'Consulta',80))
+    if(target.data.practitioner!==actor.username||target.data.status!=='draft'
+      ||target.data.confidentialPsychotherapy===true||target.row.version!==version)
+      fail('Consulta no editable, reservada o modificada')
+  }
+
   suggestClinicalNote(actor:Actor,id:string):ClinicalNoteProposal & {readonly encounterId:string;readonly encounterVersion:number;readonly mayUseLocalModel:boolean} {
     if(actor.role!=='clinician'&&actor.role!=='psychologist')
       fail('Profesional clínico requerido')
