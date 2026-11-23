@@ -344,8 +344,13 @@ class RuntimeManager implements LocalModelRuntimeManager {
     if (!await this.dependencies.pathExists(executablePath) || !await this.dependencies.pathExists(modelPath)) {
       throw new LocalModelRuntimeFault('installation-incomplete', 'La instalación de Phoenix Local está incompleta. Vuelve a instalarla desde Settings.')
     }
-    if (this.dependencies.freeMemoryBytes() < model.estimatedRamBytes + MEMORY_HEADROOM_BYTES) {
-      throw new LocalModelRuntimeFault('insufficient-memory', 'No hay memoria libre suficiente para iniciar Phoenix Local de forma segura.')
+    const availableMemory = this.dependencies.freeMemoryBytes()
+    const requiredMemory = model.estimatedRamBytes + MEMORY_HEADROOM_BYTES
+    if (availableMemory < requiredMemory) {
+      const error = new LocalModelRuntimeFault('insufficient-memory',
+        `Memoria libre insuficiente para ${model.displayName} (GGUF): ${(availableMemory / 1e9).toFixed(2)} GB disponibles; ${(requiredMemory / 1e9).toFixed(2)} GB estimados con reserva. Libera memoria o selecciona un modelo Ollama más ligero.`)
+      this.publishError(error)
+      throw error
     }
 
     this.publishPhase('starting')
