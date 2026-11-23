@@ -63,7 +63,7 @@ import { authContextFrom, credentialStoreFrom } from './auth.ts'
 import { catalogProviderIds } from './catalog.ts'
 import { CODEX_PROVIDER, CodexLiveCatalog } from './codex-live-catalog.ts'
 import { codexNativeAccessToken } from './codex-auth.ts'
-import { assertServiceable, CHATGPT_WEB_PROVIDER, chatgptWebDefaults, Config, resolveProfiles } from './config.ts'
+import { assertServiceable, CHATGPT_WEB_PROVIDER, chatgptWebDefaults, Config, DEFAULT_PHOENIX_LOCAL_STREAM_IDLE_TIMEOUT_MS, resolveProfiles } from './config.ts'
 import type { PiAiProviderProfile, ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
 import { installCodexAvatarTransform, installCodexImageGeneration } from './image-generation.ts'
@@ -153,7 +153,7 @@ async function resolvePhoenixLocalModel(
     }
     const metadata = await response.json() as Partial<PhoenixLocalModelMetadata> | null
     if (metadata === null || typeof metadata.selectedModelId !== 'string'
-      || !/^[a-z0-9][a-z0-9.-]*$/u.test(metadata.selectedModelId)
+      || !( /^[a-z0-9][a-z0-9.-]*$/u.test(metadata.selectedModelId) || (metadata.selectedModelId.length <= 167 && /^ollama:[a-zA-Z0-9][a-zA-Z0-9._-]*(?:\/[a-zA-Z0-9][a-zA-Z0-9._-]*)*(?::[a-zA-Z0-9][a-zA-Z0-9._-]*)?$/u.test(metadata.selectedModelId)))
       || typeof metadata.contextWindow !== 'number' || !Number.isSafeInteger(metadata.contextWindow)
       || metadata.contextWindow < 4_096
       || typeof metadata.maxTokens !== 'number' || !Number.isSafeInteger(metadata.maxTokens)
@@ -183,10 +183,9 @@ function phoenixLocalProfile(): PiAiProviderProfile {
     // Ollama's OpenAI-compatible /chat/completions consumes max_tokens.
     // Do not let pi-ai's generic OpenAI compatibility choose a different field.
     compat: { maxTokensField: 'max_tokens', supportsStore: false },
-    // CPU-first Ollama Qwen should fail explicitly, not silently wait for five
-    // minutes and repeat the same stalled 'hola' with another retry.
-    timeoutMs: 90_000,
-    streamIdleTimeoutMs: 90_000,
+    // Allow local model loading and CPU prefill; the proxy retains its own bounded deadline.
+    timeoutMs: 11 * 60_000,
+    streamIdleTimeoutMs: DEFAULT_PHOENIX_LOCAL_STREAM_IDLE_TIMEOUT_MS,
     retryPolicy: { mode: 'normal', maxRetries: 0, retryableCodes: ['TIMEOUT', 'TRANSPORT', 'SERVER'] },
     models: [{
       id: PHOENIX_LOCAL_MODEL,
