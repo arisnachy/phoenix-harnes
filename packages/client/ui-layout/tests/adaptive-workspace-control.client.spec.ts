@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { addAdaptiveField, createAdaptiveAppBlueprint, type AdaptiveFormDraft } from '../src/client/AdaptiveAppCatalog.ts'
 import { appendAdaptiveSection, installAdaptiveApp, readAdaptiveApps } from '../src/client/AdaptiveAppRegistry.ts'
-import { readAdaptiveForm, saveAdaptiveForm } from '../src/client/AdaptiveFormMetadataStore.ts'
+import { readAdaptiveForm, saveAdaptiveForm, restoreAdaptiveFormRevision } from '../src/client/AdaptiveFormMetadataStore.ts'
 import {
   ADAPTIVE_PALETTES, applyAdaptiveFieldEdit, findAdaptiveMetadata, parseAdaptiveControl,
   preflightAdaptiveControl, readAdaptivePalette, saveAdaptivePalette,
@@ -108,4 +108,20 @@ describe('Adaptive workspace safe chat actions', () => {
     expect(() => saveAdaptivePalette(blueprint.id,'url(evil)' as never,memory)).toThrow('ADAPTIVE_THEME_DENIED')
     expect(() => saveAdaptivePalette('healthia','iris',memory)).toThrow('ADAPTIVE_THEME_DENIED')
   })
+})
+
+it('restores one generic form as a new revision without changing another app',()=>{
+  const {memory,blueprint}=seeded()
+  const other=createAdaptiveAppBlueprint('Otro inventario',['Inicio'])
+  installAdaptiveApp(other,memory)
+  const unrelated:AdaptiveFormDraft={version:1,appId:other.id,templateId:'inicio',revision:0,state:'local-draft',fields:[]}
+  saveAdaptiveForm(unrelated,memory)
+  const current=readAdaptiveForm(blueprint.id,'productos',memory)!
+  saveAdaptiveForm({...current,revision:2,fields:current.fields.map(f=>({...f,label:'Nuevo lote'}))},memory)
+  const restored=restoreAdaptiveFormRevision(blueprint.id,'productos',2,memory)
+  expect(restored.revision).toBe(3)
+  expect(restored.fields[0]?.label).toBe('Lote')
+  expect(readAdaptiveForm(other.id,'inicio',memory)).toEqual(unrelated)
+  expect(()=>restoreAdaptiveFormRevision(blueprint.id,'productos',2,memory)).toThrow()
+  expect(parseAdaptiveControl({appId:'healthia',operation:'restore-form',sectionId:'patients',expectedRevision:2})).toBeNull()
 })
