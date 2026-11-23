@@ -10,7 +10,7 @@ import type { ClinicalSession, ClinicalPatient, ClinicalEncounter, ClinicalIntak
 import { HealthiaPatientDossier } from './HealthiaPatientDossier.tsx'
 import { HealthiaClinicalNote, formatClinicalNoteParts, NOTE_KINDS } from './HealthiaClinicalNote.tsx'
 import type { ClinicalNoteValues, ClinicalNoteKind } from './HealthiaClinicalNote.tsx'
-import type { ClinicalEditorStep, ClinicalEditorViewState } from './HealthiaEditorSupport.ts'
+import type { ClinicalEditorRequest, ClinicalEditorViewState } from './HealthiaEditorSupport.ts'
 import { printProtectedClinicalDocument } from './HealthiaClinicalPrint.ts'
 import css from './HealthiaClinicOperations.module.css'
 
@@ -88,7 +88,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
   accessOnly=false, onSessionReady, requestedStep, onEditorState }: {
   area:Area
   /** Reuse exactly the professional login/setup flow without rendering patient records. */
-  requestedStep?:{step:ClinicalEditorStep;sequence:number}|undefined
+  requestedStep?:ClinicalEditorRequest|undefined
   onEditorState?:((state:ClinicalEditorViewState|null)=>void)|undefined
   accessOnly?:boolean
   onSessionReady?:()=>void
