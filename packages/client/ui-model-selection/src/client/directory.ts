@@ -28,6 +28,8 @@ export interface ModelDirectoryState {
    * from the groups yet perfectly usable.
    */
   routable: boolean | null
+  /** Latest Host-owned local Ollama catalog and thinking controls. */
+  localModel: PhoenixLocalInstallState | null
   /** Successfully loaded provider groups (last good load). */
   groups: readonly ModelProviderGroup[]
   /** Provider-local failures from the last load; usable groups stay usable. */
@@ -42,7 +44,7 @@ export interface ModelDirectoryState {
 export class ModelDirectory {
   /** The shared snapshot both entries render from (uSES-safe store). */
   readonly store: SnapshotStore<ModelDirectoryState> = createSnapshotStore<ModelDirectoryState>({
-    current: null, routable: null, groups: [], failures: [], status: 'idle', error: null,
+    current: null, routable: null, localModel: null, groups: [], failures: [], status: 'idle', error: null,
   })
 
   /** Latest operation wins; an older response never overwrites a newer one. */
@@ -60,6 +62,9 @@ export class ModelDirectory {
     private readonly sessionId: SessionId,
     private readonly available: () => boolean,
     private readonly readLocalModelState?: () => Promise<PhoenixLocalInstallState | undefined>,
+    private readonly setDefaultLocalModel?: (modelId: string) => Promise<PhoenixLocalInstallState>,
+    private readonly connectInstalledLocalModel?: (modelId: string) => Promise<PhoenixLocalInstallState>,
+    private readonly setLocalModelThinking?: (thinking: boolean | string | null) => Promise<PhoenixLocalInstallState>,
   ) {}
 
   /**
@@ -91,6 +96,7 @@ export class ModelDirectory {
       s.current = current
       s.routable = routable
       s.groups = groups
+      s.localModel = localState ?? null
       s.failures = failures
       s.status = 'ready'
       s.error = null
@@ -147,6 +153,65 @@ export class ModelDirectory {
   }
 
   /**
+   * Select an actual locally installed model, keeping the Host's stable
+   * phoenix-local/phoenix-local transport route. Models present in Ollama are
+   * connected without downloading; never pull an unknown tag implicitly.
+   */
+  async selectLocalModel(modelId: string): Promise<void> {
+    this.assertAvailable()
+    const generation = ++this.generation
+    this.store.update(s => { s.status = 'selecting'; s.error = null })
+    try {
+      const local = await this.safeLocalModelState()
+      const installedInPhoenix = local?.installedModelIds.includes(modelId) === true
+      const installedInOllama = local?.ollamaInstalledModelIds?.includes(modelId) === true
+      if (local?.mode === 'off') throw new Error('Phoenix Local está apagado. Actívalo en Configuración → Modelos.')
+      if (!installedInPhoenix && !installedInOllama) {
+        throw new Error('Este modelo no aparece instalado en Ollama.')
+      }
+      const apply = installedInPhoenix ? this.setDefaultLocalModel : this.connectInstalledLocalModel
+      if (apply === undefined) throw new Error('El control de modelos locales no está disponible.')
+      const selectedLocal = await apply(modelId)
+      // Route IDs must remain stable; an Ollama tag is NOT a pi-ai model ID.
+      const { result } = await this.sessions.selectModel({
+        sessionId: this.sessionId, provider: 'phoenix-local', model: 'phoenix-local',
+      })
+      if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
+      if (this.disposed || generation !== this.generation) return
+      this.store.update(s => {
+        s.localModel = selectedLocal
+        s.current = result.value.selected
+        s.routable = true
+        s.status = 'ready'
+        s.error = null
+      })
+    } catch (error) {
+      if (!this.disposed && generation === this.generation) {
+        this.store.update(s => { s.status = 'error'; s.error = error instanceof Error ? error.message : String(error) })
+      }
+      throw error
+    }
+  }
+
+  /** Persist a verified Ollama thinking setting via the owning Host, not pi-ai. */
+  async changeLocalThinking(thinking: boolean | string | null): Promise<void> {
+    this.assertAvailable()
+    const generation = ++this.generation
+    this.store.update(s => { s.status = 'selecting'; s.error = null })
+    try {
+      if (this.setLocalModelThinking === undefined) throw new Error('El control de razonamiento local no está disponible.')
+      const selected = await this.setLocalModelThinking(thinking)
+      if (this.disposed || generation !== this.generation) return
+      this.store.update(s => { s.localModel = selected; s.status = 'ready'; s.error = null })
+    } catch (error) {
+      if (!this.disposed && generation === this.generation) {
+        this.store.update(s => { s.status = 'error'; s.error = error instanceof Error ? error.message : String(error) })
+      }
+      throw error
+    }
+  }
+
+  /**
    * Drop the previous Host generation's projection and repull it. Clearing
    * first prevents an unconsumed process-local selection from being displayed
    * while the restarted Host has restored the last logged model selection.
@@ -158,6 +223,7 @@ export class ModelDirectory {
       s.current = null
       s.routable = null
       s.groups = []
+      s.localModel = null
       s.failures = []
       s.status = 'idle'
       s.error = null
