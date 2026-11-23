@@ -42,8 +42,18 @@ export function HealthiaClinicDashboard({onNavigate,onPatientChange}:{
       v.toLocaleLowerCase('es').includes(search.trim().toLocaleLowerCase('es'))))
     :patients.slice(0,8)
   const pick=(id:string)=>{onPatientChange(id);onNavigate('patients')}
-  if(loading)return <p role="status" className={css.empty}>Abriendo la actividad clínica autorizada…</p>
-  if(error)return <div role="alert" className={css.empty}>{error} · Puede iniciar sesión desde Pacientes o Consultas.</div>
+  if(loading||error)return <section className={css.root} aria-label="Inicio clínico">
+    <header className={css.top}><div><h3>¿Qué necesitas hacer hoy?</h3>
+      <p>{loading?'Cargando la actividad autorizada…':'Inicia sesión para acceder a los registros clínicos.'}</p></div>
+      <button className={css.primary} type="button" onClick={()=>onNavigate('encounters')}>+ Nueva consulta</button>
+    </header>
+    <p className={css.empty} role={error?'alert':'status'}>
+      {error||'Recuperando pacientes y citas desde el servicio protegido…'}
+    </p>
+    {error&&<button className={css.primary} type="button" onClick={()=>onNavigate('patients')}>
+      Abrir registro de pacientes
+    </button>}
+  </section>
   return <section className={css.root} aria-label="Inicio clínico">
     <header className={css.top}><div><h3>¿Qué necesitas hacer hoy?</h3><p>Actividad clínica desde el repositorio protegido</p></div>
       <button className={css.primary} type="button" onClick={()=>onNavigate('encounters')}>+ Nueva consulta</button>
