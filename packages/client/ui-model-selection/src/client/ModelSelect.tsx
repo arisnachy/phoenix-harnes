@@ -134,7 +134,7 @@ export function ModelSelect(
   const normalizedQuery = modelQuery.trim().toLocaleLowerCase()
   const installedLocalModels = useMemo(() => {
     const snapshot = state.localModel
-    if (snapshot === null) return []
+    if (snapshot == null) return []
     const installed = new Set([...snapshot.installedModelIds, ...(snapshot.ollamaInstalledModelIds ?? [])])
     return (snapshot.catalog ?? []).filter(model => installed.has(model.id))
   }, [state.localModel])
