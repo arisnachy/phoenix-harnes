@@ -117,12 +117,13 @@ export function AdaptiveWorkspaceProposal({spec}:{spec:AdaptiveWorkspaceProposal
   const [status,setStatus] = useState<'idle'|'checking'|'ready'|'rejected'|'applying'|'done'|'failed'>('idle')
   const [note,setNote] = useState('')
   const request = useRef<string | null>(null)
+  const binding=useRef<string|undefined>(undefined)
   useEffect(() => {
     const onResult = (event:Event):void => {
-      const value = (event as CustomEvent<{requestId?:string;phase?:string;ok?:boolean;reason?:string}>).detail
+      const value = (event as CustomEvent<{requestId?:string;phase?:string;ok?:boolean;reason?:string;binding?:string}>).detail
       if (request.current === null || value?.requestId !== request.current) return
       setNote(value.reason ?? '')
-      if (value.phase === 'preflight') setStatus(value.ok ? 'ready' : 'rejected')
+      if (value.phase === 'preflight') {binding.current=value.ok?value.binding:undefined;setStatus(value.ok ? 'ready' : 'rejected')}
       else if (value.phase === 'apply') setStatus(value.ok ? 'done' : 'failed')
       request.current = null
     }
@@ -135,7 +136,7 @@ export function AdaptiveWorkspaceProposal({spec}:{spec:AdaptiveWorkspaceProposal
     request.current = requestId
     setStatus(phase === 'preflight' ? 'checking' : 'applying')
     window.dispatchEvent(new CustomEvent('phoenix:adaptive-control-request',{
-      detail:{requestId,phase,command:spec.props},
+      detail:{requestId,phase,command:spec.props,...(phase==='apply'&&binding.current?{binding:binding.current}:{})},
     }))
   }
   return <section className={css.card} aria-label="Control adaptativo de PHOENIX">
