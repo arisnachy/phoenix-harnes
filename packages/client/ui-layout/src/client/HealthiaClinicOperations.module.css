@@ -91,3 +91,23 @@
 .patientResult,.patientResultActive{min-height:69px;}
 .emptyState{padding:20px 16px;margin:0;border:1px dashed var(--dsw-alias-border-l2);border-radius:13px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.5;}
 @media(max-width:680px){.directoryHeader .primary{width:100%;}.settingsPanel{right:-5px;}.patientFocus{align-items:flex-start;}}
+
+
+/* Guided interview and explicit clinical lifecycle, without replacing native chart form. */
+.interviewCard,.reviewCard{display:grid;gap:11px;padding:14px;border:1px solid var(--dsw-alias-border-l2);border-radius:13px;background:var(--dsw-alias-bg-layer-1)}
+.interviewHeader{display:grid;gap:4px}.interviewHeader strong,.reviewCard strong{font-size:14px}
+.interviewHeader small{font-size:11px;color:var(--dsw-alias-label-secondary)}
+.interviewQuestion,.interviewQuestionActive{padding:11px 12px;text-align:left;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;background:var(--dsw-alias-bg-layer-1);color:inherit;font:inherit;font-size:12px;line-height:1.4;cursor:pointer}
+.interviewQuestionActive{border-color:var(--dsw-specific-phoenix-accent);background:var(--dsw-alias-interactive-bg-hover)}
+.interviewQuestion:hover,.interviewQuestion:focus-visible{background:var(--dsw-alias-interactive-bg-hover)}
+.interviewAnswer{display:grid;gap:9px}.interviewAnswer label{display:grid;gap:5px;font-size:12px}.interviewAnswer textarea{padding:10px 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;color:inherit;background:var(--dsw-alias-bg-layer-1);font:inherit;resize:vertical;min-height:70px}
+.interviewAnswered{display:grid;gap:4px;padding:10px 12px;background:var(--dsw-alias-interactive-bg-hover);border-radius:11px}
+.interviewAnswered strong{font-size:12px}.interviewAnswered p{margin:0;font-size:12px;overflow-wrap:anywhere;white-space:pre-wrap}
+.interviewCard>button:last-child{justify-self:start;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;padding:9px 12px;color:inherit;background:var(--dsw-alias-bg-layer-1);cursor:pointer;font:inherit;font-size:12px}
+.reviewCard p{font-size:12px;line-height:1.55;color:var(--dsw-alias-label-secondary);margin:0}
+.signCheck{display:flex;align-items:start;gap:9px;font-size:12px;line-height:1.4}.signCheck input{accent-color:var(--dsw-specific-phoenix-accent)}
+.reviewCard button{justify-self:start}
+
+.printAction{justify-self:start;cursor:pointer;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;padding:9px 12px;background:var(--dsw-alias-bg-layer-1);color:inherit;font:inherit;font-size:12px}
+.printAction:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.printAction:focus-visible{outline:2px solid var(--dsw-specific-phoenix-accent);outline-offset:2px}

@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import {
-  HealthiaClinicalNote, clinicalBmi, formatClinicalNote,
+  HealthiaClinicalNote, clinicalBmi, formatClinicalNote, formatClinicalNoteParts,
   CLINICAL_NOTE_SECTIONS, fieldsForKind,
 } from '../src/client/HealthiaClinicalNote.tsx'
 
@@ -41,6 +41,28 @@ describe('Healthia clinical note from the supplied legacy intake concepts', () =
     expect(clinicalBmi({ weight: '0', height: '175' })).toBeUndefined()
     expect(clinicalBmi({ weight: '75', height: 'abc' })).toBeUndefined()
     expect(formatClinicalNote('first', { weight: '75', height: '175' })).toContain('IMC calculado: 24.5 kg/m²')
+  })
+
+  it('splits a complete clinical encounter without losing free text, diagnoses or advice',()=>{
+    const long='Enfermedad actual documentada: '+('A'.repeat(5000))
+    const sections=formatClinicalNoteParts('first',{
+      chief:'Dolor abdominal documentado',hea:long,
+      sys:'120',dia:'80',physical:'Exploración física registrada',
+      assessment:'Impresión provisional, sujeta a confirmación',
+      icd10:'Código por verificar',
+      tests:'Estudio a considerar',
+      imaging:'Ecografía considerada',
+      healthEducation:'Recomendaciones individualizadas',
+      followup:'Reevaluación programada',
+    })
+    expect(sections.history).toContain(long)
+    expect(sections.history).not.toContain('Exploración física registrada')
+    expect(sections.exam).toContain('Exploración física registrada')
+    expect(sections.assessment).toContain('Código por verificar')
+    expect(sections.plan).toContain('Ecografía considerada')
+    expect(sections.plan).toContain('Recomendaciones individualizadas')
+    expect(sections.plan).toContain('Reevaluación programada')
+    expect(formatClinicalNote('first',{chief:'Prueba'})).toContain('BORRADOR SIN FIRMAR')
   })
 
   it('offers structured editable forms, a review-only preview and an explicit discard action', () => {

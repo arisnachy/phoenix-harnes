@@ -13,6 +13,8 @@ export type ClinicalPatient = {
   readonly id: string; readonly version: number; readonly name: string
   readonly dateOfBirth: string; readonly phone?: string; readonly email?: string
   readonly documentType?: 'cedula'|'passport'|'other'; readonly documentNumber?: string
+  readonly sexAtBirth?:'female'|'male'|'intersex'|'unknown'|null
+  readonly genderIdentity?:string
   readonly customFields?: Readonly<Record<string,string>>
   readonly medicalHistory?: Readonly<Record<string,string>>
   readonly medicalHistoryReview?: {readonly reviewedAt?:string;readonly reviewedBy?:string}
@@ -57,6 +59,7 @@ export type ClinicalEncounter = {
   readonly history: string; readonly exam: string; readonly assessment: string
   readonly plan: string; readonly status: 'draft'|'reviewed'|'signed'
   readonly signedBy?: string|null; readonly signedAt?: string|null
+  readonly interviewAnswers?:Readonly<Record<string,string>>
 }
 export type ClinicalStatus = {readonly initialized:boolean;readonly enabled:boolean}
 export type ClinicalBranding = {readonly logoDataUrl:string|null}
@@ -108,6 +111,43 @@ function encounterOf(item: unknown): item is ClinicalEncounter {
     && typeof x.history==='string'&&typeof x.exam==='string'
     &&typeof x.assessment==='string'&&typeof x.plan==='string'
     &&['draft','reviewed','signed'].includes(String(x.status))
+}
+
+
+/** Typed projections of real, encrypted /health resources. These are not browser drafts. */
+export type ClinicResourceKind = 'appointments'|'orders'|'prescriptions'|'invoices'|'followups'|'observations'
+export type ClinicResource = { readonly id:string;readonly version:number;readonly patientId?:string;readonly status?:string;
+  readonly createdAt?:string;readonly [key:string]:unknown }
+export type ClinicStaff = {readonly username:string;readonly role:string;readonly org:string}
+export type ClinicAssignment = {readonly patientId:string;readonly staffId:string;readonly purpose:string;
+  readonly grantedBy:string;readonly grantedAt:string}
+export type ClinicalInterviewQuestion = {readonly key:string;readonly question:string}
+export type PatientIntakeSubmission={
+  readonly id:string;readonly version:number;readonly patientId:string;
+  readonly createdAt:string;readonly status:'pending-review'|'reviewed';
+  readonly submittedAt:string;readonly source:'patient-portal';
+  readonly answers:Readonly<Record<string,string>>;
+  readonly reviewedBy?:string;readonly reviewedAt?:string;
+}
+function patientIntakeOf(value:unknown):value is PatientIntakeSubmission {
+  if(!value||typeof value!=='object'||Array.isArray(value))return false
+  const row=value as Record<string,unknown>,answers=row.answers
+  return typeof row.id==='string'&&UUID.test(row.id)&&typeof row.patientId==='string'&&UUID.test(row.patientId)
+    &&Number.isSafeInteger(row.version)&&['pending-review','reviewed'].includes(String(row.status))
+    &&typeof row.createdAt==='string'&&answers!==null&&typeof answers==='object'&&!Array.isArray(answers)
+    &&Object.values(answers as Record<string,unknown>).every(v=>typeof v==='string')
+}
+export type ClinicalInterviewGuide = {readonly pathway:string;readonly nextQuestions:readonly ClinicalInterviewQuestion[];
+  readonly guidance:string;readonly requiresClinicianAssessment:true}
+function clinicResourceOf(value:unknown):value is ClinicResource {
+  if(!value||typeof value!=='object'||Array.isArray(value))return false
+  const item=value as Record<string,unknown>
+  return typeof item.id==='string'&&UUID.test(item.id)&&Number.isSafeInteger(item.version)&&(item.version as number)>0
+}
+function clinicStaffOf(value:unknown):value is ClinicStaff {
+  if(!value||typeof value!=='object'||Array.isArray(value))return false
+  const item=value as Record<string,unknown>
+  return typeof item.username==='string'&&typeof item.role==='string'&&typeof item.org==='string'
 }
 
 export class HealthiaClinicalApi {
@@ -185,6 +225,7 @@ export class HealthiaClinicalApi {
   }
   async createPatient(session:ClinicalSession,input:{
     name:string;dateOfBirth:string;phone?:string;email?:string;
+    sexAtBirth?:'female'|'male'|'intersex'|'unknown';
     documentType?:string;documentNumber?:string;customFields?:Readonly<Record<string,string>>;
     notes?:string;confirmDistinct?:boolean;distinctReason?:string;
   }):Promise<ClinicalPatient> {
@@ -234,6 +275,19 @@ export class HealthiaClinicalApi {
     if(!patientOf(record.record)||(record.record as ClinicalPatient).id!==patient.id)
       throw Error('La confirmación no corresponde al expediente solicitado')
     return record.record as ClinicalPatient
+  }
+  async updatePatientIdentityContext(session:ClinicalSession,patient:ClinicalPatient,input:{
+    sexAtBirth?:'female'|'male'|'intersex'|'unknown';genderIdentity:string
+  }):Promise<ClinicalPatient> {
+    if(!UUID.test(patient.id)||!Number.isSafeInteger(patient.version)||patient.version<1)
+      throw Error('Paciente o versión inválida')
+    if(input.genderIdentity.length>160)throw Error('Identidad referida demasiado extensa')
+    const response=object(await this.request('patients/'+patient.id,'PATCH',session,{
+      version:patient.version,action:'identity-context',...input,
+    }))
+    if(!patientOf(response.record)||(response.record as ClinicalPatient).id!==patient.id)
+      throw Error('No coincide la confirmación del expediente')
+    return response.record as ClinicalPatient
   }
   /** A verified negative allergy review is never inferred from empty fields. */
   async reviewPatientAllergies(session:ClinicalSession,patient:ClinicalPatient,
@@ -291,13 +345,135 @@ export class HealthiaClinicalApi {
   }):Promise<ClinicalEncounter> {
     if(!UUID.test(encounter.id)||!Number.isSafeInteger(encounter.version)
       ||encounter.status==='signed')throw Error('Consulta firmada o versión inválida')
-    if(!values.history.trim()||values.history.length>4000||Object.values(values).some(value=>value.length>4000))
-      throw Error('La nota supera el límite o no contiene historia clínica.')
+    if(!values.history.trim()||values.history.length>16000||
+      values.exam.length>8000||values.assessment.length>8000||values.plan.length>8000)
+      throw Error('La nota supera el límite de cada sección o no contiene historia clínica.')
     const v=object(await this.request('encounters/'+encounter.id,'PATCH',session,{
       version:encounter.version,action:'document',...values
     }))
     if(!encounterOf(v.record)||v.record.id!==encounter.id||v.record.patientId!==encounter.patientId)
       throw Error('Confirmación de consulta no coincide con el paciente')
     return v.record
+  }
+  /** Role-filtered resources from the encrypted Host; authorization remains server-owned. */
+  async listClinicResources(session:ClinicalSession,kind:ClinicResourceKind):Promise<readonly ClinicResource[]> {
+    return listOf(await this.request(kind,'GET',session),clinicResourceOf)
+  }
+  async createClinicResource(session:ClinicalSession,kind:ClinicResourceKind,
+    input:Readonly<Record<string,unknown>>):Promise<ClinicResource> {
+    const data=object(await this.request(kind,'POST',session,{...input}))
+    if(!clinicResourceOf(data.record))throw Error('Confirmación del registro clínico inválida')
+    if(typeof input.patientId==='string'&&data.record.patientId!==input.patientId)
+      throw Error('El registro se vinculó a un paciente diferente')
+    return data.record
+  }
+  async updateClinicResource(session:ClinicalSession,kind:ClinicResourceKind,
+    current:ClinicResource,changes:Readonly<Record<string,unknown>>):Promise<ClinicResource> {
+    if(!clinicResourceOf(current))throw Error('Identificador o versión inválidos')
+    const data=object(await this.request(kind+'/'+current.id,'PATCH',session,{
+      ...changes,version:current.version,
+    }))
+    if(!clinicResourceOf(data.record)||data.record.id!==current.id
+      ||(current.patientId!==undefined&&data.record.patientId!==current.patientId))
+      throw Error('Versión clínica o paciente incompatible')
+    return data.record
+  }
+  async reviewEncounter(session:ClinicalSession,current:ClinicalEncounter):Promise<ClinicalEncounter> {
+    if(current.status!=='draft')throw Error('La consulta no está en borrador')
+    const data=object(await this.request('encounters/'+current.id,'PATCH',session,{
+      version:current.version,action:'review',
+    }))
+    if(!encounterOf(data.record)||data.record.id!==current.id||data.record.patientId!==current.patientId
+      ||data.record.status!=='reviewed')throw Error('Revisión clínica no confirmada')
+    return data.record
+  }
+  async signEncounter(session:ClinicalSession,current:ClinicalEncounter):Promise<ClinicalEncounter> {
+    if(current.status!=='reviewed')throw Error('Primero revise la versión de la consulta')
+    const data=object(await this.request('encounters/'+current.id,'PATCH',session,{
+      version:current.version,action:'sign',
+    }))
+    if(!encounterOf(data.record)||data.record.id!==current.id||data.record.patientId!==current.patientId
+      ||data.record.status!=='signed')throw Error('Firma profesional no confirmada')
+    return data.record
+  }
+  async interviewGuide(session:ClinicalSession,encounterId:string):Promise<ClinicalInterviewGuide> {
+    if(!UUID.test(encounterId))throw Error('Consulta inválida')
+    const response=object(await this.request('interview/'+encounterId,'GET',session))
+    const guide=object(response.guide)
+    if(!Array.isArray(guide.nextQuestions)||guide.nextQuestions.length>4||
+      !guide.nextQuestions.every(q=>q&&typeof q==='object'&&typeof q.key==='string'
+        &&/^[a-z_]{1,40}$/u.test(q.key)&&typeof q.question==='string'))
+      throw Error('Guía de entrevista no verificable')
+    return guide as unknown as ClinicalInterviewGuide
+  }
+  async answerInterview(session:ClinicalSession,current:ClinicalEncounter,
+    key:string,answer:string):Promise<ClinicalEncounter> {
+    if(!/^[a-z_]{1,40}$/u.test(key)||!answer.trim()||answer.length>1600)
+      throw Error('Respuesta de entrevista inválida')
+    const response=object(await this.request('encounters/'+current.id,'PATCH',session,{
+      version:current.version,action:'answer',field:key,answer:answer.trim(),
+    }))
+    if(!encounterOf(response.record)||response.record.id!==current.id||
+      response.record.patientId!==current.patientId)
+      throw Error('La respuesta no quedó registrada en la consulta')
+    return response.record
+  }
+  async patientIntakes(session:ClinicalSession,patientId:string):Promise<readonly PatientIntakeSubmission[]> {
+    if(!UUID.test(patientId))throw Error('Paciente inválido')
+    const result=listOf(await this.request('patient-intakes/'+patientId,'GET',session),patientIntakeOf)
+    if(result.some(item=>item.patientId!==patientId))throw Error('Se recibió una preconsulta de otro paciente')
+    return result
+  }
+  async reviewPatientIntake(session:ClinicalSession,current:PatientIntakeSubmission):Promise<PatientIntakeSubmission> {
+    if(!patientIntakeOf(current)||current.status!=='pending-review')
+      throw Error('Preconsulta inexistente o ya revisada')
+    const response=object(await this.request('patient-intake-review/'+current.id,'PATCH',session,{
+      action:'review',version:current.version,
+    }))
+    if(!patientIntakeOf(response.record)||response.record.id!==current.id
+      ||response.record.patientId!==current.patientId||response.record.status!=='reviewed')
+      throw Error('No se confirmó la revisión de la preconsulta')
+    return response.record
+  }
+  async clinicStaff(session:ClinicalSession):Promise<readonly ClinicStaff[]> {
+    return listOf(await this.request('staff','GET',session),clinicStaffOf)
+  }
+  async createClinicStaff(session:ClinicalSession,values:{
+    username:string;password:string;role:string
+  }):Promise<void> {
+    await this.request('staff','POST',session,values)
+  }
+  async clinicPatientOptions(session:ClinicalSession):Promise<readonly {id:string;name:string}[]> {
+    const response=object(await this.request('patient-options','GET',session))
+    const items=response.items
+    if(!Array.isArray(items)||items.length>500||!items.every(v=>v&&typeof v==='object'
+      &&typeof v.id==='string'&&UUID.test(v.id)&&typeof v.name==='string'))
+      throw Error('Directorio administrativo inválido')
+    return items as {id:string;name:string}[]
+  }
+  async clinicAssignments(session:ClinicalSession):Promise<readonly ClinicAssignment[]> {
+    const response=object(await this.request('assignments','GET',session))
+    const rows=response.items
+    if(!Array.isArray(rows)||rows.length>500||!rows.every(v=>v&&typeof v==='object'
+      &&typeof v.patientId==='string'&&UUID.test(v.patientId)
+      &&typeof v.staffId==='string'&&typeof v.purpose==='string'))
+      throw Error('Asignaciones clínicas inválidas')
+    return rows as ClinicAssignment[]
+  }
+  async setClinicAssignment(session:ClinicalSession,values:{
+    patientId:string;staffId:string;action:'grant'|'revoke';purpose?:string
+  }):Promise<void> {
+    if(!UUID.test(values.patientId)||!values.staffId.trim())throw Error('Asignación inválida')
+    await this.request('assignments','POST',session,values)
+  }
+  async draftEncounterFromInterview(session:ClinicalSession,current:ClinicalEncounter):Promise<ClinicalEncounter> {
+    if(current.status==='signed'||current.history.trim())throw Error('La historia existente no debe sobrescribirse')
+    const response=object(await this.request('encounters/'+current.id,'PATCH',session,{
+      version:current.version,action:'draft-from-interview',
+    }))
+    if(!encounterOf(response.record)||response.record.id!==current.id||
+      response.record.patientId!==current.patientId)
+      throw Error('La nota no quedó registrada en el expediente')
+    return response.record
   }
 }

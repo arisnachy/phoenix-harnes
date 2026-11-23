@@ -63,6 +63,45 @@ test('real SQLite encrypted record persists across restart and plaintext is abse
   assert.equal(f.db.list(restored.actor,'patients')[0].name,'NombreReservadoUnicoFicticioXYZ')
   f.db.close()
 })
+test('clinical notes and patient context round-trip without silent truncation',t=>{
+  const {db,admin}=fixture(t)
+  db.createStaff(admin.actor,{username:'doctor1',password:'abcdef123',role:'clinician'})
+  const doctor=db.login('doctor1','abcdef123').actor
+  const patient=db.create(admin.actor,'patients',{
+    name:'Paciente de laboratorio sintético',dateOfBirth:'1985-01-03',sexAtBirth:'female',
+  })
+  assert.equal(patient.sexAtBirth,'female')
+  db.assignPatient(admin.actor,patient.id,'doctor1','Estudio longitudinal y verificación')
+  const changed=db.update(doctor,'patients',patient.id,patient.version,{
+    action:'identity-context',sexAtBirth:'male',genderIdentity:'Identidad referida de prueba',
+  })
+  assert.equal(changed.sexAtBirth,'male')
+  assert.equal(changed.genderIdentity,'Identidad referida de prueba')
+  assert.throws(()=>db.update(doctor,'patients',patient.id,patient.version,{
+    action:'identity-context',sexAtBirth:'female',
+  }),/Conflicto/)
+  let encounter=db.create(doctor,'encounters',{
+    patientId:patient.id,specialty:'Medicina familiar',complaint:'Seguimiento sintético',
+  })
+  const source='Historia clínica documentada sin pérdida. '+('ABCDE'.repeat(1700))
+  const exam='Observaciones de exploración. '+('X'.repeat(6000))
+  const assessment='Impresión documentada. '+('D'.repeat(6000))
+  const plan='Seguimiento documentado. '+('S'.repeat(6000))
+  encounter=db.update(doctor,'encounters',encounter.id,encounter.version,{
+    action:'document',history:source,exam,assessment,plan,
+  })
+  assert.equal(encounter.history,source)
+  assert.equal(encounter.exam,exam)
+  assert.equal(encounter.assessment,assessment)
+  assert.equal(encounter.plan,plan)
+  assert.throws(()=>db.update(doctor,'encounters',encounter.id,encounter.version,{
+    action:'document',history:'H'.repeat(16001),
+  }),/Historia|inválido/)
+  const current=db.list(doctor,'encounters').find(x=>x.id===encounter.id)
+  assert.equal(current.history,source)
+  assert.equal(current.exam,exam)
+})
+
 test('staff permissions isolate clinical operations and require signed encounters',t=>{
   const {db,admin}=fixture(t)
   db.createStaff(admin.actor,{username:'doctor1',password:'another-secure-password-2026',role:'clinician'})

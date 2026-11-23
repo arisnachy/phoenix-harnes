@@ -50,6 +50,55 @@ test('patient invitation is scoped, short-lived and single-use, with independent
   store.logoutPatientPortal(session.cookie)
   assert.throws(()=>store.patientPortalFeed(session.cookie),/caducada/)
 })
+test('patient preconsultation stays encrypted, isolated and unverified until clinician review',t=>{
+  const {store,root,admin,doctor,other,patient}=fixture(t)
+  const invitation=store.issuePatientPortalInvite(doctor,patient.id)
+  const account=store.redeemPatientPortalInvite(invitation.invite,PATIENT_PASSWORD)
+  const portal=store.loginPatientPortal(account.accountId,PATIENT_PASSWORD)
+  assert.throws(()=>store.patientPortalSubmitIntake(portal.cookie,'incorrect',{
+    complaint:'Dolor ficticio, confidencial',
+  }),/CSRF/)
+  assert.throws(()=>store.patientPortalSubmitIntake(portal.cookie,portal.csrf,{
+    complaint:'Dolor ficticio',unknownField:'foreign',
+  }),/no permitido/)
+  const saved=store.patientPortalSubmitIntake(portal.cookie,portal.csrf,{
+    complaint:'SíntomaPrivadoNoPublicar24680',
+    timeline:'Comenzó recientemente y evolucionó',
+    allergies:'Alergia referida por paciente',
+    medications:'Tratamiento informado, no conciliado',
+    questions:'Dudas para el profesional',
+  })
+  assert.equal(saved.status,'pending-review')
+  const patientFeed=store.patientPortalIntakes(portal.cookie)
+  assert.equal(patientFeed.length,1)
+  assert.equal(patientFeed[0].id,saved.id)
+  assert.equal(patientFeed[0].status,'pending-review')
+  assert(!JSON.stringify(patientFeed).includes('Alergia referida por paciente'))
+  assert.throws(()=>store.patientIntakes(other,patient.id),/asignado/)
+  const professional=store.patientIntakes(doctor,patient.id)
+  assert.equal(professional.length,1)
+  assert.equal(professional[0].answers.complaint,'SíntomaPrivadoNoPublicar24680')
+  assert.equal(professional[0].source,'patient-portal')
+  const chart=store.patientContext(doctor,patient.id)
+  assert(!JSON.stringify(chart.patient.medicalHistory).includes('SíntomaPrivadoNoPublicar24680'))
+  assert.throws(()=>store.reviewPatientIntake(other,saved.id,1),/asignado/)
+  const reviewed=store.reviewPatientIntake(doctor,saved.id,1)
+  assert.equal(reviewed.status,'reviewed')
+  assert.equal(reviewed.verifiedHistoryTransfer,false)
+  assert.throws(()=>store.reviewPatientIntake(doctor,saved.id,1),/revisada|Conflicto/)
+  assert.equal(store.patientPortalIntakes(portal.cookie)[0].status,'reviewed')
+  assert(!readFileSync(join(root,'clinic.sqlite')).includes(Buffer.from('SíntomaPrivadoNoPublicar24680')))
+  assert(store.audits(admin).some(e=>e.action==='patient.portal.intake'))
+  assert(store.audits(admin).some(e=>e.action==='patient.intake.reviewed'))
+  const second=store.create(admin,'patients',{name:'Segundo sintético',dateOfBirth:'1987-03-04'})
+  store.assignPatient(admin,second.id,'doctor2','Segunda consulta')
+  const invitation2=store.issuePatientPortalInvite(other,second.id)
+  const account2=store.redeemPatientPortalInvite(invitation2.invite,PATIENT_PASSWORD)
+  const portal2=store.loginPatientPortal(account2.accountId,PATIENT_PASSWORD)
+  assert.deepEqual(store.patientPortalIntakes(portal2.cookie),[])
+  assert.deepEqual(store.patientIntakes(other,second.id),[])
+})
+
 test('clinical publication requires owning prescriber and never exposes unpublished history',t=>{
   const {store,admin,doctor,other,patient}=fixture(t)
   const appointment=store.create(admin,'appointments',{

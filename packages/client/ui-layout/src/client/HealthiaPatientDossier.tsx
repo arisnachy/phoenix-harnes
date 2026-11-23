@@ -4,13 +4,14 @@
  */
 import { useEffect, useState, type FormEvent } from 'react'
 import { HealthiaClinicalApi } from './HealthiaClinicalApi.ts'
-import type { ClinicalPatient, ClinicalPatientContext, ClinicalChartItem, ClinicalSession, ClinicalIntakeTemplate } from './HealthiaClinicalApi.ts'
+import type { ClinicalPatient, ClinicalPatientContext, ClinicalChartItem, ClinicalSession, ClinicalIntakeTemplate, PatientIntakeSubmission } from './HealthiaClinicalApi.ts'
 import css from './HealthiaPatientDossier.module.css'
 
 const api = new HealthiaClinicalApi()
-type Tab = 'summary'|'history'|'encounters'|'medications'|'studies'|'followup'
+type Tab = 'summary'|'history'|'intake'|'encounters'|'medications'|'studies'|'followup'
 const TABS: readonly {id:Tab;name:string}[] = [
   {id:'summary',name:'Resumen'}, {id:'history',name:'Antecedentes'},
+  {id:'intake',name:'Preconsulta'},
   {id:'encounters',name:'Consultas'}, {id:'medications',name:'Medicación'},
   {id:'studies',name:'Estudios y archivos'}, {id:'followup',name:'Seguimiento'},
 ]
@@ -80,9 +81,12 @@ export function HealthiaPatientDossier({
   const [context,setContext]=useState<ClinicalPatientContext|null>(null)
   const [loading,setLoading]=useState(false)
   const [revision,setRevision]=useState(0)
+  const [patientIntakes,setPatientIntakes]=useState<readonly PatientIntakeSubmission[]>([])
   const [history,setHistory]=useState<Record<string,string>>({})
   const [allergyStatus,setAllergyStatus]=useState<'none-known'|'documented'|'unreviewed'>('unreviewed')
   const [allergyDetails,setAllergyDetails]=useState('')
+  const [sexAtBirth,setSexAtBirth]=useState<''|'female'|'male'|'intersex'|'unknown'>('')
+  const [genderIdentity,setGenderIdentity]=useState('')
   const [busy,setBusy]=useState(false)
   const [error,setError]=useState('')
   const [notice,setNotice]=useState('')
@@ -96,6 +100,8 @@ export function HealthiaPatientDossier({
       setContext(result)
       const saved=result.patient.medicalHistory??{}
       setHistory(Object.fromEntries(HISTORY_IDS.map(id=>[id,typeof saved[id]==='string'?saved[id]:''])))
+      setSexAtBirth(result.patient.sexAtBirth??'')
+      setGenderIdentity(result.patient.genderIdentity??'')
       const allergy=result.patient.allergyReview
       setAllergyStatus(allergy?.status??'unreviewed')
       setAllergyDetails(allergy?.details??'')
@@ -105,6 +111,26 @@ export function HealthiaPatientDossier({
     return()=>{active=false}
   },[session,patient.id,revision,allowed])
 
+  useEffect(()=>{
+    if(!allowed){setPatientIntakes([]);return}
+    if(tab!=='intake')return
+    let active=true
+    void api.patientIntakes(session,patient.id).then(items=>{
+      if(active)setPatientIntakes(items)
+    }).catch(err=>{if(active)setError(err instanceof Error?err.message:'No se pudieron leer las preconsultas')})
+    return()=>{active=false}
+  },[allowed,session,patient.id,revision,tab])
+
+  const reviewIntake=async(item:PatientIntakeSubmission):Promise<void>=>{
+    if(busy)return
+    setBusy(true);setError('');setNotice('')
+    try{
+      const reviewed=await api.reviewPatientIntake(session,item)
+      setPatientIntakes(list=>list.map(current=>current.id===reviewed.id?reviewed:current))
+      setNotice('Aportación revisada. No se ha convertido automáticamente en antecedentes confirmados.')
+    }catch(err){setError(err instanceof Error?err.message:'No se pudo revisar esta aportación')}
+    finally{setBusy(false)}
+  }
   const historySubmit=async(event:FormEvent<HTMLFormElement>)=>{
     event.preventDefault()
     if(!context||!mayEdit||busy)return
@@ -129,6 +155,20 @@ export function HealthiaPatientDossier({
       setNotice('Revisión de alergias confirmada por el profesional.')
       setRevision(value=>value+1)
     }catch(err){setError(err instanceof Error?err.message:'No se guardó la revisión de alergias.')}
+    finally{setBusy(false)}
+  }
+  const identitySubmit=async(event:FormEvent<HTMLFormElement>)=>{
+    event.preventDefault()
+    if(!context||!mayEdit||busy)return
+    setBusy(true);setError('');setNotice('')
+    try{
+      const changed=await api.updatePatientIdentityContext(session,context.patient,{
+        ...(sexAtBirth?{sexAtBirth}:{}),genderIdentity,
+      })
+      onPatientUpdated(changed)
+      setNotice('Contexto de identidad actualizado en el expediente protegido.')
+      setRevision(value=>value+1)
+    }catch(e){setError(e instanceof Error?e.message:'No se actualizaron los datos')}
     finally{setBusy(false)}
   }
   const chart=context?.patient??patient
@@ -198,6 +238,28 @@ export function HealthiaPatientDossier({
       </>}
       {clinicianContext&&tab==='history'&&<>
         <section className={css.tile}>
+          <h4>Contexto de identidad clínica</h4>
+          <p className={css.helper}>Registra datos aportados o confirmados. Sexo al nacer e identidad
+            de género son datos distintos y no determinan solos una indicación terapéutica.</p>
+          <form className={css.editForm} onSubmit={event=>{void identitySubmit(event)}}>
+            <div className={css.formGrid}>
+              <label>Sexo registrado al nacer
+                <select value={sexAtBirth} disabled={!mayEdit||busy}
+                  onChange={e=>setSexAtBirth(e.target.value as typeof sexAtBirth)}>
+                  <option value="">No documentado</option>
+                  <option value="female">Femenino</option><option value="male">Masculino</option>
+                  <option value="intersex">Intersexual</option><option value="unknown">Desconocido</option>
+                </select>
+              </label>
+              <label>Identidad de género referida (opcional)
+                <input maxLength={160} disabled={!mayEdit||busy} value={genderIdentity}
+                  onChange={e=>setGenderIdentity(e.target.value)}/>
+              </label>
+            </div>
+            {mayEdit&&<button className={css.primary} type="submit" disabled={busy}>Guardar contexto de identidad</button>}
+          </form>
+        </section>
+        <section className={css.tile}>
           <h4>Revisión de alergias</h4><p className={css.helper}>Selecciona «sin alergias conocidas» únicamente tras confirmarlo en la entrevista. Una casilla vacía nunca significa negativo.</p>
           <form onSubmit={event=>{void allergySubmit(event)}} className={css.editForm}>
             <label>Estado de verificación
@@ -228,6 +290,27 @@ export function HealthiaPatientDossier({
           {mayEdit&&<button className={css.primary} type="submit" disabled={busy}>{busy?'Guardando…':'Guardar antecedentes revisados'}</button>}
         </form>
       </>}
+      {clinicianContext&&tab==='intake'&&<section className={css.tile}>
+        <h4>Información aportada por el paciente</h4>
+        <p className={css.helper}>Datos recibidos desde la cuenta propia del paciente. Son afirmaciones no
+          verificadas hasta revisarlas; no se transfieren a la historia médica automáticamente.</p>
+        {!patientIntakes.length&&<p className={css.empty}>No hay preconsultas enviadas desde el portal.</p>}
+        {patientIntakes.map(item=><article className={css.records} key={item.id}>
+          <h4>{item.status==='reviewed'?'Revisada':'Pendiente de revisión'} · {displayDate(item.createdAt)}</h4>
+          <dl className={css.details}>
+            {Object.entries(item.answers).filter(([,value])=>!!value).map(([key,value])=>
+              <div key={key}><dt>{({
+                complaint:'Motivo referido',timeline:'Inicio y evolución',symptoms:'Otros síntomas',
+                medications:'Medicación referida',allergies:'Alergias referidas',questions:'Preguntas del paciente',
+              } as Record<string,string>)[key]??key}</dt><dd>{value}</dd></div>)}
+          </dl>
+          {item.status==='pending-review'&&<button className={css.primary} type="button"
+            disabled={busy} onClick={()=>{void reviewIntake(item)}}>
+            Marcar aportación como revisada (sin validar hallazgos)
+          </button>}
+          {item.reviewedBy&&<small>Revisó: {item.reviewedBy} · {displayDate(item.reviewedAt)}</small>}
+        </article>)}
+      </section>}
       {clinicianContext&&tab==='encounters'&&<Records label="Consultas y episodios" items={clinicianContext.encounters}/>}
       {clinicianContext&&tab==='medications'&&<>
         <section className={css.tile}><h4>Conciliación de medicación</h4>

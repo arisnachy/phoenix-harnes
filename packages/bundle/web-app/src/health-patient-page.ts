@@ -15,7 +15,9 @@ h1{font-size:28px;margin:0}h2{font-size:19px;margin:0 0 12px}p{line-height:1.6;c
 .card{background:#fff;border:1px solid #e9dfd9;border-radius:18px;padding:22px;margin:15px 0;box-shadow:0 5px 19px rgba(50,40,30,.04)}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
 label{display:block;font-size:13px;font-weight:600;margin:12px 0 5px}
-input{width:100%;padding:11px;border-radius:10px;border:1px solid #cbbfba;font:inherit;color:#292522}
+input,textarea{width:100%;padding:11px;border-radius:10px;border:1px solid #cbbfba;font:inherit;color:#292522}
+textarea{min-height:76px;resize:vertical}
+textarea:focus-visible{outline:3px solid #a95427;outline-offset:2px}
 button{font:inherit;background:#c94d1e;color:white;border:0;border-radius:11px;padding:12px 16px;cursor:pointer;margin-top:14px}
 button.secondary{background:#ede7e2;color:#332b25}button:focus-visible,input:focus-visible{outline:3px solid #a95427;outline-offset:2px}
 small{color:#766d67}.hidden{display:none!important}.item{padding:14px;border:1px solid #eae2dc;border-radius:12px;margin-top:10px}
@@ -39,6 +41,28 @@ small{color:#766d67}.hidden{display:none!important}.item{padding:14px;border:1px
 <div><h2>Mi información autorizada</h2><small>Documentos publicados explícitamente por mi profesional</small></div>
 <button id="logout" class="secondary" type="button">Cerrar sesión</button></div>
 <div id="feed"></div></div>
+<form id="preconsultation" class="card">
+<h2>Preparar mi próxima consulta</h2>
+<p>Tu información se guardará cifrada como datos <strong>aportados por el paciente y pendientes de revisión</strong>.
+No sustituye la valoración profesional. Ante una urgencia, utiliza los servicios de emergencia.</p>
+<label for="p-complaint">¿Cuál es el motivo principal de tu consulta?</label>
+<textarea id="p-complaint" name="complaint" maxlength="1600" required placeholder="Describe qué te ocurre con tus propias palabras"></textarea>
+<div class="grid">
+<div><label for="p-timeline">¿Cuándo comenzó y cómo ha evolucionado?</label>
+<textarea id="p-timeline" name="timeline" maxlength="1600"></textarea></div>
+<div><label for="p-symptoms">Otros síntomas que deseas comunicar</label>
+<textarea id="p-symptoms" name="symptoms" maxlength="1600"></textarea></div>
+<div><label for="p-medications">Medicamentos y suplementos que utilizas</label>
+<textarea id="p-medications" name="medications" maxlength="1600"></textarea></div>
+<div><label for="p-allergies">Alergias o reacciones que recuerdas</label>
+<textarea id="p-allergies" name="allergies" maxlength="1600"></textarea></div>
+</div>
+<label for="p-questions">Preguntas que quieres hacer al equipo</label>
+<textarea id="p-questions" name="questions" maxlength="1600"></textarea>
+<button id="submit-preconsultation" type="submit">Enviar preparación protegida</button>
+<p><small>Esta información no modifica tus antecedentes confirmados; un profesional deberá revisarla.</small></p>
+</form>
+<div class="card"><h2>Preparaciones enviadas</h2><div id="intake-list"></div></div>
 </section>
 <p><small>Este portal piloto funciona únicamente en la instalación clínica local, cuando un administrador lo habilita. No sustituye la consulta médica ni habilita acceso remoto.</small></p>
 </main><script nonce="__NONCE__">
@@ -73,14 +97,46 @@ function renderFeed(items){
   div.append(main);root.append(div);
  }
 }
+async function refreshIntake(){
+ const list=await api('intake');
+ const root=get('intake-list');root.replaceChildren();
+ if(!Array.isArray(list.items)||!list.items.length){
+  const empty=document.createElement('p');empty.textContent='Todavía no has enviado información de preconsulta.';root.append(empty);return;
+ }
+ for(const item of list.items.slice(0,25)){
+  const row=document.createElement('article');row.className='item';
+  const name=document.createElement('strong');name.textContent=String(item.complaint??'Preconsulta');
+  const status=document.createElement('p');status.textContent='Recibida: '+String(item.createdAt??'')+
+    ' · '+(item.status==='reviewed'?'Revisada por profesional':'Pendiente de revisión');
+  row.append(name,status);root.append(row);
+ }
+}
 async function refresh(){
  try{
   const session=await api('session');
   csrf=session.csrf;
   const feed=await api('feed');
   showWorkspace();renderFeed(feed.items);
+  await refreshIntake();
  }catch{showAuth()}
 }
+get('preconsultation').addEventListener('submit',async event=>{
+ event.preventDefault();message('');
+ const form=get('preconsultation'),button=get('submit-preconsultation');
+ const answers={
+  complaint:get('p-complaint').value,timeline:get('p-timeline').value,
+  symptoms:get('p-symptoms').value,medications:get('p-medications').value,
+  allergies:get('p-allergies').value,questions:get('p-questions').value,
+ };
+ if(!answers.complaint.trim()){message('Indica el motivo principal.');return;}
+ button.disabled=true;
+ try{
+  await api('intake','POST',answers);form.reset();
+  message('Preparación recibida. Tu equipo la revisará antes de incorporarla a la historia.');
+  await refreshIntake();
+ }catch(err){message(err.message)}
+ finally{button.disabled=false}
+});
 get('login').addEventListener('submit',async event=>{
  event.preventDefault();message('');
  try{

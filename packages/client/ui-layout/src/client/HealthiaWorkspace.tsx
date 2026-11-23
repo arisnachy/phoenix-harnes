@@ -6,6 +6,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import css from './HealthiaWorkspace.module.css'
 import { HealthiaClinicOperations } from './HealthiaClinicOperations.tsx'
+import { HealthiaClinicDashboard } from './HealthiaClinicDashboard.tsx'
+import { HealthiaOperationsBoard } from './HealthiaOperationsBoard.tsx'
 import type { AdaptiveLiveSnapshot } from './AdaptiveLiveSlots.ts'
 import { probeClinicalSession, type ClinicalRouteStatus } from './HealthiaClinicalBridge.ts'
 import {
@@ -147,35 +149,29 @@ export function HealthiaWorkspace({
         ))}
       </nav>
       <div className={css.body}>
-        {active === 'overview' && (
-          <div className={css.dashboard}>
-            <p className={css.description}>
-              {isPatient
-                ? 'Tus citas y documentos solo se mostrarán después de verificar una cuenta vinculada.'
-                : 'Organiza la consulta sin abandonar PHOENIX. Kira permanece en el panel derecho.'}
-            </p>
-            <div className={css.quickGrid}>
-              {(isPatient ? [
-                { id: 'appointments', title: 'Mis citas', detail: 'Solicitudes y próximas visitas' },
-                { id: 'records', title: 'Mi expediente', detail: 'Información autorizada' },
-                { id: 'documents', title: 'Mis documentos', detail: 'Recetas e informes compartidos' },
-              ] : [
-                { id: 'encounters', title: 'Preparar consulta', detail: 'Historia, anamnesis y exploración' },
-                { id: 'patients', title: 'Pacientes', detail: 'Directorio clínico protegido' },
-                { id: 'appointments', title: 'Agenda', detail: 'Citas y seguimiento' },
-                { id: 'documents', title: 'Documentos', detail: 'Recetas e indicaciones' },
-              ]).map(item => (
-                <button key={item.id} className={css.quickCard} type="button" onClick={() => onSectionChange(item.id)}>
-                  <strong>{item.title}</strong><span>{item.detail}</span>
-                </button>
-              ))}
+        {active === 'overview' && (!isPatient
+          ? <HealthiaClinicDashboard onNavigate={onSectionChange}
+              onPatientChange={setSelectedClinicalPatient}/>
+          : <div className={css.dashboard}>
+              <p className={css.description}>El portal del paciente utiliza una cuenta vinculada y permisos propios.
+                Cambiar de vista no concede acceso a un expediente.</p>
+              <div className={css.quickGrid}>
+                {[{id:'appointments',title:'Mis citas',detail:'Solicitudes y próximas visitas'},
+                  {id:'records',title:'Mi expediente',detail:'Información autorizada'},
+                  {id:'documents',title:'Mis documentos',detail:'Recetas e informes compartidos'}].map(item=>
+                  <button key={item.id} className={css.quickCard} type="button"
+                    onClick={()=>onSectionChange(item.id)}><strong>{item.title}</strong><span>{item.detail}</span></button>)}
+              </div>
             </div>
-          </div>
         )}
         {!isPatient && (active === 'encounters' || active === 'patients') &&
           <HealthiaClinicOperations area={active} selectedPatientId={selectedClinicalPatient}
             onPatientChange={setSelectedClinicalPatient} onNavigate={onSectionChange} />}
-        {active !== 'overview' && active !== 'encounters' && active !== 'patients' && active !== 'tools' && (
+        {!isPatient && (active === 'appointments' || active === 'documents' || active === 'management') &&
+          <HealthiaOperationsBoard section={active} selectedPatientId={selectedClinicalPatient}
+            onPatientChange={setSelectedClinicalPatient}/>}
+        {active !== 'overview' && active !== 'encounters' && active !== 'patients' && active !== 'tools'
+          && (isPatient || !['appointments','documents','management'].includes(active)) && (
           <div className={css.modulePlaceholder}>
             <strong>{MODULES[active]?.title ?? HEALTHIA_NAV[role].find(item => item.id === active)?.label}</strong>
             <p>{MODULES[active]?.detail}</p>

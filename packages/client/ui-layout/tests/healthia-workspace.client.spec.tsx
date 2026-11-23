@@ -37,7 +37,7 @@ describe('PHOENIX embedded Healthia', () => {
       throw Error('Unexpected clinical request')
     }))
     render(<ScreenHarness />)
-    fireEvent.click(screen.getByRole('button', { name: /Preparar consulta/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Nueva consulta/ }))
     expect(screen.queryByRole('button', { name: 'Guardar consulta' })).toBeNull()
     expect(screen.queryByRole('region', { name: 'Historia clínica estructurada' })).toBeNull()
   })
