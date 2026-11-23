@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { HealthiaClinicalApi } from './HealthiaClinicalApi.ts'
 import type { ClinicResource, ClinicResourceKind, ClinicStaff, ClinicAssignment,
   ClinicalEncounter, ClinicalPatient, ClinicalSession } from './HealthiaClinicalApi.ts'
+import { printProtectedClinicalDocument } from './HealthiaClinicalPrint.ts'
 import css from './HealthiaOperationsBoard.module.css'
 
 const api=new HealthiaClinicalApi()
@@ -320,6 +321,29 @@ export function HealthiaOperationsBoard({section,selectedPatientId,onPatientChan
           {active==='invoices'&&<small>{euro(item.paidCents)} pagado de {euro(item.amountCents)}</small>}
         </div>
         <div className={css.recordActions}>
+          <button type="button" onClick={()=>{
+            try{
+              printProtectedClinicalDocument({
+                title:TITLE[active],
+                institution:session.actor.org,
+                patientName:patients.find(p=>p.id===item.patientId)?.name??'Paciente autorizado',
+                patientId:typeof item.patientId==='string'?item.patientId:'No aplica',
+                practitioner:typeof item.signedBy==='string'?item.signedBy:session.actor.username,
+                date:moment(item.createdAt),
+                status:active==='prescriptions'&&item.status==='prescribed'?'signed':item.status??'registrado',
+                sections:[
+                  {heading:'Descripción',body:label(item)},
+                  {heading:'Indicaciones',body:typeof item.directions==='string'?item.directions:''},
+                  {heading:'Resultado',body:typeof item.result==='string'?item.result:''},
+                  ...(active==='invoices'?[{heading:'Cuenta administrativa (NO fiscal)',
+                    body:'Total: '+euro(item.amountCents)+'\nAbonado: '+euro(item.paidCents)}]:[]),
+                ],
+                disclaimer:active==='invoices'
+                  ?'RESUMEN ADMINISTRATIVO INTERNO: no es comprobante fiscal ni NCF/e-CF.'
+                  :'Copia del registro clínico autorizado. Verifique alcance, estado y autenticidad.',
+              })
+            }catch(e){setError(e instanceof Error?e.message:'No se pudo imprimir el registro')}
+          }}>Imprimir copia</button>
           {active==='appointments'&&['scheduled'].includes(item.status??'')&&canCreate&&
             <button type="button" disabled={busy} onClick={()=>{void update(item,{status:'completed'})}}>Atendida</button>}
           {active==='followups'&&item.status==='pending'&&canCreate&&
