@@ -281,7 +281,8 @@ export function AppFrame({
                 setAdaptiveApp('healthia')
                 if(action&&binding){
                   const target=CLINICAL_EDITOR_ACTIONS[action]
-                  setClinicalStep(previous=>({step:target.step,sequence:(previous?.sequence??0)+1,action,binding}))
+                  const activeBinding=binding
+                  setClinicalStep(previous=>({step:target.step,sequence:(previous?.sequence??0)+1,action,binding:activeBinding}))
                 }else if (healthiaRole==='doctor'&&clinicalEditorStep(command.sectionId)) {
                   const step=command.sectionId
                   setClinicalStep(previous=>({step,sequence:(previous?.sequence??0)+1}))
