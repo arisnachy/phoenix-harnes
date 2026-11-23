@@ -292,6 +292,11 @@ export function classifyScraperFailure(error:unknown):
     return 'no-events'
   return 'scraper-exit-error'
 }
+/**
+ * Produces a credential-redacted diagnostic for a failed odds scraper.
+ * @param error - Untrusted scraper failure and process output.
+ * @returns A safe diagnostic string with the failure category and exit details.
+ */
 export function describeScraperError(error:unknown):string{
   const record=error&&typeof error==='object'?error as Record<string,unknown>:{}
   const raw=typeof record.stderr==='string'?record.stderr:''
