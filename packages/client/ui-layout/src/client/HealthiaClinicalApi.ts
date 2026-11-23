@@ -12,7 +12,45 @@ export type ClinicalSession = { readonly actor: ClinicalActor; readonly csrf: st
 export type ClinicalPatient = {
   readonly id: string; readonly version: number; readonly name: string
   readonly dateOfBirth: string; readonly phone?: string; readonly email?: string
+  readonly documentType?: 'cedula'|'passport'|'other'; readonly documentNumber?: string
+  readonly customFields?: Readonly<Record<string,string>>
+  readonly medicalHistory?: Readonly<Record<string,string>>
+  readonly medicalHistoryReview?: {readonly reviewedAt?:string;readonly reviewedBy?:string}
+  readonly allergyReview?: {readonly status:'none-known'|'documented';readonly details:string;
+    readonly reviewedAt?:string;readonly reviewedBy?:string}|null
+  readonly emailConsent?: boolean; readonly emailVerified?:boolean
+  readonly notes?:string
 }
+
+/** Entries are server-filtered by the institution, assigned clinician and patient. */
+export type ClinicalChartItem = {
+  readonly id:string;readonly patientId?:string;readonly createdAt?:string;
+  readonly status?:string;readonly [key:string]:unknown
+}
+export type ClinicalPatientContext = {
+  readonly patient:ClinicalPatient
+  readonly encounters:readonly ClinicalChartItem[]
+  readonly orders:readonly ClinicalChartItem[]
+  readonly prescriptions:readonly ClinicalChartItem[]
+  readonly observations:readonly ClinicalChartItem[]
+  readonly followups:readonly ClinicalChartItem[]
+  readonly appointments:readonly ClinicalChartItem[]
+  readonly attachments:readonly ClinicalChartItem[]
+  readonly timeline:readonly ClinicalChartItem[]
+  readonly pending:{readonly orders:number;readonly followups:number;readonly attachments:number}
+}
+export type ClinicalIntakeTemplate = {
+  readonly version:1;readonly revision:number
+  readonly fields:readonly {readonly id:string;readonly label:string;
+    readonly kind:'text'|'number'|'date'|'email'|'tel'|'select';readonly required:boolean;
+    readonly choices?:readonly string[]}[]
+}
+export type ClinicalIdentityMatches = {
+  readonly matches:readonly {readonly id:string;readonly name:string;
+    readonly dateOfBirth:string;readonly reason:string}[]
+  readonly restrictedCount:number
+}
+
 export type ClinicalEncounter = {
   readonly id: string; readonly version: number; readonly patientId: string
   readonly practitioner: string; readonly specialty: string; readonly complaint: string
@@ -147,11 +185,97 @@ export class HealthiaClinicalApi {
   }
   async createPatient(session:ClinicalSession,input:{
     name:string;dateOfBirth:string;phone?:string;email?:string;
+    documentType?:string;documentNumber?:string;customFields?:Readonly<Record<string,string>>;
+    notes?:string;confirmDistinct?:boolean;distinctReason?:string;
   }):Promise<ClinicalPatient> {
     const v=object(await this.request('patients','POST',session,{...input}))
     if(!patientOf(v.record))throw Error('Confirmación de paciente inválida')
     return v.record
   }
+
+  /** Read the authorized longitudinal projection. The Host never returns other patients. */
+  async patientContext(session:ClinicalSession,patientId:string):Promise<ClinicalPatientContext> {
+    if(!UUID.test(patientId))throw Error('Identificador de paciente inválido')
+    const root=object(await this.request('patient-context/'+patientId,'GET',session))
+    const context=object(root.context)
+    if(!patientOf(context.patient)||(context.patient as ClinicalPatient).id!==patientId)
+      throw Error('El expediente recibido no corresponde al paciente solicitado')
+    const names=['encounters','orders','prescriptions','observations','followups',
+      'appointments','attachments','timeline'] as const
+    const lists:Record<string,readonly ClinicalChartItem[]>={}
+    for(const name of names) {
+      const items=context[name]
+      if(!Array.isArray(items)||items.length>500||!items.every(item=>{
+        if(!item||typeof item!=='object'||Array.isArray(item))return false
+        const row=item as Record<string,unknown>
+        return typeof row.id==='string'&&row.patientId===patientId
+      }))throw Error('El servicio devolvió referencias clínicas incompatibles con el paciente')
+      lists[name]=items as ClinicalChartItem[]
+    }
+    const pending=object(context.pending)
+    if(!['orders','followups','attachments'].every(key=>
+      Number.isSafeInteger(pending[key])&&(pending[key] as number)>=0))
+      throw Error('Estado del expediente inválido')
+    return {patient:context.patient as ClinicalPatient,
+      encounters:lists.encounters!,orders:lists.orders!,
+      prescriptions:lists.prescriptions!,observations:lists.observations!,
+      followups:lists.followups!,appointments:lists.appointments!,
+      attachments:lists.attachments!,timeline:lists.timeline!,
+      pending:{orders:pending.orders as number,followups:pending.followups as number,attachments:pending.attachments as number}}
+  }
+  /** Medical history is submitted directly to the encrypted EHR, never to chat. */
+  async updatePatientHistory(session:ClinicalSession,patient:ClinicalPatient,
+    history:Readonly<Record<string,string>>):Promise<ClinicalPatient> {
+    if(!UUID.test(patient.id)||!Number.isSafeInteger(patient.version)||patient.version<1)
+      throw Error('Identidad o versión de paciente inválida')
+    const record=object(await this.request('patients/'+patient.id,'PATCH',session,{
+      action:'history',version:patient.version,record:{...history}
+    }))
+    if(!patientOf(record.record)||(record.record as ClinicalPatient).id!==patient.id)
+      throw Error('La confirmación no corresponde al expediente solicitado')
+    return record.record as ClinicalPatient
+  }
+  /** A verified negative allergy review is never inferred from empty fields. */
+  async reviewPatientAllergies(session:ClinicalSession,patient:ClinicalPatient,
+    status:'none-known'|'documented',details:string):Promise<ClinicalPatient> {
+    if(!UUID.test(patient.id)||!Number.isSafeInteger(patient.version)||patient.version<1
+      ||!['none-known','documented'].includes(status)||details.length>2500
+      ||status==='documented'&&!details.trim())
+      throw Error('Revisión de alergias inválida')
+    const response=object(await this.request('patients/'+patient.id,'PATCH',session,{
+      version:patient.version,action:'allergy-review',status,details:status==='documented'?details.trim():''
+    }))
+    if(!patientOf(response.record)||(response.record as ClinicalPatient).id!==patient.id)
+      throw Error('La confirmación no corresponde al paciente')
+    return response.record as ClinicalPatient
+  }
+  async patientIntakeTemplate(session:ClinicalSession):Promise<ClinicalIntakeTemplate> {
+    const root=object(await this.request('patient-intake-template','GET',session))
+    const template=object(root.template)
+    if(template.version!==1||!Number.isSafeInteger(template.revision)
+      ||!Array.isArray(template.fields)||template.fields.length>64
+      ||!template.fields.every(entry=>entry&&typeof entry==='object'&&!Array.isArray(entry)
+        &&typeof entry.id==='string'&&typeof entry.label==='string'
+        &&typeof entry.kind==='string'&&typeof entry.required==='boolean'))
+      throw Error('Formulario de admisión no verificable')
+    return template as unknown as ClinicalIntakeTemplate
+  }
+  async patientIdentityMatches(session:ClinicalSession,input:{
+    name:string;dateOfBirth:string;documentType?:string;documentNumber?:string;
+    phone?:string;email?:string
+  }):Promise<ClinicalIdentityMatches> {
+    const root=object(await this.request('patient-identity-match','POST',session,{...input}))
+    const result=object(root.result)
+    if(!Array.isArray(result.matches)||result.matches.length>8
+      ||!Number.isSafeInteger(result.restrictedCount))
+      throw Error('Resultado de identidades inválido')
+    if(!result.matches.every(item=>item&&typeof item==='object'&&!Array.isArray(item)
+      &&typeof item.id==='string'&&typeof item.name==='string'
+      &&typeof item.dateOfBirth==='string'&&typeof item.reason==='string'))
+      throw Error('Coincidencias de identidad inválidas')
+    return result as unknown as ClinicalIdentityMatches
+  }
+
   async encounters(session:ClinicalSession):Promise<readonly ClinicalEncounter[]> {
     return listOf(await this.request('encounters','GET',session),encounterOf)
   }
