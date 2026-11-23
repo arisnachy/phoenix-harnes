@@ -124,10 +124,11 @@ describe('request image policy bounds', () => {
 
 describe('Phoenix Local slow-prefill budget', () => {
   it('reserves a longer idle interval for the loopback model without relaxing Codex', () => {
-    const local = resolveProfiles({ 'phoenix-local': {
+    const parsed = Config({ providers: { 'phoenix-local': {
       api: 'openai-completions', baseURL: 'http://127.0.0.1:17842/v1',
       models: [{ id: 'phoenix-local' }],
-    } }).get('phoenix-local')
+    } } })
+    const local = resolveProfiles(parsed.providers).get('phoenix-local')
     const codex = resolveProfiles({ 'openai-codex': {} }).get('openai-codex')
     expect(local?.streamIdleTimeoutMs).toBe(540_000)
     expect(codex?.streamIdleTimeoutMs).toBe(90_000)
