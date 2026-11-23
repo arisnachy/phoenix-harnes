@@ -49,7 +49,7 @@ describe('Healthia real protected operational forms',()=>{
     await waitFor(()=>expect(writes.length).toBe(1))
     expect(writes[0]!.body).toMatchObject({patientId,concept:'Consulta documentada',amountCents:12345})
     expect(writes[0]!.csrf).toBe('a'.repeat(48))
-    expect(screen.getByText(/no es comprobante fiscal/i)).toBeTruthy()
+    expect(screen.getByText(/No genera NCF/i)).toBeTruthy()
     expect(window.localStorage.getItem('clinical-invoice')).toBeNull()
   })
   it('isolates billing roles from the professional patient and consultation APIs',async()=>{
