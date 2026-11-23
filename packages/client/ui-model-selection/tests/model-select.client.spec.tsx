@@ -713,7 +713,7 @@ describe('PHOENIX installed local model selector', () => {
     />)
     const trigger = screen.getByRole('button', { name: /Gemma 4 E2B/ })
     expect(trigger.textContent).toContain('Gemma 4 E2B')
-    expect(container.querySelector('.triggerPhoenixLogo')).toBeTruthy()
+    expect(container.querySelector('img[src="/phoenix-emblem.png"]')).toBeTruthy()
     fireEvent.click(trigger)
     fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
     expect(screen.getByRole('menuitemradio', { name: 'Gemma 4 E2B' })).toBeTruthy()
