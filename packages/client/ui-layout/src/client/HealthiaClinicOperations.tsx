@@ -6,7 +6,8 @@
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { HealthiaClinicalApi, ProtectedClinicError } from './HealthiaClinicalApi.ts'
-import type { ClinicalSession, ClinicalPatient, ClinicalEncounter } from './HealthiaClinicalApi.ts'
+import type { ClinicalSession, ClinicalPatient, ClinicalEncounter, ClinicalIntakeTemplate, ClinicalIdentityMatches } from './HealthiaClinicalApi.ts'
+import { HealthiaPatientDossier } from './HealthiaPatientDossier.tsx'
 import { HealthiaClinicalNote, formatClinicalNote, NOTE_KINDS } from './HealthiaClinicalNote.tsx'
 import type { ClinicalNoteValues, ClinicalNoteKind } from './HealthiaClinicalNote.tsx'
 import css from './HealthiaClinicOperations.module.css'
@@ -89,6 +90,15 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
   const [birthDate,setBirthDate]=useState('')
   const [email,setEmail]=useState('')
   const [phone,setPhone]=useState('')
+  const [patientSearch,setPatientSearch]=useState('')
+  const [documentType,setDocumentType]=useState<'cedula'|'passport'|'other'>('cedula')
+  const [documentNumber,setDocumentNumber]=useState('')
+  const [admissionNotes,setAdmissionNotes]=useState('')
+  const [customFields,setCustomFields]=useState<Record<string,string>>({})
+  const [intakeTemplate,setIntakeTemplate]=useState<ClinicalIntakeTemplate|null>(null)
+  const [identityMatches,setIdentityMatches]=useState<ClinicalIdentityMatches|null>(null)
+  const [confirmDistinct,setConfirmDistinct]=useState(false)
+  const [distinctReason,setDistinctReason]=useState('')
   const [specialty,setSpecialty]=useState('Medicina familiar')
   const [complaint,setComplaint]=useState('')
   const [busy,setBusy]=useState(false)
@@ -101,6 +111,10 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
   const canManagePatients=userRole==='admin'||userRole==='clinician'||userRole==='reception'
   const canManageEncounters=userRole==='clinician'||userRole==='psychologist'
   const selectedPatient=patients.find(p=>p.id===patientId)
+  const normalizedSearch=patientSearch.trim().toLocaleLowerCase('es')
+  const visiblePatients=patients.filter(p=>!normalizedSearch||
+    [p.name,p.dateOfBirth,p.phone,p.email,p.documentNumber].some(value=>
+      typeof value==='string'&&value.toLocaleLowerCase('es').includes(normalizedSearch)))
   const selectedEncounter=encounters.find(e=>e.id===encounterId&&e.patientId===patientId)
   const patientEncounters=encounters.filter(e=>e.patientId===patientId)
   const currentNote=selectedEncounter?restoreClinicalNote(selectedEncounter):undefined
@@ -109,6 +123,10 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
     // The Host filters by institution, assignment and authenticated role.
     const list=await api.patients(s)
     setPatients(list)
+    if(['admin','clinician','reception'].includes(s.actor.role)) {
+      try { setIntakeTemplate(await api.patientIntakeTemplate(s)) }
+      catch { setIntakeTemplate(null) }
+    } else setIntakeTemplate(null)
     if(['clinician','psychologist','admin','nurse'].includes(s.actor.role)) {
       const visits=await api.encounters(s)
       setEncounters(visits)
@@ -215,14 +233,37 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
         name:name.trim(),dateOfBirth:birthDate,
         ...(phone.trim()?{phone:phone.trim()}:{}),
         ...(email.trim()?{email:email.trim()}:{}),
+        ...(documentNumber.trim()?{documentType,documentNumber:documentNumber.trim()}:{}),
+        ...(admissionNotes.trim()?{notes:admissionNotes.trim()}:{}),
+        ...(intakeTemplate?{customFields}:{}),
+        ...(confirmDistinct?{confirmDistinct:true,distinctReason:distinctReason.trim()}:{}),
       })
       setPatients(prev=>[record,...prev])
       setPatientId(record.id)
       setEncounterId('')
       setName('');setBirthDate('');setEmail('');setPhone('')
+      setDocumentNumber('');setAdmissionNotes('');setCustomFields({})
+      setIdentityMatches(null);setConfirmDistinct(false);setDistinctReason('')
       setCreatingPatient(false)
       setNotice('Paciente registrado en el repositorio local cifrado.')
     } catch(err){setError(err instanceof Error?err.message:'No se pudo registrar al paciente')}
+    finally{setBusy(false)}
+  }
+  const checkPatientIdentity=async():Promise<void>=>{
+    if(!session||!canManagePatients||busy||!name.trim()||!birthDate)return
+    setBusy(true);setError('');setNotice('');setIdentityMatches(null)
+    try {
+      const result=await api.patientIdentityMatches(session,{
+        name:name.trim(),dateOfBirth:birthDate,
+        ...(documentNumber.trim()?{documentType,documentNumber:documentNumber.trim()}:{}),
+        ...(phone.trim()?{phone:phone.trim()}:{}),
+        ...(email.trim()?{email:email.trim()}:{}),
+      })
+      setIdentityMatches(result)
+      setNotice(result.matches.length||result.restrictedCount
+        ?'Se detectaron posibles coincidencias. Comprueba la identidad antes de registrar.'
+        :'Sin coincidencias detectadas. Se comprobará nuevamente al guardar.')
+    }catch(err){setError(err instanceof Error?err.message:'No se pudo verificar la identidad.')}
     finally{setBusy(false)}
   }
   const addEncounter=async(event:FormEvent<HTMLFormElement>):Promise<void>=>{
@@ -335,33 +376,99 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
     </div>}
     {!readyRef.current&&<p role="status" className={css.notice}>Cargando registros autorizados…</p>}
     {(error||notice)&&<p role={error?'alert':'status'} className={error?css.error:css.notice}>{error||notice}</p>}
+    {area==='patients'&&<div className={css.directoryHeader}>
+      <div><strong>Directorio de pacientes</strong><small>{patients.length} expedientes accesibles en esta institución · búsqueda local</small></div>
+      <label>Buscar por nombre, fecha, contacto o documento
+        <input aria-label="Buscar pacientes" type="search" value={patientSearch}
+          placeholder="Buscar paciente…" onChange={e=>setPatientSearch(e.currentTarget.value)}/>
+      </label>
+    </div>}
     <label className={css.selectPatient}>Paciente del expediente
       <select value={patientId} aria-label="Paciente del expediente"
         onChange={e=>{setPatientId(e.currentTarget.value);setEncounterId('');setError('');setNotice('')}}>
         <option value="">Seleccionar paciente</option>
-        {patients.map(item=><option key={item.id} value={item.id}>{item.name} · {item.dateOfBirth}</option>)}
+        {(area==='patients'?visiblePatients:patients).map(item=><option key={item.id} value={item.id}>{item.name} · {item.dateOfBirth}</option>)}
       </select>
     </label>
     {area==='patients'&&<>
+      <div className={css.patientResults} role="group" aria-label="Resultados del directorio">
+        {visiblePatients.slice(0,50).map(item=><button type="button" key={item.id}
+          className={patientId===item.id?css.patientResultActive:css.patientResult}
+          aria-pressed={patientId===item.id}
+          onClick={()=>{setPatientId(item.id);setEncounterId('');setError('');setNotice('')}}>
+          <span className={css.patientInitial} aria-hidden="true">{item.name.trim().slice(0,1).toUpperCase()}</span>
+          <span><strong>{item.name}</strong><small>Nacimiento: {item.dateOfBirth||'Sin fecha documentada'}</small></span>
+          <span className={css.patientRecordIndicator}>{patientId===item.id?'Abierto':'Abrir'}</span>
+        </button>)}
+        {!visiblePatients.length&&<p className={css.notice}>No hay pacientes que coincidan con esta búsqueda.</p>}
+        {visiblePatients.length>50&&<p className={css.notice}>Mostrando 50 de {visiblePatients.length}. Precisa la búsqueda.</p>}
+      </div>
       <div className={css.actionBar}>
         {canManagePatients&&<button type="button" onClick={()=>setCreatingPatient(x=>!x)}>
           {creatingPatient?'Cancelar registro':'Registrar paciente'}
         </button>}
       </div>
       {creatingPatient&&canManagePatients&&<form className={css.form} onSubmit={event=>{void addPatient(event)}} autoComplete="off">
-        <h3>Registro protegido</h3>
-        <label>Nombre completo<input required maxLength={160} value={name} onChange={e=>setName(e.target.value)}/></label>
-        <label>Fecha de nacimiento<input type="date" required value={birthDate} onChange={e=>setBirthDate(e.target.value)}/></label>
-        <label>Teléfono (opcional)<input maxLength={35} value={phone} onChange={e=>setPhone(e.target.value)}/></label>
-        <label>Correo (opcional)<input type="email" maxLength={254} value={email} onChange={e=>setEmail(e.target.value)}/></label>
-        <button className={css.primary} type="submit" disabled={busy||!name.trim()||!birthDate}>Guardar paciente</button>
-        <p className={css.notice}>La clínica verifica posibles identidades duplicadas; una coincidencia no se resuelve automáticamente.</p>
+        <h3>Registro de paciente · admisión protegida</h3>
+        <p>Identidad, contacto y datos de admisión. El expediente interno se asigna al guardar; documento y teléfono no son su identificador principal.</p>
+        <div className={css.admissionGrid}>
+          <label>Nombre completo<input required maxLength={160} value={name} onChange={e=>{setName(e.target.value);setIdentityMatches(null)}}/></label>
+          <label>Fecha de nacimiento<input type="date" required value={birthDate} max={new Date().toISOString().slice(0,10)}
+            onChange={e=>{setBirthDate(e.target.value);setIdentityMatches(null)}}/></label>
+          <label>Tipo de documento<select value={documentType} onChange={e=>{setDocumentType(e.target.value as typeof documentType);setIdentityMatches(null)}}>
+            <option value="cedula">Cédula dominicana</option><option value="passport">Pasaporte</option><option value="other">Otro documento</option>
+          </select></label>
+          <label>Número de documento (opcional)<input maxLength={32} value={documentNumber}
+            onChange={e=>{setDocumentNumber(e.target.value);setIdentityMatches(null)}}/></label>
+          <label>Teléfono (opcional)<input maxLength={35} type="tel" value={phone}
+            onChange={e=>{setPhone(e.target.value);setIdentityMatches(null)}}/></label>
+          <label>Correo (opcional)<input type="email" maxLength={254} value={email}
+            onChange={e=>{setEmail(e.target.value);setIdentityMatches(null)}}/></label>
+        </div>
+        {intakeTemplate&&<fieldset className={css.admissionFields}><legend>Datos complementarios de admisión</legend>
+          <div className={css.admissionGrid}>{intakeTemplate.fields.map(field=>
+            <label key={field.id}>{field.label}
+              {field.kind==='select'?<select required={field.required} value={customFields[field.id]??''}
+                onChange={e=>setCustomFields(x=>({...x,[field.id]:e.target.value}))}>
+                  <option value="">Sin registrar</option>
+                  {(field.choices??[]).map(choice=><option key={choice} value={choice}>{choice}</option>)}
+                </select>:<input required={field.required} maxLength={250}
+                  type={field.kind==='number'?'number':field.kind==='email'?'email':field.kind==='tel'?'tel':field.kind==='date'?'date':'text'}
+                  value={customFields[field.id]??''}
+                  onChange={e=>setCustomFields(x=>({...x,[field.id]:e.target.value}))}/>}
+            </label>)}</div>
+        </fieldset>}
+        <label>Observaciones de admisión (opcional)<textarea maxLength={4000} value={admissionNotes}
+          onChange={e=>setAdmissionNotes(e.target.value)} placeholder="Información administrativa facilitada y su procedencia"/></label>
+        <div className={css.actionBar}>
+          <button type="button" disabled={busy||!name.trim()||!birthDate}
+            onClick={()=>{void checkPatientIdentity()}}>Comprobar identidad</button>
+        </div>
+        {identityMatches&&<div className={css.identityResults} role="status">
+          {identityMatches.matches.length===0&&identityMatches.restrictedCount===0
+            ?'Sin coincidencias en los registros autorizados.'
+            :'Posibles duplicados: revisa si el paciente ya tiene expediente. No se fusionan automáticamente.'}
+          {identityMatches.matches.map(match=><button key={match.id} type="button"
+            onClick={()=>{setPatientId(match.id);setCreatingPatient(false)}}
+            className={css.candidate}>Abrir existente: {match.name} · {match.dateOfBirth} · {match.reason}</button>)}
+          {identityMatches.restrictedCount>0&&<p>Hay coincidencias restringidas. Solicita revisión de admisión antes de crear una ficha.</p>}
+        </div>}
+        {identityMatches?.matches.some(item=>item.reason!=='document')&&<label className={css.override}>
+          <input type="checkbox" checked={confirmDistinct} onChange={e=>setConfirmDistinct(e.target.checked)}/>
+          He verificado que se trata de una persona diferente
+        </label>}
+        {confirmDistinct&&<label>Justificación de identidad distinta
+          <textarea required minLength={12} maxLength={300} value={distinctReason} onChange={e=>setDistinctReason(e.target.value)}/>
+        </label>}
+        <button className={css.primary} type="submit"
+          disabled={busy||!name.trim()||!birthDate||(confirmDistinct&&distinctReason.trim().length<12)}>Guardar paciente</button>
+        <p className={css.notice}>La clínica realiza nuevamente la detección de duplicados al guardar y registra cualquier excepción justificada.</p>
       </form>}
-      {selectedPatient&&<div className={css.panel}>
-        <h3>{selectedPatient.name}</h3>
-        <p>Nacimiento: {selectedPatient.dateOfBirth}. Registro cifrado · versión {selectedPatient.version}.</p>
-        <p>La historia longitudinal se consulta desde el servicio clínico autorizado, no desde la memoria de Kira.</p>
-      </div>}
+      {selectedPatient&&session&&<HealthiaPatientDossier key={selectedPatient.id}
+
+        session={session} patient={selectedPatient} intakeTemplate={intakeTemplate}
+        onPatientUpdated={updated=>setPatients(previous=>previous.map(p=>p.id===updated.id?updated:p))}/>}
+
     </>}
     {area==='encounters'&&<>
       {!selectedPatient&&<p className={css.notice}>Selecciona un paciente para abrir o recuperar sus consultas.</p>}
