@@ -10,7 +10,7 @@ import type { ClinicalSession, ClinicalPatient, ClinicalEncounter, ClinicalIntak
 import { HealthiaPatientDossier } from './HealthiaPatientDossier.tsx'
 import { HealthiaClinicalNote, formatClinicalNoteParts, NOTE_KINDS } from './HealthiaClinicalNote.tsx'
 import type { ClinicalNoteValues, ClinicalNoteKind } from './HealthiaClinicalNote.tsx'
-import type { ClinicalEditorStep } from './HealthiaEditorSupport.ts'
+import type { ClinicalEditorStep, ClinicalEditorViewState } from './HealthiaEditorSupport.ts'
 import { printProtectedClinicalDocument } from './HealthiaClinicalPrint.ts'
 import css from './HealthiaClinicOperations.module.css'
 
@@ -85,10 +85,11 @@ export function restoreClinicalNote(encounter:ClinicalEncounter):{
 }
 
 export function HealthiaClinicOperations({ area, selectedPatientId, onPatientChange, onNavigate,
-  accessOnly=false, onSessionReady, requestedStep }: {
+  accessOnly=false, onSessionReady, requestedStep, onEditorState }: {
   area:Area
   /** Reuse exactly the professional login/setup flow without rendering patient records. */
   requestedStep?:{step:ClinicalEditorStep;sequence:number}|undefined
+  onEditorState?:((state:ClinicalEditorViewState|null)=>void)|undefined
   accessOnly?:boolean
   onSessionReady?:()=>void
   selectedPatientId?:string
@@ -650,7 +651,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
             {selectedEncounter.signedAt??'fecha protegida'}. No admite sobrescritura; correcciones mediante adenda.</p>
         </div> : <HealthiaClinicalNote key={selectedEncounter.id} initialKind={currentNote.kind}
           initialValues={currentNote.values} patient={selectedPatient} encounterVersion={selectedEncounter.version}
-          requestedStep={requestedStep} onDirtyChange={setDirtyEncounter} {...(canManageEncounters&&session?.actor.username===selectedEncounter.practitioner?{onSave:saveNote}:{})}
+          requestedStep={requestedStep} onEditorState={onEditorState} onDirtyChange={setDirtyEncounter} {...(canManageEncounters&&session?.actor.username===selectedEncounter.practitioner?{onSave:saveNote}:{})}
           {...(session?.actor.role==='clinician'&&session.actor.username===selectedEncounter.practitioner&&selectedEncounter.status==='draft'?{
             loadModels:()=>api.editorModels(session),
             refineField:(field:string,text:string,model:import('./HealthiaClinicalApi.ts').ClinicalEditorModel,confirmed:boolean)=>api.refineEditorField(session,selectedEncounter,field,text,model,confirmed),
