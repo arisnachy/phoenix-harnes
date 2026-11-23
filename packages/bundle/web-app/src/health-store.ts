@@ -58,6 +58,11 @@ function str(x:unknown,label:string,max=512):string {
 }
 function text(x:unknown,label:string,max=4000):string {return str(x,label,max)}
 /** Optional encounter columns are never silently sliced: reject oversized data. */
+function biologicalSex(value:unknown):string|undefined {
+  if(value===undefined||value===null||value==='')return undefined
+  if(!['female','male','intersex','unknown'].includes(String(value)))fail('Sexo registrado al nacer inválido')
+  return String(value)
+}
 function optionalNoteText(value:unknown,label:string,max:number):string {
   if(value===undefined||value===null||value==='')return ''
   if(typeof value!=='string')fail(label+' inválido')
@@ -877,7 +882,9 @@ export class HealthClinicStore {
       if(override!==null && override.length<12)fail('Explique por qué se trata de una persona diferente')
       const template=this.getPatientIntakeTemplate(actor)
       const customFields=patientIntakeValues(template,x.customFields)
+      const sexAtBirth=biologicalSex(x.sexAtBirth)
       const patient=this.insert(actor,kind,{ name,dateOfBirth:dob,
+        ...(sexAtBirth===undefined?{}:{sexAtBirth}),
         ...(doc===null?{}:doc),customFields,intakeTemplateRevision:template.revision,
         ...(override===null?{}:{identityReview:{reason:override,reviewedBy:actor.username,
           reviewedAt:new Date().toISOString()}}),
@@ -1374,6 +1381,19 @@ export class HealthClinicStore {
         return this.modify(actor,kind,id,version,current=>({
           ...current,medicalHistory,
           medicalHistoryReview:{ reviewedBy:actor.username,reviewedAt:new Date().toISOString(),source:'clinician-entered' },
+        }))
+      }
+      if(x.action==='identity-context'){
+        // The patient's reported identity details are separate from diagnoses
+        // and can be amended with an audited, optimistic-version transaction.
+        const target=this.find(actor,'patients',id)
+        if(target.row.version!==version)fail('Conflicto de edición: recarga el registro')
+        const sexAtBirth=biologicalSex(x.sexAtBirth)
+        const genderIdentity=x.genderIdentity===undefined||x.genderIdentity===null?''
+          :typeof x.genderIdentity==='string'?x.genderIdentity.trim():fail('Identidad referida inválida')
+        if(genderIdentity.length>160)fail('Identidad referida excesiva')
+        return this.modify(actor,kind,id,version,current=>({
+          ...current,sexAtBirth:sexAtBirth??null,genderIdentity,
         }))
       }
       if(x.action==='allergy-review'){
