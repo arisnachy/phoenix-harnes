@@ -18,6 +18,7 @@ import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAU
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
 import { HealthiaWorkspace, HEALTHIA_NAV, type HealthiaRole } from './HealthiaWorkspace.tsx'
+import { clinicalEditorStep, CLINICAL_EDITOR_STEPS, type ClinicalEditorStep } from './HealthiaEditorSupport.ts'
 import { ADAPTIVE_APP_PRESETS, createAdaptiveAppBlueprint, type AdaptiveAppBlueprint } from './AdaptiveAppCatalog.ts'
 import { appendAdaptiveSection, renameAdaptiveSection, removeAdaptiveSection, restorePreviousAdaptiveApps, installAdaptiveApp, readAdaptiveApps } from './AdaptiveAppRegistry.ts'
 import { applyAdaptiveFormFields, restorePreviousAdaptiveForms } from './AdaptiveFormMetadataStore.ts'
@@ -241,6 +242,7 @@ export function AppFrame({
   const activeBlueprint = customApps.find(app => app.id === adaptiveApp)
   const [healthiaRole, setHealthiaRole] = useState<HealthiaRole>('doctor')
   const [healthiaSection, setHealthiaSection] = useState('overview')
+  const [clinicalStep,setClinicalStep]=useState<{step:ClinicalEditorStep;sequence:number}|undefined>()
   const [missionError, setMissionError] = useState(false)
   const [search, setSearch] = useState<{ term: string; results: readonly AdaptiveDiscovery[] } | null>(null)
   const [paletteRevision, setPaletteRevision] = useState(0)
@@ -267,7 +269,11 @@ export function AppFrame({
               if (command.appId === 'general') setAdaptiveApp('general')
               else if (command.appId === 'healthia') {
                 setAdaptiveApp('healthia')
-                if (command.sectionId && HEALTHIA_NAV[healthiaRole].some(item => item.id === command.sectionId)) {
+                if (healthiaRole==='doctor'&&clinicalEditorStep(command.sectionId)) {
+                  const step=command.sectionId
+                  setClinicalStep(previous=>({step,sequence:(previous?.sequence??0)+1}))
+                  setHealthiaSection('encounters')
+                } else if (command.sectionId && HEALTHIA_NAV[healthiaRole].some(item => item.id === command.sectionId)) {
                   setHealthiaSection(command.sectionId)
                 } else setHealthiaSection('overview')
               } else {
@@ -464,6 +470,7 @@ export function AppFrame({
           })()
           window.dispatchEvent(new CustomEvent('phoenix:adaptive-self-inspect', {detail:{
             activeApp:adaptiveApp,
+            ...(adaptiveApp==='healthia'?{clinicalEditor:{section:healthiaSection,steps:CLINICAL_EDITOR_STEPS.map(x=>({id:x.id,label:x.label})),scope:'navigation-only',valuesExposed:false}}:{}),
             apps:customApps.slice(0,12).map(app => ({
               id:app.id,title:app.title,
               sections:app.sections.slice(0,8).map(item => {
@@ -482,7 +489,7 @@ export function AppFrame({
     }
     window.addEventListener('phoenix:adaptive-self-inspect-request', inspect)
     return () => window.removeEventListener('phoenix:adaptive-self-inspect-request', inspect)
-  }, [adaptiveApp,customApps,inspectRuntime])
+  }, [adaptiveApp,customApps,inspectRuntime,healthiaSection])
 
   // Adaptive UI occupies a scrollable surface WITHIN the conversation body.
   // It must never replace the chat or claim width from the input/PHOENIX shell.
@@ -682,7 +689,7 @@ export function AppFrame({
                 onSectionChange={setCustomSection} onReturn={() => setAdaptiveApp('general')} />
             )}
             {adaptiveApp === 'healthia' && (
-              <HealthiaWorkspace role={healthiaRole} section={healthiaSection} inspectRuntime={inspectRuntime}
+              <HealthiaWorkspace requestedStep={clinicalStep} role={healthiaRole} section={healthiaSection} inspectRuntime={inspectRuntime}
                 onRoleChange={role => { setHealthiaRole(role); setHealthiaSection('overview') }}
                 onSectionChange={setHealthiaSection}
                 onReturn={() => { setAdaptiveApp('general');  }}
