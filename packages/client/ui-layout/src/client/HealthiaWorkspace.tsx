@@ -67,6 +67,7 @@ export function HealthiaWorkspace({
     status: 'unavailable', role: null, patientPortal: 'not-verified',
   })
   const [clinicalRefresh, setClinicalRefresh] = useState(0)
+  const [selectedClinicalPatient, setSelectedClinicalPatient] = useState('')
   const [liveStatus, setLiveStatus] = useState<AdaptiveLiveSnapshot | null>(null)
   const isPatient = role === 'patient'
   const active = HEALTHIA_NAV[role].some(item => item.id === section) ? section : 'overview'
@@ -107,35 +108,37 @@ export function HealthiaWorkspace({
 
   return (
     <section className={css.shell} aria-label="Espacio clínico de PHOENIX">
-      <div className={css.titleRow}>
+      <header className={css.titleRow}>
         <div>
-          <span className={css.eyebrow}>ESPACIO CLÍNICO</span>
+          <span className={css.eyebrow}>PHOENIX / HEALTHIA</span>
           <h2>{HEALTHIA_NAV[role].find(item => item.id === active)?.label}</h2>
         </div>
         <div className={css.actions}>
-          <button className={role === 'doctor' ? css.selected : css.action} type="button"
-            aria-pressed={role === 'doctor'}
-            onClick={() => onRoleChange('doctor')}>Médico</button>
-          <button className={role === 'patient' ? css.selected : css.action} type="button"
-            aria-pressed={role === 'patient'}
-            onClick={() => onRoleChange('patient')}>Paciente</button>
-          <button className={css.action} type="button" onClick={onReturn}>Salir del espacio</button>
+          <details className={css.roleMenu}>
+            <summary>Vista: {isPatient ? 'Paciente' : 'Médico'}</summary>
+            <div className={css.roleChoices}>
+              <button type="button" aria-pressed={role === 'doctor'}
+                onClick={() => onRoleChange('doctor')}>Médico</button>
+              <button type="button" aria-pressed={role === 'patient'}
+                onClick={() => onRoleChange('patient')}>Paciente</button>
+            </div>
+          </details>
+          <button className={css.action} type="button" onClick={onReturn}>Volver al chat</button>
         </div>
-      </div>
-      <div className={css.sessionStrip}>
-        <span className={css.notice}>
-          {isPatient
-            ? 'Vista del paciente. Cambiar la vista no inicia sesión ni concede acceso a datos.'
-            : clinical.status === 'authenticated'
-              ? `Servicio clínico autenticado · función: ${clinical.role}`
+      </header>
+      {(isPatient || clinical.status !== 'authenticated') && (
+        <div className={css.sessionStrip} role="status">
+          <span className={css.notice}>
+            {isPatient
+              ? 'Vista del paciente. Cambiar la vista no inicia sesión ni concede acceso a datos.'
               : clinical.status === 'locked'
-                ? 'Servicio clínico protegido: requiere autenticación.'
-                : 'Repositorio clínico no conectado a esta vista. Borradores temporales sin guardar.'}
-        </span>
-        <button className={css.action} type="button" onClick={() => setClinicalRefresh(v => v + 1)}>
-          Comprobar conexión
-        </button>
-      </div>
+                ? 'Inicia sesión para acceder a los expedientes del servicio clínico protegido.'
+                : 'El servicio clínico aún no está disponible. Los expedientes no se guardan fuera del repositorio protegido.'}
+          </span>
+          {!isPatient && <button className={css.action} type="button"
+            onClick={() => setClinicalRefresh(value => value + 1)}>Reintentar conexión</button>}
+        </div>
+      )}
       <nav className={css.tabs} aria-label="Secciones del espacio clínico">
         {HEALTHIA_NAV[role].map(item => (
           <button key={item.id} type="button" aria-current={item.id === active ? 'page' : undefined}
@@ -170,7 +173,8 @@ export function HealthiaWorkspace({
           </div>
         )}
         {!isPatient && (active === 'encounters' || active === 'patients') &&
-          <HealthiaClinicOperations area={active} />}
+          <HealthiaClinicOperations area={active} selectedPatientId={selectedClinicalPatient}
+            onPatientChange={setSelectedClinicalPatient} onNavigate={onSectionChange} />}
         {active !== 'overview' && active !== 'encounters' && active !== 'patients' && active !== 'tools' && (
           <div className={css.modulePlaceholder}>
             <strong>{MODULES[active]?.title ?? HEALTHIA_NAV[role].find(item => item.id === active)?.label}</strong>
@@ -238,15 +242,14 @@ export function HealthiaWorkspace({
           </div>
         )}
       </div>
-      <div className={css.footer}>
-        <span className={css.chatHint}>Kira continúa en el chat del panel derecho; los borradores clínicos no se envían automáticamente.</span>
-        {!isPatient && <a className={css.openClinical} href="/health" target="_blank" rel="noopener noreferrer">
-          Servicio clínico protegido
-        </a>}
-        {isPatient && <a className={css.openClinical} href="/health/patient" target="_blank" rel="noopener noreferrer">
-          Portal protegido del paciente
-        </a>}
-      </div>
+      <details className={css.supportDetails}>
+        <summary>Información y acceso técnico</summary>
+        <p>Los registros clínicos permanecen en el servicio protegido, no en el chat.</p>
+        <a className={css.openClinical} href={isPatient ? '/health/patient' : '/health'}
+          target="_blank" rel="noopener noreferrer">
+          {isPatient ? 'Portal protegido del paciente' : 'Servicio clínico protegido'}
+        </a>
+      </details>
     </section>
   )
 }
