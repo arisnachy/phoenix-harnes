@@ -122,3 +122,10 @@ button.quickCard:focus-visible {outline:2px solid var(--dsw-specific-phoenix-acc
 .quickCard{transition:background .12s,border-color .12s;min-height:84px;}
 @media(max-width:580px){.shell>.titleRow{flex-wrap:wrap;}.roleMenu summary{padding:7px 9px;}.shell>.titleRow h2{font-size:22px;}}
 @media(prefers-reduced-motion:reduce){.quickCard{transition:none;}}
+
+/* Keep section names visible: icon-only PHOENIX rail is not sufficient navigation. */
+@media (min-width:761px){.shell .tabs{display:flex}}
+.shell .tabs{gap:5px;flex-wrap:nowrap;max-width:100%;overflow-x:auto;padding:0 0 5px;margin:0 0 1px;scrollbar-width:thin}
+.shell .tab,.shell .activeTab{flex:none;padding:8px 11px;border-radius:9px;font-size:11px;line-height:1.2;font-weight:550}
+.shell .activeTab{border-color:var(--dsw-specific-phoenix-accent);background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-specific-phoenix-accent);font-weight:700}
+.shell .titleRow{margin-bottom:0}
