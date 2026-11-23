@@ -150,6 +150,8 @@ function clinicStaffOf(value:unknown):value is ClinicStaff {
   return typeof item.username==='string'&&typeof item.role==='string'&&typeof item.org==='string'
 }
 
+export type ClinicalEditorModel={id:string;label:string;location:'local'|'external'}
+export type ClinicalEditorProposal={text:string;numericWarnings:readonly string[];provider:string;model:string}
 export class HealthiaClinicalApi {
   constructor(private readonly requester?: Requester) {}
 
@@ -167,7 +169,7 @@ export class HealthiaClinicalApi {
       response=await (this.requester ?? fetch)('/health/api/'+path, {
         method,headers,credentials:'same-origin',cache:'no-store',
         ...(body===undefined?{}:{body:JSON.stringify(body)}),
-        signal:AbortSignal.timeout(path==='setup'||path==='login'?30000:10000),
+        signal:AbortSignal.timeout((path.startsWith('clinical-field-ai/')||path.startsWith('clinical-context-ai/'))?65000:path==='setup'||path==='login'?30000:10000),
       })
     } catch (cause) {
       const timedOut=cause instanceof Error && /timeout|aborted/i.test(cause.name+' '+cause.message)
@@ -188,6 +190,27 @@ export class HealthiaClinicalApi {
     if(!response.headers.get('content-type')?.includes('application/json'))
       throw Error('Respuesta del servicio no es JSON')
     return response.json() as Promise<unknown>
+  }
+  async editorModels(session:ClinicalSession):Promise<readonly ClinicalEditorModel[]>{
+    const data=object(await this.request('clinical-note-ai-status','GET',session))
+    if(!Array.isArray(data.models)||!data.models.every(x=>x&&typeof x.id==='string'&&typeof x.label==='string'&&['local','external'].includes(x.location)))
+      throw Error('Catálogo de modelos no verificable')
+    return data.models as ClinicalEditorModel[]
+  }
+  async refineEditorField(session:ClinicalSession,encounter:ClinicalEncounter,field:string,text:string,
+    model:ClinicalEditorModel,confirmed:boolean):Promise<ClinicalEditorProposal>{
+    if(!confirmed||encounter.status!=='draft'||!UUID.test(encounter.id))throw Error('Confirme el procesamiento del borrador')
+    const data=object(await this.request((field==='context-review'?'clinical-context-ai/':'clinical-field-ai/')+encounter.id,'POST',session,{
+      version:encounter.version,field,text,routeId:model.id,
+      confirmLocalProcessing:model.location==='local',confirmExternalProcessing:model.location==='external',
+    }))
+    const p=object(data.proposal)
+    if(p.encounterId!==encounter.id||p.encounterVersion!==encounter.version||p.field!==field
+      ||typeof p.text!=='string'||!p.text.trim()||p.text.length>3900||p.requiresClinicianReview!==true
+      ||typeof p.provider!=='string'||typeof p.model!=='string'||p.location!==model.location
+      ||!Array.isArray(p.numericWarnings)||!p.numericWarnings.every(x=>typeof x==='string'))
+      throw Error('Propuesta clínica no verificable')
+    return {text:p.text,numericWarnings:p.numericWarnings as string[],provider:p.provider,model:p.model}
   }
   async status():Promise<ClinicalStatus> {
     const v=object(await this.request('status'))

@@ -6,7 +6,7 @@
 import { createAdaptiveAppBlueprint, validateAdaptiveDraft, type AdaptiveAppBlueprint,
   type AdaptiveFormDraft, type AdaptiveDestination, type AdaptiveOutput, type AdaptiveInputKind } from './AdaptiveAppCatalog.ts'
 import { readAdaptiveApps } from './AdaptiveAppRegistry.ts'
-import { readAdaptiveForm, saveAdaptiveForm } from './AdaptiveFormMetadataStore.ts'
+import { readAdaptiveForm, saveAdaptiveForm, previousAdaptiveForm, restoreAdaptiveFormRevision } from './AdaptiveFormMetadataStore.ts'
 import { readFieldAiConfig,saveFieldAiConfig,type FieldSkill } from './AdaptiveIntelligentFields.ts'
 import { readVisualBoard, parseVisualCommand, preflightVisualCommand, applyVisualCommand, isVisualOperation,
   type VisualOperation, type VisualKind, type VisualSpan, type VisualCommand } from './AdaptiveVisualKit.ts'
@@ -20,7 +20,7 @@ export const ADAPTIVE_PALETTES = {
 } as const
 export type AdaptivePalette = keyof typeof ADAPTIVE_PALETTES
 export type AdaptiveControlOperation =
-  'open' | 'find' | 'add-section' | 'rename-section' | 'remove-section' | 'palette' | 'rename-field' | 'remove-field' | 'set-binding' | 'set-field-kind' | 'set-required' | 'set-field-ai' | VisualOperation
+  'open' | 'find' | 'add-section' | 'rename-section' | 'remove-section' | 'palette' | 'rename-field' | 'remove-field' | 'set-binding' | 'set-field-kind' | 'set-required' | 'set-field-ai' | 'restore-form' | VisualOperation
 export interface AdaptiveControlCommand {
   readonly appId: string
   readonly operation: AdaptiveControlOperation
@@ -67,7 +67,7 @@ export function parseAdaptiveControl(value: unknown): AdaptiveControlCommand | n
     return parseVisualCommand(value) as AdaptiveControlCommand | null
   }
   if (typeof v.appId !== 'string' || !['general','healthia'].includes(v.appId) && !APP.test(v.appId)
-      || !['open','find','add-section','rename-section','remove-section','palette','rename-field','remove-field','set-binding','set-field-kind','set-required','set-field-ai'].includes(v.operation as string)) return null
+      || !['open','find','add-section','rename-section','remove-section','palette','rename-field','remove-field','set-binding','set-field-kind','set-required','set-field-ai','restore-form'].includes(v.operation as string)) return null
   const op = v.operation as AdaptiveControlOperation
   const base = ['appId','operation']
   let keys = base
@@ -82,6 +82,7 @@ export function parseAdaptiveControl(value: unknown): AdaptiveControlCommand | n
   if (op === 'set-binding') keys = [...base,'sectionId','fieldId','destination','output','expectedRevision']
   if (op === 'set-field-kind') keys = [...base,'sectionId','fieldId','kind','expectedRevision']
   if (op === 'set-required') keys = [...base,'sectionId','fieldId','required','expectedRevision']
+  if (op === 'restore-form') keys = [...base,'sectionId','expectedRevision']
   if (op === 'set-field-ai') keys = [...base,'sectionId','fieldId','enabled','skill','instruction','expectedRevision']
   if (!onlyKeys(v,keys)) return null
   if (op !== 'open' && op !== 'find' && !APP.test(v.appId)) return null
@@ -101,6 +102,7 @@ export function parseAdaptiveControl(value: unknown): AdaptiveControlCommand | n
   if (op === 'set-binding' && (!DEST.includes(v.destination as string) || !OUTPUT.includes(v.output as string))) return null
   if (op === 'set-field-kind' && !['text','number','date','select','textarea'].includes(v.kind as string)) return null
   if (op === 'set-required' && typeof v.required !== 'boolean') return null
+  if(op==='restore-form'&&(typeof v.sectionId!=='string'||!ID.test(v.sectionId)||!Number.isSafeInteger(v.expectedRevision)||(v.expectedRevision as number)<1))return null
   if (op === 'set-field-ai' && (typeof v.enabled !== 'boolean'
     || !['polish','summarize','structure','extract'].includes(v.skill as string)
     || typeof v.instruction !== 'string' || v.instruction.length > 320
@@ -212,6 +214,7 @@ export function preflightAdaptiveControl(command: AdaptiveControlCommand, apps: 
       ? {valid:true,reason:'HIDE_MENU_KEEP_FORM_DATA'} : {valid:false,reason:'LAST_OR_UNKNOWN_SECTION'}
   }
   if (!app.sections.some(s => s.id === command.sectionId)) return {valid:false,reason:'UNKNOWN_SECTION'}
+  if(command.operation==='restore-form')return previousAdaptiveForm(app.id,command.sectionId!,command.expectedRevision!)?{valid:true,reason:'SCOPED_FORM_ROLLBACK'}:{valid:false,reason:'ROLLBACK_UNAVAILABLE'}
   if (isVisualOperation(command.operation)) {
     return preflightVisualCommand(command,readVisualBoard(app.id,command.sectionId!))
   }
@@ -267,4 +270,9 @@ export function applyAdaptiveAiFieldEdit(command:AdaptiveControlCommand) {
   return saveFieldAiConfig({version:1,appId:command.appId,sectionId:command.sectionId!,
     fieldId:command.fieldId!,revision:command.expectedRevision!+1,
     enabled:command.enabled!,skill:command.skill!,instruction:command.instruction!})
+}
+
+export function applyAdaptiveFormRestore(command:AdaptiveControlCommand){
+  if(command.operation!=='restore-form'||!preflightAdaptiveControl(command).valid)throw Error('ADAPTIVE_FORM_ROLLBACK_DENIED')
+  return restoreAdaptiveFormRevision(command.appId,command.sectionId!,command.expectedRevision!)
 }

@@ -136,3 +136,24 @@ export function applyAdaptiveFormFields(
   if (!validateAdaptiveDraft(next)) throw new Error('ADAPTIVE_INVALID_FORM_PROPOSAL')
   return saveAdaptiveForm(next, store)
 }
+
+/** Restore only one generic form, as a new revision. Other apps and EHR are untouched. */
+export function previousAdaptiveForm(appId:string,sectionId:string,revision:number,
+  store:Store|undefined=currentStore()):AdaptiveFormDraft|undefined{
+  if(!store||!/^app-[a-z0-9-]{1,45}$/u.test(appId)||!Number.isSafeInteger(revision))return undefined
+  const current=readAdaptiveForm(appId,sectionId,store)
+  if(!current||current.revision!==revision)return undefined
+  const snapshot=parse(store.getItem(ROLLBACK))
+  const prior=snapshot?.find(item=>item.appId===appId&&item.templateId===sectionId)
+  if(!prior||prior.revision!==revision-1)return undefined
+  // Never remove or modify protected fields through restoration.
+  const protectedFields=current.fields.filter(field=>field.protected)
+  if(protectedFields.some(field=>!prior.fields.some(p=>JSON.stringify(p)===JSON.stringify(field))))return undefined
+  return prior
+}
+export function restoreAdaptiveFormRevision(appId:string,sectionId:string,revision:number,
+  store:Store|undefined=currentStore()):AdaptiveFormDraft{
+  const prior=previousAdaptiveForm(appId,sectionId,revision,store)
+  if(!prior)throw Error('ADAPTIVE_FORM_ROLLBACK_UNAVAILABLE')
+  return saveAdaptiveForm({...prior,revision:revision+1},store)
+}
