@@ -38,6 +38,9 @@ type PluginInventoryRemoteResult<T> =
 
 interface PluginInventoryLocalRemote {
   localModelState?: () => Promise<PluginInventoryRemoteResult<PhoenixLocalInstallState>>
+  setDefaultLocalModel?: (request: { modelId: string }) => Promise<PluginInventoryRemoteResult<PhoenixLocalInstallState>>
+  installLocalModel?: (request: { modelId: string }) => Promise<PluginInventoryRemoteResult<PhoenixLocalInstallState>>
+  setLocalModelThinking?: (request: { thinking: boolean | string | null }) => Promise<PluginInventoryRemoteResult<PhoenixLocalInstallState>>
 }
 
 /** The `ctx.modelDirectories` session model-selection service. */
@@ -98,11 +101,28 @@ export class ModelDirectoryResolver extends Service {
           `pluginInventory.localModelState failed: ${result.error.code}: ${result.error.message}`,
         )
       }
+    const unwrapLocal = async (
+      operation: (() => Promise<PluginInventoryRemoteResult<PhoenixLocalInstallState>>) | undefined,
+    ): Promise<PhoenixLocalInstallState> => {
+      if (operation === undefined) throw new Error('Phoenix Local controls unavailable')
+      const result = await operation()
+      if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
+      return result.value
+    }
     const directory = new ModelDirectory(
       connection.api.sessions,
       sessionId,
       () => sessions.subagentAddress(sessionId) === undefined,
       readLocalModelState,
+      pluginInventory?.setDefaultLocalModel === undefined
+        ? undefined
+        : modelId => unwrapLocal(() => pluginInventory.setDefaultLocalModel!({ modelId })),
+      pluginInventory?.installLocalModel === undefined
+        ? undefined
+        : modelId => unwrapLocal(() => pluginInventory.installLocalModel!({ modelId })),
+      pluginInventory?.setLocalModelThinking === undefined
+        ? undefined
+        : thinking => unwrapLocal(() => pluginInventory.setLocalModelThinking!({ thinking })),
     )
     live.directories.set(sessionId, directory)
     // The composer cannot read this plugin (the dependency runs one way), so
