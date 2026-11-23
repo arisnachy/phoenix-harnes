@@ -112,7 +112,7 @@ export function HealthiaWorkspace({
     <section className={css.shell} aria-label="Espacio clínico de PHOENIX">
       <header className={css.titleRow}>
         <div>
-          <span className={css.eyebrow}>PHOENIX / HEALTHIA</span>
+          <span className={css.eyebrow}>ESPACIO CLÍNICO</span>
           <h2>{HEALTHIA_NAV[role].find(item => item.id === active)?.label}</h2>
         </div>
         <div className={css.actions}>
@@ -239,14 +239,14 @@ export function HealthiaWorkspace({
           </div>
         )}
       </div>
-      <details className={css.supportDetails}>
+      {active === 'tools' && <details className={css.supportDetails}>
         <summary>Información y acceso técnico</summary>
         <p>Los registros clínicos permanecen en el servicio protegido, no en el chat.</p>
         <a className={css.openClinical} href={isPatient ? '/health/patient' : '/health'}
           target="_blank" rel="noopener noreferrer">
           {isPatient ? 'Portal protegido del paciente' : 'Servicio clínico protegido'}
         </a>
-      </details>
+      </details>}
     </section>
   )
 }
