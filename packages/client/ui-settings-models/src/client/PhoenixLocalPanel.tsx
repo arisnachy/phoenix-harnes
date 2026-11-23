@@ -59,6 +59,19 @@ export interface PhoenixLocalPanelProps {
 
 const TRANSIENT_PHASES = new Set<PhoenixLocalModelPhase>(['installing', 'starting', 'stopping'])
 
+type OllamaLibraryChoice = { readonly tag: string; readonly name: string }
+
+/** Curated official Ollama tags; the complete, changing directory remains on ollama.com/library. */
+const OLLAMA_LIBRARY_CHOICES: readonly OllamaLibraryChoice[] = [
+  { tag: 'qwen3.5:2b-q4_K_M', name: 'Qwen 3.5 2B · ligero' },
+  { tag: 'qwen3.5:4b', name: 'Qwen 3.5 4B' },
+  { tag: 'qwen3.5:9b', name: 'Qwen 3.5 9B' },
+  { tag: 'gemma4:e2b', name: 'Gemma 4 E2B' },
+  { tag: 'gemma4:e4b', name: 'Gemma 4 E4B' },
+  { tag: 'llama3.2:3b', name: 'Llama 3.2 3B' },
+  { tag: 'deepseek-r1:7b', name: 'DeepSeek R1 7B' },
+]
+
 function formatBytes(value: number): string {
   const gib = value / (1024 ** 3)
   if (gib >= 1) return `${gib.toFixed(gib >= 10 ? 0 : 1)} GB`
@@ -91,6 +104,8 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
   const [confirmUninstall, setConfirmUninstall] = useState(false)
   const [confirmOllamaDelete, setConfirmOllamaDelete] = useState(false)
   const [ollamaTag, setOllamaTag] = useState('')
+  const [ollamaSearch, setOllamaSearch] = useState('')
+  const [ollamaView, setOllamaView] = useState<'suggested' | 'installed'>('suggested')
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
@@ -134,6 +149,25 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
     : typeof activeThinking === 'boolean' ? `boolean:${String(activeThinking)}` : `level:${activeThinking}`
   const supportedKeys = new Set(modes.map(value => typeof value === 'boolean'
     ? `boolean:${String(value)}` : `level:${value}`))
+  const installedOllamaIds = new Set(snapshot?.ollamaInstalledModelIds ?? [])
+  const libraryEntries = OLLAMA_LIBRARY_CHOICES.map(choice => {
+    const legacyQwenId = choice.tag === 'qwen3.5:2b-q4_K_M'
+      && snapshot?.catalog.some(model => model.id === 'qwen3.5-2b-ollama-q4-k-m')
+    const id = legacyQwenId ? 'qwen3.5-2b-ollama-q4-k-m' : `ollama:${choice.tag}`
+    return { ...choice, id, installed: installedOllamaIds.has(id) }
+  })
+  const otherInstalled = (snapshot?.catalog ?? [])
+    .filter(model => model.backend === 'ollama' && model.id.startsWith('ollama:')
+      && installedOllamaIds.has(model.id)
+      && !libraryEntries.some(choice => choice.id === model.id))
+    .map(model => ({ name: model.displayName, tag: model.id.slice('ollama:'.length),
+      id: model.id, installed: true }))
+  const searchTerm = ollamaSearch.trim().toLocaleLowerCase()
+  const visibleOllamaEntries = [...libraryEntries, ...otherInstalled]
+    .filter(model => ollamaView === 'suggested' || model.installed)
+    .filter(model => searchTerm.length === 0
+      || model.name.toLocaleLowerCase().includes(searchTerm)
+      || model.tag.toLocaleLowerCase().includes(searchTerm))
 
   const run = useCallback(async (
     operation: () => Promise<PhoenixLocalModelSnapshot>,
@@ -247,6 +281,46 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
           onClick={() => { void refresh() }}>{t('ollamaRefresh')}</button>
       </div>
       <p className={styles['muted']}>{t('ollamaTagHint')}</p>
+      <section className={styles['library']} aria-label={t('ollamaLibrary')}>
+        <div className={styles['libraryHeading']}>
+          <strong>{t('ollamaLibrary')}</strong>
+          <a href="https://ollama.com/library" target="_blank" rel="noopener noreferrer">
+            {t('ollamaAllModels')}
+          </a>
+        </div>
+        <div className={styles['libraryControls']}>
+          <label className={styles['field']}>
+            <span className={styles['label']}>{t('ollamaSearch')}</span>
+            <input type="search" value={ollamaSearch} autoComplete="off"
+              onChange={event => { setOllamaSearch(event.currentTarget.value) }} />
+          </label>
+          <label className={styles['field']}>
+            <span className={styles['label']}>{t('ollamaFilter')}</span>
+            <select value={ollamaView}
+              onChange={event => { setOllamaView(event.currentTarget.value as 'suggested' | 'installed') }}>
+              <option value="suggested">{t('ollamaSuggested')}</option>
+              <option value="installed">{t('ollamaInstalled')}</option>
+            </select>
+          </label>
+        </div>
+        <div className={styles['libraryGrid']}>
+          {visibleOllamaEntries.length === 0 ? <p className={styles['muted']}>{t('ollamaNoMatches')}</p>
+            : visibleOllamaEntries.map(entry => (
+              <div key={entry.id} className={styles['libraryCard']}>
+                <div className={styles['libraryDetails']}>
+                  <strong>{entry.name}</strong>
+                  <span>{entry.tag}</span>
+                  {entry.installed ? <span>{t('ollamaExisting')}</span> : null}
+                </div>
+                <button type="button" className={styles['secondary']}
+                  disabled={busy || TRANSIENT_PHASES.has(snapshot.phase)}
+                  onClick={() => { void run(() => client.install(entry.id), 'installing') }}>
+                  {entry.installed ? t('connectOllama') : t('ollamaPull')} · {entry.tag}
+                </button>
+              </div>
+            ))}
+        </div>
+      </section>
       {selected === undefined ? null : (
         <div className={styles['facts']}>
           <span><b>{t('download')}:</b> {selected.backend === 'ollama' ? inOllama ? t('ollamaExisting') : t('ollamaNotDownloaded') : formatBytes(selected.sizeBytes)}</span>
