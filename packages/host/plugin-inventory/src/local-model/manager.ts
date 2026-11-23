@@ -135,6 +135,10 @@ class RuntimeManager implements LocalModelRuntimeManager {
   async refreshThinking(): Promise<LocalModelRuntimeSnapshot> {
     const selectedModelId = this.persistent.selectedModelId
     const model = getLocalModel(selectedModelId)
+    if (model?.id === 'qwen3.5-4b-q4-k-m' && model.backend === 'llama-server') {
+      this.publish({ ...this.current, thinkingCapabilities: { values: [false, true], default: false } })
+      return this.snapshot()
+    }
     if (model?.backend !== 'ollama' || this.dependencies.readOllamaThinking === undefined) {
       return this.snapshot()
     }
@@ -152,12 +156,14 @@ class RuntimeManager implements LocalModelRuntimeManager {
   /** Persist only a value actually advertised by the selected Ollama model. */
   async setThinking(thinking: LocalThinking): Promise<LocalModelRuntimeSnapshot> {
     const model = getLocalModel(this.persistent.selectedModelId)
-    if (model?.backend !== 'ollama') {
-      throw new LocalModelRuntimeFault('invalid-thinking', 'El modelo seleccionado no utiliza Ollama.')
+    const managedQwen = model?.id === 'qwen3.5-4b-q4-k-m' && model.backend === 'llama-server'
+    if (model?.backend !== 'ollama' && !managedQwen) {
+      throw new LocalModelRuntimeFault('invalid-thinking', 'El modelo seleccionado no ofrece control de razonamiento.')
     }
     if (thinking !== null && !this.current.thinkingCapabilities?.values.some(value => value === thinking)) {
       throw new LocalModelRuntimeFault('unsupported-thinking', 'Este nivel de razonamiento no está confirmado por Ollama /api/show.')
     }
+    if (managedQwen && thinking !== this.persistent.thinking && this.current.phase === 'running') await this.stop()
     await this.savePersistent({ ...this.persistent, thinking })
     this.publish({ ...this.current, thinking })
     return this.snapshot()
@@ -344,8 +350,13 @@ class RuntimeManager implements LocalModelRuntimeManager {
     if (!await this.dependencies.pathExists(executablePath) || !await this.dependencies.pathExists(modelPath)) {
       throw new LocalModelRuntimeFault('installation-incomplete', 'La instalación de Phoenix Local está incompleta. Vuelve a instalarla desde Settings.')
     }
-    if (this.dependencies.freeMemoryBytes() < model.estimatedRamBytes + MEMORY_HEADROOM_BYTES) {
-      throw new LocalModelRuntimeFault('insufficient-memory', 'No hay memoria libre suficiente para iniciar Phoenix Local de forma segura.')
+    const availableMemory = this.dependencies.freeMemoryBytes()
+    const requiredMemory = model.estimatedRamBytes + MEMORY_HEADROOM_BYTES
+    if (availableMemory < requiredMemory) {
+      const error = new LocalModelRuntimeFault('insufficient-memory',
+        `Memoria libre insuficiente para ${model.displayName} (GGUF): ${(availableMemory / 1e9).toFixed(2)} GB disponibles; ${(requiredMemory / 1e9).toFixed(2)} GB estimados con reserva. Libera memoria o selecciona un modelo Ollama más ligero.`)
+      this.publishError(error)
+      throw error
     }
 
     this.publishPhase('starting')
@@ -360,7 +371,7 @@ class RuntimeManager implements LocalModelRuntimeManager {
       // automatic reasoning, which can spend the entire completion budget on
       // hidden thinking and return no visible answer. Disable it at process
       // startup for this exact model; leave Gemma and other backends untouched.
-      ...(model.id === 'qwen3.5-4b-q4-k-m' ? ['--reasoning', 'off'] : []),
+      ...(model.id === 'qwen3.5-4b-q4-k-m' ? ['--reasoning', this.persistent.thinking === true ? 'on' : 'off'] : []),
       // Keep long local contexts affordable on CPU-first machines by halving
       // the default f16 KV-cache footprint without changing model weights.
       '--cache-type-k', 'q8_0',

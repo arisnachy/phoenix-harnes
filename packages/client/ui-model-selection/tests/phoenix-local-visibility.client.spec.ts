@@ -99,6 +99,34 @@ describe('Installed local model selection', () => {
     expect(() => assertPhoenixLocalSelectable({ provider: 'phoenix-local', model: 'stale' }, inventory)).toThrow()
   })
 
+  it('shows native thinking only for the active Ollama model and preserves its choice', () => {
+    const result = projectPhoenixLocalAvailability(hostDirectory, {
+      ...inventory, thinking: false, thinkingCapabilities: { values: [false, true], default: true },
+    })
+    expect(result.current.reasoningEffort).toBe('off')
+    expect(result.groups[1]?.models[0]?.reasoning?.efforts.map(value => value.id)).toEqual(['off', 'on'])
+    expect(result.groups[1]?.models[1]?.reasoning).toBeUndefined()
+    expect(result.groups[1]?.models[2]?.reasoning).toBeUndefined()
+  })
+
+  it('sends native thinking through the Host and not the generic model effort RPC', async () => {
+    let local: PhoenixLocalInstallState = {
+      ...inventory, thinking: false, thinkingCapabilities: { values: [false, true], default: true },
+    }
+    const selectModel = vi.fn(async () => ({ result: { ok: true, value: { selected: selectedLocal } } }))
+    const sessions = {
+      models: async () => ({ result: { ok: true, value: hostDirectory } }), selectModel,
+    } as unknown as Pick<IApiClient['sessions'], 'models' | 'selectModel'>
+    const setThinking = vi.fn(async (thinking: boolean | string | null) => (local = { ...local, thinking }))
+    const directory = new ModelDirectory(sessions, 'local-thinking' as SessionId, () => true,
+      async () => local, async () => local, setThinking)
+    await directory.load()
+    await directory.select({ provider: 'phoenix-local', model: gemma, reasoningEffort: 'on' })
+    expect(setThinking).toHaveBeenCalledWith(true)
+    expect(selectModel).toHaveBeenCalledWith({ sessionId: 'local-thinking', provider: 'phoenix-local', model: 'phoenix-local' })
+    expect(directory.store.getSnapshot().current?.reasoningEffort).toBe('on')
+  })
+
   it('activates the exact artifact and submits only the stable adapter route to the session', async () => {
     let local = inventory
     const activate = vi.fn(async (modelId: string) => {
