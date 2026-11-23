@@ -111,3 +111,13 @@
 .printAction{justify-self:start;cursor:pointer;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;padding:9px 12px;background:var(--dsw-alias-bg-layer-1);color:inherit;font:inherit;font-size:12px}
 .printAction:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .printAction:focus-visible{outline:2px solid var(--dsw-specific-phoenix-accent);outline-offset:2px}
+
+/* Shared credential flow embedded in the clinical home, never a second app shell. */
+.accessPanel{display:grid;gap:10px;min-width:0;margin:0;padding:0;background:transparent;color:inherit}
+.accessPanel h3{font-size:13px;font-weight:680;margin:2px 0 0}
+.accessPanel p{margin:0;font-size:11px;line-height:1.55;color:var(--dsw-alias-label-secondary)}
+.accessPanel .form{padding:0;border:0;border-radius:0;background:transparent;gap:11px}
+.accessPanel .form label{font-size:11px}
+.accessPanel .form input{width:100%;min-height:39px}
+.accessPanel .form button.primary{width:100%;justify-self:stretch;min-height:39px;margin-top:2px}
+.accessPanel .error{font-size:11px}
