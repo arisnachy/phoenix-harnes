@@ -72,12 +72,19 @@ export function restoreClinicalNote(encounter:ClinicalEncounter):{
   return {kind,values}
 }
 
-export function HealthiaClinicOperations({ area }: {area:Area}) {
+export function HealthiaClinicOperations({ area, selectedPatientId, onPatientChange, onNavigate }: {
+  area:Area
+  selectedPatientId?:string
+  onPatientChange?:(id:string)=>void
+  onNavigate?:(area:Area)=>void
+}) {
   const [mode,setMode]=useState<Mode>('loading')
   const [session,setSession]=useState<ClinicalSession|null>(null)
   const [patients,setPatients]=useState<readonly ClinicalPatient[]>([])
   const [encounters,setEncounters]=useState<readonly ClinicalEncounter[]>([])
-  const [patientId,setPatientId]=useState('')
+  const [patientId,setPatientIdInternal]=useState(selectedPatientId??'')
+  // Share only an opaque patient id across sections; the clinical Host owns PHI.
+  const setPatientId=(id:string):void=>{setPatientIdInternal(id);onPatientChange?.(id)}
   const [encounterId,setEncounterId]=useState('')
   const [user,setUser]=useState('')
   const [password,setPassword]=useState('')
@@ -349,49 +356,85 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
   </section>
 
   return <section className={css.root} aria-label={area==='patients'?'Pacientes clínicos':'Consultas clínicas'}>
-    <div className={css.toolbar}>
-      {brandMark}
-      <div className={css.identity}><strong>Sesión profesional activa</strong><small>{session?.actor.username} · {session?.actor.role}</small></div>
+    <header className={css.toolbar}>
+      <div className={css.identity}>
+        <span className={css.secureIndicator}>● Repositorio clínico protegido</span>
+        <strong>Sesión profesional activa</strong>
+        <small>{session?.actor.username} · {session?.actor.role}</small>
+      </div>
       <div className={css.toolbarActions}>
         <button type="button" disabled={busy} onClick={()=>{void reload()}}>Actualizar</button>
-        <button type="button" onClick={()=>{
-          if(!session||busy)return
-          setBusy(true);setError('')
-          void api.logout(session).then(()=>{
-            setSession(null);setPatients([]);setEncounters([])
-            setPatientId('');setEncounterId('');setMode('login')
-          }).catch(()=>{
-            setError('No se pudo cerrar la sesión en el Host. Reintenta antes de abandonar el equipo.')
-          }).finally(()=>setBusy(false))
-        }}>Cerrar sesión clínica</button>
+        <details className={css.settingsMenu}>
+          <summary>Opciones de clínica</summary>
+          <div className={css.settingsPanel}>
+            {userRole==='admin'&&<div className={css.brandSettings}>
+              <strong>Identidad institucional</strong>
+              {brandMark}
+              <label>Logo de la institución
+                <input type="file" accept="image/png,image/jpeg,image/webp"
+                  onChange={event=>{void readLogo(event.currentTarget.files?.[0])}}/>
+              </label>
+              <small>PNG, JPG o WebP · máximo 160 KB.</small>
+              <div className={css.toolbarActions}>
+                <button type="button" disabled={busy||logoDraft===null||!!logoError}
+                  onClick={()=>{void saveBranding(logoDraft)}}>Guardar logo</button>
+                <button type="button" disabled={busy||(!logo&&!logoDraft)}
+                  onClick={()=>{void saveBranding(null)}}>Usar logo de Healthia</button>
+              </div>
+              {logoError&&<p role="alert" className={css.error}>{logoError}</p>}
+            </div>}
+            <button type="button" className={css.logoutAction} onClick={()=>{
+              if(!session||busy)return
+              setBusy(true);setError('')
+              void api.logout(session).then(()=>{
+                setSession(null);setPatients([]);setEncounters([])
+                setPatientId('');setEncounterId('');setMode('login')
+              }).catch(()=>{
+                setError('No se pudo cerrar la sesión en el Host. Reintenta antes de abandonar el equipo.')
+              }).finally(()=>setBusy(false))
+            }}>Cerrar sesión clínica</button>
+          </div>
+        </details>
       </div>
-    </div>
-    {userRole==='admin'&&<div className={css.brandSettings}>
-      <label>Logo de la institución
-        <input type="file" accept="image/png,image/jpeg,image/webp" onChange={event=>{void readLogo(event.currentTarget.files?.[0])}}/>
-      </label>
-      <button type="button" disabled={busy||logoDraft===null||!!logoError} onClick={()=>{void saveBranding(logoDraft)}}>Guardar logo</button>
-      <button type="button" disabled={busy||(!logo&&!logoDraft)} onClick={()=>{void saveBranding(null)}}>Usar logo de Healthia</button>
-      {logoError&&<p role="alert" className={css.error}>{logoError}</p>}
-    </div>}
+    </header>
     {!readyRef.current&&<p role="status" className={css.notice}>Cargando registros autorizados…</p>}
     {(error||notice)&&<p role={error?'alert':'status'} className={error?css.error:css.notice}>{error||notice}</p>}
-    {area==='patients'&&<div className={css.directoryHeader}>
-      <div><strong>Directorio de pacientes</strong><small>{patients.length} expedientes accesibles en esta institución · búsqueda local</small></div>
-      <label>Buscar por nombre, fecha, contacto o documento
+    <div className={css.directoryHeader}>
+      <div>
+        <strong>{area==='patients'?'Directorio de pacientes':'Atención de consultas'}</strong>
+        <small>{patients.length} expedientes autorizados · {area==='patients'?'Selecciona uno para ver su ficha':'Selecciona un paciente para continuar'}</small>
+      </div>
+      <label>Buscar paciente
         <input aria-label="Buscar pacientes" type="search" value={patientSearch}
-          placeholder="Buscar paciente…" onChange={e=>setPatientSearch(e.currentTarget.value)}/>
+          placeholder="Nombre, cédula, teléfono o fecha…" onChange={e=>setPatientSearch(e.currentTarget.value)}/>
       </label>
-    </div>}
-    <label className={css.selectPatient}>Paciente del expediente
+      {area==='patients'&&canManagePatients&&<button className={css.primary} type="button"
+        onClick={()=>setCreatingPatient(value=>!value)}>
+        {creatingPatient?'Cancelar registro':'Registrar paciente'}
+      </button>}
+    </div>
+    {area==='encounters'&&<label className={css.selectPatient}>Paciente del expediente
       <select value={patientId} aria-label="Paciente del expediente"
         onChange={e=>{setPatientId(e.currentTarget.value);setEncounterId('');setError('');setNotice('')}}>
         <option value="">Seleccionar paciente</option>
-        {(area==='patients'?visiblePatients:patients).map(item=><option key={item.id} value={item.id}>{item.name} · {item.dateOfBirth}</option>)}
+        {visiblePatients.map(item=><option key={item.id} value={item.id}>{item.name} · {item.dateOfBirth}</option>)}
+        {selectedPatient&&!visiblePatients.some(item=>item.id===selectedPatient.id)&&
+          <option value={selectedPatient.id}>{selectedPatient.name}</option>}
       </select>
-    </label>
+    </label>}
+    {selectedPatient&&<div className={css.patientFocus} aria-label="Paciente activo">
+      <div className={css.patientFocusIdentity}>
+        <span className={css.patientInitial} aria-hidden="true">{selectedPatient.name.trim().slice(0,1).toUpperCase()}</span>
+        <span><strong>{selectedPatient.name}</strong><small>Nacimiento: {selectedPatient.dateOfBirth||'Sin fecha documentada'}</small></span>
+      </div>
+      <div className={css.toolbarActions}>
+        {area==='patients'&&canManageEncounters&&onNavigate&&
+          <button className={css.primary} type="button" onClick={()=>onNavigate('encounters')}>Ir a consultas</button>}
+        <button type="button" onClick={()=>{setPatientId('');setEncounterId('')}}>Cambiar paciente</button>
+      </div>
+    </div>}
     {area==='patients'&&<>
-      <div className={css.patientResults} role="group" aria-label="Resultados del directorio">
+      {!selectedPatient&&!creatingPatient&&<div className={css.patientResults} role="group" aria-label="Resultados del directorio">
         {visiblePatients.slice(0,50).map(item=><button type="button" key={item.id}
           className={patientId===item.id?css.patientResultActive:css.patientResult}
           aria-pressed={patientId===item.id}
@@ -402,12 +445,7 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
         </button>)}
         {!visiblePatients.length&&<p className={css.notice}>No hay pacientes que coincidan con esta búsqueda.</p>}
         {visiblePatients.length>50&&<p className={css.notice}>Mostrando 50 de {visiblePatients.length}. Precisa la búsqueda.</p>}
-      </div>
-      <div className={css.actionBar}>
-        {canManagePatients&&<button type="button" onClick={()=>setCreatingPatient(x=>!x)}>
-          {creatingPatient?'Cancelar registro':'Registrar paciente'}
-        </button>}
-      </div>
+      </div>}
       {creatingPatient&&canManagePatients&&<form className={css.form} onSubmit={event=>{void addPatient(event)}} autoComplete="off">
         <h3>Registro de paciente · admisión protegida</h3>
         <p>Identidad, contacto y datos de admisión. El expediente interno se asigna al guardar; documento y teléfono no son su identificador principal.</p>
@@ -471,7 +509,16 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
 
     </>}
     {area==='encounters'&&<>
-      {!selectedPatient&&<p className={css.notice}>Selecciona un paciente para abrir o recuperar sus consultas.</p>}
+      {!selectedPatient&&<div className={css.patientResults} role="group" aria-label="Elegir paciente para consultar">
+        {visiblePatients.slice(0,50).map(item=><button type="button" key={item.id}
+          className={css.patientResult} onClick={()=>{setPatientId(item.id);setEncounterId('')}}>
+          <span className={css.patientInitial} aria-hidden="true">{item.name.trim().slice(0,1).toUpperCase()}</span>
+          <span><strong>{item.name}</strong><small>{item.dateOfBirth||'Sin fecha documentada'}</small></span>
+          <span className={css.patientRecordIndicator}>Seleccionar</span>
+        </button>)}
+        {!visiblePatients.length&&<p className={css.notice}>No hay pacientes que coincidan con esta búsqueda.</p>}
+        {visiblePatients.length>50&&<p className={css.notice}>Mostrando 50 de {visiblePatients.length}. Refina la búsqueda.</p>}
+      </div>}
       {selectedPatient&&canManageEncounters&&<div className={css.actionBar}>
         <button type="button" onClick={()=>{setCreatingEncounter(v=>!v);setEncounterId('')}}>
           {creatingEncounter?'Cancelar':'Nueva consulta'}
@@ -486,7 +533,7 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
         <button className={css.primary} disabled={busy||!complaint.trim()||!specialty.trim()}
           type="submit">Abrir consulta</button>
       </form>}
-      {selectedPatient&&<label className={css.selectPatient}>Consulta del paciente
+      {selectedPatient&&patientEncounters.length>0&&<label className={css.selectPatient}>Consulta del paciente
         <select value={encounterId} aria-label="Consulta del paciente" onChange={e=>{
           setEncounterId(e.currentTarget.value);setError('');setNotice('')
         }}>
@@ -496,6 +543,8 @@ export function HealthiaClinicOperations({ area }: {area:Area}) {
           </option>)}
         </select>
       </label>}
+      {selectedPatient&&!creatingEncounter&&!patientEncounters.length&&
+        <p className={css.emptyState}>Este paciente aún no tiene consultas accesibles. Utiliza «Nueva consulta» para iniciar la atención.</p>}
       {selectedEncounter&&currentNote&&<div className={css.encounter}>
         <p className={css.notice}>Consulta · versión {selectedEncounter.version} · {selectedEncounter.status}
           {selectedEncounter.status==='signed'?' · Solo lectura': ' · Borrador pendiente de revisión y firma'}</p>
