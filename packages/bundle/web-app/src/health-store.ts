@@ -722,6 +722,36 @@ export class HealthClinicStore {
       fail('Consulta no editable, reservada o modificada')
   }
 
+  /** Bounded clinical context, resolved from the authorized encounter, never a client patient ID. */
+  clinicalEditorContext(actor:Actor,id:string,version:number):RecordData {
+    this.assertClinicalEditorModel(actor,id,version)
+    const encounter=this.find(actor,'encounters',id).data
+    const patientId=str(encounter.patientId,'Paciente',80)
+    const context=this.patientContext(actor,patientId)
+    const patient=context.patient as RecordData
+    const pick=(item:RecordData,keys:readonly string[]):RecordData=>Object.fromEntries(
+      keys.filter(key=>item[key]!==undefined).map(key=>[key,item[key]]))
+    const rows=(key:string,keys:readonly string[],limit:number):RecordData[]=>{
+      const list=context[key]
+      if(!Array.isArray(list))return []
+      return list.filter(item=>item&&typeof item==='object'&&item.id!==id&&item.confidentialPsychotherapy!==true)
+        .sort((a,b)=>String(b.createdAt??'').localeCompare(String(a.createdAt??'')))
+        .slice(0,limit).map(item=>pick(item as RecordData,keys))
+    }
+    const birth=typeof patient.dateOfBirth==='string'?new Date(patient.dateOfBirth):null
+    const now=new Date()
+    const age=birth&&Number.isFinite(birth.getTime())?now.getUTCFullYear()-birth.getUTCFullYear()
+      -(now.toISOString().slice(5,10)<birth.toISOString().slice(5,10)?1:0):null
+    return {demographics:{age,sexAtBirth:patient.sexAtBirth??null},
+      longitudinal:pick(patient,['medicalHistory','medicalHistoryReview','allergyReview']),
+      interviewAnswers:encounter.interviewAnswers??{},
+      recentEncounters:rows('encounters',['createdAt','complaint','status','assessment','plan'],3),
+      observations:rows('observations',['display','value','unit','effectiveAt','source','status','referenceLow','referenceHigh'],12),
+      studies:rows('orders',['createdAt','description','result','status'],5),
+      prescriptions:rows('prescriptions',['createdAt','medication','directions','status'],5),
+      scope:'Limited recent records; not the complete chart. Prior values are not current measurements.'}
+  }
+
   suggestClinicalNote(actor:Actor,id:string):ClinicalNoteProposal & {readonly encounterId:string;readonly encounterVersion:number;readonly mayUseLocalModel:boolean} {
     if(actor.role!=='clinician'&&actor.role!=='psychologist')
       fail('Profesional clínico requerido')
