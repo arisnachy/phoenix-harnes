@@ -101,6 +101,7 @@ export const CLINICAL_EDITOR_ACTIONS={
   'clinical-import-background':{step:'background',label:'Recuperar antecedentes longitudinales'},
   'clinical-vital-entry':{step:'vitals',label:'Abrir entrada inteligente de mediciones'},
   'clinical-preview':{step:'plan',label:'Preparar historia clínica completa'},
+  'clinical-context-review':{step:'diagnosis',label:'Revisar contexto clínico con IA'},
 } as const
 export type ClinicalEditorAction=keyof typeof CLINICAL_EDITOR_ACTIONS
 export function clinicalEditorAction(value:unknown):value is ClinicalEditorAction {
