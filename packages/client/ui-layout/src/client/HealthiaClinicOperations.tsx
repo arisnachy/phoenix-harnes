@@ -6,7 +6,7 @@
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { HealthiaClinicalApi, ProtectedClinicError } from './HealthiaClinicalApi.ts'
-import type { ClinicalSession, ClinicalPatient, ClinicalEncounter, ClinicalIntakeTemplate, ClinicalIdentityMatches } from './HealthiaClinicalApi.ts'
+import type { ClinicalSession, ClinicalPatient, ClinicalEncounter, ClinicalIntakeTemplate, ClinicalIdentityMatches, ClinicalInterviewGuide } from './HealthiaClinicalApi.ts'
 import { HealthiaPatientDossier } from './HealthiaPatientDossier.tsx'
 import { HealthiaClinicalNote, formatClinicalNote, NOTE_KINDS } from './HealthiaClinicalNote.tsx'
 import type { ClinicalNoteValues, ClinicalNoteKind } from './HealthiaClinicalNote.tsx'
@@ -113,6 +113,10 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
   const [notice,setNotice]=useState('')
   const [creatingPatient,setCreatingPatient]=useState(false)
   const [creatingEncounter,setCreatingEncounter]=useState(false)
+  const [interviewGuide,setInterviewGuide]=useState<ClinicalInterviewGuide|null>(null)
+  const [answerKey,setAnswerKey]=useState('')
+  const [answerText,setAnswerText]=useState('')
+  const [signChecked,setSignChecked]=useState(false)
   const readyRef=useRef(false)
   const userRole=session?.actor.role
   const canManagePatients=userRole==='admin'||userRole==='clinician'||userRole==='reception'
@@ -315,6 +319,37 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
     finally{setBusy(false)}
   }
 
+
+  useEffect(()=>{
+    setInterviewGuide(null)
+    if(!session||!selectedEncounter||selectedEncounter.status==='signed'||!canManageEncounters)return
+    let active=true
+    void api.interviewGuide(session,selectedEncounter.id).then(guide=>{
+      if(active)setInterviewGuide(guide)
+    }).catch(()=>{if(active)setInterviewGuide(null)})
+    return()=>{active=false}
+  },[session,selectedEncounter?.id,selectedEncounter?.version,canManageEncounters])
+  const mutateEncounter=async(
+    operation:(current:ClinicalEncounter)=>Promise<ClinicalEncounter>,message:string
+  ):Promise<void>=>{
+    if(!selectedEncounter||busy)return
+    setBusy(true);setError('');setNotice('')
+    try{
+      const updated=await operation(selectedEncounter)
+      if(updated.id!==selectedEncounter.id||updated.patientId!==selectedEncounter.patientId)
+        throw Error('La respuesta no corresponde al paciente seleccionado')
+      setEncounters(items=>items.map(item=>item.id===updated.id?updated:item))
+      setNotice(message)
+      setSignChecked(false)
+    }catch(err){setError(err instanceof Error?err.message:'La operación no quedó confirmada')}
+    finally{setBusy(false)}
+  }
+  const submitInterview=():void=>{
+    if(!session||!answerKey||!answerText.trim()||!selectedEncounter)return
+    void mutateEncounter(record=>api.answerInterview(session,record,answerKey,answerText),
+      'Respuesta registrada en el interrogatorio protegido.')
+    setAnswerKey('');setAnswerText('')
+  }
   if(mode==='loading')return <div className={css.status} role="status">Comprobando la sesión clínica local…</div>
   if(mode==='unavailable')return <div className={css.panel} role="status">
     {brandMark}
@@ -546,13 +581,71 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
       {selectedPatient&&!creatingEncounter&&!patientEncounters.length&&
         <p className={css.emptyState}>Este paciente aún no tiene consultas accesibles. Utiliza «Nueva consulta» para iniciar la atención.</p>}
       {selectedEncounter&&currentNote&&<div className={css.encounter}>
+        {canManageEncounters&&selectedEncounter.status!=='signed'&&<section className={css.interviewCard}
+          aria-label="Ask clínico protegido">
+          <div className={css.interviewHeader}><strong>Ask · interrogatorio clínico</strong>
+            <small>Preguntas del servicio local; ninguna respuesta se envía al chat de Kira.</small>
+          </div>
+          <p className={css.notice}>Registra únicamente lo que refiere el paciente o lo verificado.
+            Ante signos de alarma, realiza valoración inmediata; la guía no determina un diagnóstico.</p>
+          {(interviewGuide?.nextQuestions??[]).map(question=><button type="button" key={question.key}
+            className={answerKey===question.key?css.interviewQuestionActive:css.interviewQuestion}
+            onClick={()=>{setAnswerKey(question.key);setAnswerText('')}}>
+            {question.question}
+          </button>)}
+          {answerKey&&<div className={css.interviewAnswer}>
+            <label>Respuesta documentada por el profesional
+              <textarea maxLength={1600} rows={3} value={answerText}
+                onChange={e=>setAnswerText(e.currentTarget.value)}/>
+            </label>
+            <button className={css.primary} type="button" disabled={busy||!answerText.trim()}
+              onClick={submitInterview}>Guardar respuesta en consulta</button>
+          </div>}
+          {interviewGuide&&interviewGuide.nextQuestions.length===0&&
+            <p className={css.notice}>No quedan preguntas pendientes de esta guía; comprueba si necesitas ampliar la entrevista.</p>}
+          {Object.entries(selectedEncounter.interviewAnswers??{}).length>0&&
+            <div className={css.interviewAnswered}><strong>Respuestas registradas</strong>
+              {Object.entries(selectedEncounter.interviewAnswers??{}).map(([key,value])=>
+                <p key={key}>{key.replaceAll('_',' ')}: {value}</p>)}
+            </div>}
+          {!selectedEncounter.history.trim()&&Object.keys(selectedEncounter.interviewAnswers??{}).length>0&&
+            <button type="button" disabled={busy} onClick={()=>{
+              if(session)void mutateEncounter(record=>api.draftEncounterFromInterview(session,record),
+                'Borrador construido a partir de las respuestas registradas; requiere revisión profesional.')
+            }}>Preparar borrador desde el interrogatorio</button>}
+        </section>}
+
         <p className={css.notice}>Consulta · versión {selectedEncounter.version} · {selectedEncounter.status}
           {selectedEncounter.status==='signed'?' · Solo lectura': ' · Borrador pendiente de revisión y firma'}</p>
         {selectedEncounter.status==='signed' ? <div className={css.panel}>
           <strong>Consulta firmada · protegida contra edición</strong>
           <pre>{selectedEncounter.history}</pre>
+          <p className={css.notice}>Firmada por {selectedEncounter.signedBy??'profesional autorizado'} ·
+            {selectedEncounter.signedAt??'fecha protegida'}. No admite sobrescritura; correcciones mediante adenda.</p>
         </div> : <HealthiaClinicalNote key={selectedEncounter.id} initialKind={currentNote.kind}
           initialValues={currentNote.values} onSave={saveNote}/>}
+        {canManageEncounters&&selectedEncounter.status==='draft'&&selectedEncounter.history.trim()&&
+          <div className={css.reviewCard}>
+            <strong>Validación profesional</strong>
+            <p>Comprueba identidad, motivo, enfermedad actual, antecedentes, exploración, diagnóstico,
+              códigos, plan, indicaciones y datos faltantes antes de marcar la versión como revisada.</p>
+            <button className={css.primary} type="button" disabled={busy} onClick={()=>{
+              if(session)void mutateEncounter(record=>api.reviewEncounter(session,record),
+                'Versión de la consulta revisada. Requiere firma explícita.')
+            }}>Marcar esta versión como revisada</button>
+          </div>}
+        {canManageEncounters&&selectedEncounter.status==='reviewed'&&
+          <div className={css.reviewCard}>
+            <strong>Firma clínica</strong>
+            <p>La firma deja la consulta inmutable. Después podrán emitirse órdenes y recetas autorizadas.</p>
+            <label className={css.signCheck}><input type="checkbox" checked={signChecked}
+              onChange={e=>setSignChecked(e.currentTarget.checked)}/>
+              He revisado la historia, las decisiones y los datos de este paciente.</label>
+            <button className={css.primary} type="button" disabled={busy||!signChecked} onClick={()=>{
+              if(session)void mutateEncounter(record=>api.signEncounter(session,record),
+                'Consulta firmada por el servicio clínico protegido.')
+            }}>Firmar consulta revisada</button>
+          </div>}
       </div>}
     </>}
   </section>
