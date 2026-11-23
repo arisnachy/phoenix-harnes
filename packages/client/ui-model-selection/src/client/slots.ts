@@ -22,4 +22,8 @@ export interface ModelSelectInjected {
    * @returns whether the host accepted the selection.
    */
   select: (selection: ModelSelection) => Promise<boolean>
+  /** Choose the actual locally installed Ollama model using Phoenix's stable route. */
+  selectLocalModel?: (modelId: string) => Promise<boolean>
+  /** Apply an Ollama-advertised thinking mode to the selected local model. */
+  changeLocalThinking?: (thinking: boolean | string | null) => Promise<boolean>
 }
