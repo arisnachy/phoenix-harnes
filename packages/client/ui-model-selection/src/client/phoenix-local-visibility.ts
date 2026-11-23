@@ -9,7 +9,21 @@ export interface PhoenixLocalInstallState {
   installedModelIds: readonly string[]
   ollamaInstalledModelIds?: readonly string[]
   catalog?: readonly { id: string; displayName: string; backend: 'ollama' | 'llama-server' }[]
+  thinking?: boolean | string | null
+  thinkingCapabilities?: { readonly values: readonly (boolean | string)[]; readonly default: boolean | string | null }
   mode?: 'off' | 'on-demand' | 'always-on'
+}
+
+/** Encode native choices without sending them to the generic pi-ai effort API. */
+export function localThinkingEffort(value: boolean | string | null | undefined): string | undefined {
+  return value == null ? undefined : typeof value === 'boolean' ? (value ? 'on' : 'off') : value
+}
+
+export function projectLocalCurrent(selection: ModelSelection, state: PhoenixLocalInstallState): ModelSelection {
+  const { reasoningEffort: _oldEffort, ...rest } = selection
+  const effort = localThinkingEffort(state.thinking)
+  const supported = state.thinkingCapabilities?.values.some(value => localThinkingEffort(value) === effort)
+  return { ...rest, model: state.selectedModelId, ...(effort !== undefined && supported ? { reasoningEffort: effort } : {}) }
 }
 
 function installedCandidates(state: PhoenixLocalInstallState) {
@@ -53,6 +67,13 @@ export function projectPhoenixLocalAvailability(
       id: model.id,
       name: model.displayName,
       description: model.backend === 'ollama' ? 'Ollama · Local' : 'GGUF · Local',
+      ...(model.backend === 'ollama' && model.id === state.selectedModelId
+        && state.thinkingCapabilities?.values.some(value => value !== false)
+        ? { reasoning: { efforts: state.thinkingCapabilities.values.map(value => ({
+            id: localThinkingEffort(value)!,
+            name: value === false ? 'Sin pensar' : value === true ? 'Pensar' : value,
+          })) } }
+        : {}),
     }))
     return models.length === 0 ? [] : [{ ...group, name, models }]
   })
@@ -60,7 +81,7 @@ export function projectPhoenixLocalAvailability(
     ...directory,
     groups,
     current: currentIsLocal && localReady && state?.catalog !== undefined
-      ? { ...directory.current, model: state.selectedModelId }
+      ? projectLocalCurrent(directory.current, state)
       : directory.current,
     routable: currentIsLocal ? directory.routable && localReady : directory.routable,
   }
