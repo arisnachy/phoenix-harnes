@@ -14,7 +14,7 @@ Healthia uses its existing authenticated loopback /health Host as the only owner
 
 The clinical editor splits authored note sections into history, examination, assessment and plan, persists them without silent clipping and reconstructs them for editing. It requires an explicit review and confirmation before signature. Demographic context, including the separately reported biological sex at birth and gender identity, is recorded with versioned protected updates. The overview displays real authorized patient records and scheduled appointments rather than fake metrics.
 
-Native printing produces escaped, self-contained records for a deliberate user action, with a prominent unsigned watermark or an internal non-fiscal invoice disclaimer. The dose helper performs arithmetic only with clinician-supplied, independently checked mg/kg and per-administration maximum values; it does not offer drug-specific recommendations or claim interaction checking. Patient portal access remains separate and opt-in.
+Native printing produces escaped, self-contained records for a deliberate user action, with a prominent unsigned watermark or an internal non-fiscal invoice disclaimer. The dose helper performs arithmetic only with clinician-supplied, independently checked mg/kg and per-administration maximum values; it does not offer drug-specific recommendations or claim interaction checking. Patient portal access remains separate and opt-in; authenticated patients can submit protected previsit histories as explicitly unverified contributions, which appear only in the assigned clinician's intake tab and require acknowledgment without becoming a verified diagnosis or replacing longitudinal history.
 
 ## Alternatives considered
 
@@ -28,7 +28,7 @@ Native printing produces escaped, self-contained records for a deliberate user a
 
 A professional can select a patient once, perform an encounter, record interview answers, review and sign, then issue orders and prescriptions using existing protected endpoints. Administrative roles access only allowed scheduling, staff, assignments and internal billing workflows. Unsigned records are never labeled as issued prescriptions. The clinical UI no longer fabricates daily counts.
 
-The existing patient portal remains subject to explicit service enablement and professional publication. Real automatic drug-interaction checks, a validated drug dosing formulary, fiscal e-CF issuance, comprehensive AI diagnostic accuracy and arbitrary cross-institution cloud synchronization are not asserted as implemented.
+The existing patient portal remains subject to explicit service enablement and professional publication. Patient-written intake is encrypted, indexed by patient and organization, isolated by the portal's independent session/CSRF, and reviewed by an assigned clinician. Real automatic drug-interaction checks, a validated drug dosing formulary, fiscal e-CF issuance, comprehensive AI diagnostic accuracy and arbitrary cross-institution cloud synchronization are not asserted as implemented.
 
 ## Testing
 
