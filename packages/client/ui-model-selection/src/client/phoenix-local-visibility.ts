@@ -1,60 +1,80 @@
 import type { ModelProviderGroup, ModelSelection, SessionModels } from '@phoenix-ai/dsh-api-remotes/client'
 
-/** Provider id reserved by the built-in Phoenix Local route. */
+/** Stable wire route of the Host local runtime. */
 export const PHOENIX_LOCAL_PROVIDER = 'phoenix-local'
 
-/** Minimal install state needed by model-selection surfaces. */
+/** Public inventory subset consumed by model-selection surfaces. */
 export interface PhoenixLocalInstallState {
   selectedModelId: string
   installedModelIds: readonly string[]
+  ollamaInstalledModelIds?: readonly string[]
+  catalog?: readonly { id: string; displayName: string; backend: 'ollama' | 'llama-server' }[]
+  mode?: 'off' | 'on-demand' | 'always-on'
+}
+
+function installedCandidates(state: PhoenixLocalInstallState) {
+  const linked = new Set(state.installedModelIds)
+  const ollama = state.ollamaInstalledModelIds === undefined ? undefined : new Set(state.ollamaInstalledModelIds)
+  return (state.catalog ?? []).filter(model => model.backend === 'ollama' && ollama !== undefined
+    ? ollama.has(model.id)
+    : linked.has(model.id))
 }
 
 /**
- * Whether the selected Phoenix Local runtime model is actually installed.
- * @param state - Current Phoenix Local installation state, when available.
- * @returns Whether the selected model id is present in the installed model set.
+ * Check whether the current runtime model is installed and linked.
+ * @param state - Host install state, when available.
+ * @returns Whether the selected local artifact can be used.
  */
 export function isPhoenixLocalInstalled(state: PhoenixLocalInstallState | undefined): boolean {
-  return state !== undefined && state.installedModelIds.includes(state.selectedModelId)
+  return state !== undefined && state.mode !== 'off'
+    && state.installedModelIds.includes(state.selectedModelId)
+    && (state.catalog === undefined || installedCandidates(state).some(model => model.id === state.selectedModelId))
 }
 
 /**
- * Project the Host model directory into a user-selectable directory.
- *
- * The LLM adapter keeps `phoenix-local` registered so its lightweight loopback
- * proxy can preserve on-demand startup. Registration alone must not make an
- * uninstalled multi-GB model selectable, so the UI catalog hides the route
- * until the selected local model is present. Failure to read Host install state
- * is fail-closed for this one local route and leaves every cloud route intact.
- * @param directory - Model directory reported by the Host.
- * @param state - Current Phoenix Local installation state, when available.
- * @returns A directory with Phoenix Local exposed only when its selected model is installed.
+ * Replace the generic route row with exact installed artifacts; the wire
+ * route remains unchanged and local runtime selection remains Host-wide.
+ * @param directory - Host model catalog.
+ * @param state - Current local inventory.
+ * @returns Directory with concrete local choices and active model.
  */
 export function projectPhoenixLocalAvailability(
   directory: Pick<SessionModels, 'current' | 'routable' | 'groups' | 'failures'>,
   state: PhoenixLocalInstallState | undefined,
 ): Pick<SessionModels, 'current' | 'routable' | 'groups' | 'failures'> {
-  if (isPhoenixLocalInstalled(state)) return directory
-
-  const groups: ModelProviderGroup[] = directory.groups.filter(group => group.id !== PHOENIX_LOCAL_PROVIDER)
   const currentIsLocal = directory.current.provider === PHOENIX_LOCAL_PROVIDER
+  const localReady = isPhoenixLocalInstalled(state)
+  const groups: ModelProviderGroup[] = directory.groups.flatMap(group => {
+    if (group.id !== PHOENIX_LOCAL_PROVIDER) return [group]
+    if (state === undefined || state.mode === 'off') return []
+    const name = group.name.replace(/^🔥\s*/u, '')
+    if (state.catalog === undefined) return localReady ? [{ ...group, name }] : []
+    const models = installedCandidates(state).map(model => ({
+      id: model.id,
+      name: model.displayName,
+      description: model.backend === 'ollama' ? 'Ollama · Local' : 'GGUF · Local',
+    }))
+    return models.length === 0 ? [] : [{ ...group, name, models }]
+  })
   return {
     ...directory,
     groups,
-    routable: currentIsLocal ? false : directory.routable,
+    current: currentIsLocal && localReady && state?.catalog !== undefined
+      ? { ...directory.current, model: state.selectedModelId }
+      : directory.current,
+    routable: currentIsLocal ? directory.routable && localReady : directory.routable,
   }
 }
 
 /**
- * Reject stale or direct local selections when the backing local model is absent.
- * @param selection - Requested model selection.
- * @param state - Current Phoenix Local installation state, when available.
+ * Reject stale or unavailable local artifacts; cloud selections are untouched.
+ * @param selection - Requested selection.
+ * @param state - Current Host inventory.
  */
-export function assertPhoenixLocalSelectable(
-  selection: ModelSelection,
-  state: PhoenixLocalInstallState | undefined,
-): void {
+export function assertPhoenixLocalSelectable(selection: ModelSelection, state: PhoenixLocalInstallState | undefined): void {
   if (selection.provider !== PHOENIX_LOCAL_PROVIDER) return
-  if (isPhoenixLocalInstalled(state)) return
+  if (selection.model === PHOENIX_LOCAL_PROVIDER && isPhoenixLocalInstalled(state)) return
+  if (state !== undefined && state.mode !== 'off'
+    && installedCandidates(state).some(model => model.id === selection.model)) return
   throw new Error('Install Phoenix Local in Settings → Models before selecting it.')
 }

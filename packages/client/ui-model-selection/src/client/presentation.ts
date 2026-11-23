@@ -4,6 +4,7 @@ import {
   siCloudflare,
   siDeepseek,
   siGithubcopilot,
+  siGoogle,
   siGooglegemini,
   siHuggingface,
   siKimi,
@@ -184,4 +185,15 @@ export function providerBrandMark(providerId: string, providerName: string): Pro
  */
 export function providerInitial(providerName: string): string {
   return providerName.match(/[\p{L}\p{N}]/u)?.[0]?.toUpperCase() ?? '?'
+}
+
+/** Resolve known local model families independently of the shared local route. */
+export function localModelBrandMark(modelId: string, modelName: string): ProviderMark | undefined {
+  const label = `${modelId} ${modelName}`.toLowerCase()
+  if (/gemma|gemini/u.test(label)) return providerMark(['gemma'], siGoogle)
+  if (/qwen/u.test(label)) return providerMark(['qwen'], siQwen)
+  if (/deepseek/u.test(label)) return providerMark(['deepseek'], siDeepseek)
+  if (/llama/u.test(label)) return providerMark(['llama'], siMeta)
+  if (/mistral|mixtral/u.test(label)) return providerMark(['mistral'], siMistralai)
+  return undefined
 }

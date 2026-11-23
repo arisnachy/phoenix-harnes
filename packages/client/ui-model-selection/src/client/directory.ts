@@ -13,6 +13,7 @@ import { createSnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
 import {
   assertPhoenixLocalSelectable,
   projectPhoenixLocalAvailability,
+  PHOENIX_LOCAL_PROVIDER,
   type PhoenixLocalInstallState,
 } from './phoenix-local-visibility.ts'
 
@@ -60,6 +61,7 @@ export class ModelDirectory {
     private readonly sessionId: SessionId,
     private readonly available: () => boolean,
     private readonly readLocalModelState?: () => Promise<PhoenixLocalInstallState | undefined>,
+    private readonly selectLocalModel?: (modelId: string) => Promise<PhoenixLocalInstallState>,
   ) {}
 
   /**
@@ -109,10 +111,18 @@ export class ModelDirectory {
     const generation = ++this.generation
     this.store.update((s) => { s.status = 'selecting'; s.error = null })
 
-    const localState = await this.safeLocalModelState()
+    let localState = selection.provider === PHOENIX_LOCAL_PROVIDER ? await this.safeLocalModelState() : undefined
     if (this.disposed || generation !== this.generation) return
     try {
       assertPhoenixLocalSelectable(selection, localState)
+      if (selection.provider === PHOENIX_LOCAL_PROVIDER && selection.model !== PHOENIX_LOCAL_PROVIDER) {
+        if (this.selectLocalModel === undefined) throw new Error('Local model switching is unavailable on this Host.')
+        localState = await this.selectLocalModel(selection.model)
+        if (localState.selectedModelId !== selection.model || !localState.installedModelIds.includes(selection.model)) {
+          throw new Error('Host did not activate the requested local model.')
+        }
+        if (this.disposed || generation !== this.generation) return
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       this.store.update((s) => { s.status = 'error'; s.error = message })
@@ -122,7 +132,7 @@ export class ModelDirectory {
     const { result } = await this.sessions.selectModel({
       sessionId: this.sessionId,
       provider: selection.provider,
-      model: selection.model,
+      model: selection.provider === PHOENIX_LOCAL_PROVIDER ? PHOENIX_LOCAL_PROVIDER : selection.model,
       ...selection.reasoningEffort === undefined
         ? {}
         : { reasoningEffort: selection.reasoningEffort },
@@ -139,7 +149,9 @@ export class ModelDirectory {
     // The Host validated the route before accepting it, and Phoenix Local has
     // additionally passed the install-state gate immediately before submission.
     this.store.update((s) => {
-      s.current = result.value.selected
+      s.current = result.value.selected.provider === PHOENIX_LOCAL_PROVIDER && localState?.catalog !== undefined
+        ? { ...result.value.selected, model: localState.selectedModelId }
+        : result.value.selected
       s.routable = true
       s.status = 'ready'
       s.error = null
