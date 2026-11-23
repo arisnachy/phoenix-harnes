@@ -13,7 +13,7 @@ import { HealthClinicStore, healthKinds, type ClinicActor } from './health-store
 import { renderHealthPage } from './health-ui.ts'
 import { createPatientPortalHandler } from './health-patient-routes.ts'
 import { HEALTH_CLINICAL_TOOLS, runHealthClinicalTool } from './health-clinical-tools.ts'
-import { discoverClinicalModels, runClinicalModel, type HostClinicalLlm } from './health-clinical-models.ts'
+import { discoverClinicalModels, runClinicalModel, runClinicalContextReview, type HostClinicalLlm } from './health-clinical-models.ts'
 
 type Kind = Parameters<HealthClinicStore['list']>[1]
 const jsonHeaders:Record<string,string> = {
@@ -266,6 +266,24 @@ export function registerHealthRoutes(ctx:Context):void {
         reply(res,200,catalog);return
       }
       // Field-specific transient inference; never writes an encounter or uses general chat.
+      if(operation==='clinical-context-ai'&&id!==undefined&&method==='POST'){
+        const body=await readBody(req,100000)
+        if(body.field!=='context-review'||typeof body.text!=='string'||!body.text.trim()||body.text.length>24000
+          ||typeof body.routeId!=='string'||typeof body.version!=='number'||!Number.isSafeInteger(body.version))
+          throw Error('Solicitud contextual inválida')
+        const context=store.clinicalEditorContext(actor,id,body.version)
+        const runtime=clinicalModelRuntime(ctx)
+        const catalog=await discoverClinicalModels(runtime)
+        const proposal=await runClinicalContextReview({currentUnverifiedDraft:body.text,authorizedContext:context},{
+          requestedId:body.routeId,acknowledgeLocal:body.confirmLocalProcessing===true,
+          acknowledgeExternal:body.confirmExternalProcessing===true,
+        },catalog,runtime)
+        const latest=store.clinicalEditorContext(actor,id,body.version)
+        if(JSON.stringify(latest)!==JSON.stringify(context))throw Error('Contexto clínico modificado; vuelve a revisar')
+        reply(res,200,{proposal:{...proposal,encounterId:id,encounterVersion:body.version,field:body.field,
+          requiresClinicianReview:true}})
+        return
+      }
       if(operation==='clinical-field-ai'&&id!==undefined&&method==='POST'){
         const body=await readBody(req,24000)
         const fields=['chief','hea','ros','personal','surgical','family','habits','medications','perinatal','gyneco','physical','findings']
