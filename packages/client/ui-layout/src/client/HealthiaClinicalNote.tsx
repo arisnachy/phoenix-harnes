@@ -168,9 +168,10 @@ export function formatClinicalNoteParts(kind:ClinicalNoteKind,values:Readonly<Cl
 /** Clinical values remain local to this React tree unless the authenticated
  * Host-owned persistence callback is explicitly supplied and clicked. */
 export function HealthiaClinicalNote({
-  onReturn, initialValues = {}, initialKind = 'first', onSave, patient, encounterVersion, requestedStep, loadModels, refineField,
+  onReturn, initialValues = {}, initialKind = 'first', onSave, patient, encounterVersion, requestedStep, loadModels, refineField, onDirtyChange,
 }: {
   onReturn?: () => void
+  onDirtyChange?: ((dirty:boolean)=>void) | undefined
   patient?: LongitudinalPatient | undefined
   encounterVersion?: number | undefined
   requestedStep?: {step:ClinicalEditorStep;sequence:number} | undefined
@@ -183,10 +184,13 @@ export function HealthiaClinicalNote({
   const [kind, setKind] = useState<ClinicalNoteKind>(initialKind)
   const [values, setValues] = useState<ClinicalNoteValues>(() => ({ ...initialValues }))
   const [saving, setSaving] = useState(false)
+  const baseline=useRef(formatClinicalNote(initialKind,initialValues))
   const [section, setSection] = useState<ClinicalEditorStep>('interview')
   const [preview, setPreview] = useState(false)
   const [message, setMessage] = useState('')
   const note = useMemo(() => formatClinicalNote(kind, values), [kind, values])
+  const dirty=note!==baseline.current
+  useEffect(()=>{onDirtyChange?.(dirty)},[dirty,onDirtyChange])
   const hasContent = Object.values(values).some(value => value.trim().length > 0)
   const current = CLINICAL_NOTE_SECTIONS.find(item => item.id === (section==='vitals'?'exam':section==='diagnosis'?'plan':section)) ?? CLINICAL_NOTE_SECTIONS[0]!
   const shown=fieldsForKind(current,kind).filter(f=>section==='vitals'?VITAL_IDS.some(id=>id===f.id):section==='exam'?!VITAL_IDS.some(id=>id===f.id):section==='diagnosis'?DIAGNOSIS_IDS.some(id=>id===f.id):section==='plan'?!DIAGNOSIS_IDS.some(id=>id===f.id):true)
@@ -243,7 +247,9 @@ export function HealthiaClinicalNote({
   }
   const reset = (): void => {
     generation.current++;setAiBusy(false);setProposal(null);setAiField('');setVitalDraft(null);setQuick('')
-    setValues({})
+    setValues({...initialValues});setKind(initialKind)
+    baseline.current=formatClinicalNote(initialKind,initialValues)
+    onDirtyChange?.(false)
     setPreview(false)
     setSection('interview')
     setMessage('Cambios de esta vista descartados. Los registros previamente guardados no se han modificado.')
@@ -255,6 +261,8 @@ export function HealthiaClinicalNote({
     try {
       // The owning clinical session must recheck patient, role, version and CSRF.
       await onSave(kind, { ...values })
+      baseline.current=note
+      onDirtyChange?.(false)
       setMessage('Borrador registrado en el servicio clínico protegido. Sin firmar.')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo guardar la nota.')
@@ -289,6 +297,7 @@ export function HealthiaClinicalNote({
         {onReturn && <button type="button" className={css.secondary} onClick={onReturn}>Volver</button>}
       </div>
       <form onSubmit={showPreview} autoComplete="off">
+        <fieldset disabled={saving} className={css.editorFields}>
         <label className={css.noteKind}>Tipo de consulta
           <select value={kind} onChange={event => { setKind(event.currentTarget.value as ClinicalNoteKind); setPreview(false) }} aria-label="Tipo de consulta">
             {NOTE_KINDS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
@@ -349,6 +358,7 @@ export function HealthiaClinicalNote({
             onClick={() => { void save() }}>{saving ? 'Guardando…' : 'Guardar borrador clínico'}</button>}
           <button type="button" className={css.secondary} onClick={reset} disabled={!hasContent || saving}>Descartar cambios</button>
         </div>
+        </fieldset>
       </form>
       {preview && hasContent && (
         <section className={css.preview} aria-label="Vista previa clínica">
