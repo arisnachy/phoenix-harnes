@@ -144,6 +144,12 @@ export function apply(ctx: ClientContext): void {
         select: (selection: ModelSelection) => available
           ? directory.select(selection).then(() => true, () => false)
           : Promise.resolve(false),
+        selectLocalModel: (modelId: string) => available
+          ? directory.selectLocalModel(modelId).then(() => true, () => false)
+          : Promise.resolve(false),
+        changeLocalThinking: (thinking: boolean | string | null) => available
+          ? directory.changeLocalThinking(thinking).then(() => true, () => false)
+          : Promise.resolve(false),
       }
     }
     scope.slots.inject('conversation.input.model', () => scope.slots.register({
