@@ -83,7 +83,7 @@ describe('Native clinic inside PHOENIX (protected Host ownership)',()=>{
     const view=render(<HealthiaClinicOperations area="patients"
       onPatientChange={onPatientChange} onNavigate={onNavigate}/>)
     await waitFor(()=>expect(screen.getByRole('button',{name:'Registrar paciente'})).toBeTruthy())
-    expect(screen.queryByText('Logo de la institución')).toBeNull()
+    expect((screen.getByText('Opciones de clínica').closest('details') as HTMLDetailsElement).open).toBe(false)
     expect(screen.queryByRole('button',{name:'Cerrar sesión clínica'})).toBeNull()
     fireEvent.click(screen.getByRole('button',{name:/Paciente de prueba/}))
     expect(onPatientChange).toHaveBeenCalledWith(patient.id)
