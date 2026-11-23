@@ -83,6 +83,8 @@ export function HealthiaPatientDossier({
   const [history,setHistory]=useState<Record<string,string>>({})
   const [allergyStatus,setAllergyStatus]=useState<'none-known'|'documented'|'unreviewed'>('unreviewed')
   const [allergyDetails,setAllergyDetails]=useState('')
+  const [sexAtBirth,setSexAtBirth]=useState<''|'female'|'male'|'intersex'|'unknown'>('')
+  const [genderIdentity,setGenderIdentity]=useState('')
   const [busy,setBusy]=useState(false)
   const [error,setError]=useState('')
   const [notice,setNotice]=useState('')
@@ -96,6 +98,8 @@ export function HealthiaPatientDossier({
       setContext(result)
       const saved=result.patient.medicalHistory??{}
       setHistory(Object.fromEntries(HISTORY_IDS.map(id=>[id,typeof saved[id]==='string'?saved[id]:''])))
+      setSexAtBirth(result.patient.sexAtBirth??'')
+      setGenderIdentity(result.patient.genderIdentity??'')
       const allergy=result.patient.allergyReview
       setAllergyStatus(allergy?.status??'unreviewed')
       setAllergyDetails(allergy?.details??'')
@@ -129,6 +133,20 @@ export function HealthiaPatientDossier({
       setNotice('Revisión de alergias confirmada por el profesional.')
       setRevision(value=>value+1)
     }catch(err){setError(err instanceof Error?err.message:'No se guardó la revisión de alergias.')}
+    finally{setBusy(false)}
+  }
+  const identitySubmit=async(event:FormEvent<HTMLFormElement>)=>{
+    event.preventDefault()
+    if(!context||!mayEdit||busy)return
+    setBusy(true);setError('');setNotice('')
+    try{
+      const changed=await api.updatePatientIdentityContext(session,context.patient,{
+        ...(sexAtBirth?{sexAtBirth}:{}),genderIdentity,
+      })
+      onPatientUpdated(changed)
+      setNotice('Contexto de identidad actualizado en el expediente protegido.')
+      setRevision(value=>value+1)
+    }catch(e){setError(e instanceof Error?e.message:'No se actualizaron los datos')}
     finally{setBusy(false)}
   }
   const chart=context?.patient??patient
@@ -197,6 +215,28 @@ export function HealthiaPatientDossier({
         <Records label="Actividad reciente" items={clinicianContext.timeline.slice(0,12)}/>
       </>}
       {clinicianContext&&tab==='history'&&<>
+        <section className={css.tile}>
+          <h4>Contexto de identidad clínica</h4>
+          <p className={css.helper}>Registra datos aportados o confirmados. Sexo al nacer e identidad
+            de género son datos distintos y no determinan solos una indicación terapéutica.</p>
+          <form className={css.editForm} onSubmit={event=>{void identitySubmit(event)}}>
+            <div className={css.formGrid}>
+              <label>Sexo registrado al nacer
+                <select value={sexAtBirth} disabled={!mayEdit||busy}
+                  onChange={e=>setSexAtBirth(e.target.value as typeof sexAtBirth)}>
+                  <option value="">No documentado</option>
+                  <option value="female">Femenino</option><option value="male">Masculino</option>
+                  <option value="intersex">Intersexual</option><option value="unknown">Desconocido</option>
+                </select>
+              </label>
+              <label>Identidad de género referida (opcional)
+                <input maxLength={160} disabled={!mayEdit||busy} value={genderIdentity}
+                  onChange={e=>setGenderIdentity(e.target.value)}/>
+              </label>
+            </div>
+            {mayEdit&&<button className={css.primary} type="submit" disabled={busy}>Guardar contexto de identidad</button>}
+          </form>
+        </section>
         <section className={css.tile}>
           <h4>Revisión de alergias</h4><p className={css.helper}>Selecciona «sin alergias conocidas» únicamente tras confirmarlo en la entrevista. Una casilla vacía nunca significa negativo.</p>
           <form onSubmit={event=>{void allergySubmit(event)}} className={css.editForm}>
