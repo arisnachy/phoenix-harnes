@@ -174,7 +174,7 @@ export function HealthiaPatientDossier({
           <section className={css.tile}><h4>Tratamiento habitual</h4><p className={css.paragraph}>{safeValue(chart.medicalHistory?.currentMedications)}</p></section>
           <section className={css.tile}><h4>Problemas documentados</h4><p className={css.paragraph}>{safeValue(chart.medicalHistory?.problems)}</p></section>
           <section className={css.tile}><h4>Última consulta</h4>
-            <p className={css.paragraph}>{clinicianContext.encounters.length?recordName(clinicianContext.encounters[0]):'No hay consultas documentadas.'}</p>
+            <p className={css.paragraph}>{clinicianContext.encounters[0] ? recordName(clinicianContext.encounters[0]) : 'No hay consultas documentadas.'}</p>
           </section>
           <section className={css.tile}><h4>Identidad y contacto</h4>
             <dl className={css.details}>
