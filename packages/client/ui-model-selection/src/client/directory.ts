@@ -29,7 +29,7 @@ export interface ModelDirectoryState {
    */
   routable: boolean | null
   /** Latest Host-owned local Ollama catalog and thinking controls. */
-  localModel: PhoenixLocalInstallState | null
+  localModel?: PhoenixLocalInstallState | null
   /** Successfully loaded provider groups (last good load). */
   groups: readonly ModelProviderGroup[]
   /** Provider-local failures from the last load; usable groups stay usable. */
