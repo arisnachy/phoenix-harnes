@@ -57,6 +57,13 @@ function str(x:unknown,label:string,max=512):string {
   return x.trim()
 }
 function text(x:unknown,label:string,max=4000):string {return str(x,label,max)}
+/** Optional encounter columns are never silently sliced: reject oversized data. */
+function optionalNoteText(value:unknown,label:string,max:number):string {
+  if(value===undefined||value===null||value==='')return ''
+  if(typeof value!=='string')fail(label+' inválido')
+  return value.trim()?str(value,label,max):''
+}
+
 function obj(x:unknown):RecordData {
   if(!x||typeof x!=='object'||Array.isArray(x))fail('Datos inválidos')
   return x as RecordData
@@ -1446,9 +1453,11 @@ export class HealthClinicStore {
       })
       if(action==='document')return this.modify(actor,kind,id,version,(current)=>{
         if(current.status==='signed')fail('Historia firmada: requiere adenda independiente')
-        return { ...current,history:text(x.history,'Historia'),exam:typeof x.exam==='string'?x.exam.slice(0,4000):'',
-          assessment:typeof x.assessment==='string'?x.assessment.slice(0,4000):'',
-          plan:typeof x.plan==='string'?x.plan.slice(0,4000):'',status:'draft',reviewedVersion:null }
+        return { ...current,history:text(x.history,'Historia',16000),
+          exam:optionalNoteText(x.exam,'Exploración',8000),
+          assessment:optionalNoteText(x.assessment,'Valoración',8000),
+          plan:optionalNoteText(x.plan,'Plan',8000),
+          status:'draft',reviewedVersion:null }
       })
       if(action==='review')return this.modify(actor,kind,id,version,(current)=>{
         if(current.status!=='draft'||!current.history)fail('Se requiere historia en borrador')
