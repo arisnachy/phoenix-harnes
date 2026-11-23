@@ -86,9 +86,27 @@ export function longitudinalFields(patient:LongitudinalPatient):Record<string,st
 /** Structural live state, safe to share with the workspace; never a record payload. */
 export type ClinicalEditorViewState={
   step:ClinicalEditorStep
+  binding:string
   visibleFieldIds:readonly string[]
   filledFields:number
   dirty:boolean
   hasEncounter:boolean
   canEdit:boolean
+}
+
+/** A bounded action catalog, never clinical content or authority to sign. */
+export const CLINICAL_EDITOR_ACTIONS={
+  'clinical-refine-chief':{step:'interview',field:'chief',label:'Mejorar motivo de consulta'},
+  'clinical-refine-hea':{step:'interview',field:'hea',label:'Mejorar enfermedad actual'},
+  'clinical-import-background':{step:'background',label:'Recuperar antecedentes longitudinales'},
+  'clinical-vital-entry':{step:'vitals',label:'Abrir entrada inteligente de mediciones'},
+  'clinical-preview':{step:'plan',label:'Preparar historia clínica completa'},
+} as const
+export type ClinicalEditorAction=keyof typeof CLINICAL_EDITOR_ACTIONS
+export function clinicalEditorAction(value:unknown):value is ClinicalEditorAction {
+  return typeof value==='string'&&Object.hasOwn(CLINICAL_EDITOR_ACTIONS,value)
+}
+export type ClinicalEditorRequest={step:ClinicalEditorStep;sequence:number;action?:ClinicalEditorAction;binding?:string}
+export function canApplyClinicalAction(view:ClinicalEditorViewState|null,binding:unknown):boolean {
+  return !!view?.hasEncounter&&view.canEdit&&typeof binding==='string'&&binding===view.binding
 }
