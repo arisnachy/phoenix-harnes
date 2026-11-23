@@ -8,7 +8,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { HealthiaClinicalApi, ProtectedClinicError } from './HealthiaClinicalApi.ts'
 import type { ClinicalSession, ClinicalPatient, ClinicalEncounter, ClinicalIntakeTemplate, ClinicalIdentityMatches, ClinicalInterviewGuide } from './HealthiaClinicalApi.ts'
 import { HealthiaPatientDossier } from './HealthiaPatientDossier.tsx'
-import { HealthiaClinicalNote, formatClinicalNote, NOTE_KINDS } from './HealthiaClinicalNote.tsx'
+import { HealthiaClinicalNote, formatClinicalNoteParts, NOTE_KINDS } from './HealthiaClinicalNote.tsx'
 import type { ClinicalNoteValues, ClinicalNoteKind } from './HealthiaClinicalNote.tsx'
 import css from './HealthiaClinicOperations.module.css'
 
@@ -21,7 +21,9 @@ type Area = 'patients' | 'encounters'
 export function restoreClinicalNote(encounter:ClinicalEncounter):{
   kind:ClinicalNoteKind;values:ClinicalNoteValues
 } {
-  const saved=encounter.history || ''
+  const saved=encounter.history.includes(' · BORRADOR SIN FIRMAR')
+    ?[encounter.history,encounter.exam,encounter.assessment,encounter.plan].filter(Boolean).join('\n\n')
+    :(encounter.history || '')
   const values:ClinicalNoteValues={ chief:encounter.complaint }
   const kind=NOTE_KINDS.find(item=>saved.startsWith(item.label+' · BORRADOR SIN FIRMAR'))?.value ?? 'first'
   if(!saved.includes(' · BORRADOR SIN FIRMAR')) {
@@ -46,7 +48,15 @@ export function restoreClinicalNote(encounter:ClinicalEncounter):{
     'Examen físico por sistemas':'physical','Resultados clínicos relevantes':'findings',
     'Impresión clínica y razonamiento':'assessment',
     'Diagnósticos diferenciales o incertidumbres':'differential',
+    'Estado diagnóstico (sospecha, provisional o confirmado)':'diagnosisStatus',
+    'Diagnósticos adicionales y su evidencia':'secondaryDiagnosis',
+    'Terminología o variante de codificación utilizada':'codeSystem',
     'CIE-10 sugerido (requiere verificación)':'icd10',
+    'Analíticas consideradas (las órdenes se emiten por separado)':'tests',
+    'Imágenes diagnósticas consideradas (no emitidas)':'imaging',
+    'Derivaciones e interconsultas consideradas':'referrals',
+    'Educación y recomendaciones de estilo de vida':'healthEducation',
+    'Signos de alarma e indicaciones de retorno':'returnPrecautions',
     'Tratamiento e indicaciones':'plan','Estudios solicitados':'tests',
     'Seguimiento y signos de alarma':'followup',
   }
@@ -297,14 +307,9 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
     if(!session||!canManageEncounters||!selectedPatient||!selectedEncounter)
       throw new Error('Seleccione primero un paciente y una consulta propia.')
     if(selectedEncounter.status==='signed')throw new Error('La consulta firmada no admite modificaciones.')
-    const history=formatClinicalNote(kind,values)
-    // Full note is kept losslessly inside the encrypted encounter. Do not
-    // truncate or silently drop user-entered clinical observations.
-    const record=await api.saveEncounter(session,selectedEncounter,{
-      history,exam:values.physical??'',
-      assessment:values.assessment??'',
-      plan:values.plan??'',
-    })
+    const parts=formatClinicalNoteParts(kind,values)
+    // Separate encrypted columns preserve all authored sections without duplicates.
+    const record=await api.saveEncounter(session,selectedEncounter,parts)
     if(record.patientId!==selectedPatient.id)throw new Error('No coincide la identidad clínica.')
     setEncounters(prev=>prev.map(e=>e.id===record.id?record:e))
     setNotice('Consulta guardada con versión '+String(record.version)+'. Revisión y firma pendientes.')
