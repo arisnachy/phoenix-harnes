@@ -13,6 +13,8 @@ import { createSnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
 import {
   assertPhoenixLocalSelectable,
   projectPhoenixLocalAvailability,
+  projectLocalCurrent,
+  localThinkingEffort,
   PHOENIX_LOCAL_PROVIDER,
   type PhoenixLocalInstallState,
 } from './phoenix-local-visibility.ts'
@@ -62,6 +64,7 @@ export class ModelDirectory {
     private readonly available: () => boolean,
     private readonly readLocalModelState?: () => Promise<PhoenixLocalInstallState | undefined>,
     private readonly selectLocalModel?: (modelId: string) => Promise<PhoenixLocalInstallState>,
+    private readonly setLocalThinking?: (thinking: boolean | string | null) => Promise<PhoenixLocalInstallState>,
   ) {}
 
   /**
@@ -117,7 +120,14 @@ export class ModelDirectory {
       assertPhoenixLocalSelectable(selection, localState)
       if (selection.provider === PHOENIX_LOCAL_PROVIDER && selection.model !== PHOENIX_LOCAL_PROVIDER) {
         if (this.selectLocalModel === undefined) throw new Error('Local model switching is unavailable on this Host.')
+        const sameModel = localState?.selectedModelId === selection.model
         localState = await this.selectLocalModel(selection.model)
+        if (sameModel && this.setLocalThinking !== undefined && localState.thinkingCapabilities?.values.some(value => value !== false)) {
+          const value = selection.reasoningEffort === undefined ? null
+            : localState.thinkingCapabilities.values.find(value => localThinkingEffort(value) === selection.reasoningEffort)
+          if (value === undefined) throw new Error('Unsupported local thinking mode.')
+          localState = await this.setLocalThinking(value)
+        }
         if (localState.selectedModelId !== selection.model || !localState.installedModelIds.includes(selection.model)) {
           throw new Error('Host did not activate the requested local model.')
         }
@@ -133,7 +143,7 @@ export class ModelDirectory {
       sessionId: this.sessionId,
       provider: selection.provider,
       model: selection.provider === PHOENIX_LOCAL_PROVIDER ? PHOENIX_LOCAL_PROVIDER : selection.model,
-      ...selection.reasoningEffort === undefined
+      ...selection.provider === PHOENIX_LOCAL_PROVIDER || selection.reasoningEffort === undefined
         ? {}
         : { reasoningEffort: selection.reasoningEffort },
       ...selection.serviceTier === undefined ? {} : { serviceTier: selection.serviceTier },
@@ -150,8 +160,11 @@ export class ModelDirectory {
     // additionally passed the install-state gate immediately before submission.
     this.store.update((s) => {
       s.current = result.value.selected.provider === PHOENIX_LOCAL_PROVIDER && localState?.catalog !== undefined
-        ? { ...result.value.selected, model: localState.selectedModelId }
+        ? projectLocalCurrent(result.value.selected, localState)
         : result.value.selected
+      if (result.value.selected.provider === PHOENIX_LOCAL_PROVIDER && localState !== undefined) {
+        s.groups = projectPhoenixLocalAvailability({ current: result.value.selected, groups: [...s.groups], routable: true, failures: [...s.failures] }, localState).groups
+      }
       s.routable = true
       s.status = 'ready'
       s.error = null
