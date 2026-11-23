@@ -10,6 +10,7 @@ import type { ClinicalSession, ClinicalPatient, ClinicalEncounter, ClinicalIntak
 import { HealthiaPatientDossier } from './HealthiaPatientDossier.tsx'
 import { HealthiaClinicalNote, formatClinicalNoteParts, NOTE_KINDS } from './HealthiaClinicalNote.tsx'
 import type { ClinicalNoteValues, ClinicalNoteKind } from './HealthiaClinicalNote.tsx'
+import { printProtectedClinicalDocument } from './HealthiaClinicalPrint.ts'
 import css from './HealthiaClinicOperations.module.css'
 
 const api = new HealthiaClinicalApi()
@@ -629,6 +630,29 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
             {selectedEncounter.signedAt??'fecha protegida'}. No admite sobrescritura; correcciones mediante adenda.</p>
         </div> : <HealthiaClinicalNote key={selectedEncounter.id} initialKind={currentNote.kind}
           initialValues={currentNote.values} onSave={saveNote}/>}
+        <button type="button" className={css.printAction} onClick={()=>{
+          try {
+            printProtectedClinicalDocument({
+              title:selectedEncounter.status==='signed'?'Historia clínica firmada':'Historia clínica · borrador',
+              institution:session?.actor.org??'Healthia',
+              patientName:selectedPatient?.name??'Paciente autorizado',
+              patientBirth:selectedPatient?.dateOfBirth,
+              patientId:selectedEncounter.patientId,
+              practitioner:selectedEncounter.signedBy??selectedEncounter.practitioner,
+              date:selectedEncounter.signedAt??new Date().toISOString(),
+              status:selectedEncounter.status,
+              sections:[
+                {heading:'Entrevista y antecedentes',body:selectedEncounter.history},
+                {heading:'Exploración',body:selectedEncounter.exam},
+                {heading:'Diagnósticos y valoración',body:selectedEncounter.assessment},
+                {heading:'Plan e indicaciones',body:selectedEncounter.plan},
+              ],
+              disclaimer:selectedEncounter.status==='signed'
+                ?'Historia firmada en el registro protegido; confirme la autenticidad institucional de la copia.'
+                :'BORRADOR SIN FIRMAR. Prohibido interpretarlo como documento clínico definitivo.',
+            })
+          }catch(err){setError(err instanceof Error?err.message:'No se pudo preparar la impresión')}
+        }}>Imprimir {selectedEncounter.status==='signed'?'historia clínica':'borrador sin firmar'}</button>
         {canManageEncounters&&selectedEncounter.status==='draft'&&selectedEncounter.history.trim()&&
           <div className={css.reviewCard}>
             <strong>Validación profesional</strong>
