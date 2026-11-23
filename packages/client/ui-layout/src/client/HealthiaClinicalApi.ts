@@ -314,8 +314,9 @@ export class HealthiaClinicalApi {
   }):Promise<ClinicalEncounter> {
     if(!UUID.test(encounter.id)||!Number.isSafeInteger(encounter.version)
       ||encounter.status==='signed')throw Error('Consulta firmada o versión inválida')
-    if(!values.history.trim()||values.history.length>4000||Object.values(values).some(value=>value.length>4000))
-      throw Error('La nota supera el límite o no contiene historia clínica.')
+    if(!values.history.trim()||values.history.length>16000||
+      values.exam.length>8000||values.assessment.length>8000||values.plan.length>8000)
+      throw Error('La nota supera el límite de cada sección o no contiene historia clínica.')
     const v=object(await this.request('encounters/'+encounter.id,'PATCH',session,{
       version:encounter.version,action:'document',...values
     }))
