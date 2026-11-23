@@ -211,6 +211,26 @@ describe('LocalModelRuntimeManager', () => {
     expect(dependencies.listOllamaModels).toHaveBeenCalledTimes(1)
   })
 
+  it('activates an already-installed Ollama tag without downloading it', async () => {
+    const tag = 'gemma4:e2b'
+    const id = `ollama:${tag}`
+    const { dependencies, readState } = harness()
+    dependencies.listOllamaModels = vi.fn(async () => [{
+      tag, sizeBytes: 1_000, estimatedRamBytes: 4_000_000, contextWindow: 4_096, maxTokens: 256,
+    }])
+    dependencies.pullOllamaModel = vi.fn(async () => undefined)
+    const manager = await createLocalModelRuntimeManager(dependencies)
+    await manager.refreshCatalog()
+    const selected = await manager.setDefaultModel(id, true)
+    expect(selected.selectedModelId).toBe(id)
+    expect(readState().installedModelIds).toContain(id)
+    expect(dependencies.probeOllamaModel).toHaveBeenCalledWith(tag)
+    expect(dependencies.pullOllamaModel).not.toHaveBeenCalled()
+    dependencies.probeOllamaModel = vi.fn(async () => { throw new LocalModelRuntimeFault('ollama-model-missing', 'removed') })
+    await expect(manager.setDefaultModel(id, true)).rejects.toThrow('removed')
+    expect(dependencies.pullOllamaModel).not.toHaveBeenCalled()
+  })
+
   it('downloads an Ollama tag only after an explicit install request, while unlink remains non-destructive', async () => {
     const tag = 'gemma4:e2b'
     const id = `ollama:${tag}`

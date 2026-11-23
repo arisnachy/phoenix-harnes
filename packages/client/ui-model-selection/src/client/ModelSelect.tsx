@@ -25,12 +25,12 @@ import clsx from 'clsx'
 import type { ModelReasoningEffort, ModelSelection } from '@phoenix-ai/dsh-api-remotes/client'
 import {
   IconCheckOutline16, IconChevronDownOutline14, IconChevronRightOutline14,
-  IconRefreshOutline16, IconWarningOutline16, Toast,
+  IconRefreshOutline16, IconWarningOutline16, PhoenixLogo, Toast,
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@phoenix-ai/dsh-client-ui-slots'
 import type { ModelSelectInjected } from './slots.ts'
 import {
-  isPhoenixAutoRouting, presentModel, providerBrandMark, providerInitial, type ModelPresentation,
+  isPhoenixAutoRouting, localModelBrandMark, presentModel, providerBrandMark, providerInitial, type ModelPresentation,
 } from './presentation.ts'
 import css from './ModelSelect.module.css'
 
@@ -46,12 +46,15 @@ interface EffortChoice {
 }
 
 /** Render a packaged provider mark or the local fallback for unknown ids. */
-function ProviderLogo({ providerId, providerName }: { providerId: string; providerName: string }) {
-  const mark = providerBrandMark(providerId, providerName)
+function ProviderLogo({ providerId, providerName, modelId, modelName }: {
+  providerId: string; providerName: string; modelId?: string; modelName?: string
+}) {
+  const local = providerId === 'phoenix-local'
+  const mark = local ? localModelBrandMark(modelId ?? '', modelName ?? '') : providerBrandMark(providerId, providerName)
   return (
-    <span className={css.providerLogo} role="img" aria-label={`${providerName} logo`}>
+    <span className={css.providerLogo} role="img" aria-label={`${local ? modelName ?? 'PHOENIX' : providerName} logo`}>
       {mark === undefined
-        ? <span className={css.providerLogoFallback} aria-hidden="true">{providerInitial(providerName)}</span>
+        ? local ? <PhoenixLogo size={20} /> : <span className={css.providerLogoFallback} aria-hidden="true">{providerInitial(providerName)}</span>
         : (
           <svg
             className={css.providerLogoMark}
@@ -354,7 +357,7 @@ export function ModelSelect(
         : presentModel(displayedRoute.model).displayName
     : isPhoenixAutoRouting(currentChoice.model.id, currentChoice.model.name)
       ? t('trigger.auto')
-      : presentModel(currentChoice.model.name).displayName
+      : currentChoice.group.id === 'phoenix-local' ? currentChoice.model.name : presentModel(currentChoice.model.name).displayName
   const visibleEffort = effortLabel ?? displayedRoute?.reasoningEffort
   const triggerAria = displayedRoute === null
     ? t('trigger.selectAria')
@@ -408,6 +411,7 @@ export function ModelSelect(
           }
         }}
       >
+        {displayedRoute?.provider === 'phoenix-local' && <PhoenixLogo size={17} />}
         <span className={css.triggerLabel}>{modelLabel}</span>
         {visibleEffort !== undefined && <span className={css.triggerEffort}>{visibleEffort}</span>}
         {codexSpeedAvailable && activeSpeed === 'fast' && <span className={css.triggerEffort}>{speedLabel}</span>}
@@ -509,14 +513,17 @@ export function ModelSelect(
                         onClick={() => { toggleGroup(group.id) }}
                       >
                         <IconChevronRightOutline14 className={clsx(css.groupChevron, expanded && css.groupChevronOpen)} />
-                        <span className={css.groupName}>{group.name}</span>
+                        {group.id === 'phoenix-local' && <PhoenixLogo size={18} />}
+                        <span className={css.groupName}>{group.id === 'phoenix-local' ? group.name.replace(/^🔥\s*/u, '') : group.name}</span>
                         <span className={css.groupCount} aria-hidden="true">{group.models.length}</span>
                       </button>
                       {expanded && group.models.map((model) => {
                         const selected = state.current?.provider === group.id && state.current.model === model.id
                         const presentation: ModelPresentation = isPhoenixAutoRouting(model.id, model.name)
                           ? { displayName: t('trigger.auto'), description: t('trigger.autoDetail') }
-                          : presentModel(model.name, model.description)
+                          : group.id === 'phoenix-local'
+                            ? { displayName: model.name, ...(model.description === undefined ? {} : { description: model.description }) }
+                            : presentModel(model.name, model.description)
                         return (
                           <button
                             ref={itemRef()}
@@ -532,7 +539,7 @@ export function ModelSelect(
                                 && state.current.serviceTier !== undefined ? { serviceTier: state.current.serviceTier } : {},
                             }) }}
                           >
-                            <ProviderLogo providerId={group.id} providerName={group.name} />
+                            <ProviderLogo providerId={group.id} providerName={group.name} modelId={model.id} modelName={model.name} />
                             <span className={css.optionCopy}>
                               <span className={css.modelName}>{presentation.displayName}</span>
                               {presentation.description !== undefined && (

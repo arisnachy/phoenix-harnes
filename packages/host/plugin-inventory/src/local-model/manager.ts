@@ -59,7 +59,7 @@ export interface LocalModelRuntimeManager {
   stop(): Promise<LocalModelRuntimeSnapshot>
   uninstall(modelId: string): Promise<LocalModelRuntimeSnapshot>
   setMode(mode: LocalModelMode): Promise<LocalModelRuntimeSnapshot>
-  setDefaultModel(modelId: string): Promise<LocalModelRuntimeSnapshot>
+  setDefaultModel(modelId: string, installedOnly?: boolean): Promise<LocalModelRuntimeSnapshot>
   refreshThinking(): Promise<LocalModelRuntimeSnapshot>
   refreshCatalog(): Promise<LocalModelRuntimeSnapshot>
   deleteOllamaModel(modelId: string): Promise<LocalModelRuntimeSnapshot>
@@ -501,18 +501,35 @@ class RuntimeManager implements LocalModelRuntimeManager {
     return this.snapshot()
   }
 
-  async setDefaultModel(modelId: string): Promise<LocalModelRuntimeSnapshot> {
+  async setDefaultModel(modelId: string, installedOnly = false): Promise<LocalModelRuntimeSnapshot> {
     if (getLocalModel(modelId) === undefined) await this.refreshCatalog()
-    if (getLocalModel(modelId) === undefined) throw new LocalModelRuntimeFault('unknown-model', `Modelo local desconocido: ${modelId}`)
+    const model = getLocalModel(modelId)
+    if (model === undefined) throw new LocalModelRuntimeFault('unknown-model', `Modelo local desconocido: ${modelId}`)
+    let installedModelIds = this.persistent.installedModelIds
+    if (installedOnly) {
+      if (this.persistent.mode === 'off') throw new LocalModelRuntimeFault('local-model-disabled', 'Phoenix Local está apagado en Settings.')
+      if (this.current.phase === 'installing' || this.current.phase === 'starting' || this.current.phase === 'stopping') {
+        throw new LocalModelRuntimeFault('local-model-busy', 'El modelo local está ocupado cambiando de estado.')
+      }
+      if (model.backend === 'ollama') {
+        await this.dependencies.probeOllamaModel(model.ollamaModel)
+        installedModelIds = [...new Set([...installedModelIds, modelId])]
+      } else if (!installedModelIds.includes(modelId)) {
+        throw new LocalModelRuntimeFault('model-not-installed', 'El modelo no está instalado.')
+      }
+      if (modelId === this.persistent.selectedModelId && this.persistent.installedModelIds.includes(modelId)) {
+        return this.refreshThinking()
+      }
+    }
     if (this.current.phase === 'running' || this.server !== undefined) await this.stop()
-    await this.savePersistent({ ...this.persistent, selectedModelId: modelId, thinking: null })
+    await this.savePersistent({ ...this.persistent, selectedModelId: modelId, installedModelIds, thinking: null })
     const phase = this.persistent.installedModelIds.includes(modelId) ? 'ready' : 'not-installed'
     // exactOptionalPropertyTypes: removing an optional capability is not the
     // same as assigning undefined to its property.
     const { thinkingCapabilities: _oldCapabilities, ...withoutCapabilities } = this.current
     this.publish({ ...withoutCapabilities, phase })
     if (this.persistent.mode === 'always-on' && phase === 'ready') return this.start()
-    return this.snapshot()
+    return installedOnly ? this.refreshThinking() : this.snapshot()
   }
 
   async dispose(): Promise<void> {

@@ -29,3 +29,5 @@ Switching the route can reduce or invalidate provider-side cache reuse for subse
 - **No create-time or addressed-subagent selection** — both entries require an existing ordinary session's Agent; there is no draft-phase model choice to fold into session creation, and subagent continuation deliberately exposes no independent model-selection contract.
 - **Directory names are presentation-only** — selection and persistence use provider/model/effort ids; a provider whose catalog or exact-model metadata lookup fails lists as an unselectable failure row until reload.
 - **No arbitrary effort input** — the composer offers only the exact model's adapter-advertised levels; an adapter without reasoning metadata leaves the Effort row absent.
+
+Phoenix Local projects the Host's installed Ollama and managed GGUF inventory into individual model rows, with the official PHOENIX emblem in its group header and packaged family marks. Selection validates the artifact through the Host without pulling weights. The session uses the stable `phoenix-local` adapter route, while the selected local runtime is still a shared Host setting rather than independent concurrent model instances.

@@ -1011,7 +1011,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
 
   @Remote('setDefaultLocalModel')
   async setDefaultLocalModel(request: PhoenixLocalModelRequest): Promise<PhoenixLocalModelSnapshot> {
-    return publicLocalSnapshot(await (await this.localModel).setDefaultModel(request.modelId))
+    return publicLocalSnapshot(await (await this.localModel).setDefaultModel(request.modelId, request.installedOnly))
   }
 
   /**
