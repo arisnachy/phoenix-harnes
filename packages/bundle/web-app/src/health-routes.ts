@@ -334,6 +334,14 @@ export function registerHealthRoutes(ctx:Context):void {
         }
       }
 
+      if(operation==='patient-intakes'&&method==='GET'&&id!==undefined){
+        reply(res,200,{items:store.patientIntakes(actor,id)});return
+      }
+      if(operation==='patient-intake-review'&&method==='PATCH'&&id!==undefined){
+        const request=await readBody(req,2048)
+        if(request.action!=='review')throw Error('Revisión de preconsulta inválida')
+        reply(res,200,{record:store.reviewPatientIntake(actor,id,Number(request.version))});return
+      }
       if(operation==='patient-context'&&method==='GET'&&id!==undefined){
         reply(res,200,{context:store.patientContext(actor,id)});return
       }
