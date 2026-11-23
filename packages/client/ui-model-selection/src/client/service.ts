@@ -39,7 +39,7 @@ type PluginInventoryRemoteResult<T> =
 interface PluginInventoryLocalRemote {
   localModelState?: () => Promise<PluginInventoryRemoteResult<PhoenixLocalInstallState>>
   setDefaultLocalModel?: (request: { modelId: string }) => Promise<PluginInventoryRemoteResult<PhoenixLocalInstallState>>
-  installLocalModel?: (request: { modelId: string }) => Promise<PluginInventoryRemoteResult<PhoenixLocalInstallState>>
+  connectInstalledOllamaModel?: (request: { modelId: string }) => Promise<PluginInventoryRemoteResult<PhoenixLocalInstallState>>
   setLocalModelThinking?: (request: { thinking: boolean | string | null }) => Promise<PluginInventoryRemoteResult<PhoenixLocalInstallState>>
 }
 
@@ -117,9 +117,9 @@ export class ModelDirectoryResolver extends Service {
       pluginInventory?.setDefaultLocalModel === undefined
         ? undefined
         : modelId => unwrapLocal(() => pluginInventory.setDefaultLocalModel!({ modelId })),
-      pluginInventory?.installLocalModel === undefined
+      pluginInventory?.connectInstalledOllamaModel === undefined
         ? undefined
-        : modelId => unwrapLocal(() => pluginInventory.installLocalModel!({ modelId })),
+        : modelId => unwrapLocal(() => pluginInventory.connectInstalledOllamaModel!({ modelId })),
       pluginInventory?.setLocalModelThinking === undefined
         ? undefined
         : thinking => unwrapLocal(() => pluginInventory.setLocalModelThinking!({ thinking })),
