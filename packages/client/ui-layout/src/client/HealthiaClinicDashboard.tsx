@@ -20,13 +20,24 @@ const clock=(value:unknown):string=>typeof value==='string'&&Number.isFinite(Dat
   :'Hora no registrada'
 
 type Page='patients'|'encounters'|'appointments'|'documents'|'management'
-const DESTINATIONS:readonly {id:Page;label:string;detail:string;glyph:string}[]=[
-  {id:'patients',label:'Pacientes',detail:'Admisión y expediente',glyph:'P'},
-  {id:'encounters',label:'Consultas',detail:'Historia, evaluación y firma',glyph:'C'},
-  {id:'appointments',label:'Agenda',detail:'Citas y seguimiento',glyph:'A'},
-  {id:'documents',label:'Documentos',detail:'Órdenes y recetas',glyph:'D'},
-  {id:'management',label:'Gestión',detail:'Equipo y administración',glyph:'G'},
+const DESTINATIONS:readonly {id:Page;label:string;detail:string}[]=[
+  {id:'patients',label:'Pacientes',detail:'Admisión y expediente'},
+  {id:'encounters',label:'Consultas',detail:'Historia, evaluación y firma'},
+  {id:'appointments',label:'Agenda',detail:'Citas y seguimiento'},
+  {id:'documents',label:'Documentos',detail:'Órdenes y recetas'},
+  {id:'management',label:'Gestión',detail:'Equipo y administración'},
 ]
+/** Compact local stroke icons: no external icon CDN or duplicated menu branding. */
+function ClinicalIcon({kind}:{kind:Page}) {
+  return <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    {kind==='patients'&&<><circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M17 7a3 3 0 0 1 0 6M18 16c1.9.4 3 1.7 3 4"/></>}
+    {kind==='encounters'&&<><path d="M6 3v5a6 6 0 0 0 12 0V3M4 3h4M16 3h4"/><circle cx="18" cy="16" r="2"/><path d="M12 14v3a4 4 0 0 0 8 0"/></>}
+    {kind==='appointments'&&<><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18M8 15l2 2 5-5"/></>}
+    {kind==='documents'&&<><path d="M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10zM13 3v7h7M8 15h8M8 18h5"/></>}
+    {kind==='management'&&<><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>}
+  </svg>
+}
 
 export function HealthiaClinicDashboard({onNavigate,onPatientChange,accessStatus,onSessionReady}:{
   onNavigate:(section:string)=>void
@@ -95,7 +106,7 @@ export function HealthiaClinicDashboard({onNavigate,onPatientChange,accessStatus
     <nav className={css.destinations} aria-label="Accesos clínicos rápidos">
       {DESTINATIONS.map(item=><button key={item.id} className={css.destination} type="button"
         onClick={()=>onNavigate(item.id)}>
-        <span className={css.destinationIcon} aria-hidden="true">{item.glyph}</span>
+        <span className={css.destinationIcon}><ClinicalIcon kind={item.id}/></span>
         <span className={css.destinationCopy}><strong>{item.label}</strong><small>{item.detail}</small></span>
         <span className={css.destinationArrow} aria-hidden="true">›</span>
       </button>)}
