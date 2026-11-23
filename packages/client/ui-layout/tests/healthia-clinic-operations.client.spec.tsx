@@ -69,6 +69,32 @@ describe('Native clinic inside PHOENIX (protected Host ownership)',()=>{
     expect(window.localStorage.getItem('clinical-record')).toBeNull()
   })
 
+  it('keeps institutional settings collapsed and carries a patient into the consultation view',async()=>{
+    vi.stubGlobal('fetch',vi.fn(async(input:string)=>{
+      const path=String(input).split('/health/api/')[1]!
+      if(path==='session')return answer({actor,csrf:'a'.repeat(48)})
+      if(path==='patients')return answer({items:[patient]})
+      if(path==='encounters')return answer({items:[]})
+      if(path==='branding')return answer({logoDataUrl:null})
+      throw Error('Unexpected request: '+path)
+    }))
+    const onPatientChange=vi.fn()
+    const onNavigate=vi.fn()
+    const view=render(<HealthiaClinicOperations area="patients"
+      onPatientChange={onPatientChange} onNavigate={onNavigate}/>)
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Registrar paciente'})).toBeTruthy())
+    expect(screen.queryByText('Logo de la institución')).toBeNull()
+    expect(screen.queryByRole('button',{name:'Cerrar sesión clínica'})).toBeNull()
+    fireEvent.click(screen.getByRole('button',{name:/Paciente de prueba/}))
+    expect(onPatientChange).toHaveBeenCalledWith(patient.id)
+    fireEvent.click(screen.getByRole('button',{name:'Ir a consultas'}))
+    expect(onNavigate).toHaveBeenCalledWith('encounters')
+    view.unmount()
+    render(<HealthiaClinicOperations area="encounters" selectedPatientId={patient.id}/>)
+    await waitFor(()=>expect(screen.getByLabelText('Paciente activo')).toBeTruthy())
+    expect((screen.getByRole('combobox',{name:'Paciente del expediente'}) as HTMLSelectElement).value).toBe(patient.id)
+  })
+
   it('creates the local administrator with a six-character password and Healthia fallback',async()=>{
     const calls:Array<{path:string;method:string;body?:Record<string,unknown>}>=[]
     const fetcher=vi.fn(async(input:string,init?:RequestInit)=>{
