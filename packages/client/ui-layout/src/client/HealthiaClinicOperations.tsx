@@ -83,8 +83,12 @@ export function restoreClinicalNote(encounter:ClinicalEncounter):{
   return {kind,values}
 }
 
-export function HealthiaClinicOperations({ area, selectedPatientId, onPatientChange, onNavigate }: {
+export function HealthiaClinicOperations({ area, selectedPatientId, onPatientChange, onNavigate,
+  accessOnly=false, onSessionReady }: {
   area:Area
+  /** Reuse exactly the professional login/setup flow without rendering patient records. */
+  accessOnly?:boolean
+  onSessionReady?:()=>void
   selectedPatientId?:string
   onPatientChange?:(id:string)=>void
   onNavigate?:(area:Area)=>void
@@ -165,8 +169,8 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
         if(!mounted)return
         setSession(s)
         setMode('ready')
-        await refreshLists(s)
-        if(mounted)readyRef.current=true
+        if(!accessOnly)await refreshLists(s)
+        if(mounted){readyRef.current=true;if(accessOnly)onSessionReady?.()}
       } catch(err) {
         if(!mounted)return
         setSession(null)
@@ -237,8 +241,9 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
       setSession(s)
       setMode('ready')
       if(logoDraft!==null){setLogo(logoDraft);setLogoDraft(null)}
-      await refreshLists(s)
+      if(!accessOnly)await refreshLists(s)
       readyRef.current=true
+      if(accessOnly)onSessionReady?.()
     } catch(err) {
       setPassword('')
       setError(err instanceof Error?err.message:'No se pudo autenticar la clínica')
@@ -360,7 +365,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
   }
   if(mode==='loading')return <div className={css.status} role="status">Comprobando la sesión clínica local…</div>
   if(mode==='unavailable')return <div className={css.panel} role="status">
-    {brandMark}
+    {!accessOnly&&brandMark}
     <h3>Servicio clínico local no disponible</h3>
     <p>El Host clínico no respondió. Comprueba la conexión y reintenta; los expedientes no se trasladarán a un almacén sin protección.</p>
     <div className={css.toolbarActions}>
@@ -368,8 +373,8 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
       <a href="/health" target="_blank" rel="noopener noreferrer">Diagnóstico del servicio protegido</a>
     </div>
   </div>
-  if(mode==='login'||mode==='setup')return <section className={css.panel} aria-label="Acceso clínico protegido">
-    {brandMark}
+  if(mode==='login'||mode==='setup')return <section className={accessOnly?css.accessPanel:css.panel} aria-label="Acceso clínico protegido">
+    {!accessOnly&&brandMark}
     <h3>{mode==='setup'?'Inicializar clínica local':'Inicio de sesión profesional'}</h3>
     <p>{mode==='setup'
       ? 'La clínica es local y cifrada. Crea el administrador con una contraseña de 6 caracteres o más; recomendamos 12 o más. Guárdala fuera de PHOENIX: también protege el cifrado del expediente.'
@@ -397,6 +402,8 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
     {error&&<p className={css.error} role="alert">{error}</p>}
     {error&&<button type="button" onClick={()=>{setMode('loading');setConnectionRetry(v=>v+1)}}>Comprobar conexión</button>}
   </section>
+
+  if(accessOnly)return <p className={css.notice} role="status">Sesión clínica verificada. Preparando el espacio de trabajo…</p>
 
   return <section className={css.root} aria-label={area==='patients'?'Pacientes clínicos':'Consultas clínicas'}>
     <header className={css.toolbar}>
