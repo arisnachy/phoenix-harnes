@@ -131,11 +131,33 @@ describe('LocalModelRuntimeManager', () => {
 
     const [, args] = vi.mocked(dependencies.spawnServer).mock.calls[0]!
     expect(args).toEqual(expect.arrayContaining([
-      '--ctx-size', '262144',
+      '--ctx-size', '16384',
       '--reasoning', 'off',
       '--model', expect.stringContaining('Qwen_Qwen3.5-4B-Q4_K_M.gguf'),
     ]))
     expect(manager.snapshot().selectedModelId).toBe(qwen)
+  })
+
+  it('starts managed Qwen with a smaller operational context while keeping a memory reserve', async () => {
+    const qwen = 'qwen3.5-4b-q4-k-m'
+    const { dependencies } = harness({ selectedModelId: qwen, installedModelIds: [qwen] })
+    vi.mocked(dependencies.freeMemoryBytes).mockReturnValue(8_000_000_000)
+    const manager = await createLocalModelRuntimeManager(dependencies)
+    await manager.refreshThinking()
+    expect(manager.snapshot().thinkingCapabilities?.values).toEqual([false, true])
+    await manager.setThinking(true)
+    await manager.start()
+    expect(vi.mocked(dependencies.spawnServer).mock.calls[0]?.[1]).toEqual(expect.arrayContaining(['--ctx-size', '16384', '--reasoning', 'on']))
+    expect(getLocalModel(qwen)?.nativeContextWindow).toBe(262_144)
+  })
+
+  it('rejects managed Qwen when even its reduced context does not fit', async () => {
+    const qwen = 'qwen3.5-4b-q4-k-m'
+    const { dependencies } = harness({ selectedModelId: qwen, installedModelIds: [qwen] })
+    vi.mocked(dependencies.freeMemoryBytes).mockReturnValue(5_000_000_000)
+    const manager = await createLocalModelRuntimeManager(dependencies)
+    await expect(manager.start()).rejects.toMatchObject({ code: 'insufficient-memory' })
+    expect(dependencies.spawnServer).not.toHaveBeenCalled()
   })
 
   it('coalesces concurrent on-demand starts into one supervised llama-server', async () => {
