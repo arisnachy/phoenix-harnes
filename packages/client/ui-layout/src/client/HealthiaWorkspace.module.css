@@ -101,3 +101,24 @@ button.quickCard:focus-visible {outline:2px solid var(--dsw-specific-phoenix-acc
 .openClinical {background:transparent;color:var(--dsw-specific-phoenix-accent);border-color:var(--dsw-alias-border-l2);}
 .openClinical:hover {background:var(--dsw-alias-interactive-bg-hover);}
 @media (max-width:650px) {.quickGrid{grid-template-columns:1fr;}.shell>.titleRow{align-items:flex-start;gap:9px;}}
+
+
+/* Task-first clinical app shell: no duplicate full-width authentication or brand bars. */
+.shell>.titleRow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 0 12px;}
+.shell>.titleRow h2{font-size:clamp(20px,2vw,26px);margin:4px 0 0;}
+.roleMenu{position:relative;flex:0 0 auto;}
+.roleMenu summary{list-style:none;cursor:pointer;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;padding:9px 12px;font-size:12px;color:var(--dsw-alias-label-secondary);}
+.roleMenu summary::-webkit-details-marker{display:none;}
+.roleMenu[open] summary,.roleMenu summary:hover{background:var(--dsw-alias-interactive-bg-hover);}
+.roleChoices{position:absolute;right:0;top:calc(100% + 5px);z-index:5;display:grid;gap:4px;min-width:140px;padding:7px;border:1px solid var(--dsw-alias-border-l2);border-radius:12px;background:var(--dsw-alias-bg-layer-1);box-shadow:0 10px 20px rgba(25,25,25,.12);}
+.roleChoices button{border:0;border-radius:7px;padding:9px;background:transparent;text-align:left;color:inherit;font:inherit;font-size:12px;cursor:pointer;}
+.roleChoices button[aria-pressed=true],.roleChoices button:hover{background:var(--dsw-alias-interactive-bg-hover);}
+.sessionStrip{background:var(--dsw-alias-interactive-bg-hover);border-radius:11px;padding:9px 12px;}
+.supportDetails{margin-top:auto;padding-top:10px;border-top:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-secondary);font-size:11px;}
+.supportDetails summary{cursor:pointer;display:list-item;list-style:disclosure-closed;list-style-position:inside;}
+.supportDetails[open] summary{list-style:disclosure-open;list-style-position:inside;}
+.supportDetails p{margin:9px 0 12px;}
+.supportDetails a{display:inline-flex;}
+.quickCard{transition:background .12s,border-color .12s;min-height:84px;}
+@media(max-width:580px){.shell>.titleRow{flex-wrap:wrap;}.roleMenu summary{padding:7px 9px;}.shell>.titleRow h2{font-size:22px;}}
+@media(prefers-reduced-motion:reduce){.quickCard{transition:none;}}
