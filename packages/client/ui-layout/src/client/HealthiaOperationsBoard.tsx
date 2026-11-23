@@ -4,7 +4,7 @@
  */
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { HealthiaClinicalApi } from './HealthiaClinicalApi.ts'
-import type { ClinicResource, ClinicResourceKind, ClinicStaff, ClinicAssignment,
+import type { ClinicResource, ClinicStaff, ClinicAssignment,
   ClinicalEncounter, ClinicalPatient, ClinicalSession } from './HealthiaClinicalApi.ts'
 import { printProtectedClinicalDocument } from './HealthiaClinicalPrint.ts'
 import css from './HealthiaOperationsBoard.module.css'
