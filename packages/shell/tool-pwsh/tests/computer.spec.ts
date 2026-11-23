@@ -150,11 +150,21 @@ describe('Integrated browser without Phoenix Desktop', () => {
     expect(JSON.stringify(calls)).not.toContain('secret')
   })
 
+  it('reports a closed browser without launching or claiming a successful inspection', async () => {
+    const send = vi.fn(async () => new Response(JSON.stringify({
+      available: false, tabs: [], code: 'browser_not_started',
+    }), { status: 200 }))
+    const output = await runMiniBrowserFallback({ action: 'browser_inspect' }, 'session-1', undefined, send as unknown as typeof fetch)
+    expect(JSON.parse(output)).toMatchObject({ status: 'not-open', available: false, code: 'browser_not_started' })
+    expect(JSON.parse(output).nextAction).toContain('browser_open')
+    expect(send).toHaveBeenCalledTimes(1)
+  })
+
   it('fails explicitly when Chrome or the web controller is unavailable', async () => {
     const send = (async () => new Response(JSON.stringify({ error: 'No Chrome' }), { status: 503 })) as typeof fetch
     await expect(runMiniBrowserFallback(
       { action: 'browser_inspect' }, 'session-1', undefined, send,
-    )).rejects.toThrow(/MiniBrowser unavailable/)
+    )).rejects.toThrow(/HTTP 503: No Chrome/)
     await expect(runMiniBrowserFallback(
       { action: 'browser_login', origin: 'https://example.org' }, 'session-1', undefined, send,
     )).rejects.toThrow(/Never send vault credentials/)
