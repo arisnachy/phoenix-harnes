@@ -53,7 +53,7 @@ export interface LocalModelRuntimeManagerDependencies {
 export interface LocalModelRuntimeManager {
   snapshot(): LocalModelRuntimeSnapshot
   subscribe(listener: (snapshot: LocalModelRuntimeSnapshot) => void): () => void
-  install(modelId: string): Promise<LocalModelRuntimeSnapshot>
+  install(modelId: string, allowPull?: boolean): Promise<LocalModelRuntimeSnapshot>
   start(): Promise<LocalModelRuntimeSnapshot>
   ensureRunning(): Promise<string>
   stop(): Promise<LocalModelRuntimeSnapshot>
@@ -221,7 +221,7 @@ class RuntimeManager implements LocalModelRuntimeManager {
     return { archivePath, runtimeDir, executablePath }
   }
 
-  async install(modelId: string): Promise<LocalModelRuntimeSnapshot> {
+  async install(modelId: string, allowPull = true): Promise<LocalModelRuntimeSnapshot> {
     const requested = getLocalModel(modelId)
     const model = requested ?? (modelId.startsWith('ollama:')
       ? registerOllamaCandidate(modelId.slice('ollama:'.length)) : undefined)
@@ -235,7 +235,7 @@ class RuntimeManager implements LocalModelRuntimeManager {
         try {
           await this.dependencies.probeOllamaModel(model.ollamaModel)
         } catch (error) {
-          if (!(error instanceof LocalModelRuntimeFault)
+          if (!allowPull || !(error instanceof LocalModelRuntimeFault)
             || error.code !== 'ollama-model-missing'
             || this.dependencies.pullOllamaModel === undefined) throw error
           await this.dependencies.pullOllamaModel(model.ollamaModel, progress => {
