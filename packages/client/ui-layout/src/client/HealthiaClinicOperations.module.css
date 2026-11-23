@@ -53,3 +53,41 @@
 .override{display:flex!important;flex-direction:row!important;align-items:center;gap:8px;}
 .override input{width:auto!important;min-height:auto!important;}
 @media(max-width:660px){.admissionGrid{grid-template-columns:1fr;}.directoryHeader label{max-width:none;}}
+
+
+/* Clinical actions and institution preferences are separated from the chart. */
+.root{gap:14px;}
+.toolbar{padding:10px 14px;border-radius:14px;background:var(--dsw-alias-bg-layer-1);}
+.identity{gap:3px;}
+.identity strong{font-size:13px;}
+.secureIndicator{font-size:10px;letter-spacing:.015em;color:var(--dsw-alias-label-secondary);}
+.settingsMenu{position:relative;font-size:12px;}
+.settingsMenu summary{cursor:pointer;list-style:none;padding:8px 11px;border-radius:10px;border:1px solid var(--dsw-alias-border-l2);white-space:nowrap;}
+.settingsMenu summary::-webkit-details-marker{display:none;}
+.settingsMenu summary::after{content:' ▾';color:var(--dsw-alias-label-secondary);}
+.settingsMenu[open]>summary,.settingsMenu summary:hover{background:var(--dsw-alias-interactive-bg-hover);}
+.settingsPanel{position:absolute;right:0;top:calc(100% + 7px);z-index:8;display:grid;gap:11px;width:min(360px,80vw);max-height:65vh;overflow:auto;box-sizing:border-box;padding:12px;border:1px solid var(--dsw-alias-border-l2);border-radius:14px;background:var(--dsw-alias-bg-layer-1);box-shadow:0 16px 30px rgba(30,25,20,.13);}
+.settingsPanel .brandSettings{border:0;display:grid;padding:0;gap:9px;}
+.settingsPanel .brandSettings label{min-width:0;max-width:100%;}
+.settingsPanel .brandSettings small{font-size:11px;color:var(--dsw-alias-label-secondary);}
+.settingsPanel .brandSettings button{font-size:11px;}
+.settingsPanel .brand{min-height:34px;max-height:44px;}
+.settingsPanel .brandImage{max-height:44px;}
+.logoutAction{justify-self:start;}
+.directoryHeader{align-items:center;gap:12px;padding:12px 14px;}
+.directoryHeader>div{flex:1 1 210px;}
+.directoryHeader label{flex:1 1 260px;max-width:450px;}
+.directoryHeader strong{font-size:15px;}
+.directoryHeader .primary{white-space:nowrap;justify-self:end;}
+.patientFocus{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;padding:13px 15px;border:1px solid var(--dsw-alias-border-l2);border-radius:14px;background:var(--dsw-alias-bg-layer-1);}
+.patientFocusIdentity{display:flex;align-items:center;gap:10px;min-width:0;}
+.patientFocusIdentity>span:last-child{display:grid;gap:4px;min-width:0;}
+.patientFocusIdentity strong{font-size:14px;overflow-wrap:anywhere;}
+.patientFocusIdentity small{font-size:11px;color:var(--dsw-alias-label-secondary);}
+.patientFocus .toolbarActions button{padding:8px 11px;border:1px solid var(--dsw-alias-border-l2);border-radius:9px;background:transparent;color:inherit;font:inherit;font-size:12px;cursor:pointer;}
+.patientFocus .toolbarActions button.primary{background:var(--dsw-specific-phoenix-accent);color:white;border-color:var(--dsw-specific-phoenix-accent);}
+.patientFocus .toolbarActions button:hover{filter:brightness(.96);}
+.patientResults{grid-template-columns:repeat(auto-fill,minmax(230px,1fr));}
+.patientResult,.patientResultActive{min-height:69px;}
+.emptyState{padding:20px 16px;margin:0;border:1px dashed var(--dsw-alias-border-l2);border-radius:13px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.5;}
+@media(max-width:680px){.directoryHeader .primary{width:100%;}.settingsPanel{right:-5px;}.patientFocus{align-items:flex-start;}}

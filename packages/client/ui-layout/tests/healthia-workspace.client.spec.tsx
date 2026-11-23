@@ -25,6 +25,8 @@ describe('PHOENIX embedded Healthia', () => {
     expect(screen.queryByText('Healthia')).toBeNull()
     expect(screen.queryByText('Capacidades')).toBeNull()
     expect(screen.queryByText('Intercambios')).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Servicio clínico protegido' })).toBeNull()
+    fireEvent.click(screen.getByText('Información y acceso técnico'))
     expect(screen.getByRole('link', { name: 'Servicio clínico protegido' }).getAttribute('href')).toBe('/health')
   })
 
@@ -42,6 +44,8 @@ describe('PHOENIX embedded Healthia', () => {
 
   it('does not authorize the patient portal by a visual role switch', () => {
     render(<ScreenHarness />)
+    expect(screen.queryByRole('button', { name: 'Paciente' })).toBeNull()
+    fireEvent.click(screen.getByText('Vista: Médico'))
     fireEvent.click(screen.getByRole('button', { name: 'Paciente' }))
     expect(screen.getByRole('heading', { name: 'Mi espacio' })).toBeTruthy()
     expect(screen.getByText(/no inicia sesión ni concede acceso/)).toBeTruthy()
