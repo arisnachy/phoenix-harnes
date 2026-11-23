@@ -21,7 +21,7 @@ type Actor = { username:string; role:Role; org:string }
 /** Authenticated clinical principal with organization and professional role. */
 export type ClinicActor = Readonly<Actor>
 type RecordData = Record<string,unknown>
-type Row = { id:string; org:string; kind:Kind|'attachment'|'draft'|'study-interpretation'; version:number; iv:string; tag:string; payload:string; created_at:string; updated_at:string }
+type Row = { id:string; org:string; kind:Kind|'attachment'|'draft'|'study-interpretation'|'patient-submission'; version:number; iv:string; tag:string; payload:string; created_at:string; updated_at:string }
 type AttachmentRow = Omit<Row,'kind'|'updated_at'> & { patient_id:string; encounter_id:string|null; uploaded_by:string }
 type Staff = { username:string; org:string; role:Role; salt:string; digest:string }
 type Session = { actor:Actor; expires:number; csrf:string }
@@ -254,6 +254,102 @@ export class HealthClinicStore {
     return result
   }
 
+  /** Patient-authored preconsultation is encrypted, patient-scoped, and never
+   * merged into verified medical history without a professional review. */
+  patientPortalSubmitIntake(cookie:string|undefined,csrf:string|undefined,input:unknown):{
+    id:string;createdAt:string;status:'pending-review'
+  }{
+    this.patientPortalSession(cookie,csrf,true)
+    const session=this.patientSessions.get(cookie!)!
+    const x=obj(input)
+    const fields=['complaint','timeline','symptoms','medications','allergies','questions'] as const
+    if(Object.keys(x).some(key=>!fields.includes(key as typeof fields[number])))
+      fail('Campo de preconsulta no permitido')
+    const answers:RecordData={}
+    for(const key of fields){
+      const value=x[key]
+      if(value===undefined||value===null||value==='')continue
+      if(typeof value!=='string'||value.length>1600||
+        /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(value))
+        fail('Respuesta de preconsulta inválida')
+      if(value.trim())answers[key]=value.trim()
+    }
+    if(typeof answers.complaint!=='string')fail('El motivo de consulta es necesario')
+    const count=this.db.prepare(
+      "SELECT COUNT(*) AS total FROM health_records WHERE org=? AND kind='patient-submission'",
+    ).get(session.org) as {total:number}
+    if(count.total>=5000)fail('Capacidad de admisión alcanzada; contacte su clínica')
+    const id=randomUUID(),createdAt=new Date().toISOString()
+    const data:RecordData={patientId:session.patientId,answers,
+      status:'pending-review',submittedAt:createdAt,source:'patient-portal'}
+    const encrypted=this.seal(id,session.org,'patient-submission',1,data)
+    this.db.exec('BEGIN IMMEDIATE')
+    try{
+      this.db.prepare('INSERT INTO health_records VALUES (?,?,?,?,?,?,?,?,?)')
+        .run(id,session.org,'patient-submission',1,encrypted.iv,encrypted.tag,
+          encrypted.payload,createdAt,createdAt)
+      this.audit({username:'portal-paciente:'+session.accountId.slice(0,8),
+        role:'reception',org:session.org},'patient.portal.intake',id)
+      this.db.exec('COMMIT')
+    }catch(error){this.db.exec('ROLLBACK');throw error}
+    return {id,createdAt,status:'pending-review'}
+  }
+
+  /** A patient can inspect only their own previously submitted preconsultations. */
+  patientPortalIntakes(cookie:string|undefined):readonly RecordData[]{
+    this.patientPortalSession(cookie)
+    const session=this.patientSessions.get(cookie!)!
+    const rows=this.db.prepare(
+      "SELECT * FROM health_records WHERE org=? AND kind='patient-submission' ORDER BY created_at DESC LIMIT 500",
+    ).all(session.org) as Row[]
+    return rows.map(row=>({row,data:this.open(row)}))
+      .filter(x=>x.data.patientId===session.patientId).slice(0,25)
+      .map(x=>({id:x.row.id,createdAt:x.row.created_at,status:x.data.status,
+        complaint:(x.data.answers as RecordData)?.complaint}))
+  }
+
+  /** Read only submissions for a clinician's authorized patient. */
+  patientIntakes(actor:Actor,patientId:string):readonly RecordData[]{
+    if(!['clinician','psychologist'].includes(actor.role))fail('Profesional asistencial requerido')
+    const id=str(patientId,'Paciente',80)
+    this.find(actor,'patients',id)
+    const rows=this.db.prepare(
+      "SELECT * FROM health_records WHERE org=? AND kind='patient-submission' ORDER BY created_at DESC LIMIT 500",
+    ).all(actor.org) as Row[]
+    return rows.map(row=>({row,data:this.open(row)}))
+      .filter(x=>x.data.patientId===id).slice(0,30)
+      .map(x=>({id:x.row.id,version:x.row.version,createdAt:x.row.created_at,...x.data}))
+  }
+
+  /** Acknowledge patient statements without turning them into verified diagnoses. */
+  reviewPatientIntake(actor:Actor,submissionId:string,version:number):RecordData{
+    if(!['clinician','psychologist'].includes(actor.role))fail('Profesional asistencial requerido')
+    if(!Number.isSafeInteger(version)||version<1)fail('Versión de preconsulta inválida')
+    const id=str(submissionId,'Preconsulta',80)
+    this.db.exec('BEGIN IMMEDIATE')
+    try{
+      const row=this.db.prepare(
+        "SELECT * FROM health_records WHERE id=? AND org=? AND kind='patient-submission'",
+      ).get(id,actor.org) as Row|undefined
+      if(!row)fail('Preconsulta no disponible')
+      const record=this.open(row)
+      this.find(actor,'patients',str(record.patientId,'Paciente',80))
+      if(record.status!=='pending-review')fail('Preconsulta ya revisada')
+      if(row.version!==version)fail('Conflicto de edición: actualice la preconsulta')
+      const next={...record,status:'reviewed',reviewedBy:actor.username,
+        reviewedAt:new Date().toISOString(),verifiedHistoryTransfer:false}
+      const sealed=this.seal(id,actor.org,'patient-submission',version+1,next)
+      const updated=this.db.prepare(
+        "UPDATE health_records SET version=?,iv=?,tag=?,payload=?,updated_at=? WHERE id=? AND org=? AND kind='patient-submission' AND version=?",
+      ).run(version+1,sealed.iv,sealed.tag,sealed.payload,next.reviewedAt,
+        id,actor.org,version)
+      if(Number(updated.changes)!==1)fail('Conflicto de revisión')
+      this.audit(actor,'patient.intake.reviewed',id)
+      this.db.exec('COMMIT')
+      return {id,version:version+1,...next}
+    }catch(error){this.db.exec('ROLLBACK');throw error}
+  }
+
   /** Publish narrowly reviewed records, with real care relationship + audit. */
   publishPatientPortalItem(actor:Actor,kind:string,recordId:string):void {
     if(actor.role!=='clinician'||!['appointments','prescriptions'].includes(kind))
@@ -411,7 +507,7 @@ export class HealthClinicStore {
     }catch(error){this.db.exec('ROLLBACK');throw error}
   }
   private encryptionKey():Buffer {if(!this.key)fail('Expediente clínico bloqueado');return this.key}
-  private seal(id:string,org:string,kind:Kind|'attachment'|'draft'|'study-interpretation',version:number,data:RecordData):{ iv:string;tag:string;payload:string } {
+  private seal(id:string,org:string,kind:Kind|'attachment'|'draft'|'study-interpretation'|'patient-submission',version:number,data:RecordData):{ iv:string;tag:string;payload:string } {
     const iv=randomBytes(12),key=this.encryptionKey(),cipher=createCipheriv('aes-256-gcm',key,iv)
     cipher.setAAD(Buffer.from([id,org,kind,String(version)].join(':')))
     const raw=Buffer.from(JSON.stringify(data),'utf8')
