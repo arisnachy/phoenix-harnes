@@ -1,5 +1,7 @@
 # @phoenix-ai/dsh-host-plugin-inventory
 
+The Phoenix Local loopback proxy uses an eight-minute resettable Ollama stream idle limit rather than cutting off slow CPU inference after ninety seconds. Its ten-minute overall request limit and client cancellation remain in force. The pi-ai adapter separately defaults `phoenix-local` to a nine-minute idle budget; explicitly configured provider timeouts still take precedence. Installed Ollama tags are enumerated only through local `/api/tags` and inspected via `/api/show`. Pull and deletion remain explicit Host-only operations.
+
 English | [中文](README.zh.md)
 
 Host diagnostics service for the current Cordis Loader tree and PHOENIX stable-update lifecycle. `PluginInventoryGateway` registers the `pluginInventory` Remote namespace. `pluginInventory/list` remains a read-only point-in-time projection of non-group Loader entries; `pluginInventory/updateState` exposes a sanitized snapshot of the repository-local updater state; `pluginInventory/refreshForUpdate` durably wakes the detached watcher for an immediate stable-channel check; `pluginInventory/restartForUpdate` accepts a restart only when that trusted state is exactly `ready` with a valid prepared target.

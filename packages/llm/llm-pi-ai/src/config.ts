@@ -43,6 +43,9 @@ import { buildProvider, supportedProtocols } from './provider.ts'
 /** Default maximum idle interval while an adapter stream read is outstanding. */
 export const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 300_000
 
+/** Slow local CPU prefill can produce no visible model event for minutes. */
+export const DEFAULT_PHOENIX_LOCAL_STREAM_IDLE_TIMEOUT_MS = 9 * 60_000
+
 /** Bound a silent Codex remote-MCP stall without shortening other providers' budgets. */
 export const DEFAULT_CODEX_STREAM_IDLE_TIMEOUT_MS = 90_000
 
@@ -399,7 +402,7 @@ const profile = z.object({
   transport: z.union(['sse', 'websocket', 'websocket-cached', 'auto']),
   timeoutMs: z.natural(),
   websocketConnectTimeoutMs: z.natural(),
-  streamIdleTimeoutMs: z.number().min(Number.MIN_VALUE).max(MAX_TIMER_DELAY_MS).default(DEFAULT_STREAM_IDLE_TIMEOUT_MS),
+  streamIdleTimeoutMs: z.number().min(Number.MIN_VALUE).max(MAX_TIMER_DELAY_MS),
   maxRequestImageBytes: z.number().step(1).min(1).default(DEFAULT_MAX_REQUEST_IMAGE_BYTES),
   requestImagePixelBudget: z.number().step(1).min(1).default(DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET),
   requestImageMaxBytes: z.number().step(1).min(1).default(DEFAULT_REQUEST_IMAGE_MAX_BYTES),
@@ -489,7 +492,9 @@ export function resolveProfiles(
     const streamIdleTimeoutMs = source.streamIdleTimeoutMs
       ?? (provider === 'openai-codex'
         ? DEFAULT_CODEX_STREAM_IDLE_TIMEOUT_MS
-        : DEFAULT_STREAM_IDLE_TIMEOUT_MS)
+        : provider === 'phoenix-local'
+          ? DEFAULT_PHOENIX_LOCAL_STREAM_IDLE_TIMEOUT_MS
+          : DEFAULT_STREAM_IDLE_TIMEOUT_MS)
     if (!Number.isFinite(streamIdleTimeoutMs)
       || streamIdleTimeoutMs <= 0
       || streamIdleTimeoutMs > MAX_TIMER_DELAY_MS) {
