@@ -200,14 +200,15 @@ export function HealthiaClinicalNote({
   const filledFields=shown.filter(f=>!!values[f.id]?.trim()).length
   const canEdit=onSave!==undefined
   const hasEncounter=encounterVersion!==undefined
+  const modelEnabled=loadModels!==undefined&&refineField!==undefined
   const contextNonce=useRef('')
   if(!contextNonce.current)contextNonce.current=globalThis.crypto?.randomUUID?.()??Math.random().toString(36).slice(2)
   const binding=contextNonce.current+':'+String(encounterVersion??'none')
   const handledAction=useRef<number|undefined>(undefined)
   useEffect(()=>{
     onEditorState?.({step:section,binding,visibleFieldIds:visibleIds?visibleIds.split(','):[],
-      filledFields,dirty,hasEncounter,canEdit})
-  },[onEditorState,section,binding,visibleIds,filledFields,dirty,hasEncounter,canEdit])
+      filledFields,dirty,hasEncounter,canEdit,modelEnabled})
+  },[onEditorState,section,binding,visibleIds,filledFields,dirty,hasEncounter,canEdit,modelEnabled])
   useEffect(()=>()=>{onEditorState?.(null)},[onEditorState])
 
   const [quick,setQuick]=useState('')
@@ -381,7 +382,7 @@ export function HealthiaClinicalNote({
           <label className={css.fieldLabel}>Modelo clínico<select value={modelId} onChange={e=>{setModelId(e.currentTarget.value);setConsent(false);setProposal(null)}} disabled={aiBusy}><option value="">Seleccionar modelo</option>{models.map(m=><option key={m.id} value={m.id}>{m.label} · {m.location==='local'?'Local':'Externo'}</option>)}</select></label>
           {model&&<label className={css.check}><input type="checkbox" checked={consent} onChange={e=>setConsent(e.currentTarget.checked)} disabled={aiBusy}/>{model.location==='external'?'Autorizo enviar '+(aiField==='context-review'?'el borrador y los antecedentes y registros recientes autorizados':'este campo clínico')+' al proveedor externo conforme a las reglas de mi institución.':'Autorizo procesar '+(aiField==='context-review'?'el borrador y los antecedentes y registros recientes autorizados':'este campo')+' en el modelo local.'}</label>}
           <div className={css.actions}><button className={css.primary} type="button" disabled={!model||!consent||aiBusy} onClick={()=>{void generate()}}>{aiBusy?'Generando…':'Generar propuesta'}</button><button className={css.secondary} type="button" onClick={()=>{generation.current++;setAiBusy(false);setAiField('');setProposal(null)}}>Cerrar asistencia</button></div>
-          {proposal?.field==='context-review'&&<div className={css.proposal}><strong>Valoración de apoyo · sin verificar · {proposal.result.model}</strong><p>{proposal.result.text}</p><p>Verifica los hallazgos, las hipótesis y las indicaciones con el expediente y las fuentes clínicas. No se ha modificado ni firmado la historia.</p></div>}
+          {proposal?.field==='context-review'&&proposal.original===note&&<div className={css.proposal}><strong>Valoración de apoyo · sin verificar · {proposal.result.model}</strong><p>{proposal.result.text}</p><p>Verifica los hallazgos, las hipótesis y las indicaciones con el expediente y las fuentes clínicas. No se ha modificado ni firmado la historia.</p></div>}
           {proposal&&proposal.field!=='context-review'&&<div className={css.proposal}><strong>Original</strong><p>{proposal.original}</p><strong>Propuesta sin verificar · {proposal.result.model}</strong><p>{proposal.result.text}</p>{proposal.result.numericWarnings.length>0&&<p role="alert">Cifras nuevas: {proposal.result.numericWarnings.join(', ')}. Verifique contra la fuente.</p>}<button type="button" className={css.primary} disabled={values[proposal.field]!==proposal.original||encounterVersion!==proposal.version||proposal.result.text.length>(CLINICAL_NOTE_SECTIONS.flatMap(s=>s.fields).find(f=>f.id===proposal.field)?.maxLength??1800)} onClick={()=>{edit(proposal.field,proposal.result.text);setProposal(null);setAiField('');setMessage('Propuesta aceptada en el borrador, pendiente de guardar.')}}>Aceptar texto revisado</button></div>}
         </div>}
         <div className={css.actions}>
