@@ -18,7 +18,7 @@ import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAU
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
 import { HealthiaWorkspace, HEALTHIA_NAV, type HealthiaRole } from './HealthiaWorkspace.tsx'
-import { clinicalEditorStep, CLINICAL_EDITOR_STEPS, type ClinicalEditorStep, type ClinicalEditorViewState } from './HealthiaEditorSupport.ts'
+import { clinicalEditorStep, CLINICAL_EDITOR_STEPS, clinicalEditorAction, CLINICAL_EDITOR_ACTIONS, canApplyClinicalAction, type ClinicalEditorRequest, type ClinicalEditorViewState } from './HealthiaEditorSupport.ts'
 import { ADAPTIVE_APP_PRESETS, createAdaptiveAppBlueprint, type AdaptiveAppBlueprint } from './AdaptiveAppCatalog.ts'
 import { appendAdaptiveSection, renameAdaptiveSection, removeAdaptiveSection, restorePreviousAdaptiveApps, installAdaptiveApp, readAdaptiveApps } from './AdaptiveAppRegistry.ts'
 import { applyAdaptiveFormFields, restorePreviousAdaptiveForms } from './AdaptiveFormMetadataStore.ts'
@@ -242,7 +242,7 @@ export function AppFrame({
   const activeBlueprint = customApps.find(app => app.id === adaptiveApp)
   const [healthiaRole, setHealthiaRole] = useState<HealthiaRole>('doctor')
   const [healthiaSection, setHealthiaSection] = useState('overview')
-  const [clinicalStep,setClinicalStep]=useState<{step:ClinicalEditorStep;sequence:number}|undefined>()
+  const [clinicalStep,setClinicalStep]=useState<ClinicalEditorRequest|undefined>()
   const [clinicalEditorView,setClinicalEditorView]=useState<ClinicalEditorViewState|null>(null)
   const [missionError, setMissionError] = useState(false)
   const [search, setSearch] = useState<{ term: string; results: readonly AdaptiveDiscovery[] } | null>(null)
@@ -254,23 +254,34 @@ export function AppFrame({
       const detail = (event as CustomEvent<unknown>).detail
       if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return
       const request = detail as Record<string, unknown>
-      if (Object.keys(request).some(key => !['requestId','phase','command'].includes(key))
+      if (Object.keys(request).some(key => !['requestId','phase','command','binding'].includes(key))
         || typeof request.requestId !== 'string' || request.requestId.length > 90
         || (request.phase !== 'preflight' && request.phase !== 'apply')) return
       const command = parseAdaptiveControl(request.command)
       let ok = false
       let reason = 'INVALID_COMMAND'
+      let binding:string|undefined
       try {
         if (command) {
           const gate = preflightAdaptiveControl(command)
           ok = gate.valid
           reason = gate.reason
-          if (gate.valid && request.phase === 'apply') {
+          const action=command.appId==='healthia'&&command.operation==='open'&&clinicalEditorAction(command.sectionId)?command.sectionId:undefined
+          if(action){
+            const active=adaptiveApp==='healthia'&&healthiaRole==='doctor'&&healthiaSection==='encounters'
+            binding=active&&clinicalEditorView?.hasEncounter&&clinicalEditorView.canEdit?clinicalEditorView.binding:undefined
+            ok=gate.valid&&binding!==undefined&&(request.phase==='preflight'||canApplyClinicalAction(clinicalEditorView,request.binding))
+            reason=ok?'Acción sobre el borrador activo; no firma ni envía datos al chat.':'No hay consulta editable o el contexto cambió. Comprueba de nuevo.'
+          }
+          if (ok && request.phase === 'apply') {
             if (command.operation === 'open') {
               if (command.appId === 'general') setAdaptiveApp('general')
               else if (command.appId === 'healthia') {
                 setAdaptiveApp('healthia')
-                if (healthiaRole==='doctor'&&clinicalEditorStep(command.sectionId)) {
+                if(action&&binding){
+                  const target=CLINICAL_EDITOR_ACTIONS[action]
+                  setClinicalStep(previous=>({step:target.step,sequence:(previous?.sequence??0)+1,action,binding}))
+                }else if (healthiaRole==='doctor'&&clinicalEditorStep(command.sectionId)) {
                   const step=command.sectionId
                   setClinicalStep(previous=>({step,sequence:(previous?.sequence??0)+1}))
                   setHealthiaSection('encounters')
@@ -335,12 +346,12 @@ export function AppFrame({
         reason = 'VALIDATION_OR_STORAGE_FAILED'
       }
       window.dispatchEvent(new CustomEvent('phoenix:adaptive-control-result', {
-        detail:{requestId:request.requestId,phase:request.phase,ok,reason},
+        detail:{requestId:request.requestId,phase:request.phase,ok,reason,...(ok&&binding?{binding}:{})},
       }))
     }
     window.addEventListener('phoenix:adaptive-control-request',onControl)
     return () => window.removeEventListener('phoenix:adaptive-control-request',onControl)
-  }, [healthiaRole])
+  }, [healthiaRole,adaptiveApp,healthiaSection,clinicalEditorView])
 
   // A chat-authored form diff is inert until the user explicitly applies it.
   // The target must be a locally installed generic app, never Healthia EHR.
@@ -472,7 +483,7 @@ export function AppFrame({
           })()
           window.dispatchEvent(new CustomEvent('phoenix:adaptive-self-inspect', {detail:{
             activeApp:adaptiveApp,
-            ...(adaptiveApp==='healthia'?{clinicalEditor:{section:healthiaSection,steps:CLINICAL_EDITOR_STEPS.map(x=>({id:x.id,label:x.label})),live:clinicalEditorView,scope:'navigation-only',valuesExposed:false}}:{}),
+            ...(adaptiveApp==='healthia'?{clinicalEditor:{section:healthiaSection,steps:CLINICAL_EDITOR_STEPS.map(x=>({id:x.id,label:x.label})),live:clinicalEditorView,actions:Object.entries(CLINICAL_EDITOR_ACTIONS).map(([id,action])=>({id,label:action.label})),scope:'local-draft-actions',valuesExposed:false}}:{}),
             apps:customApps.slice(0,12).map(app => ({
               id:app.id,title:app.title,
               sections:app.sections.slice(0,8).map(item => {
