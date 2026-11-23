@@ -57,6 +57,7 @@ export type ClinicalEncounter = {
   readonly history: string; readonly exam: string; readonly assessment: string
   readonly plan: string; readonly status: 'draft'|'reviewed'|'signed'
   readonly signedBy?: string|null; readonly signedAt?: string|null
+  readonly interviewAnswers?:Readonly<Record<string,string>>
 }
 export type ClinicalStatus = {readonly initialized:boolean;readonly enabled:boolean}
 export type ClinicalBranding = {readonly logoDataUrl:string|null}
@@ -415,5 +416,15 @@ export class HealthiaClinicalApi {
   }):Promise<void> {
     if(!UUID.test(values.patientId)||!values.staffId.trim())throw Error('Asignación inválida')
     await this.request('assignments','POST',session,values)
+  }
+  async draftEncounterFromInterview(session:ClinicalSession,current:ClinicalEncounter):Promise<ClinicalEncounter> {
+    if(current.status==='signed'||current.history.trim())throw Error('La historia existente no debe sobrescribirse')
+    const response=object(await this.request('encounters/'+current.id,'PATCH',session,{
+      version:current.version,action:'draft-from-interview',
+    }))
+    if(!encounterOf(response.record)||response.record.id!==current.id||
+      response.record.patientId!==current.patientId)
+      throw Error('La nota no quedó registrada en el expediente')
+    return response.record
   }
 }
