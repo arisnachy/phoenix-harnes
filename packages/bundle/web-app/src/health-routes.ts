@@ -265,6 +265,31 @@ export function registerHealthRoutes(ctx:Context):void {
         const catalog=await discoverClinicalModels(clinicalModelRuntime(ctx))
         reply(res,200,catalog);return
       }
+      // Field-specific transient inference; never writes an encounter or uses general chat.
+      if(operation==='clinical-field-ai'&&id!==undefined&&method==='POST'){
+        const body=await readBody(req,24000)
+        const fields=['chief','hea','ros','personal','surgical','family','habits','medications','perinatal','gyneco','physical','findings']
+        if(!fields.includes(String(body.field))||typeof body.text!=='string'||!body.text.trim()
+          ||body.text.length>3000||/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(body.text)
+          ||typeof body.routeId!=='string'||typeof body.version!=='number'||!Number.isSafeInteger(body.version))
+          throw Error('Campo clínico inválido')
+        store.assertClinicalEditorModel(actor,id,body.version)
+        const runtime=clinicalModelRuntime(ctx)
+        const catalog=await discoverClinicalModels(runtime)
+        const refined=await runClinicalModel({
+          source:'local-recorded-facts',reviewed:false,canAutoSign:false,
+          suggestedComplaint:'',suggestedHistory:body.text,originalHistory:body.text,
+          note:{history:body.text,exam:'',assessment:'',plan:''},missingInformation:[],
+        },{
+          requestedId:body.routeId,acknowledgeLocal:body.confirmLocalProcessing===true,
+          acknowledgeExternal:body.confirmExternalProcessing===true,
+        },catalog,runtime)
+        store.assertClinicalEditorModel(actor,id,body.version)
+        reply(res,200,{proposal:{encounterId:id,encounterVersion:body.version,field:body.field,
+          text:refined.suggestedHistory,numericWarnings:refined.numericWarnings,
+          provider:refined.provider,model:refined.model,location:refined.location,requiresClinicianReview:true}})
+        return
+      }
       if(operation==='clinical-note-ai'&&id!==undefined&&method==='POST'){
         const body=await readBody(req,1024)
         if(body.action!=='refine'||typeof body.routeId!=='string')
