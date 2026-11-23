@@ -18,7 +18,7 @@ import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAU
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
 import { HealthiaWorkspace, HEALTHIA_NAV, type HealthiaRole } from './HealthiaWorkspace.tsx'
-import { clinicalEditorStep, CLINICAL_EDITOR_STEPS, clinicalEditorAction, CLINICAL_EDITOR_ACTIONS, canApplyClinicalAction, type ClinicalEditorRequest, type ClinicalEditorViewState } from './HealthiaEditorSupport.ts'
+import { clinicalEditorStep, CLINICAL_EDITOR_STEPS, clinicalEditorAction, CLINICAL_EDITOR_ACTIONS, canApplyClinicalAction, publicClinicalEditorState, type ClinicalEditorRequest, type ClinicalEditorViewState } from './HealthiaEditorSupport.ts'
 import { ADAPTIVE_APP_PRESETS, createAdaptiveAppBlueprint, type AdaptiveAppBlueprint } from './AdaptiveAppCatalog.ts'
 import { appendAdaptiveSection, renameAdaptiveSection, removeAdaptiveSection, restorePreviousAdaptiveApps, installAdaptiveApp, readAdaptiveApps } from './AdaptiveAppRegistry.ts'
 import { applyAdaptiveFormFields, restorePreviousAdaptiveForms } from './AdaptiveFormMetadataStore.ts'
@@ -269,7 +269,8 @@ export function AppFrame({
           const action=command.appId==='healthia'&&command.operation==='open'&&clinicalEditorAction(command.sectionId)?command.sectionId:undefined
           if(action){
             const active=adaptiveApp==='healthia'&&healthiaRole==='doctor'&&healthiaSection==='encounters'
-            binding=active&&clinicalEditorView?.hasEncounter&&clinicalEditorView.canEdit?clinicalEditorView.binding:undefined
+            const needsModel=action==='clinical-context-review'||action==='clinical-refine-chief'||action==='clinical-refine-hea'
+            binding=active&&clinicalEditorView?.hasEncounter&&clinicalEditorView.canEdit&&(!needsModel||clinicalEditorView.modelEnabled)?clinicalEditorView.binding:undefined
             ok=gate.valid&&binding!==undefined&&(request.phase==='preflight'||canApplyClinicalAction(clinicalEditorView,request.binding))
             reason=ok?'Acción sobre el borrador activo; no firma ni envía datos al chat.':'No hay consulta editable o el contexto cambió. Comprueba de nuevo.'
           }
@@ -457,7 +458,7 @@ export function AppFrame({
         detail: {
           app: adaptiveApp, role: healthiaRole,
           section: activeBlueprint ? customSection : healthiaSection,
-          ...(adaptiveApp==='healthia'?{clinicalEditor:clinicalEditorView}:{}),
+          ...(adaptiveApp==='healthia'?{clinicalEditor:publicClinicalEditorState(clinicalEditorView),clinicalActions:Object.entries(CLINICAL_EDITOR_ACTIONS).map(([id,action])=>({id,label:action.label}))}:{}),
           sections: activeBlueprint?.sections ?? undefined,
           title: activeBlueprint?.title ?? undefined,
           palette: activeBlueprint ? readAdaptivePalette(activeBlueprint.id) : 'pearl',
@@ -483,7 +484,7 @@ export function AppFrame({
           })()
           window.dispatchEvent(new CustomEvent('phoenix:adaptive-self-inspect', {detail:{
             activeApp:adaptiveApp,
-            ...(adaptiveApp==='healthia'?{clinicalEditor:{section:healthiaSection,steps:CLINICAL_EDITOR_STEPS.map(x=>({id:x.id,label:x.label})),live:clinicalEditorView,actions:Object.entries(CLINICAL_EDITOR_ACTIONS).map(([id,action])=>({id,label:action.label})),scope:'local-draft-actions',valuesExposed:false}}:{}),
+            ...(adaptiveApp==='healthia'?{clinicalEditor:{section:healthiaSection,steps:CLINICAL_EDITOR_STEPS.map(x=>({id:x.id,label:x.label})),live:publicClinicalEditorState(clinicalEditorView),actions:Object.entries(CLINICAL_EDITOR_ACTIONS).map(([id,action])=>({id,label:action.label})),scope:'local-draft-actions',valuesExposed:false}}:{}),
             apps:customApps.slice(0,12).map(app => ({
               id:app.id,title:app.title,
               sections:app.sections.slice(0,8).map(item => {
