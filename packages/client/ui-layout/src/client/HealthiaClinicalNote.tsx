@@ -215,12 +215,13 @@ export function HealthiaClinicalNote({
   const [models,setModels]=useState<readonly ClinicalEditorModel[]>([])
   const [modelId,setModelId]=useState('')
   const [aiField,setAiField]=useState('')
+  const currentSource=(field:string):string=>field==='context-review'?formatClinicalNote(kind,values):values[field]??''
   const [consent,setConsent]=useState(false)
   const [aiBusy,setAiBusy]=useState(false)
   const [proposal,setProposal]=useState<{field:string;original:string;version:number|undefined;result:ClinicalEditorProposal}|null>(null)
   const generation=useRef(0)
-  const live=useRef({values,encounterVersion})
-  live.current={values,encounterVersion}
+  const live=useRef({values,encounterVersion,note})
+  live.current={values,encounterVersion,note}
   const model=models.find(m=>m.id===modelId)
   const invalidVitals=VITAL_IDS.filter(id=>!!values[id]&&!validateVital(id,values[id]!))
   const reversed=!!values.sys&&!!values.dia&&Number(values.sys)<Number(values.dia)
@@ -239,12 +240,12 @@ export function HealthiaClinicalNote({
     }catch{if(token===generation.current)setMessage('No se pudo consultar el catálogo de modelos.')}
   }
   const generate=async()=>{
-    if(!refineField||!model||!consent||aiBusy||!values[aiField]?.trim())return
-    const field=aiField,original=values[field]!,version=encounterVersion,token=++generation.current
+    if(!refineField||!model||!consent||aiBusy||!currentSource(aiField).trim()||(aiField==='context-review'&&!hasContent))return
+    const field=aiField,original=currentSource(field),version=encounterVersion,token=++generation.current
     setAiBusy(true);setProposal(null);setMessage('')
     try{const result=await refineField(field,original,model,true)
       if(token!==generation.current)return
-      if(live.current.values[field]!==original||live.current.encounterVersion!==version){setMessage('El campo o la consulta cambió. La propuesta fue descartada.');return}
+      if((field==='context-review'?live.current.note:live.current.values[field])!==original||live.current.encounterVersion!==version){setMessage('El campo o la consulta cambió. La propuesta fue descartada.');return}
       setProposal({field,original,version,result})
     }catch(e){if(token===generation.current)setMessage(e instanceof Error?e.message:'No se pudo generar la propuesta.')}
     finally{if(token===generation.current)setAiBusy(false)}
@@ -269,8 +270,10 @@ export function HealthiaClinicalNote({
       void openAi(field)
     }else if(requestedStep.action==='clinical-import-background')importBackground()
     else if(requestedStep.action==='clinical-preview')setPreview(true)
+    else if(requestedStep.action==='clinical-context-review'){if(hasContent)void openAi('context-review');else setMessage('Documenta la consulta antes de solicitar valoración.')}
   },[requestedStep,binding,canEdit,saving])
   const edit = (id: string, value: string): void => {
+    if(proposal?.field==='context-review')setProposal(null)
     setValues(previous => ({ ...previous, [id]: value }))
     setMessage('')
   }
@@ -370,14 +373,16 @@ export function HealthiaClinicalNote({
             </div>
           ))}
         </div>
+        {section==='diagnosis'&&refineField&&<div className={css.assist}><strong>Valoración contextual de Kira</strong><p>Revisa el borrador actual, antecedentes y registros recientes autorizados. Propone diferenciales, preguntas y estudios para evaluación profesional, no diagnósticos definitivos ni recetas.</p><button type="button" className={css.secondary} disabled={!hasContent||aiBusy} onClick={()=>{void openAi('context-review')}}>Analizar contexto de la consulta</button></div>}
         {section==='vitals'&&<div className={css.metrics}><div><small>IMC calculado</small><strong>{clinicalBmi(values)??'—'} kg/m²</strong></div><div><small>PAM estimada</small><strong>{estimatedMap(values)??'—'} mmHg</strong></div></div>}
         {hasInvalidVitals&&<p role="alert" className={css.status}>Verifica las mediciones y unidades antes de guardar. Los límites son de entrada, no rangos clínicos normales.</p>}
         {aiField&&refineField&&<div className={css.assist} aria-label="Asistencia IA clínica">
-          <strong>Mejorar {CLINICAL_NOTE_SECTIONS.flatMap(s=>s.fields).find(f=>f.id===aiField)?.label}</strong>
+          <strong>{aiField==='context-review'?'Valoración del contexto clínico':'Mejorar '+(CLINICAL_NOTE_SECTIONS.flatMap(s=>s.fields).find(f=>f.id===aiField)?.label??'campo')}</strong>
           <label className={css.fieldLabel}>Modelo clínico<select value={modelId} onChange={e=>{setModelId(e.currentTarget.value);setConsent(false);setProposal(null)}} disabled={aiBusy}><option value="">Seleccionar modelo</option>{models.map(m=><option key={m.id} value={m.id}>{m.label} · {m.location==='local'?'Local':'Externo'}</option>)}</select></label>
-          {model&&<label className={css.check}><input type="checkbox" checked={consent} onChange={e=>setConsent(e.currentTarget.checked)} disabled={aiBusy}/>{model.location==='external'?'Autorizo enviar este campo clínico al proveedor externo conforme a las reglas de mi institución.':'Autorizo procesar este campo en el modelo local.'}</label>}
+          {model&&<label className={css.check}><input type="checkbox" checked={consent} onChange={e=>setConsent(e.currentTarget.checked)} disabled={aiBusy}/>{model.location==='external'?'Autorizo enviar '+(aiField==='context-review'?'el borrador y los antecedentes y registros recientes autorizados':'este campo clínico')+' al proveedor externo conforme a las reglas de mi institución.':'Autorizo procesar '+(aiField==='context-review'?'el borrador y los antecedentes y registros recientes autorizados':'este campo')+' en el modelo local.'}</label>}
           <div className={css.actions}><button className={css.primary} type="button" disabled={!model||!consent||aiBusy} onClick={()=>{void generate()}}>{aiBusy?'Generando…':'Generar propuesta'}</button><button className={css.secondary} type="button" onClick={()=>{generation.current++;setAiBusy(false);setAiField('');setProposal(null)}}>Cerrar asistencia</button></div>
-          {proposal&&<div className={css.proposal}><strong>Original</strong><p>{proposal.original}</p><strong>Propuesta sin verificar · {proposal.result.model}</strong><p>{proposal.result.text}</p>{proposal.result.numericWarnings.length>0&&<p role="alert">Cifras nuevas: {proposal.result.numericWarnings.join(', ')}. Verifique contra la fuente.</p>}<button type="button" className={css.primary} disabled={values[proposal.field]!==proposal.original||encounterVersion!==proposal.version||proposal.result.text.length>(CLINICAL_NOTE_SECTIONS.flatMap(s=>s.fields).find(f=>f.id===proposal.field)?.maxLength??1800)} onClick={()=>{edit(proposal.field,proposal.result.text);setProposal(null);setAiField('');setMessage('Propuesta aceptada en el borrador, pendiente de guardar.')}}>Aceptar texto revisado</button></div>}
+          {proposal?.field==='context-review'&&<div className={css.proposal}><strong>Valoración de apoyo · sin verificar · {proposal.result.model}</strong><p>{proposal.result.text}</p><p>Verifica los hallazgos, las hipótesis y las indicaciones con el expediente y las fuentes clínicas. No se ha modificado ni firmado la historia.</p></div>}
+          {proposal&&proposal.field!=='context-review'&&<div className={css.proposal}><strong>Original</strong><p>{proposal.original}</p><strong>Propuesta sin verificar · {proposal.result.model}</strong><p>{proposal.result.text}</p>{proposal.result.numericWarnings.length>0&&<p role="alert">Cifras nuevas: {proposal.result.numericWarnings.join(', ')}. Verifique contra la fuente.</p>}<button type="button" className={css.primary} disabled={values[proposal.field]!==proposal.original||encounterVersion!==proposal.version||proposal.result.text.length>(CLINICAL_NOTE_SECTIONS.flatMap(s=>s.fields).find(f=>f.id===proposal.field)?.maxLength??1800)} onClick={()=>{edit(proposal.field,proposal.result.text);setProposal(null);setAiField('');setMessage('Propuesta aceptada en el borrador, pendiente de guardar.')}}>Aceptar texto revisado</button></div>}
         </div>}
         <div className={css.actions}>
           <button type="button" className={css.secondary} disabled={section==='interview'} onClick={()=>{setSection(CLINICAL_EDITOR_STEPS[CLINICAL_EDITOR_STEPS.findIndex(s=>s.id===section)-1]!.id);setPreview(false)}}>Anterior</button>
