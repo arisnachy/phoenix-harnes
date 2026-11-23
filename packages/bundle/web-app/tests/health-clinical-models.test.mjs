@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { discoverClinicalModels, runClinicalModel } from '../src/health-clinical-models.ts'
+import { discoverClinicalModels, runClinicalModel, runClinicalContextReview } from '../src/health-clinical-models.ts'
 import { composeProtectedClinicalNote } from '../src/health-note-draft.ts'
 
 const original=composeProtectedClinicalNote({
@@ -106,4 +106,24 @@ test('a missing local model cannot silently route a clinical request to the clou
     requestedId:'',acknowledgeLocal:true,acknowledgeExternal:true,
   },catalog,host),/NOT_REGISTERED/)
   assert.equal(calls.length,0)
+})
+
+test('context review is consent-gated and rejects unstructured or executable extra output',async()=>{
+  const {host,calls}=fakeHost()
+  host.stream=async function* (input){
+    calls.push(input)
+    yield {type:'text-delta',text:JSON.stringify({review:'Pregunta pendiente y diferencial no confirmado.'})}
+    yield {type:'finish',reason:{kind:'stop'}}
+  }
+  const catalog=await discoverClinicalModels(host,async()=>[])
+  const request={requestedId:'phoenix/openai/gpt-test',acknowledgeLocal:false,acknowledgeExternal:false}
+  const context={currentUnverifiedDraft:'Historia sintética',authorizedContext:{demographics:{age:40}}}
+  await assert.rejects(runClinicalContextReview(context,request,catalog,host),/CONSENT_REQUIRED/)
+  assert.equal(calls.length,0)
+  const result=await runClinicalContextReview(context,{...request,acknowledgeExternal:true},catalog,host)
+  assert.equal(result.text,'Pregunta pendiente y diferencial no confirmado.')
+  assert.equal(calls[0].tools,undefined)
+  assert(calls[0].messages[0].content[0].text.includes('Historia sintética'))
+  host.stream=async function*(){yield {type:'text-delta',text:JSON.stringify({review:'Texto',action:'sign'})};yield {type:'finish',reason:{kind:'stop'}}}
+  await assert.rejects(runClinicalContextReview(context,{...request,acknowledgeExternal:true},catalog,host),/INVALID_OUTPUT/)
 })
