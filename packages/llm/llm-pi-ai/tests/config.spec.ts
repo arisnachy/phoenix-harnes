@@ -122,6 +122,26 @@ describe('request image policy bounds', () => {
   })
 })
 
+describe('Phoenix Local slow-prefill budget', () => {
+  it('reserves a longer idle interval for the loopback model without relaxing Codex', () => {
+    const local = resolveProfiles({ 'phoenix-local': {
+      api: 'openai-completions', baseURL: 'http://127.0.0.1:17842/v1',
+      models: [{ id: 'phoenix-local' }],
+    } }).get('phoenix-local')
+    const codex = resolveProfiles({ 'openai-codex': {} }).get('openai-codex')
+    expect(local?.streamIdleTimeoutMs).toBe(540_000)
+    expect(codex?.streamIdleTimeoutMs).toBe(90_000)
+  })
+
+  it('preserves an explicit local provider timeout override', () => {
+    const local = resolveProfiles({ 'phoenix-local': {
+      api: 'openai-completions', baseURL: 'http://127.0.0.1:17842/v1',
+      models: [{ id: 'phoenix-local' }], streamIdleTimeoutMs: 120_000,
+    } }).get('phoenix-local')
+    expect(local?.streamIdleTimeoutMs).toBe(120_000)
+  })
+})
+
 describe('ChatGPT Web route defaults', () => {
   it('materializes the dormant local bridge profile from one explicit route', () => {
     const profile = resolveProfiles({ 'chatgpt-web': {} }).get('chatgpt-web')
