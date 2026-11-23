@@ -71,9 +71,16 @@ export const CLINICAL_NOTE_SECTIONS: readonly ClinicalNoteSection[] = [
   { id: 'plan', label: 'Evaluación y plan', fields: [
     { id: 'assessment', label: 'Impresión clínica y razonamiento', kind: 'textarea', maxLength: 3500 },
     { id: 'differential', label: 'Diagnósticos diferenciales o incertidumbres', kind: 'textarea' },
+    { id: 'diagnosisStatus', label: 'Estado diagnóstico (sospecha, provisional o confirmado)' },
+    { id: 'secondaryDiagnosis', label: 'Diagnósticos adicionales y su evidencia', kind: 'textarea' },
+    { id: 'codeSystem', label: 'Terminología o variante de codificación utilizada' },
     { id: 'icd10', label: 'CIE-10 sugerido (requiere verificación)' },
     { id: 'plan', label: 'Tratamiento e indicaciones', kind: 'textarea', maxLength: 3500 },
-    { id: 'tests', label: 'Estudios solicitados', kind: 'textarea' },
+    { id: 'tests', label: 'Analíticas consideradas (las órdenes se emiten por separado)', kind: 'textarea' },
+    { id: 'imaging', label: 'Imágenes diagnósticas consideradas (no emitidas)', kind: 'textarea' },
+    { id: 'referrals', label: 'Derivaciones e interconsultas consideradas', kind: 'textarea' },
+    { id: 'healthEducation', label: 'Educación y recomendaciones de estilo de vida', kind: 'textarea' },
+    { id: 'returnPrecautions', label: 'Signos de alarma e indicaciones de retorno', kind: 'textarea' },
     { id: 'followup', label: 'Seguimiento y signos de alarma', kind: 'textarea' },
   ] },
 ]
@@ -123,6 +130,37 @@ export function formatClinicalNote(kind: ClinicalNoteKind, values: Readonly<Clin
   }
   lines.push('', 'Pendiente de revisión, vinculación al paciente y firma profesional.')
   return lines.join('\n')
+}
+
+/** Serialize a complete note across the Host's four encrypted encounter columns.
+ * Never truncate clinical prose or silently discard nonempty fields.
+ */
+export function formatClinicalNoteParts(kind:ClinicalNoteKind,values:Readonly<ClinicalNoteValues>):{
+  history:string;exam:string;assessment:string;plan:string
+}{
+  const title=NOTE_KINDS.find(item=>item.value===kind)?.label??'Consulta'
+  const write=(field:ClinicalNoteField):string=>{
+    const value=safeValue(values[field.id])
+    if(!value)return ''
+    if(field.kind==='number')return describeVital(field,value)
+    return field.label+': '+value.replace(/\r\n|\r|\n/gu,'\n  ')
+  }
+  const section=(id:string,ids?:readonly string[]):string=>{
+    const selected=CLINICAL_NOTE_SECTIONS.find(item=>item.id===id)
+    if(!selected)return ''
+    const lines=fieldsForKind(selected,kind).filter(f=>ids===undefined||ids.includes(f.id))
+      .map(write).filter(Boolean)
+    if(id==='exam'){
+      const bmi=clinicalBmi(values)
+      if(bmi!==undefined)lines.push('IMC calculado: '+bmi+' kg/m²')
+    }
+    return lines.length?selected.label.toUpperCase()+'\n'+lines.join('\n'):''
+  }
+  const history=[title+' · BORRADOR SIN FIRMAR',section('interview'),section('background')].filter(Boolean).join('\n\n')
+  const exam=section('exam')
+  const assessment=section('plan',['assessment','differential','icd10','diagnosisStatus','secondaryDiagnosis','codeSystem'])
+  const plan=section('plan',['plan','tests','followup','healthEducation','referrals','imaging','returnPrecautions'])
+  return {history,exam,assessment,plan}
 }
 
 /** Clinical values remain local to this React tree unless the authenticated
