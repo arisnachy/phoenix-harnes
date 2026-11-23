@@ -25,7 +25,7 @@ import clsx from 'clsx'
 import type { ModelReasoningEffort, ModelSelection } from '@phoenix-ai/dsh-api-remotes/client'
 import {
   IconCheckOutline16, IconChevronDownOutline14, IconChevronRightOutline14,
-  IconRefreshOutline16, IconWarningOutline16, Toast,
+  IconRefreshOutline16, IconWarningOutline16, PhoenixLogo, Toast,
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@phoenix-ai/dsh-client-ui-slots'
 import type { ModelSelectInjected } from './slots.ts'
@@ -33,6 +33,17 @@ import {
   isPhoenixAutoRouting, presentModel, providerBrandMark, providerInitial, type ModelPresentation,
 } from './presentation.ts'
 import css from './ModelSelect.module.css'
+
+/** Match local model families to the packaged provider icons, not Ollama's generic mark. */
+function localFamilyBrand(name: string): string {
+  const lower = name.toLowerCase()
+  if (lower.includes('gemma')) return 'google'
+  if (lower.includes('qwen')) return 'qwen'
+  if (lower.includes('deepseek')) return 'deepseek'
+  if (lower.includes('llama')) return 'meta'
+  if (lower.includes('mistral')) return 'mistral'
+  return 'ollama'
+}
 
 /** Which pane the dropdown shows: the two-row root or one drilled-in list. */
 type Pane = 'root' | 'model' | 'effort' | 'speed'
@@ -74,7 +85,7 @@ function ProviderLogo({ providerId, providerName }: { providerId: string; provid
  * @returns the trigger and, while open, the two-level menu.
  */
 export function ModelSelect(
-  { locked, available, directory, load, select, t }:
+  { locked, available, directory, load, select, selectLocalModel, changeLocalThinking, t }:
   ModelSelectInjected & { locked: boolean } & PropsLocale<'model'>,
 ) {
   const state = useSyncExternalStore(
@@ -121,7 +132,22 @@ export function ModelSelect(
       } satisfies ModelSelection,
     }))), [state.groups])
   const normalizedQuery = modelQuery.trim().toLocaleLowerCase()
-  const visibleGroups = useMemo(() => state.groups.map((group) => {
+  const installedLocalModels = useMemo(() => {
+    const snapshot = state.localModel
+    if (snapshot === null) return []
+    const installed = new Set([...snapshot.installedModelIds, ...(snapshot.ollamaInstalledModelIds ?? [])])
+    return (snapshot.catalog ?? []).filter(model => installed.has(model.id))
+  }, [state.localModel])
+  const visibleLocalModels = installedLocalModels.filter(model =>
+    [model.displayName, model.id, 'phoenix', 'ollama', 'local'].some(value =>
+      value.toLocaleLowerCase().includes(normalizedQuery)))
+  const currentLocalModel = state.current?.provider === 'phoenix-local'
+    ? installedLocalModels.find(model => model.id === state.localModel?.selectedModelId)
+    : undefined
+  const localThinkingCapabilities = currentLocalModel === undefined ? undefined : state.localModel?.thinkingCapabilities
+  const isCurrentLocal = currentLocalModel !== undefined
+  const visibleGroups = useMemo(() => state.groups.filter(group =>
+    !(group.id === 'phoenix-local' && installedLocalModels.length > 0)).map((group) => {
     const providerMatches = group.name.toLocaleLowerCase().includes(normalizedQuery)
       || group.id.toLocaleLowerCase().includes(normalizedQuery)
     return {
@@ -136,13 +162,28 @@ export function ModelSelect(
             .some(value => value.toLocaleLowerCase().includes(normalizedQuery))
         }),
     }
-  }).filter(group => group.models.length > 0), [state.groups, normalizedQuery, t])
+  }).filter(group => group.models.length > 0), [state.groups, installedLocalModels.length, normalizedQuery, t])
   const selectedIndex = state.current === null
     ? -1
     : choices.findIndex(c => c.selection.provider === state.current?.provider && c.selection.model === state.current.model)
   const currentChoice = choices[selectedIndex]
-  const reasoning = currentChoice?.model.reasoning
-  const effectiveEffort = state.current?.reasoningEffort ?? reasoning?.defaultEffort
+  const reasoning = isCurrentLocal && localThinkingCapabilities !== undefined
+    && localThinkingCapabilities.values.length > 0 && changeLocalThinking !== undefined
+    ? {
+      efforts: localThinkingCapabilities.values.map(value => ({
+        id: typeof value === 'boolean' ? `boolean:${String(value)}` : `level:${value}`,
+        name: value === true ? t('local.thinkingOn') : value === false ? t('local.thinkingOff') : value,
+      })),
+      defaultEffort: undefined,
+    }
+    : isCurrentLocal ? undefined : currentChoice?.model.reasoning
+  const effectiveEffort = isCurrentLocal
+    ? state.localModel?.thinking === null || state.localModel?.thinking === undefined
+      ? undefined
+      : typeof state.localModel.thinking === 'boolean'
+        ? `boolean:${String(state.localModel.thinking)}`
+        : `level:${state.localModel.thinking}`
+    : state.current?.reasoningEffort ?? reasoning?.defaultEffort
   const codexSpeedAvailable = state.current?.provider === 'openai-codex'
   const activeSpeed = state.current?.serviceTier ?? 'default'
   const speedLabel = activeSpeed === 'fast' ? t('speed.fast') : t('speed.standard')
@@ -301,7 +342,14 @@ export function ModelSelect(
 
   const chooseEffort = (effort: string | undefined): void => {
     if (state.current === null) return
-    if (effectiveEffort === effort) {
+    if (effectiveEffort === effort) return
+    if (isCurrentLocal) {
+      if (changeLocalThinking === undefined) return
+      const value = effort === undefined ? null
+        : effort === 'boolean:true' ? true
+          : effort === 'boolean:false' ? false : effort.slice('level:'.length)
+      lastActionRef.current = 'select'
+      void changeLocalThinking(value).then(settleSelection)
       return
     }
     const selection: ModelSelection = {
@@ -346,7 +394,9 @@ export function ModelSelect(
   // catalog is loading, empty, or temporarily unavailable. Do not erase the
   // model's visible identity and make the control look like it disappeared.
   const displayedRoute = state.current
-  const modelLabel = currentChoice === undefined
+  const modelLabel = currentLocalModel !== undefined
+    ? currentLocalModel.displayName.replace(/\s*·\s*Ollama$/iu, '')
+    : currentChoice === undefined
     ? displayedRoute === null
       ? t('trigger.fallback')
       : isPhoenixAutoRouting(displayedRoute.model, displayedRoute.model)
@@ -408,6 +458,7 @@ export function ModelSelect(
           }
         }}
       >
+        {isCurrentLocal && <PhoenixLogo size={18} className={css.triggerPhoenixLogo} />}
         <span className={css.triggerLabel}>{modelLabel}</span>
         {visibleEffort !== undefined && <span className={css.triggerEffort}>{visibleEffort}</span>}
         {codexSpeedAvailable && activeSpeed === 'fast' && <span className={css.triggerEffort}>{speedLabel}</span>}
@@ -486,8 +537,56 @@ export function ModelSelect(
                 </div>
               ))}
               <div ref={groupsRef} className={clsx(css.groups, 'scrollable')}>
-                {visibleGroups.length === 0 && state.status !== 'loading' && (
+                {visibleGroups.length === 0 && visibleLocalModels.length === 0 && state.status !== 'loading' && (
                   <div className={css.empty}>{normalizedQuery === '' ? t('empty.models') : t('search.noMatches')}</div>
+                )}
+                {visibleLocalModels.length > 0 && (
+                  <section className={css.group} role="group" aria-label={t('local.group')}>
+                    <div className={css.localGroupHeader}>
+                      <PhoenixLogo size={20} />
+                      <span className={css.groupName}>{t('local.group')}</span>
+                      <span className={css.groupCount}>{visibleLocalModels.length}</span>
+                    </div>
+                    {visibleLocalModels.map(model => {
+                      const selected = state.current?.provider === 'phoenix-local'
+                        && model.id === state.localModel?.selectedModelId
+                      const connected = state.localModel?.installedModelIds.includes(model.id) === true
+                      const thinking = selected && state.localModel?.thinkingCapabilities?.values.length
+                        ? state.localModel.thinking === true ? t('local.thinkingOn')
+                          : state.localModel.thinking === false ? t('local.thinkingOff')
+                            : typeof state.localModel.thinking === 'string' ? state.localModel.thinking
+                              : t('local.thinkingDefault')
+                        : undefined
+                      const label = model.displayName.replace(/\s*·\s*Ollama$/iu, '')
+                      return (
+                        <button
+                          ref={itemRef()} type="button" role="menuitemradio"
+                          aria-label={label} aria-checked={selected}
+                          className={clsx(css.option, css.modelOption, selected && css.selected)}
+                          key={model.id} disabled={busy || selectLocalModel === undefined}
+                          onClick={() => {
+                            if (selected) { close(true); return }
+                            lastActionRef.current = 'select'
+                            void selectLocalModel?.(model.id).then(settleSelection)
+                          }}
+                        >
+                          <ProviderLogo providerId={localFamilyBrand(label)} providerName={label} />
+                          <span className={css.optionCopy}>
+                            <span className={css.modelName}>{label}</span>
+                            <span className={css.description}>
+                              {connected ? t('local.connected') : t('local.installed')}
+                              {' · '}{model.contextWindow.toLocaleString()} tokens
+                              {thinking === undefined ? '' : ` · ${thinking}`}
+                            </span>
+                          </span>
+                          <span className={css.optionTrail}>
+                            {selected ? <span className={css.localPhoenixBadge}><PhoenixLogo size={16} /></span> : null}
+                            <span className={css.check}>{selected ? <IconCheckOutline16 /> : null}</span>
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </section>
                 )}
                 {visibleGroups.map((group) => {
                   const headingId = `${id}-${group.id}`
@@ -554,7 +653,7 @@ export function ModelSelect(
                   )
                 })}
               </div>
-              {state.status === 'ready' && choices.length === 0 && (
+              {state.status === 'ready' && choices.length === 0 && installedLocalModels.length === 0 && (
                 <div className={css.empty}>{t('empty.models')}</div>
               )}
             </>
