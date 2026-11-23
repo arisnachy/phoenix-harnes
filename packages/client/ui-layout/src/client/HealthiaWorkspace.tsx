@@ -6,7 +6,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import css from './HealthiaWorkspace.module.css'
 import { HealthiaClinicOperations } from './HealthiaClinicOperations.tsx'
-import type { ClinicalEditorStep, ClinicalEditorViewState } from './HealthiaEditorSupport.ts'
+import type { ClinicalEditorRequest, ClinicalEditorViewState } from './HealthiaEditorSupport.ts'
 import { HealthiaClinicDashboard } from './HealthiaClinicDashboard.tsx'
 import { HealthiaOperationsBoard } from './HealthiaOperationsBoard.tsx'
 import type { AdaptiveLiveSnapshot } from './AdaptiveLiveSlots.ts'
@@ -51,7 +51,7 @@ const MODULES: Readonly<Record<string, { title: string; detail: string }>> = {
 export function HealthiaWorkspace({
   role, section, onRoleChange, onSectionChange, onReturn, inspectRuntime, requestedStep, onEditorState,
 }: {
-  requestedStep?:{step:ClinicalEditorStep;sequence:number}|undefined
+  requestedStep?:ClinicalEditorRequest|undefined
   onEditorState?:((state:ClinicalEditorViewState|null)=>void)|undefined
   role: HealthiaRole
   section: string
