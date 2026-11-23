@@ -99,6 +99,20 @@ describe('LocalModelRuntimeManager', () => {
     expect(dependencies.downloadArtifact).not.toHaveBeenCalled()
   })
 
+  it('never downloads a missing Ollama model in connect-only selector mode', async () => {
+    const { dependencies } = harness()
+    dependencies.probeOllamaModel = vi.fn(async () => {
+      throw new LocalModelRuntimeFault('ollama-model-missing', 'Not installed')
+    })
+    dependencies.pullOllamaModel = vi.fn(async () => undefined)
+    const manager = await createLocalModelRuntimeManager(dependencies)
+    await expect(manager.install('qwen3.5-2b-ollama-q4-k-m', false)).rejects.toMatchObject({
+      code: 'ollama-model-missing',
+    })
+    expect(dependencies.pullOllamaModel).not.toHaveBeenCalled()
+    expect(dependencies.downloadArtifact).not.toHaveBeenCalled()
+  })
+
   it('starts llama-server on loopback and returns the OpenAI-compatible v1 endpoint', async () => {
     const { dependencies } = harness({ installedModelIds: ['gemma-4-e2b-it-q4-0'] })
     const manager = await createLocalModelRuntimeManager(dependencies)
