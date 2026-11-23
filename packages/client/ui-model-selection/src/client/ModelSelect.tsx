@@ -58,6 +58,9 @@ interface EffortChoice {
 
 /** Render a packaged provider mark or the local fallback for unknown ids. */
 function ProviderLogo({ providerId, providerName }: { providerId: string; providerName: string }) {
+  if (providerId === 'phoenix' || providerId === 'phoenix-local') {
+    return <span className={css.providerLogo} role="img" aria-label="PHOENIX logo"><PhoenixLogo size={23} /></span>
+  }
   const mark = providerBrandMark(providerId, providerName)
   return (
     <span className={css.providerLogo} role="img" aria-label={`${providerName} logo`}>
@@ -458,7 +461,9 @@ export function ModelSelect(
           }
         }}
       >
-        {isCurrentLocal && <PhoenixLogo size={18} className={css.triggerPhoenixLogo} />}
+        {(isCurrentLocal || (state.current !== null && isPhoenixAutoRouting(
+          state.current.model, currentChoice?.model.name ?? state.current.model,
+        ))) && <PhoenixLogo size={18} className={css.triggerPhoenixLogo} />}
         <span className={css.triggerLabel}>{modelLabel}</span>
         {visibleEffort !== undefined && <span className={css.triggerEffort}>{visibleEffort}</span>}
         {codexSpeedAvailable && activeSpeed === 'fast' && <span className={css.triggerEffort}>{speedLabel}</span>}
