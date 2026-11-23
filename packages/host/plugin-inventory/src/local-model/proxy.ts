@@ -19,7 +19,7 @@ export const PHOENIX_LOCAL_PROXY_AUTHORIZATION = 'Bearer phoenix-local'
 
 const MAX_REQUEST_BYTES = 16 * 1024 * 1024
 /** Abort a silent streaming Ollama connection, not an actively generating CPU model. */
-const OLLAMA_STREAM_IDLE_TIMEOUT_MS = 90_000
+const OLLAMA_STREAM_IDLE_TIMEOUT_MS = 8 * 60_000
 /** Bound entire local requests, including non-streaming CPU inference. */
 const LOCAL_REQUEST_MAX_MS = 10 * 60_000
 
@@ -217,9 +217,9 @@ async function forward(
       })()
     const clientClosed = new AbortController()
     response.once('close', () => { clientClosed.abort() })
-    // A single 90-second deadline discarded valid 150-second CPU completions.
-    // Refresh the short timeout on every native Ollama stream chunk; a silent
-    // connection still times out, and every request retains a finite hard cap.
+    // Slow local prefill may need several minutes without visible chunks. Refresh
+    // the idle timer on each native Ollama byte while retaining the finite
+    // request-wide 10-minute cap and caller cancellation.
     // Non-streaming /api/chat cannot emit progress; allow its full CPU budget.
     const useStreamIdle = isOllama && nativeChat?.stream === true
     const streamIdle = new AbortController()
