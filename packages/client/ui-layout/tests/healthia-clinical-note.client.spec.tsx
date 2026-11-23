@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import {
   HealthiaClinicalNote, clinicalBmi, formatClinicalNote, formatClinicalNoteParts,
   CLINICAL_NOTE_SECTIONS, fieldsForKind,
@@ -77,5 +77,62 @@ describe('Healthia clinical note from the supplied legacy intake concepts', () =
     fireEvent.click(screen.getByRole('button', { name: 'Descartar cambios' }))
     expect(screen.queryByRole('region', { name: 'Vista previa clínica' })).toBeNull()
     expect((screen.getByRole('textbox', { name: 'Motivo de consulta' }) as HTMLInputElement).value).toBe('')
+  })
+
+  it('separates vitals and requires explicit confirmation before filling the current encounter',()=>{
+    render(<HealthiaClinicalNote />)
+    fireEvent.click(screen.getByRole('button',{name:'Signos vitales'}))
+    expect(screen.queryByRole('textbox',{name:'Examen físico por sistemas'})).toBeNull()
+    fireEvent.change(screen.getByRole('textbox',{name:'Entrada rápida de mediciones'}),{
+      target:{value:'PA 120/80, pulso 76, temperatura 36.7 °C, peso 72 kg, talla 170 cm'},
+    })
+    fireEvent.click(screen.getByRole('button',{name:'Extraer mediciones'}))
+    const systolic=screen.getByRole('spinbutton',{name:/Presión sistólica/}) as HTMLInputElement
+    expect(systolic.value).toBe('')
+    fireEvent.click(screen.getByRole('button',{name:'Confirmar mediciones actuales'}))
+    expect(systolic.value).toBe('120')
+    expect(screen.getByText('93.3 mmHg')).toBeTruthy()
+    expect(screen.getByText('24.9 kg/m²')).toBeTruthy()
+  })
+  it('recovers prior history only into empty fields and does not carry previous vital values',()=>{
+    render(<HealthiaClinicalNote initialValues={{personal:'Historia actual'}}
+      patient={{medicalHistory:{pastMedical:'Anterior',familyHistory:'Historia familiar',weight:'88'}}}/>)
+    fireEvent.click(screen.getByRole('button',{name:'Antecedentes'}))
+    fireEvent.click(screen.getByRole('button',{name:'Recuperar antecedentes previos'}))
+    expect((screen.getByRole('textbox',{name:'Antecedentes personales patológicos'}) as HTMLTextAreaElement).value).toBe('Historia actual')
+    expect((screen.getByRole('textbox',{name:'Heredofamiliares'}) as HTMLTextAreaElement).value).toBe('Historia familiar')
+    fireEvent.click(screen.getByRole('button',{name:'Signos vitales'}))
+    expect((screen.getByRole('spinbutton',{name:/Peso/}) as HTMLInputElement).value).toBe('')
+  })
+  it('requires authorization and explicit acceptance of a field model suggestion',async()=>{
+    const model={id:'ollama/test',label:'Modelo de prueba',location:'local' as const}
+    const refine=vi.fn(async()=>({text:'Relato revisado',numericWarnings:[],provider:'ollama',model:'test'}))
+    render(<HealthiaClinicalNote initialValues={{hea:'Relato original'}} encounterVersion={1}
+      loadModels={async()=>[model]} refineField={refine}/>)
+    fireEvent.click(screen.getAllByRole('button',{name:/Mejorar con IA/})[1]!)
+    await waitFor(()=>expect(screen.getByRole('checkbox')).toBeTruthy())
+    expect((screen.getByRole('button',{name:'Generar propuesta'}) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button',{name:'Generar propuesta'}))
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Aceptar texto revisado'})).toBeTruthy())
+    const field=screen.getByRole('textbox',{name:'Historia de la enfermedad actual'}) as HTMLTextAreaElement
+    expect(field.value).toBe('Relato original')
+    expect(refine).toHaveBeenCalledWith('hea','Relato original',model,true)
+    fireEvent.click(screen.getByRole('button',{name:'Aceptar texto revisado'}))
+    expect(field.value).toBe('Relato revisado')
+  })
+  it('discards an asynchronous suggestion when the clinician edits its source',async()=>{
+    const model={id:'ollama/test',label:'Modelo de prueba',location:'local' as const}
+    let resolve!:(result:{text:string;numericWarnings:string[];provider:string;model:string})=>void
+    const refine=()=>new Promise<{text:string;numericWarnings:string[];provider:string;model:string}>(r=>{resolve=r})
+    render(<HealthiaClinicalNote initialValues={{hea:'Relato original'}} encounterVersion={1} loadModels={async()=>[model]} refineField={refine}/>)
+    fireEvent.click(screen.getAllByRole('button',{name:/Mejorar con IA/})[1]!)
+    await waitFor(()=>expect(screen.getByRole('checkbox')).toBeTruthy())
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button',{name:'Generar propuesta'}))
+    fireEvent.change(screen.getByRole('textbox',{name:'Historia de la enfermedad actual'}),{target:{value:'Relato nuevo'}})
+    resolve({text:'Propuesta caducada',numericWarnings:[],provider:'ollama',model:'test'})
+    await waitFor(()=>expect(screen.getByText(/propuesta fue descartada/)).toBeTruthy())
+    expect(screen.queryByRole('button',{name:'Aceptar texto revisado'})).toBeNull()
   })
 })
