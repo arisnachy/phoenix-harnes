@@ -6,7 +6,9 @@
  * chat event, telemetry, model call, or implied clinical signature occurs here.
  * Only an authenticated Host-owned clinical repository may persist records.
  */
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { CLINICAL_EDITOR_STEPS, VITAL_IDS, DIAGNOSIS_IDS, estimatedMap, extractClinicalVitals, longitudinalFields, validateVital, type ClinicalEditorStep, type LongitudinalPatient, type ClinicalEditorViewState, type ClinicalEditorRequest } from './HealthiaEditorSupport.ts'
+import type { ClinicalEditorModel, ClinicalEditorProposal } from './HealthiaClinicalApi.ts'
 import css from './HealthiaClinicalNote.module.css'
 
 export type ClinicalNoteKind = 'first' | 'followup' | 'soap' | 'pediatric' | 'obstetric'
@@ -166,9 +168,16 @@ export function formatClinicalNoteParts(kind:ClinicalNoteKind,values:Readonly<Cl
 /** Clinical values remain local to this React tree unless the authenticated
  * Host-owned persistence callback is explicitly supplied and clicked. */
 export function HealthiaClinicalNote({
-  onReturn, initialValues = {}, initialKind = 'first', onSave,
+  onReturn, initialValues = {}, initialKind = 'first', onSave, patient, encounterVersion, requestedStep, loadModels, refineField, onDirtyChange, onEditorState,
 }: {
   onReturn?: () => void
+  onDirtyChange?: ((dirty:boolean)=>void) | undefined
+  onEditorState?: ((state:ClinicalEditorViewState|null)=>void) | undefined
+  patient?: LongitudinalPatient | undefined
+  encounterVersion?: number | undefined
+  requestedStep?: ClinicalEditorRequest | undefined
+  loadModels?: (()=>Promise<readonly ClinicalEditorModel[]>) | undefined
+  refineField?: ((field:string,text:string,model:ClinicalEditorModel,confirmed:boolean)=>Promise<ClinicalEditorProposal>) | undefined
   initialValues?: ClinicalNoteValues
   initialKind?: ClinicalNoteKind
   onSave?: (kind: ClinicalNoteKind, values: Readonly<ClinicalNoteValues>) => Promise<void>
@@ -176,29 +185,117 @@ export function HealthiaClinicalNote({
   const [kind, setKind] = useState<ClinicalNoteKind>(initialKind)
   const [values, setValues] = useState<ClinicalNoteValues>(() => ({ ...initialValues }))
   const [saving, setSaving] = useState(false)
-  const [section, setSection] = useState('interview')
+  const baseline=useRef(formatClinicalNote(initialKind,initialValues))
+  const [section, setSection] = useState<ClinicalEditorStep>('interview')
   const [preview, setPreview] = useState(false)
   const [message, setMessage] = useState('')
   const note = useMemo(() => formatClinicalNote(kind, values), [kind, values])
+  const dirty=note!==baseline.current
+  useEffect(()=>{onDirtyChange?.(dirty)},[dirty,onDirtyChange])
   const hasContent = Object.values(values).some(value => value.trim().length > 0)
-  const current = CLINICAL_NOTE_SECTIONS.find(item => item.id === section) ?? CLINICAL_NOTE_SECTIONS[0]!
+  const current = CLINICAL_NOTE_SECTIONS.find(item => item.id === (section==='vitals'?'exam':section==='diagnosis'?'plan':section)) ?? CLINICAL_NOTE_SECTIONS[0]!
+  const shown=fieldsForKind(current,kind).filter(f=>section==='vitals'?VITAL_IDS.some(id=>id===f.id):section==='exam'?!VITAL_IDS.some(id=>id===f.id):section==='diagnosis'?DIAGNOSIS_IDS.some(id=>id===f.id):section==='plan'?!DIAGNOSIS_IDS.some(id=>id===f.id):true)
+  const step=CLINICAL_EDITOR_STEPS.find(x=>x.id===section)!
+  const visibleIds=shown.map(f=>f.id).join(',')
+  const filledFields=shown.filter(f=>!!values[f.id]?.trim()).length
+  const canEdit=onSave!==undefined
+  const hasEncounter=encounterVersion!==undefined
+  const modelEnabled=loadModels!==undefined&&refineField!==undefined
+  const contextNonce=useRef('')
+  if(!contextNonce.current)contextNonce.current=globalThis.crypto?.randomUUID?.()??Math.random().toString(36).slice(2)
+  const binding=contextNonce.current+':'+String(encounterVersion??'none')
+  const handledAction=useRef<number|undefined>(undefined)
+  useEffect(()=>{
+    onEditorState?.({step:section,binding,visibleFieldIds:visibleIds?visibleIds.split(','):[],
+      filledFields,dirty,hasEncounter,canEdit,modelEnabled})
+  },[onEditorState,section,binding,visibleIds,filledFields,dirty,hasEncounter,canEdit,modelEnabled])
+  useEffect(()=>()=>{onEditorState?.(null)},[onEditorState])
+
+  const [quick,setQuick]=useState('')
+  const [vitalDraft,setVitalDraft]=useState<ReturnType<typeof extractClinicalVitals>|null>(null)
+  const [models,setModels]=useState<readonly ClinicalEditorModel[]>([])
+  const [modelId,setModelId]=useState('')
+  const [aiField,setAiField]=useState('')
+  const currentSource=(field:string):string=>field==='context-review'?formatClinicalNote(kind,values):values[field]??''
+  const [consent,setConsent]=useState(false)
+  const [aiBusy,setAiBusy]=useState(false)
+  const [proposal,setProposal]=useState<{field:string;original:string;version:number|undefined;result:ClinicalEditorProposal}|null>(null)
+  const generation=useRef(0)
+  const live=useRef({values,encounterVersion,note})
+  live.current={values,encounterVersion,note}
+  const model=models.find(m=>m.id===modelId)
+  const invalidVitals=VITAL_IDS.filter(id=>!!values[id]&&!validateVital(id,values[id]!))
+  const reversed=!!values.sys&&!!values.dia&&Number(values.sys)<Number(values.dia)
+  const hasInvalidVitals=invalidVitals.length>0||reversed
+  const eligible=(id:string)=>['chief','hea','ros','personal','surgical','family','habits','medications','perinatal','gyneco','physical','findings'].includes(id)
+  useEffect(()=>{if(requestedStep&&!requestedStep.action){setSection(requestedStep.step);setPreview(false)}},[requestedStep])
+  useEffect(()=>{generation.current++;setProposal(null);setAiBusy(false)},[encounterVersion])
+  useEffect(()=>()=>{generation.current++},[])
+  const openAi=async(id:string)=>{
+    if(!loadModels||!refineField||aiBusy)return
+    setAiField(id);setProposal(null);setConsent(false);setMessage('')
+    const token=++generation.current
+    try{const list=await loadModels();if(token!==generation.current)return
+      setModels(list);setModelId(list.find(m=>m.location==='local')?.id??'')
+      if(!list.length)setMessage('No hay modelos clínicos disponibles.')
+    }catch{if(token===generation.current)setMessage('No se pudo consultar el catálogo de modelos.')}
+  }
+  const generate=async()=>{
+    if(!refineField||!model||!consent||aiBusy||!currentSource(aiField).trim()||(aiField==='context-review'&&!hasContent))return
+    const field=aiField,original=currentSource(field),version=encounterVersion,token=++generation.current
+    setAiBusy(true);setProposal(null);setMessage('')
+    try{const result=await refineField(field,original,model,true)
+      if(token!==generation.current)return
+      if((field==='context-review'?live.current.note:live.current.values[field])!==original||live.current.encounterVersion!==version){setMessage('El campo o la consulta cambió. La propuesta fue descartada.');return}
+      setProposal({field,original,version,result})
+    }catch(e){if(token===generation.current)setMessage(e instanceof Error?e.message:'No se pudo generar la propuesta.')}
+    finally{if(token===generation.current)setAiBusy(false)}
+  }
+  const importBackground=()=>{
+    if(!patient)return
+    const allowed=fieldsForKind(CLINICAL_NOTE_SECTIONS.find(s=>s.id==='background')!,kind)
+    const recovered=longitudinalFields(patient)
+    setValues(previous=>{const next={...previous};for(const field of allowed){const value=recovered[field.id];if(value&&!next[field.id]?.trim()&&value.length<=(field.maxLength??1800))next[field.id]=value}return next})
+    setMessage('Antecedentes previos incorporados solo en campos vacíos. Reconfirme vigencia y alergias.')
+  }
+  // A chat control can open assistance or prepare a local draft only; the
+  // ephemeral binding prevents applying an old card to another encounter.
+  useEffect(()=>{
+    if(!requestedStep?.action||requestedStep.binding!==binding||!canEdit||saving
+      ||handledAction.current===requestedStep.sequence)return
+    handledAction.current=requestedStep.sequence
+    setSection(requestedStep.step);setPreview(false)
+    if(requestedStep.action==='clinical-refine-chief'||requestedStep.action==='clinical-refine-hea'){
+      const field=requestedStep.action==='clinical-refine-chief'?'chief':'hea'
+      if(!values[field]?.trim()){setMessage('Introduce primero el texto clínico en este campo.');return}
+      void openAi(field)
+    }else if(requestedStep.action==='clinical-import-background')importBackground()
+    else if(requestedStep.action==='clinical-preview')setPreview(true)
+    else if(requestedStep.action==='clinical-context-review'){if(hasContent)void openAi('context-review');else setMessage('Documenta la consulta antes de solicitar valoración.')}
+  },[requestedStep,binding,canEdit,saving])
   const edit = (id: string, value: string): void => {
+    if(proposal?.field==='context-review')setProposal(null)
     setValues(previous => ({ ...previous, [id]: value }))
     setMessage('')
   }
   const reset = (): void => {
-    setValues({})
+    generation.current++;setAiBusy(false);setProposal(null);setAiField('');setVitalDraft(null);setQuick('')
+    setValues({...initialValues});setKind(initialKind)
+    baseline.current=formatClinicalNote(initialKind,initialValues)
+    onDirtyChange?.(false)
     setPreview(false)
     setSection('interview')
     setMessage('Cambios de esta vista descartados. Los registros previamente guardados no se han modificado.')
   }
   const save = async (): Promise<void> => {
-    if (!onSave || !hasContent || saving) return
+    if (!onSave || !hasContent || saving || hasInvalidVitals) return
     setSaving(true)
     setMessage('')
     try {
       // The owning clinical session must recheck patient, role, version and CSRF.
       await onSave(kind, { ...values })
+      baseline.current=note
+      onDirtyChange?.(false)
       setMessage('Borrador registrado en el servicio clínico protegido. Sin firmar.')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo guardar la nota.')
@@ -233,41 +330,70 @@ export function HealthiaClinicalNote({
         {onReturn && <button type="button" className={css.secondary} onClick={onReturn}>Volver</button>}
       </div>
       <form onSubmit={showPreview} autoComplete="off">
+        <fieldset disabled={saving} className={css.editorFields}>
         <label className={css.noteKind}>Tipo de consulta
           <select value={kind} onChange={event => { setKind(event.currentTarget.value as ClinicalNoteKind); setPreview(false) }} aria-label="Tipo de consulta">
             {NOTE_KINDS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
           </select>
         </label>
         <div className={css.steps} role="group" aria-label="Secciones de historia clínica">
-          {CLINICAL_NOTE_SECTIONS.map(item => (
+          {CLINICAL_EDITOR_STEPS.map(item => (
             <button key={item.id} type="button" className={item.id === section ? css.stepActive : css.step}
               aria-pressed={item.id === section} onClick={() => { setSection(item.id); setPreview(false) }}>
               {item.label}
             </button>
           ))}
         </div>
-        <div className={css.fields}>
-          {fieldsForKind(current, kind).map(field => (
-            <label key={field.id} className={field.kind === 'textarea' ? css.wideField : css.field}>
-              <span>{field.label}{field.unit ? ` · ${field.unit}` : ''}</span>
+        <div className={css.sectionTitle}><h4>{step.label}</h4><p>{step.hint}</p></div>
+        {section==='background'&&patient&&<div className={css.assist}><strong>Expediente longitudinal</strong><p>Última revisión: {patient.medicalHistoryReview?.reviewedAt??'No documentada'}. No se reemplazan datos escritos ni se importan mediciones anteriores.</p><button type="button" className={css.secondary} onClick={importBackground}>Recuperar antecedentes previos</button></div>}
+        {section==='vitals'&&<div className={css.assist}>
+          <label className={css.wideField}>Entrada rápida de mediciones
+            <textarea rows={2} maxLength={2000} value={quick} placeholder="PA 120/80, pulso 76, temperatura 36.7 °C, peso 72 kg, talla 170 cm" onChange={e=>{setQuick(e.currentTarget.value);setVitalDraft(null)}}/>
+          </label>
+          <button type="button" className={css.secondary} onClick={()=>setVitalDraft(extractClinicalVitals(quick))}>Extraer mediciones</button>
+          {vitalDraft&&<div className={css.proposal}>
+            {Object.entries(vitalDraft.values).map(([id,value])=><p key={id}>{current.fields.find(f=>f.id===id)?.label??id}: {value}{values[id]&&values[id]!==value?' (reemplaza '+values[id]+')':''}</p>)}
+            {vitalDraft.warnings.map(w=><p key={w}>{w}</p>)}
+            <button type="button" className={css.primary} disabled={!Object.keys(vitalDraft.values).length} onClick={()=>{setValues(old=>({...old,...vitalDraft.values} as ClinicalNoteValues));setVitalDraft(null);setQuick('')}}>Confirmar mediciones actuales</button>
+          </div>}
+        </div>}
+        <div className={section==='vitals'?css.vitals:css.fields}>
+          {shown.map(field => (
+            <div key={field.id} className={field.kind === 'textarea'||field.id==='chief' ? css.wideField : css.field}>
+              <label className={css.fieldLabel}><span>{field.label}{field.unit ? ` · ${field.unit}` : ''}</span>
               {field.kind === 'textarea' ? (
-                <textarea rows={3} maxLength={field.maxLength ?? 1800} value={values[field.id] ?? ''}
+                <textarea rows={field.id==='hea'?7:3} placeholder={field.id==='hea'?'Inicio, evolución, características, síntomas asociados y contexto clínico…':'No documentado'} maxLength={field.maxLength ?? 1800} value={values[field.id] ?? ''}
                   onChange={event => edit(field.id, event.currentTarget.value)} />
               ) : (
                 <input type={field.kind === 'date' ? 'date' : field.kind === 'number' ? 'number' : 'text'}
                   maxLength={field.kind === 'number' || field.kind === 'date' ? undefined : (field.maxLength ?? 400)}
                   step={field.kind === 'number' ? 'any' : undefined}
-                  value={values[field.id] ?? ''} onChange={event => edit(field.id, event.currentTarget.value)} />
-              )}
-            </label>
+                  placeholder={field.id==='chief'?'Motivo principal en palabras del paciente':'No documentado'} value={values[field.id] ?? ''} onChange={event => edit(field.id, event.currentTarget.value)} />
+              )}</label>
+              {refineField&&eligible(field.id)&&<button className={css.aiAction} type="button" disabled={!values[field.id]?.trim()||aiBusy} onClick={()=>{void openAi(field.id)}}>✦ Mejorar con IA</button>}
+            </div>
           ))}
         </div>
+        {section==='diagnosis'&&refineField&&<div className={css.assist}><strong>Valoración contextual de Kira</strong><p>Revisa el borrador actual, antecedentes y registros recientes autorizados. Propone diferenciales, preguntas y estudios para evaluación profesional, no diagnósticos definitivos ni recetas.</p><button type="button" className={css.secondary} disabled={!hasContent||aiBusy} onClick={()=>{void openAi('context-review')}}>Analizar contexto de la consulta</button></div>}
+        {section==='vitals'&&<div className={css.metrics}><div><small>IMC calculado</small><strong>{clinicalBmi(values)??'—'} kg/m²</strong></div><div><small>PAM estimada</small><strong>{estimatedMap(values)??'—'} mmHg</strong></div></div>}
+        {hasInvalidVitals&&<p role="alert" className={css.status}>Verifica las mediciones y unidades antes de guardar. Los límites son de entrada, no rangos clínicos normales.</p>}
+        {aiField&&refineField&&<div className={css.assist} aria-label="Asistencia IA clínica">
+          <strong>{aiField==='context-review'?'Valoración del contexto clínico':'Mejorar '+(CLINICAL_NOTE_SECTIONS.flatMap(s=>s.fields).find(f=>f.id===aiField)?.label??'campo')}</strong>
+          <label className={css.fieldLabel}>Modelo clínico<select value={modelId} onChange={e=>{setModelId(e.currentTarget.value);setConsent(false);setProposal(null)}} disabled={aiBusy}><option value="">Seleccionar modelo</option>{models.map(m=><option key={m.id} value={m.id}>{m.label} · {m.location==='local'?'Local':'Externo'}</option>)}</select></label>
+          {model&&<label className={css.check}><input type="checkbox" checked={consent} onChange={e=>setConsent(e.currentTarget.checked)} disabled={aiBusy}/>{model.location==='external'?'Autorizo enviar '+(aiField==='context-review'?'el borrador y los antecedentes y registros recientes autorizados':'este campo clínico')+' al proveedor externo conforme a las reglas de mi institución.':'Autorizo procesar '+(aiField==='context-review'?'el borrador y los antecedentes y registros recientes autorizados':'este campo')+' en el modelo local.'}</label>}
+          <div className={css.actions}><button className={css.primary} type="button" disabled={!model||!consent||aiBusy} onClick={()=>{void generate()}}>{aiBusy?'Generando…':'Generar propuesta'}</button><button className={css.secondary} type="button" onClick={()=>{generation.current++;setAiBusy(false);setAiField('');setProposal(null)}}>Cerrar asistencia</button></div>
+          {proposal?.field==='context-review'&&proposal.original===note&&<div className={css.proposal}><strong>Valoración de apoyo · sin verificar · {proposal.result.model}</strong><p>{proposal.result.text}</p><p>Verifica los hallazgos, las hipótesis y las indicaciones con el expediente y las fuentes clínicas. No se ha modificado ni firmado la historia.</p></div>}
+          {proposal&&proposal.field!=='context-review'&&<div className={css.proposal}><strong>Original</strong><p>{proposal.original}</p><strong>Propuesta sin verificar · {proposal.result.model}</strong><p>{proposal.result.text}</p>{proposal.result.numericWarnings.length>0&&<p role="alert">Cifras nuevas: {proposal.result.numericWarnings.join(', ')}. Verifique contra la fuente.</p>}<button type="button" className={css.primary} disabled={values[proposal.field]!==proposal.original||encounterVersion!==proposal.version||proposal.result.text.length>(CLINICAL_NOTE_SECTIONS.flatMap(s=>s.fields).find(f=>f.id===proposal.field)?.maxLength??1800)} onClick={()=>{edit(proposal.field,proposal.result.text);setProposal(null);setAiField('');setMessage('Propuesta aceptada en el borrador, pendiente de guardar.')}}>Aceptar texto revisado</button></div>}
+        </div>}
         <div className={css.actions}>
+          <button type="button" className={css.secondary} disabled={section==='interview'} onClick={()=>{setSection(CLINICAL_EDITOR_STEPS[CLINICAL_EDITOR_STEPS.findIndex(s=>s.id===section)-1]!.id);setPreview(false)}}>Anterior</button>
+          <button type="button" className={css.secondary} disabled={section==='plan'} onClick={()=>{setSection(CLINICAL_EDITOR_STEPS[CLINICAL_EDITOR_STEPS.findIndex(s=>s.id===section)+1]!.id);setPreview(false)}}>Siguiente</button>
           <button type="submit" className={css.primary} disabled={!hasContent}>Vista previa de nota</button>
-          {onSave && <button type="button" className={css.primary} disabled={!hasContent || saving}
+          {onSave && <button type="button" className={css.primary} disabled={!hasContent || saving || hasInvalidVitals || aiBusy}
             onClick={() => { void save() }}>{saving ? 'Guardando…' : 'Guardar borrador clínico'}</button>}
           <button type="button" className={css.secondary} onClick={reset} disabled={!hasContent || saving}>Descartar cambios</button>
         </div>
+        </fieldset>
       </form>
       {preview && hasContent && (
         <section className={css.preview} aria-label="Vista previa clínica">

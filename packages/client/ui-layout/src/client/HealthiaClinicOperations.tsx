@@ -10,6 +10,7 @@ import type { ClinicalSession, ClinicalPatient, ClinicalEncounter, ClinicalIntak
 import { HealthiaPatientDossier } from './HealthiaPatientDossier.tsx'
 import { HealthiaClinicalNote, formatClinicalNoteParts, NOTE_KINDS } from './HealthiaClinicalNote.tsx'
 import type { ClinicalNoteValues, ClinicalNoteKind } from './HealthiaClinicalNote.tsx'
+import type { ClinicalEditorRequest, ClinicalEditorViewState } from './HealthiaEditorSupport.ts'
 import { printProtectedClinicalDocument } from './HealthiaClinicalPrint.ts'
 import css from './HealthiaClinicOperations.module.css'
 
@@ -84,9 +85,11 @@ export function restoreClinicalNote(encounter:ClinicalEncounter):{
 }
 
 export function HealthiaClinicOperations({ area, selectedPatientId, onPatientChange, onNavigate,
-  accessOnly=false, onSessionReady }: {
+  accessOnly=false, onSessionReady, requestedStep, onEditorState }: {
   area:Area
   /** Reuse exactly the professional login/setup flow without rendering patient records. */
+  requestedStep?:ClinicalEditorRequest|undefined
+  onEditorState?:((state:ClinicalEditorViewState|null)=>void)|undefined
   accessOnly?:boolean
   onSessionReady?:()=>void
   selectedPatientId?:string
@@ -133,6 +136,8 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
   const [answerKey,setAnswerKey]=useState('')
   const [answerText,setAnswerText]=useState('')
   const [signChecked,setSignChecked]=useState(false)
+  const [dirtyEncounter,setDirtyEncounter]=useState(false)
+  useEffect(()=>{setDirtyEncounter(false);setSignChecked(false)},[encounterId,patientId])
   const readyRef=useRef(false)
   const userRole=session?.actor.role
   const canManagePatients=userRole==='admin'||userRole==='clinician'||userRole==='reception'
@@ -645,8 +650,13 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
           <p className={css.notice}>Firmada por {selectedEncounter.signedBy??'profesional autorizado'} ·
             {selectedEncounter.signedAt??'fecha protegida'}. No admite sobrescritura; correcciones mediante adenda.</p>
         </div> : <HealthiaClinicalNote key={selectedEncounter.id} initialKind={currentNote.kind}
-          initialValues={currentNote.values} onSave={saveNote}/>}
-        <button type="button" className={css.printAction} onClick={()=>{
+          initialValues={currentNote.values} patient={selectedPatient} encounterVersion={selectedEncounter.version}
+          requestedStep={requestedStep} onEditorState={onEditorState} onDirtyChange={setDirtyEncounter} {...(canManageEncounters&&session?.actor.username===selectedEncounter.practitioner?{onSave:saveNote}:{})}
+          {...(session?.actor.role==='clinician'&&session.actor.username===selectedEncounter.practitioner&&selectedEncounter.status==='draft'?{
+            loadModels:()=>api.editorModels(session),
+            refineField:(field:string,text:string,model:import('./HealthiaClinicalApi.ts').ClinicalEditorModel,confirmed:boolean)=>api.refineEditorField(session,selectedEncounter,field,text,model,confirmed),
+          }:{})}/>}
+        <button type="button" className={css.printAction} disabled={dirtyEncounter} onClick={()=>{
           try {
             printProtectedClinicalDocument({
               title:selectedEncounter.status==='signed'?'Historia clínica firmada':'Historia clínica · borrador',
@@ -674,8 +684,9 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
             <strong>Validación profesional</strong>
             <p>Comprueba identidad, motivo, enfermedad actual, antecedentes, exploración, diagnóstico,
               códigos, plan, indicaciones y datos faltantes antes de marcar la versión como revisada.</p>
-            <button className={css.primary} type="button" disabled={busy} onClick={()=>{
-              if(session)void mutateEncounter(record=>api.reviewEncounter(session,record),
+            {dirtyEncounter&&<p role="status">Guarda los cambios del editor antes de revisar la consulta.</p>}
+            <button className={css.primary} type="button" disabled={busy||dirtyEncounter} onClick={()=>{
+              if(session&&!dirtyEncounter)void mutateEncounter(record=>api.reviewEncounter(session,record),
                 'Versión de la consulta revisada. Requiere firma explícita.')
             }}>Marcar esta versión como revisada</button>
           </div>}
@@ -686,8 +697,8 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
             <label className={css.signCheck}><input type="checkbox" checked={signChecked}
               onChange={e=>setSignChecked(e.currentTarget.checked)}/>
               He revisado la historia, las decisiones y los datos de este paciente.</label>
-            <button className={css.primary} type="button" disabled={busy||!signChecked} onClick={()=>{
-              if(session)void mutateEncounter(record=>api.signEncounter(session,record),
+            <button className={css.primary} type="button" disabled={busy||!signChecked||dirtyEncounter} onClick={()=>{
+              if(session&&!dirtyEncounter)void mutateEncounter(record=>api.signEncounter(session,record),
                 'Consulta firmada por el servicio clínico protegido.')
             }}>Firmar consulta revisada</button>
           </div>}

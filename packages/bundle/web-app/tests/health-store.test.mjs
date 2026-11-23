@@ -793,3 +793,31 @@ test('source-backed study drafts are encrypted, assigned, and cannot forge image
   patientId:otherPatient.id,sourceAttachmentId:source.id,modality:'xray',
   originalReviewed:true}),/no corresponde/)
 })
+
+
+test('clinical editor model access checks owner, draft status and exact version',t=>{
+  const {db,admin}=fixture(t)
+  db.createStaff(admin.actor,{username:'doctor1',password:'abcdef123',role:'clinician'})
+  db.createStaff(admin.actor,{username:'doctor2',password:'abcdef123',role:'clinician'})
+  const doctor=db.login('doctor1','abcdef123').actor
+  const other=db.login('doctor2','abcdef123').actor
+  const p=db.create(admin.actor,'patients',{name:'Paciente sintético',dateOfBirth:'2000-01-01'})
+  db.assignPatient(admin.actor,p.id,'doctor1','Atención de prueba')
+  db.assignPatient(admin.actor,p.id,'doctor2','Atención de prueba')
+  let e=db.create(doctor,'encounters',{patientId:p.id,specialty:'Medicina familiar',complaint:'Consulta sintética'})
+  assert.doesNotThrow(()=>db.assertClinicalEditorModel(doctor,e.id,e.version))
+  const context=db.clinicalEditorContext(doctor,e.id,e.version)
+  assert.equal(typeof context.demographics.age,'number')
+  assert(!JSON.stringify(context).includes(p.id))
+  assert(!JSON.stringify(context).includes(p.name))
+  assert.throws(()=>db.clinicalEditorContext(other,e.id,e.version))
+  assert.throws(()=>db.clinicalEditorContext(doctor,e.id,e.version+1))
+  assert.throws(()=>db.assertClinicalEditorModel(admin.actor,e.id,e.version))
+  assert.throws(()=>db.assertClinicalEditorModel(other,e.id,e.version))
+  assert.throws(()=>db.assertClinicalEditorModel(doctor,e.id,e.version+1))
+  e=db.update(doctor,'encounters',e.id,e.version,{action:'document',history:'Relato verificado'})
+  assert.throws(()=>db.assertClinicalEditorModel(doctor,e.id,e.version-1))
+  assert.doesNotThrow(()=>db.assertClinicalEditorModel(doctor,e.id,e.version))
+  e=db.update(doctor,'encounters',e.id,e.version,{action:'review'})
+  assert.throws(()=>db.assertClinicalEditorModel(doctor,e.id,e.version))
+})
