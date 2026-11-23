@@ -26,6 +26,8 @@ describe('PHOENIX embedded Healthia', () => {
     expect(screen.queryByText('Capacidades')).toBeNull()
     expect(screen.queryByText('Intercambios')).toBeNull()
     expect(screen.queryByRole('link', { name: 'Servicio clínico protegido' })).toBeNull()
+    expect(screen.queryByText('Información y acceso técnico')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Herramientas' }))
     fireEvent.click(screen.getByText('Información y acceso técnico'))
     expect(screen.getByRole('link', { name: 'Servicio clínico protegido' }).getAttribute('href')).toBe('/health')
   })
