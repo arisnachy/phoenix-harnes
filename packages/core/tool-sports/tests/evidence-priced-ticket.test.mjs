@@ -74,7 +74,7 @@ test('six-legged evidence path quotes only same bookmaker and preserves the requ
   assert.equal(complete.candidateLegs,5)
   assert.ok(complete.discoveredEvents>=5)
   assert.ok(complete.discoveryAudit.eligibleLeagues>=1)
-  assert.equal(complete.ticketReadyForReview,true)
+  assert.equal(complete.ticketReadyForReview,false,'missing bilateral market evidence prevents readiness')
   assert.equal(complete.card.props.modelSelectionRequired,true)
   assert.ok(Array.isArray(complete.card.props.modelComparisonBriefs))
   assert.equal(complete.card.props.modelComparisonBriefs.length,5)
@@ -349,7 +349,7 @@ test('missing specialist data creates a visible conditional ticket when ESPN and
   assert.match(result.card.props.subtitle,/BORRADOR COTIZADO/)
   assert.match(result.explanation,/ADVERTENCIA DE INVESTIGACIÓN/)
   assert.equal(result.candidateLegs,5)
-  assert.equal(result.ticketReadyForReview,true)
+  assert.equal(result.ticketReadyForReview,false,'missing specialist dossiers prevent readiness')
 })
 test('explicit team identity conflict still blocks attaching odds to the wrong fixture',async()=>{
   const wrongTeams=async games=>games.map(game=>({
@@ -553,7 +553,7 @@ test('final five-leg research ticket remains visible when provisional lineups ar
   assert.equal(result.priced,true)
   assert.equal(result.quotedLegs,5)
   assert.equal(result.candidateLegs,5)
-  assert.equal(result.ticketReadyForReview,true)
+  assert.equal(result.ticketReadyForReview,false,'provisional lineups prevent readiness')
   assert.equal(result.approvedForBetting,false)
   assert.equal(result.card.props.presentationStatus,'research-selection')
   assert.match(result.card.props.subtitle,/BORRADOR COTIZADO/)

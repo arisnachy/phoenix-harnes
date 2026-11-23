@@ -237,11 +237,21 @@ describe('trading and sports isolation', () => {
 })
 
 describe('chat tool activity grouping', () => {
-  it('renders the browser workspace for nested Chrome activity while Tools stays collapsed', () => {
+  it('keeps nested Chrome tool activity collapsed without mounting a browser in the generic slot fixture', () => {
     renderChat([user(1, 'Investiga y completa el formulario en Chrome'), nestedChromeTool()])
 
-    expect(screen.getByRole('region', { name: 'Navegador de Kira' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Tools' })).toBeTruthy()
+    // renderChat intentionally stubs conversation.chat.node; browser-specific
+    // receipts belong to the real node renderer, not this grouping fixture.
+    const disclosure = screen.getByRole('button', { name: 'Tools' })
+    expect(disclosure.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.getByTestId('tool-activity-receipt').textContent).toContain('1 operation recorded')
+    expect(screen.queryByRole('region', { name: 'Navegador de Kira' })).toBeNull()
+    fireEvent.click(disclosure)
+    expect(disclosure.getAttribute('aria-expanded')).toBe('true')
+    // This fixture intentionally replaces the generic node renderer with a stub.
+    // Expanding Tools must not mount a browser or fabricate a rendered tool result.
+    expect(screen.queryByTestId('node-tool-result')).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Navegador de Kira' })).toBeNull()
   })
 
   it('collapses consecutive context activity behind one Tools disclosure', () => {

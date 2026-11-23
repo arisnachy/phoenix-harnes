@@ -35,7 +35,7 @@ export type DecisionLeg={
   exploratoryVsBreakEvenGapPct:number|null
   alternativeReviewRequired:boolean
 }
-export type DecisionScenario={count:3|4|5;eventIds:string[];marketProductPct:number|null}
+export type DecisionScenario={count:3|4|5|6;eventIds:string[];marketProductPct:number|null}
 export type TicketDecisionAudit={
   legs:DecisionLeg[];excludedEvents:string[];heldEvents:string[]
   alternativesNeeded:number;alternativesToReview:number;scenarios:DecisionScenario[]
@@ -138,8 +138,8 @@ export function auditTicketDecisions(inputs:readonly DecisionInput[],
   // win rate is allowed to select, sort or boost a particular team.
   const candidates=legs.filter(leg=>leg.verdict==='candidate')
     .filter(leg=>leg.bookmakerBreakEvenPct!==null)
-  const scenarios:DecisionScenario[]=[3,4,5].map(value=>{
-    const count=value as 3|4|5
+  const scenarios:DecisionScenario[]=[3,4,5,6].map(value=>{
+    const count=value as DecisionScenario['count']
     return{count,eventIds:candidates.slice(0,count).map(leg=>leg.eventId),
       marketProductPct:null}
   })
