@@ -82,3 +82,13 @@ export function longitudinalFields(patient:LongitudinalPatient):Record<string,st
     out.allergies='Sin alergias conocidas según revisión previa; reconfirmar.'
   return out
 }
+
+/** Structural live state, safe to share with the workspace; never a record payload. */
+export type ClinicalEditorViewState={
+  step:ClinicalEditorStep
+  visibleFieldIds:readonly string[]
+  filledFields:number
+  dirty:boolean
+  hasEncounter:boolean
+  canEdit:boolean
+}
