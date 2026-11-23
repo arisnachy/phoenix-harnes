@@ -330,11 +330,21 @@ export async function runMiniBrowserFallback(
       body: JSON.stringify(command),
       signal: controller.signal,
     })
-    const parsed: unknown = await result.json()
-    if (!result.ok || parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error('MiniBrowser unavailable: controller returned HTTP ' + String(result.status))
+    const parsed: unknown = await result.json().catch(() => undefined)
+    const payload = parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown> : undefined
+    if (!result.ok || payload === undefined) {
+      const detail = typeof payload?.error === 'string' ? ': ' + payload.error.slice(0, 500) : ''
+      throw new Error('MiniBrowser unavailable: controller returned HTTP ' + String(result.status) + detail)
     }
-    const payload = parsed as Record<string, unknown>
+    if (args.action === 'browser_inspect' && payload.available === false
+      && (payload.code === 'browser_not_started' || payload.code === 'browser_no_tabs')) {
+      return JSON.stringify({
+        browser: 'phoenix-mini-browser', action: args.action, status: 'not-open',
+        available: false, code: payload.code,
+        nextAction: 'Use browser_open with the intended URL, then browser_inspect. No page was observed.',
+      })
+    }
     if (payload.available !== true || typeof payload.tabId !== 'string') {
       throw new Error('MiniBrowser did not confirm an available conversation tab')
     }
@@ -1880,6 +1890,7 @@ export function registerComputerTool(ctx: Context): void {
       'When the Desktop broker is absent or stale, computer browser_open/back/forward/reload/inspect uses',
       'this conversation\'s isolated MiniBrowser CDP controller automatically (requires Phoenix Web and Chrome/Edge).',
       'Use phoenix_browser/chrome for approved form edits, clicks, and credentials; never downgrade credential actions.',
+      'If browser_inspect reports not-open, call browser_open with the intended URL before inspecting again; do not treat an inactive browser as a broken controller.',
       'If navigation fails, report the actual controller error and continue with other authorized web tools.',
       'Native Windows windows/focus/click/type/key/scroll retain the fixed PowerShell fallback.',
     ].join(' '),
