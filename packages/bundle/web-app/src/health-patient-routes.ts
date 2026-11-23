@@ -31,13 +31,13 @@ function allowedOrigin(req:IncomingMessage):boolean {
     && req.headers['content-type']?.split(';',1)[0]?.trim()==='application/json'
     && req.headers['x-phoenix-patient']==='1'
 }
-async function body(req:IncomingMessage):Promise<Record<string,unknown>> {
+async function body(req:IncomingMessage,maxBytes=2048):Promise<Record<string,unknown>> {
   const pieces:Buffer[]=[]
   let count=0
   for await(const raw of req){
     const part=Buffer.isBuffer(raw)?raw:Buffer.from(raw)
     count+=part.length
-    if(count>2048)throw Error('REQUEST_TOO_LARGE')
+    if(count>maxBytes)throw Error('REQUEST_TOO_LARGE')
     pieces.push(part)
   }
   const value:unknown=JSON.parse(Buffer.concat(pieces).toString('utf8'))
@@ -68,7 +68,7 @@ export function createPatientPortalHandler(store:HealthClinicStore) {
     if(method!=='GET'&&method!=='POST'){reply(res,405,{error:'Método no permitido'});return true}
     if(method==='POST'&&!allowedOrigin(req)){reply(res,403,{error:'Origen no autorizado'});return true}
     const action=path.slice('/health/patient/api/'.length)
-    if(!['session','feed','redeem','login','logout'].includes(action)){
+    if(!['session','feed','intake','redeem','login','logout'].includes(action)){
       reply(res,404,{error:'Operación no disponible'});return true
     }
     const patientCookie=cookie(req)
@@ -106,6 +106,16 @@ export function createPatientPortalHandler(store:HealthClinicStore) {
       }
       if(action==='feed'&&method==='GET'){
         reply(res,200,{items:store.patientPortalFeed(patientCookie)});return true
+      }
+      if(action==='intake'&&method==='GET'){
+        reply(res,200,{items:store.patientPortalIntakes(patientCookie)});return true
+      }
+      if(action==='intake'&&method==='POST'){
+        const csrf=typeof req.headers['x-phoenix-patient-csrf']==='string'
+          ?req.headers['x-phoenix-patient-csrf']:undefined
+        const request=await body(req,12_000)
+        reply(res,201,{submission:store.patientPortalSubmitIntake(patientCookie,csrf,request)})
+        return true
       }
       if(action==='logout'&&method==='POST'){
         store.patientPortalSession(patientCookie,
