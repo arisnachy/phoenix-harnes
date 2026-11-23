@@ -113,12 +113,13 @@ export function HealthiaPatientDossier({
 
   useEffect(()=>{
     if(!allowed){setPatientIntakes([]);return}
+    if(tab!=='intake')return
     let active=true
     void api.patientIntakes(session,patient.id).then(items=>{
       if(active)setPatientIntakes(items)
     }).catch(err=>{if(active)setError(err instanceof Error?err.message:'No se pudieron leer las preconsultas')})
     return()=>{active=false}
-  },[allowed,session,patient.id,revision])
+  },[allowed,session,patient.id,revision,tab])
 
   const reviewIntake=async(item:PatientIntakeSubmission):Promise<void>=>{
     if(busy)return
