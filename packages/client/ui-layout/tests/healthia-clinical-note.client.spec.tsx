@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { canApplyClinicalAction, publicClinicalEditorState, type ClinicalEditorViewState } from '../src/client/HealthiaEditorSupport.ts'
 import {
   HealthiaClinicalNote, clinicalBmi, formatClinicalNote, formatClinicalNoteParts,
   CLINICAL_NOTE_SECTIONS, fieldsForKind,
@@ -134,5 +135,31 @@ describe('Healthia clinical note from the supplied legacy intake concepts', () =
     resolve({text:'Propuesta caducada',numericWarnings:[],provider:'ollama',model:'test'})
     await waitFor(()=>expect(screen.getByText(/propuesta fue descartada/)).toBeTruthy())
     expect(screen.queryByRole('button',{name:'Aceptar texto revisado'})).toBeNull()
+  })
+
+  it('never exposes the active encounter binding or data in public inspection',()=>{
+    const v:ClinicalEditorViewState={step:'interview',binding:'mount-A:1',visibleFieldIds:['hea'],filledFields:1,
+      dirty:false,hasEncounter:true,canEdit:true,modelEnabled:true}
+    expect(canApplyClinicalAction(v,'mount-A:1')).toBe(true)
+    expect(canApplyClinicalAction(v,'mount-B:1')).toBe(false)
+    expect(canApplyClinicalAction({...v,binding:'mount-A:2'},v.binding)).toBe(false)
+    expect(canApplyClinicalAction({...v,canEdit:false},v.binding)).toBe(false)
+    expect(publicClinicalEditorState(v)).not.toHaveProperty('binding')
+  })
+  it('prepares a contextual review only after model consent, without overwriting any field',async()=>{
+    const model={id:'ollama/test',label:'Modelo de prueba',location:'local' as const}
+    const refine=vi.fn(async()=>({text:'Hipótesis a verificar y pregunta pendiente',numericWarnings:[],provider:'ollama',model:'test'}))
+    render(<HealthiaClinicalNote initialValues={{hea:'Relato original',personal:'Antecedente documentado'}}
+      encounterVersion={1} onSave={async()=>{}} loadModels={async()=>[model]} refineField={refine}/>)
+    fireEvent.click(screen.getByRole('button',{name:'Diagnóstico'}))
+    fireEvent.click(screen.getByRole('button',{name:'Analizar contexto de la consulta'}))
+    await waitFor(()=>expect(screen.getByRole('checkbox')).toBeTruthy())
+    expect(refine).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button',{name:'Generar propuesta'}))
+    await waitFor(()=>expect(screen.getByText('Hipótesis a verificar y pregunta pendiente')).toBeTruthy())
+    expect(refine).toHaveBeenCalledWith('context-review',expect.stringContaining('Antecedente documentado'),model,true)
+    expect(screen.queryByRole('button',{name:'Aceptar texto revisado'})).toBeNull()
+    expect((screen.getByRole('textbox',{name:'Impresión clínica y razonamiento'}) as HTMLTextAreaElement).value).toBe('')
   })
 })
