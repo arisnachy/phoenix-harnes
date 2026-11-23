@@ -67,7 +67,7 @@ export function projectPhoenixLocalAvailability(
       id: model.id,
       name: model.displayName,
       description: model.backend === 'ollama' ? 'Ollama · Local' : 'GGUF · Local',
-      ...(model.backend === 'ollama' && model.id === state.selectedModelId
+      ...(model.id === state.selectedModelId
         && state.thinkingCapabilities?.values.some(value => value !== false)
         ? { reasoning: { efforts: state.thinkingCapabilities.values.map(value => ({
             id: localThinkingEffort(value)!,
