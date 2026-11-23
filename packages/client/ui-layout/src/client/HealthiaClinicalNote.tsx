@@ -7,7 +7,7 @@
  * Only an authenticated Host-owned clinical repository may persist records.
  */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { CLINICAL_EDITOR_STEPS, VITAL_IDS, DIAGNOSIS_IDS, estimatedMap, extractClinicalVitals, longitudinalFields, validateVital, type ClinicalEditorStep, type LongitudinalPatient, type ClinicalEditorViewState } from './HealthiaEditorSupport.ts'
+import { CLINICAL_EDITOR_STEPS, VITAL_IDS, DIAGNOSIS_IDS, estimatedMap, extractClinicalVitals, longitudinalFields, validateVital, type ClinicalEditorStep, type LongitudinalPatient, type ClinicalEditorViewState, type ClinicalEditorRequest } from './HealthiaEditorSupport.ts'
 import type { ClinicalEditorModel, ClinicalEditorProposal } from './HealthiaClinicalApi.ts'
 import css from './HealthiaClinicalNote.module.css'
 
@@ -175,7 +175,7 @@ export function HealthiaClinicalNote({
   onEditorState?: ((state:ClinicalEditorViewState|null)=>void) | undefined
   patient?: LongitudinalPatient | undefined
   encounterVersion?: number | undefined
-  requestedStep?: {step:ClinicalEditorStep;sequence:number} | undefined
+  requestedStep?: ClinicalEditorRequest | undefined
   loadModels?: (()=>Promise<readonly ClinicalEditorModel[]>) | undefined
   refineField?: ((field:string,text:string,model:ClinicalEditorModel,confirmed:boolean)=>Promise<ClinicalEditorProposal>) | undefined
   initialValues?: ClinicalNoteValues
@@ -200,10 +200,14 @@ export function HealthiaClinicalNote({
   const filledFields=shown.filter(f=>!!values[f.id]?.trim()).length
   const canEdit=onSave!==undefined
   const hasEncounter=encounterVersion!==undefined
+  const contextNonce=useRef('')
+  if(!contextNonce.current)contextNonce.current=globalThis.crypto?.randomUUID?.()??Math.random().toString(36).slice(2)
+  const binding=contextNonce.current+':'+String(encounterVersion??'none')
+  const handledAction=useRef<number|undefined>(undefined)
   useEffect(()=>{
-    onEditorState?.({step:section,visibleFieldIds:visibleIds?visibleIds.split(','):[],
+    onEditorState?.({step:section,binding,visibleFieldIds:visibleIds?visibleIds.split(','):[],
       filledFields,dirty,hasEncounter,canEdit})
-  },[onEditorState,section,visibleIds,filledFields,dirty,hasEncounter,canEdit])
+  },[onEditorState,section,binding,visibleIds,filledFields,dirty,hasEncounter,canEdit])
   useEffect(()=>()=>{onEditorState?.(null)},[onEditorState])
 
   const [quick,setQuick]=useState('')
@@ -222,7 +226,7 @@ export function HealthiaClinicalNote({
   const reversed=!!values.sys&&!!values.dia&&Number(values.sys)<Number(values.dia)
   const hasInvalidVitals=invalidVitals.length>0||reversed
   const eligible=(id:string)=>['chief','hea','ros','personal','surgical','family','habits','medications','perinatal','gyneco','physical','findings'].includes(id)
-  useEffect(()=>{if(requestedStep){setSection(requestedStep.step);setPreview(false)}},[requestedStep])
+  useEffect(()=>{if(requestedStep&&!requestedStep.action){setSection(requestedStep.step);setPreview(false)}},[requestedStep])
   useEffect(()=>{generation.current++;setProposal(null);setAiBusy(false)},[encounterVersion])
   useEffect(()=>()=>{generation.current++},[])
   const openAi=async(id:string)=>{
@@ -252,6 +256,20 @@ export function HealthiaClinicalNote({
     setValues(previous=>{const next={...previous};for(const field of allowed){const value=recovered[field.id];if(value&&!next[field.id]?.trim()&&value.length<=(field.maxLength??1800))next[field.id]=value}return next})
     setMessage('Antecedentes previos incorporados solo en campos vacíos. Reconfirme vigencia y alergias.')
   }
+  // A chat control can open assistance or prepare a local draft only; the
+  // ephemeral binding prevents applying an old card to another encounter.
+  useEffect(()=>{
+    if(!requestedStep?.action||requestedStep.binding!==binding||!canEdit||saving
+      ||handledAction.current===requestedStep.sequence)return
+    handledAction.current=requestedStep.sequence
+    setSection(requestedStep.step);setPreview(false)
+    if(requestedStep.action==='clinical-refine-chief'||requestedStep.action==='clinical-refine-hea'){
+      const field=requestedStep.action==='clinical-refine-chief'?'chief':'hea'
+      if(!values[field]?.trim()){setMessage('Introduce primero el texto clínico en este campo.');return}
+      void openAi(field)
+    }else if(requestedStep.action==='clinical-import-background')importBackground()
+    else if(requestedStep.action==='clinical-preview')setPreview(true)
+  },[requestedStep,binding,canEdit,saving])
   const edit = (id: string, value: string): void => {
     setValues(previous => ({ ...previous, [id]: value }))
     setMessage('')
