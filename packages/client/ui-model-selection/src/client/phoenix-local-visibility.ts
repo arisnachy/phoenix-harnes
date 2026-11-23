@@ -7,6 +7,22 @@ export const PHOENIX_LOCAL_PROVIDER = 'phoenix-local'
 export interface PhoenixLocalInstallState {
   selectedModelId: string
   installedModelIds: readonly string[]
+  /** Installed in Ollama itself, even if not yet connected to Phoenix. */
+  ollamaInstalledModelIds?: readonly string[]
+  mode?: 'off' | 'on-demand' | 'always-on'
+  catalog?: readonly {
+    id: string
+    displayName: string
+    backend?: 'ollama' | 'llama-server'
+    contextWindow: number
+    nativeContextWindow?: number
+    maxTokens: number
+  }[]
+  thinking?: boolean | string | null
+  thinkingCapabilities?: {
+    values: readonly (boolean | string)[]
+    default: boolean | string | null
+  }
 }
 
 /**
