@@ -645,7 +645,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
               title:selectedEncounter.status==='signed'?'Historia clínica firmada':'Historia clínica · borrador',
               institution:session?.actor.org??'Healthia',
               patientName:selectedPatient?.name??'Paciente autorizado',
-              patientBirth:selectedPatient?.dateOfBirth,
+              ...(selectedPatient?.dateOfBirth?{patientBirth:selectedPatient.dateOfBirth}:{}),
               patientId:selectedEncounter.patientId,
               practitioner:selectedEncounter.signedBy??selectedEncounter.practitioner,
               date:selectedEncounter.signedAt??new Date().toISOString(),
