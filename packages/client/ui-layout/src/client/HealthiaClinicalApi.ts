@@ -169,7 +169,7 @@ export class HealthiaClinicalApi {
       response=await (this.requester ?? fetch)('/health/api/'+path, {
         method,headers,credentials:'same-origin',cache:'no-store',
         ...(body===undefined?{}:{body:JSON.stringify(body)}),
-        signal:AbortSignal.timeout(path.startsWith('clinical-field-ai/')?65000:path==='setup'||path==='login'?30000:10000),
+        signal:AbortSignal.timeout((path.startsWith('clinical-field-ai/')||path.startsWith('clinical-context-ai/'))?65000:path==='setup'||path==='login'?30000:10000),
       })
     } catch (cause) {
       const timedOut=cause instanceof Error && /timeout|aborted/i.test(cause.name+' '+cause.message)
@@ -200,7 +200,7 @@ export class HealthiaClinicalApi {
   async refineEditorField(session:ClinicalSession,encounter:ClinicalEncounter,field:string,text:string,
     model:ClinicalEditorModel,confirmed:boolean):Promise<ClinicalEditorProposal>{
     if(!confirmed||encounter.status!=='draft'||!UUID.test(encounter.id))throw Error('Confirme el procesamiento del borrador')
-    const data=object(await this.request('clinical-field-ai/'+encounter.id,'POST',session,{
+    const data=object(await this.request((field==='context-review'?'clinical-context-ai/':'clinical-field-ai/')+encounter.id,'POST',session,{
       version:encounter.version,field,text,routeId:model.id,
       confirmLocalProcessing:model.location==='local',confirmExternalProcessing:model.location==='external',
     }))
