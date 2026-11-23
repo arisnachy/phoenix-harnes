@@ -107,3 +107,7 @@
 .reviewCard p{font-size:12px;line-height:1.55;color:var(--dsw-alias-label-secondary);margin:0}
 .signCheck{display:flex;align-items:start;gap:9px;font-size:12px;line-height:1.4}.signCheck input{accent-color:var(--dsw-specific-phoenix-accent)}
 .reviewCard button{justify-self:start}
+
+.printAction{justify-self:start;cursor:pointer;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;padding:9px 12px;background:var(--dsw-alias-bg-layer-1);color:inherit;font:inherit;font-size:12px}
+.printAction:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.printAction:focus-visible{outline:2px solid var(--dsw-specific-phoenix-accent);outline-offset:2px}
