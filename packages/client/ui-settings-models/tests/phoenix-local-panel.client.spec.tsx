@@ -173,6 +173,20 @@ describe('PhoenixLocalPanel', () => {
     await waitFor(() => { expect(local.calls.install).toHaveBeenCalledWith('ollama:gemma4:e2b') })
   })
 
+  it('offers searchable official Ollama choices and installs without a command line', async () => {
+    const local = client()
+    render(<PhoenixLocalPanel client={local} t={t} />)
+    await screen.findByText(localEn.title)
+    expect(screen.getByRole('link', { name: localEn.ollamaAllModels })
+      .getAttribute('href')).toBe('https://ollama.com/library')
+    fireEvent.change(screen.getByLabelText(localEn.ollamaSearch), {
+      target: { value: 'gemma4:e2b' },
+    })
+    expect(screen.queryByText('Qwen 3.5 9B')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: `${localEn.ollamaPull} · gemma4:e2b` }))
+    await waitFor(() => { expect(local.calls.install).toHaveBeenCalledWith('ollama:gemma4:e2b') })
+  })
+
   it('requires confirmation before physical deletion and never equates unlinking with removal', async () => {
     const id = 'ollama:gemma4:e2b'
     const local = client(snapshot({
