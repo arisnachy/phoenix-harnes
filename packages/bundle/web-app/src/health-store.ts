@@ -135,7 +135,9 @@ export class HealthClinicStore {
       'CREATE TABLE IF NOT EXISTS health_patient_portal_invites (digest TEXT PRIMARY KEY, org TEXT NOT NULL, patient_id TEXT NOT NULL, expires_ms INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0);'+
       'CREATE INDEX IF NOT EXISTS health_patient_portal_invite_expiration ON health_patient_portal_invites(expires_ms);'+
       'CREATE TABLE IF NOT EXISTS health_patient_portal_accounts (account_id TEXT PRIMARY KEY, org TEXT NOT NULL, patient_id TEXT NOT NULL, salt TEXT NOT NULL, digest TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, UNIQUE(org,patient_id));'+
-      'CREATE TABLE IF NOT EXISTS health_patient_portal_publications (org TEXT NOT NULL, patient_id TEXT NOT NULL, kind TEXT NOT NULL, record_id TEXT NOT NULL, published_by TEXT NOT NULL, at TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(org,patient_id,kind,record_id));',
+      'CREATE TABLE IF NOT EXISTS health_patient_portal_publications (org TEXT NOT NULL, patient_id TEXT NOT NULL, kind TEXT NOT NULL, record_id TEXT NOT NULL, published_by TEXT NOT NULL, at TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(org,patient_id,kind,record_id));'+
+      'CREATE TABLE IF NOT EXISTS health_patient_submissions (org TEXT NOT NULL, patient_id TEXT NOT NULL, submission_id TEXT PRIMARY KEY, created_at TEXT NOT NULL);'+
+      'CREATE INDEX IF NOT EXISTS health_patient_submissions_patient ON health_patient_submissions(org,patient_id,created_at);',
     )
   }
   /**
@@ -276,9 +278,9 @@ export class HealthClinicStore {
     }
     if(typeof answers.complaint!=='string')fail('El motivo de consulta es necesario')
     const count=this.db.prepare(
-      "SELECT COUNT(*) AS total FROM health_records WHERE org=? AND kind='patient-submission'",
-    ).get(session.org) as {total:number}
-    if(count.total>=5000)fail('Capacidad de admisión alcanzada; contacte su clínica')
+      "SELECT COUNT(*) AS total FROM health_patient_submissions WHERE org=? AND patient_id=?",
+    ).get(session.org,session.patientId) as {total:number}
+    if(count.total>=500)fail('Capacidad de preconsultas de esta cuenta alcanzada; contacte su clínica')
     const id=randomUUID(),createdAt=new Date().toISOString()
     const data:RecordData={patientId:session.patientId,answers,
       status:'pending-review',submittedAt:createdAt,source:'patient-portal'}
@@ -288,6 +290,8 @@ export class HealthClinicStore {
       this.db.prepare('INSERT INTO health_records VALUES (?,?,?,?,?,?,?,?,?)')
         .run(id,session.org,'patient-submission',1,encrypted.iv,encrypted.tag,
           encrypted.payload,createdAt,createdAt)
+      this.db.prepare('INSERT INTO health_patient_submissions VALUES (?,?,?,?)')
+        .run(session.org,session.patientId,id,createdAt)
       this.audit({username:'portal-paciente:'+session.accountId.slice(0,8),
         role:'reception',org:session.org},'patient.portal.intake',id)
       this.db.exec('COMMIT')
@@ -300,10 +304,10 @@ export class HealthClinicStore {
     this.patientPortalSession(cookie)
     const session=this.patientSessions.get(cookie!)!
     const rows=this.db.prepare(
-      "SELECT * FROM health_records WHERE org=? AND kind='patient-submission' ORDER BY created_at DESC LIMIT 500",
-    ).all(session.org) as Row[]
+      "SELECT r.* FROM health_records r JOIN health_patient_submissions s ON s.submission_id=r.id WHERE s.org=? AND s.patient_id=? AND r.org=? AND r.kind='patient-submission' ORDER BY s.created_at DESC LIMIT 25",
+    ).all(session.org,session.patientId,session.org) as Row[]
     return rows.map(row=>({row,data:this.open(row)}))
-      .filter(x=>x.data.patientId===session.patientId).slice(0,25)
+      .filter(x=>x.data.patientId===session.patientId)
       .map(x=>({id:x.row.id,createdAt:x.row.created_at,status:x.data.status,
         complaint:(x.data.answers as RecordData)?.complaint}))
   }
@@ -314,10 +318,10 @@ export class HealthClinicStore {
     const id=str(patientId,'Paciente',80)
     this.find(actor,'patients',id)
     const rows=this.db.prepare(
-      "SELECT * FROM health_records WHERE org=? AND kind='patient-submission' ORDER BY created_at DESC LIMIT 500",
-    ).all(actor.org) as Row[]
+      "SELECT r.* FROM health_records r JOIN health_patient_submissions s ON s.submission_id=r.id WHERE s.org=? AND s.patient_id=? AND r.org=? AND r.kind='patient-submission' ORDER BY s.created_at DESC LIMIT 30",
+    ).all(actor.org,id,actor.org) as Row[]
     return rows.map(row=>({row,data:this.open(row)}))
-      .filter(x=>x.data.patientId===id).slice(0,30)
+      .filter(x=>x.data.patientId===id)
       .map(x=>({id:x.row.id,version:x.row.version,createdAt:x.row.created_at,...x.data}))
   }
 
