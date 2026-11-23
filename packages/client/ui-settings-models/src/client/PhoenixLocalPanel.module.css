@@ -189,3 +189,14 @@
   .ollamaPicker { grid-template-columns: 1fr 1fr; }
   .ollamaPicker .field { grid-column: 1 / -1; }
 }
+
+.library { display: flex; flex-direction: column; gap: 12px; padding: 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; }
+.libraryHeading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 13px; }
+.libraryHeading a { color: var(--dsw-alias-brand-primary); font-size: 12px; }
+.libraryControls { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 10px; }
+.libraryControls input { box-sizing: border-box; width: 100%; min-height: 36px; padding: 6px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font: inherit; }
+.libraryGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 8px; }
+.libraryCard { display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; background: var(--dsw-alias-bg-base); }
+.libraryDetails { display: flex; flex-direction: column; gap: 4px; font-size: 12px; overflow-wrap: anywhere; }
+.libraryDetails span { color: var(--dsw-alias-label-tertiary); font-size: 11px; }
+@media (max-width: 640px) { .libraryControls { grid-template-columns: 1fr; } }
