@@ -13,6 +13,8 @@ export type ClinicalPatient = {
   readonly id: string; readonly version: number; readonly name: string
   readonly dateOfBirth: string; readonly phone?: string; readonly email?: string
   readonly documentType?: 'cedula'|'passport'|'other'; readonly documentNumber?: string
+  readonly sexAtBirth?:'female'|'male'|'intersex'|'unknown'|null
+  readonly genderIdentity?:string
   readonly customFields?: Readonly<Record<string,string>>
   readonly medicalHistory?: Readonly<Record<string,string>>
   readonly medicalHistoryReview?: {readonly reviewedAt?:string;readonly reviewedBy?:string}
@@ -208,6 +210,7 @@ export class HealthiaClinicalApi {
   }
   async createPatient(session:ClinicalSession,input:{
     name:string;dateOfBirth:string;phone?:string;email?:string;
+    sexAtBirth?:'female'|'male'|'intersex'|'unknown';
     documentType?:string;documentNumber?:string;customFields?:Readonly<Record<string,string>>;
     notes?:string;confirmDistinct?:boolean;distinctReason?:string;
   }):Promise<ClinicalPatient> {
@@ -257,6 +260,19 @@ export class HealthiaClinicalApi {
     if(!patientOf(record.record)||(record.record as ClinicalPatient).id!==patient.id)
       throw Error('La confirmación no corresponde al expediente solicitado')
     return record.record as ClinicalPatient
+  }
+  async updatePatientIdentityContext(session:ClinicalSession,patient:ClinicalPatient,input:{
+    sexAtBirth?:'female'|'male'|'intersex'|'unknown';genderIdentity:string
+  }):Promise<ClinicalPatient> {
+    if(!UUID.test(patient.id)||!Number.isSafeInteger(patient.version)||patient.version<1)
+      throw Error('Paciente o versión inválida')
+    if(input.genderIdentity.length>160)throw Error('Identidad referida demasiado extensa')
+    const response=object(await this.request('patients/'+patient.id,'PATCH',session,{
+      version:patient.version,action:'identity-context',...input,
+    }))
+    if(!patientOf(response.record)||(response.record as ClinicalPatient).id!==patient.id)
+      throw Error('No coincide la confirmación del expediente')
+    return response.record as ClinicalPatient
   }
   /** A verified negative allergy review is never inferred from empty fields. */
   async reviewPatientAllergies(session:ClinicalSession,patient:ClinicalPatient,
