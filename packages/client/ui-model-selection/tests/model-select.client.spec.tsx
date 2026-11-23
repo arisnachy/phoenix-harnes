@@ -678,3 +678,68 @@ describe('Fénix Eclipse is the visible name of Phoenix automatic routing', () =
     expect(select).not.toHaveBeenCalled()
   })
 })
+
+
+describe('PHOENIX installed local model selector', () => {
+  const local = {
+    selectedModelId: 'ollama:gemma4:e2b',
+    installedModelIds: ['ollama:gemma4:e2b'],
+    ollamaInstalledModelIds: ['ollama:gemma4:e2b', 'ollama:qwen3.5:2b'],
+    mode: 'on-demand' as const,
+    catalog: [
+      { id: 'ollama:gemma4:e2b', displayName: 'Gemma 4 E2B · Ollama', contextWindow: 131_072, maxTokens: 2048 },
+      { id: 'ollama:qwen3.5:2b', displayName: 'Qwen 3.5 2B · Ollama', contextWindow: 262_144, maxTokens: 2048 },
+    ],
+    thinking: false,
+    thinkingCapabilities: { values: [false, true], default: false },
+  }
+  const localGroups = [{
+    id: 'phoenix-local',
+    name: 'Phoenix Local',
+    models: [{ id: 'phoenix-local', name: 'Phoenix Local' }],
+  }]
+
+  it('shows every installed Ollama model by name with distinct family marks and Phoenix identity', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      current: { provider: 'phoenix-local', model: 'phoenix-local' },
+      groups: localGroups,
+      localModel: local,
+    }))
+    const selectLocalModel = vi.fn().mockResolvedValue(true)
+    const { container } = render(<ModelSelect
+      locked={false} available directory={directory} load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)} selectLocalModel={selectLocalModel}
+      changeLocalThinking={vi.fn().mockResolvedValue(true)} t={t}
+    />)
+    const trigger = screen.getByRole('button', { name: /Gemma 4 E2B/ })
+    expect(trigger.textContent).toContain('Gemma 4 E2B')
+    expect(container.querySelector('img[src="/phoenix-emblem.png"]')).toBeTruthy()
+    fireEvent.click(trigger)
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    expect(screen.getByRole('menuitemradio', { name: 'Gemma 4 E2B' })).toBeTruthy()
+    const qwen = screen.getByRole('menuitemradio', { name: 'Qwen 3.5 2B' })
+    expect(qwen).toBeTruthy()
+    expect(container.querySelector('[data-provider-mark="qwen"]')).toBeTruthy()
+    fireEvent.click(qwen)
+    expect(selectLocalModel).toHaveBeenCalledWith('ollama:qwen3.5:2b')
+  })
+
+  it('offers only the selected model own verified thinking choices', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      current: { provider: 'phoenix-local', model: 'phoenix-local' },
+      groups: localGroups,
+      localModel: local,
+    }))
+    const changeLocalThinking = vi.fn().mockResolvedValue(true)
+    render(<ModelSelect locked={false} available directory={directory}
+      load={vi.fn()} select={vi.fn().mockResolvedValue(true)}
+      selectLocalModel={vi.fn().mockResolvedValue(true)}
+      changeLocalThinking={changeLocalThinking} t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: /Gemma 4 E2B/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /推理等级/ }))
+    expect(screen.getByRole('slider')).toBeTruthy()
+    fireEvent.change(screen.getByRole('slider'), { target: { value: '2' } })
+    fireEvent.pointerUp(screen.getByRole('slider'), { target: { value: '2' } })
+    expect(changeLocalThinking).toHaveBeenCalledWith(true)
+  })
+})

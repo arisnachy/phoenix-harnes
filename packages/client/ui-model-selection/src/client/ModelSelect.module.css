@@ -36,6 +36,28 @@
   cursor: default;
 }
 
+.triggerPhoenixLogo {
+  flex: 0 0 18px;
+  object-fit: contain;
+}
+
+.localGroupHeader {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  min-height: 38px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.localPhoenixBadge {
+  display: grid;
+  place-items: center;
+}
+
 .triggerLabel {
   min-width: 0;
   overflow: hidden;

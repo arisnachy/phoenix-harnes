@@ -954,6 +954,19 @@ export class PluginInventoryGateway extends TypertRemoteService {
     return publicLocalSnapshot(await (await this.localModel).install(request.modelId))
   }
 
+  /** Connect only a model already present on the user's Ollama daemon.
+   * Never download model weights as a side effect of a model selector click. */
+  @Remote('connectInstalledOllamaModel')
+  async connectInstalledOllamaModel(request: PhoenixLocalModelRequest): Promise<PhoenixLocalModelSnapshot> {
+    const local = await this.localModel
+    await local.refreshCatalog()
+    const entry = getLocalModelCatalog().find(model => model.id === request.modelId)
+    if (entry?.backend !== 'ollama' || !local.snapshot().ollamaInstalledModelIds?.includes(request.modelId)) {
+      throw new Error('El modelo seleccionado no figura entre los modelos instalados en Ollama.')
+    }
+    return publicLocalSnapshot(await local.install(request.modelId, false))
+  }
+
   /**
    * Start Phoenix Local now, regardless of whether a chat has requested it yet.
    * @returns Updated sanitized Phoenix Local state.
