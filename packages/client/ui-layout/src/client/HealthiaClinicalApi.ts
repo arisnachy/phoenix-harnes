@@ -122,6 +122,21 @@ export type ClinicStaff = {readonly username:string;readonly role:string;readonl
 export type ClinicAssignment = {readonly patientId:string;readonly staffId:string;readonly purpose:string;
   readonly grantedBy:string;readonly grantedAt:string}
 export type ClinicalInterviewQuestion = {readonly key:string;readonly question:string}
+export type PatientIntakeSubmission={
+  readonly id:string;readonly version:number;readonly patientId:string;
+  readonly createdAt:string;readonly status:'pending-review'|'reviewed';
+  readonly submittedAt:string;readonly source:'patient-portal';
+  readonly answers:Readonly<Record<string,string>>;
+  readonly reviewedBy?:string;readonly reviewedAt?:string;
+}
+function patientIntakeOf(value:unknown):value is PatientIntakeSubmission {
+  if(!value||typeof value!=='object'||Array.isArray(value))return false
+  const row=value as Record<string,unknown>,answers=row.answers
+  return typeof row.id==='string'&&UUID.test(row.id)&&typeof row.patientId==='string'&&UUID.test(row.patientId)
+    &&Number.isSafeInteger(row.version)&&['pending-review','reviewed'].includes(String(row.status))
+    &&typeof row.createdAt==='string'&&answers!==null&&typeof answers==='object'&&!Array.isArray(answers)
+    &&Object.values(answers as Record<string,unknown>).every(v=>typeof v==='string')
+}
 export type ClinicalInterviewGuide = {readonly pathway:string;readonly nextQuestions:readonly ClinicalInterviewQuestion[];
   readonly guidance:string;readonly requiresClinicianAssessment:true}
 function clinicResourceOf(value:unknown):value is ClinicResource {
@@ -401,6 +416,23 @@ export class HealthiaClinicalApi {
     if(!encounterOf(response.record)||response.record.id!==current.id||
       response.record.patientId!==current.patientId)
       throw Error('La respuesta no quedó registrada en la consulta')
+    return response.record
+  }
+  async patientIntakes(session:ClinicalSession,patientId:string):Promise<readonly PatientIntakeSubmission[]> {
+    if(!UUID.test(patientId))throw Error('Paciente inválido')
+    const result=listOf(await this.request('patient-intakes/'+patientId,'GET',session),patientIntakeOf)
+    if(result.some(item=>item.patientId!==patientId))throw Error('Se recibió una preconsulta de otro paciente')
+    return result
+  }
+  async reviewPatientIntake(session:ClinicalSession,current:PatientIntakeSubmission):Promise<PatientIntakeSubmission> {
+    if(!patientIntakeOf(current)||current.status!=='pending-review')
+      throw Error('Preconsulta inexistente o ya revisada')
+    const response=object(await this.request('patient-intake-review/'+current.id,'PATCH',session,{
+      action:'review',version:current.version,
+    }))
+    if(!patientIntakeOf(response.record)||response.record.id!==current.id
+      ||response.record.patientId!==current.patientId||response.record.status!=='reviewed')
+      throw Error('No se confirmó la revisión de la preconsulta')
     return response.record
   }
   async clinicStaff(session:ClinicalSession):Promise<readonly ClinicStaff[]> {
