@@ -678,3 +678,29 @@ describe('Fénix Eclipse is the visible name of Phoenix automatic routing', () =
     expect(select).not.toHaveBeenCalled()
   })
 })
+
+describe('Phoenix Local installed model branding', () => {
+  it('shows the official emblem, exact names, family logos and selects an installed artifact', async () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      current: { provider: 'phoenix-local', model: 'ollama:gemma4:e2b' },
+      groups: [{ id: 'phoenix-local', name: '🔥 Phoenix Local · Offline', models: [
+        { id: 'ollama:gemma4:e2b', name: 'Gemma 4 E2B', description: 'Ollama · Local' },
+        { id: 'ollama:qwen3.5:2b', name: 'Qwen 3.5 2B', description: 'Ollama · Local' },
+      ] }],
+    }))
+    const select = vi.fn().mockResolvedValue(true)
+    render(<ModelSelect locked={false} available directory={directory} load={vi.fn()} select={select} t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: /Gemma 4 E2B/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    const group = screen.getByRole('menuitem', { name: 'Phoenix Local · Offline' })
+    expect(group.querySelector('img[src="/phoenix-emblem.png"]')).not.toBeNull()
+    expect(group.textContent).not.toContain('🔥')
+    const gemma = screen.getByRole('menuitemradio', { name: 'Gemma 4 E2B' })
+    const qwen = screen.getByRole('menuitemradio', { name: 'Qwen 3.5 2B' })
+    expect(gemma.querySelector('svg[data-provider-mark="google"]')).not.toBeNull()
+    expect(qwen.querySelector('svg[data-provider-mark="qwen"]')).not.toBeNull()
+    expect(gemma.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(qwen)
+    await waitFor(() => expect(select).toHaveBeenCalledWith({ provider: 'phoenix-local', model: 'ollama:qwen3.5:2b' }))
+  })
+})

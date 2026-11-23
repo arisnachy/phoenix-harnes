@@ -38,6 +38,7 @@ type PluginInventoryRemoteResult<T> =
 
 interface PluginInventoryLocalRemote {
   localModelState?: () => Promise<PluginInventoryRemoteResult<PhoenixLocalInstallState>>
+  setDefaultLocalModel?: (request: { modelId: string; installedOnly: boolean }) => Promise<PluginInventoryRemoteResult<PhoenixLocalInstallState>>
 }
 
 /** The `ctx.modelDirectories` session model-selection service. */
@@ -98,11 +99,17 @@ export class ModelDirectoryResolver extends Service {
           `pluginInventory.localModelState failed: ${result.error.code}: ${result.error.message}`,
         )
       }
+    const selectLocalModel = pluginInventory?.setDefaultLocalModel === undefined ? undefined : async (modelId: string) => {
+      const result = await pluginInventory.setDefaultLocalModel!({ modelId, installedOnly: true })
+      if (result.ok) return result.value
+      throw new Error(result.error.message)
+    }
     const directory = new ModelDirectory(
       connection.api.sessions,
       sessionId,
       () => sessions.subagentAddress(sessionId) === undefined,
       readLocalModelState,
+      selectLocalModel,
     )
     live.directories.set(sessionId, directory)
     // The composer cannot read this plugin (the dependency runs one way), so

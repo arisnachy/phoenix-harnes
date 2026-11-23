@@ -505,6 +505,8 @@ export interface PhoenixLocalModelSnapshot {
 /** Model-address request used by install/uninstall/default actions. */
 export interface PhoenixLocalModelRequest {
   readonly modelId: string
+  /** Selector requests may only activate an existing artifact; never download. */
+  readonly installedOnly?: boolean
 }
 
 /** Runtime-mode request used by Settings. */
