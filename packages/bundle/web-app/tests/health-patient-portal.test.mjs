@@ -129,7 +129,7 @@ test('patient portal UI uses isolated nonce script and production-safe opt-in co
   const html=renderHealthPatientPage(nonce)
   assert.match(html,/PHOENIX Healthia/)
   assert.match(html,/script nonce="PatientTestNonce0000000"/)
-  assert.match(html,//health/patient/api//)
+  assert.ok(html.includes('/health/patient/api/'))
   assert.doesNotMatch(html,/localStorage|sessionStorage|https:\/\/cdn|external\.js/u)
   const source=/<script nonce="PatientTestNonce0000000">([\s\S]+?)<\/script>/u.exec(html)?.[1]
   assert.equal(typeof source,'string')
