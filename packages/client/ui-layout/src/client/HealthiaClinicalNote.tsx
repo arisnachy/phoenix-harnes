@@ -7,7 +7,7 @@
  * Only an authenticated Host-owned clinical repository may persist records.
  */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { CLINICAL_EDITOR_STEPS, VITAL_IDS, DIAGNOSIS_IDS, estimatedMap, extractClinicalVitals, longitudinalFields, validateVital, type ClinicalEditorStep, type LongitudinalPatient } from './HealthiaEditorSupport.ts'
+import { CLINICAL_EDITOR_STEPS, VITAL_IDS, DIAGNOSIS_IDS, estimatedMap, extractClinicalVitals, longitudinalFields, validateVital, type ClinicalEditorStep, type LongitudinalPatient, type ClinicalEditorViewState } from './HealthiaEditorSupport.ts'
 import type { ClinicalEditorModel, ClinicalEditorProposal } from './HealthiaClinicalApi.ts'
 import css from './HealthiaClinicalNote.module.css'
 
@@ -168,10 +168,11 @@ export function formatClinicalNoteParts(kind:ClinicalNoteKind,values:Readonly<Cl
 /** Clinical values remain local to this React tree unless the authenticated
  * Host-owned persistence callback is explicitly supplied and clicked. */
 export function HealthiaClinicalNote({
-  onReturn, initialValues = {}, initialKind = 'first', onSave, patient, encounterVersion, requestedStep, loadModels, refineField, onDirtyChange,
+  onReturn, initialValues = {}, initialKind = 'first', onSave, patient, encounterVersion, requestedStep, loadModels, refineField, onDirtyChange, onEditorState,
 }: {
   onReturn?: () => void
   onDirtyChange?: ((dirty:boolean)=>void) | undefined
+  onEditorState?: ((state:ClinicalEditorViewState|null)=>void) | undefined
   patient?: LongitudinalPatient | undefined
   encounterVersion?: number | undefined
   requestedStep?: {step:ClinicalEditorStep;sequence:number} | undefined
@@ -195,6 +196,16 @@ export function HealthiaClinicalNote({
   const current = CLINICAL_NOTE_SECTIONS.find(item => item.id === (section==='vitals'?'exam':section==='diagnosis'?'plan':section)) ?? CLINICAL_NOTE_SECTIONS[0]!
   const shown=fieldsForKind(current,kind).filter(f=>section==='vitals'?VITAL_IDS.some(id=>id===f.id):section==='exam'?!VITAL_IDS.some(id=>id===f.id):section==='diagnosis'?DIAGNOSIS_IDS.some(id=>id===f.id):section==='plan'?!DIAGNOSIS_IDS.some(id=>id===f.id):true)
   const step=CLINICAL_EDITOR_STEPS.find(x=>x.id===section)!
+  const visibleIds=shown.map(f=>f.id).join(',')
+  const filledFields=shown.filter(f=>!!values[f.id]?.trim()).length
+  const canEdit=onSave!==undefined
+  const hasEncounter=encounterVersion!==undefined
+  useEffect(()=>{
+    onEditorState?.({step:section,visibleFieldIds:visibleIds?visibleIds.split(','):[],
+      filledFields,dirty,hasEncounter,canEdit})
+  },[onEditorState,section,visibleIds,filledFields,dirty,hasEncounter,canEdit])
+  useEffect(()=>()=>{onEditorState?.(null)},[onEditorState])
+
   const [quick,setQuick]=useState('')
   const [vitalDraft,setVitalDraft]=useState<ReturnType<typeof extractClinicalVitals>|null>(null)
   const [models,setModels]=useState<readonly ClinicalEditorModel[]>([])
