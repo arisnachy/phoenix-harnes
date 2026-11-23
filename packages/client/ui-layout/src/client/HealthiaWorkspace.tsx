@@ -6,6 +6,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import css from './HealthiaWorkspace.module.css'
 import { HealthiaClinicOperations } from './HealthiaClinicOperations.tsx'
+import type { ClinicalEditorStep } from './HealthiaEditorSupport.ts'
 import { HealthiaClinicDashboard } from './HealthiaClinicDashboard.tsx'
 import { HealthiaOperationsBoard } from './HealthiaOperationsBoard.tsx'
 import type { AdaptiveLiveSnapshot } from './AdaptiveLiveSlots.ts'
@@ -48,8 +49,9 @@ const MODULES: Readonly<Record<string, { title: string; detail: string }>> = {
 }
 
 export function HealthiaWorkspace({
-  role, section, onRoleChange, onSectionChange, onReturn, inspectRuntime,
+  role, section, onRoleChange, onSectionChange, onReturn, inspectRuntime, requestedStep,
 }: {
+  requestedStep?:{step:ClinicalEditorStep;sequence:number}|undefined
   role: HealthiaRole
   section: string
   onRoleChange: (role: HealthiaRole) => void
@@ -167,7 +169,7 @@ export function HealthiaWorkspace({
         )}
         {!isPatient && (active === 'encounters' || active === 'patients') &&
           <HealthiaClinicOperations area={active} selectedPatientId={selectedClinicalPatient}
-            onPatientChange={setSelectedClinicalPatient} onNavigate={onSectionChange} />}
+            onPatientChange={setSelectedClinicalPatient} onNavigate={onSectionChange} requestedStep={requestedStep} />}
         {!isPatient && (active === 'appointments' || active === 'documents' || active === 'management') &&
           <HealthiaOperationsBoard section={active} selectedPatientId={selectedClinicalPatient}
             onPatientChange={setSelectedClinicalPatient}/>}
