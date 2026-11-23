@@ -1,5 +1,7 @@
 # @phoenix-ai/dsh-client-ui-settings-models
 
+Settings → Models → Phoenix Local includes a searchable curated selection of official Ollama tags alongside the already installed on-device inventory. Each result can be connected or downloaded through the Host's existing Ollama pull operation with progress, without shell commands. The complete changing Ollama catalog remains available at https://ollama.com/library; users can install any validated official tag through the adjacent manual field. A Phoenix unlink never deletes the model from Ollama, and permanent deletion requires its separate confirmation.
+
 English | [中文](README.zh.md)
 
 Authorization preparation and configuration prompts stay in a persistent panel above the connector catalog, independent of search filters and account refreshes. Phoenix opens a tab only for a validated provider consent URL and retains a manual link when popups are blocked. Outcomes remain visible instead of disappearing on a timer; authorization failures appear at the top of the page.
