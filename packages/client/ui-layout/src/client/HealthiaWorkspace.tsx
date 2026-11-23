@@ -112,7 +112,7 @@ export function HealthiaWorkspace({
     <section className={css.shell} aria-label="Espacio clínico de PHOENIX">
       <header className={css.titleRow}>
         <div>
-          <span className={css.eyebrow}>PHOENIX / HEALTHIA</span>
+          <span className={css.eyebrow}>ESPACIO CLÍNICO</span>
           <h2>{HEALTHIA_NAV[role].find(item => item.id === active)?.label}</h2>
         </div>
         <div className={css.actions}>
@@ -128,7 +128,7 @@ export function HealthiaWorkspace({
           <button className={css.action} type="button" onClick={onReturn}>Volver al chat</button>
         </div>
       </header>
-      {(isPatient || clinical.status !== 'authenticated') && (
+      {isPatient && (
         <div className={css.sessionStrip} role="status">
           <span className={css.notice}>
             {isPatient
@@ -137,8 +137,7 @@ export function HealthiaWorkspace({
                 ? 'Inicia sesión para acceder a los expedientes del servicio clínico protegido.'
                 : 'El servicio clínico aún no está disponible. Los expedientes no se guardan fuera del repositorio protegido.'}
           </span>
-          {!isPatient && <button className={css.action} type="button"
-            onClick={() => setClinicalRefresh(value => value + 1)}>Reintentar conexión</button>}
+
         </div>
       )}
       <nav className={css.tabs} aria-label="Secciones del espacio clínico">
@@ -151,7 +150,9 @@ export function HealthiaWorkspace({
       <div className={css.body}>
         {active === 'overview' && (!isPatient
           ? <HealthiaClinicDashboard onNavigate={onSectionChange}
-              onPatientChange={setSelectedClinicalPatient}/>
+              onPatientChange={setSelectedClinicalPatient}
+              accessStatus={clinical.status}
+              onSessionReady={() => setClinicalRefresh(value => value + 1)}/>
           : <div className={css.dashboard}>
               <p className={css.description}>El portal del paciente utiliza una cuenta vinculada y permisos propios.
                 Cambiar de vista no concede acceso a un expediente.</p>
@@ -238,14 +239,14 @@ export function HealthiaWorkspace({
           </div>
         )}
       </div>
-      <details className={css.supportDetails}>
+      {active === 'tools' && <details className={css.supportDetails}>
         <summary>Información y acceso técnico</summary>
         <p>Los registros clínicos permanecen en el servicio protegido, no en el chat.</p>
         <a className={css.openClinical} href={isPatient ? '/health/patient' : '/health'}
           target="_blank" rel="noopener noreferrer">
           {isPatient ? 'Portal protegido del paciente' : 'Servicio clínico protegido'}
         </a>
-      </details>
+      </details>}
     </section>
   )
 }
