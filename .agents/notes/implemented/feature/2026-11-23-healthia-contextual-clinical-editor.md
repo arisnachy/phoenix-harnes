@@ -14,7 +14,7 @@ Separate six editor steps without changing the persisted note grammar. Recover o
 
 The field-specific Host endpoint authorizes the owning clinician, exact encounter revision, draft status and non-confidential record before and after model inference. It processes only the explicitly selected text with the existing model registry and consent mechanism. Model output is a proposal, not a record mutation. The editor rejects results if the source text, version or mounted encounter changes. Review, signing and printing are disabled for uncommitted edits.
 
-The existing adaptive open operation navigates clinical steps; structural inspection exposes navigation metadata only. Clinical identities, notes, values and credentials do not enter the general chat event bus.
+The existing adaptive open operation navigates clinical steps and starts local draft actions after preflight bound to an ephemeral encounter/version token. Public inspection exposes structural metadata, not that binding or clinical values. The separately consented contextual model review combines the current draft with a bounded authorized longitudinal projection; the result is advisory and is not applied to clinical fields. Generic apps can restore the previous form revision independently of other forms. Clinical identities, notes, values and credentials do not enter the general chat event bus.
 
 ## Alternatives considered
 
@@ -24,7 +24,7 @@ The existing adaptive open operation navigates clinical steps; structural inspec
 
 ## Consequences
 
-The native editor supports explicit clinical narrative refinement and structured manual capture. Full chart reasoning, automatic diagnostic coding, universal clinical chat mutation, and self-rewriting medical rules are not delivered by this change. Clinical safety and real model execution need clinical and provider validation.
+The native editor supports explicit clinical narrative refinement and structured manual capture. Contextual reasoning covers a bounded recent chart projection, not every historical item. Automatic diagnostic coding, arbitrary clinical chat mutation and self-rewriting medical rules are not delivered by this change. Clinical safety and real model execution need clinical and provider validation.
 
 ## Testing
 
