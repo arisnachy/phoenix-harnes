@@ -119,7 +119,34 @@ export function localInterviewPlan(
                       /(?:diabetes|glucosa|glicemia|hipoglucemia|hiperglucemia)/u.test(c)||/(?:endocrinologia)/u.test(specialtyText)?'metabolic':
                         /(?:dolor de oido|otitis|hipoacusia|audicion|vertigo)/u.test(c)||/(?:otorrinolaringologia)/u.test(specialtyText)?'ent':
                           'general'
-  const remaining=[...(SPECIAL[pathway]??[]),...COMMON].filter(x=>!answered.includes(x.key)).slice(0,4)
+  // Preserve the primary pathway but do not drop independent symptom domains
+  // in a multi-complaint visit. These are prompts, never inferred findings.
+  const secondary:readonly [string,RegExp][]=[
+    ['abdominal',/dolor abdominal|abdomen|barriga/u],
+    ['headache',/cefalea|migrana|dolor de cabeza/u],
+    ['respiratory',/\btos\b|disnea|dificultad respiratoria|falta de aire/u],
+    ['cardiovascular',/dolor toracico|dolor en el pecho|palpitaciones/u],
+    ['urinary',/disuria|dolor al orinar|hematuria/u],
+    ['musculoskeletal',/dolor articular|dolor lumbar|traumatismo/u],
+    ['dermatology',/lesion cutanea|erupcion|sarpullido/u],
+    ['metabolic',/diabetes|hipoglucemia|hiperglucemia/u],
+    ['ent',/dolor de oido|otitis|hipoacusia|vertigo/u],
+    ['mental-health',/ansiedad|depresion|angustia/u],
+    ['obstetric',/embarazo|prenatal|gestacion/u],
+    ['pediatric',/lactante|fiebre infantil/u],
+  ]
+  const additional=secondary.filter(([id,pattern])=>id!==pathway&&pattern.test(c)).map(([id])=>id)
+  const primary=SPECIAL[pathway]??[]
+  const secondaryQuestions=additional.flatMap(id=>SPECIAL[id]??[])
+  // In a multi-domain encounter, surface distinct safety questions before
+  // expanding each history, without classifying severity from text alone.
+  const candidates=additional.length?[
+    ...primary.filter(q=>q.key.endsWith('_alarm')||q.key==='risk'),
+    ...secondaryQuestions.filter(q=>q.key.endsWith('_alarm')||q.key==='risk'),
+    ...primary,...secondaryQuestions,...COMMON,
+  ]:[...primary,...COMMON]
+  const remaining=[...new Map(candidates.map(q=>[q.key,q])).values()]
+    .filter(q=>!answered.includes(q.key)).slice(0,4)
   return { mode,specialty:s,pathway,nextQuestions:remaining,patientDataPersisted:false,
     requiresClinicianAssessment:true,emergencyScreeningRequired:true,
     guidance:'Guía estructurada, no diagnóstico ni evaluación de urgencias. El profesional confirma respuestas y signos de alarma.' }
