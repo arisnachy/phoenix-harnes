@@ -93,6 +93,10 @@ export type ClinicalEditorViewState={
   hasEncounter:boolean
   canEdit:boolean
   modelEnabled:boolean
+  activeFieldId?:string
+  completedSections?:readonly ClinicalEditorStep[]
+  nextSection?:ClinicalEditorStep
+  busy?:boolean
 }
 
 /** A bounded action catalog, never clinical content or authority to sign. */
@@ -110,12 +114,15 @@ export function clinicalEditorAction(value:unknown):value is ClinicalEditorActio
 }
 export type ClinicalEditorRequest={step:ClinicalEditorStep;sequence:number;action?:ClinicalEditorAction;binding?:string}
 export function canApplyClinicalAction(view:ClinicalEditorViewState|null,binding:unknown):boolean {
-  return !!view?.hasEncounter&&view.canEdit&&typeof binding==='string'&&binding===view.binding
+  return !!view?.hasEncounter&&view.canEdit&&!view.busy&&typeof binding==='string'&&binding===view.binding
 }
 
 export function publicClinicalEditorState(view:ClinicalEditorViewState|null) {
   return view===null?null:{step:view.step,visibleFieldIds:view.visibleFieldIds,filledFields:view.filledFields,
-    dirty:view.dirty,hasEncounter:view.hasEncounter,canEdit:view.canEdit,modelEnabled:view.modelEnabled}
+    dirty:view.dirty,hasEncounter:view.hasEncounter,canEdit:view.canEdit,modelEnabled:view.modelEnabled,
+    ...(view.activeFieldId&&view.visibleFieldIds.includes(view.activeFieldId)?{activeFieldId:view.activeFieldId}:{}),
+    ...(view.completedSections?{completedSections:view.completedSections.filter(clinicalEditorStep)}:{}),
+    ...(view.nextSection&&clinicalEditorStep(view.nextSection)?{nextSection:view.nextSection}:{}),busy:view.busy===true}
 }
 
 /** Extract only explicitly supplied intake fields. Never manufacture a DOB from age. */
