@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PhoenixSpaceStore, phoenixSpaceRoot, validateSpacePayload } from '../src/space-store.ts'
 import { parseSpaceClipboard, syntheticSpaceDataset } from '../src/space-workflows.ts'
-import { exportPptx, exportXlsx, zipOffice } from '../src/space-office.ts'
+import { exportPptx, exportXlsx, zipOffice, exportStaticSpaceApp } from '../src/space-office.ts'
 
 const roots:string[]=[]
 const stores:PhoenixSpaceStore[]=[]
@@ -205,4 +205,15 @@ describe('reactive derived library artifacts',()=>{
     db.update(source.id,3,{content:'invalid'})
     expect(db.dependencies(slides.id).stale).toBe(true)
   })
+})
+
+it('exports real web ZIP entries without installing dependencies and rejects unsafe paths',()=>{
+  const bundle={entry:'index.html',files:{'index.html':'<!doctype html><html><script src="main.js"></script></html>','main.js':'document.body.textContent="Hello"'}}
+  const files=parts(exportStaticSpaceApp(JSON.stringify(bundle)))
+  expect(files['app/index.html']).toBe(bundle.files['index.html'])
+  expect(files['app/main.js']).toBe(bundle.files['main.js'])
+  expect(parts(exportStaticSpaceApp('<html>Standalone</html>'))['app/index.html']).toContain('Standalone')
+  expect(()=>exportStaticSpaceApp(JSON.stringify({...bundle,files:{...bundle.files,'../escape.js':'x'}}))).toThrow()
+  expect(()=>exportStaticSpaceApp(JSON.stringify({...bundle,files:{...bundle.files,'CON.js':'x'}}))).toThrow()
+  expect(()=>exportStaticSpaceApp(JSON.stringify({...bundle,files:{...bundle.files,'secret.js':'phoenix-control://v1?token=secret'}}))).toThrow()
 })
