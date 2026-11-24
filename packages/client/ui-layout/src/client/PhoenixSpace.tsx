@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import css from './PhoenixSpace.module.css'
+import { UniversalFileViewer } from './UniversalFileEngine.tsx'
 
 type SpaceKind='document'|'slides'|'sheet'|'image'|'game'|'app'|'code'|'file'
 type Item={id:string;kind:SpaceKind;space:string;title:string;mime:string;content:string;
@@ -251,14 +252,11 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
   const [editor,setEditor]=useState<Editor|null>(null)
   const [slideIndex,setSlideIndex]=useState(0)
   const [showSource,setShowSource]=useState(false)
-  const [importedHtml,setImportedHtml]=useState<{id:string;html:string}|null>(null)
-  const [htmlLoadError,setHtmlLoadError]=useState('')
   const [history,setHistory]=useState<Array<{revision:number;title:string;changedAt:string}>>([])
   const [error,setError]=useState('')
   const [status,setStatus]=useState('')
   const [busy,setBusy]=useState(false)
   const [loading,setLoading]=useState(true)
-  const [imageUrl,setImageUrl]=useState('')
   const [revisionCounter,setRevisionCounter]=useState(0)
   const saving=useRef(false)
   const migrated=useRef(false)
@@ -281,38 +279,10 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
       if(count>0)setRevisionCounter(n=>n+1)
     })
   },[])
-  useEffect(()=>{
-    if(editor?.item.kind!=='image'||!editor.item.bytes){setImageUrl('');return}
-    let url=''
-    let cancelled=false
-    void fetch('/space-api/items/'+editor.item.id+'/file').then(r=>{
-      if(!r.ok)throw new Error('Imagen no disponible')
-      return r.blob()
-    }).then(blob=>{
-      if(cancelled)return
-      url=URL.createObjectURL(blob)
-      setImageUrl(url)
-    }).catch(()=>setImageUrl(''))
-    return ()=>{cancelled=true;if(url)URL.revokeObjectURL(url)}
-  },[selectedId,editor?.item.kind,editor?.item.bytes])
-  const htmlItem=editor!==null&&isSpaceHtml(editor.item,editor.content)
-  const importedHtmlItem=htmlItem&&editor!==null&&editor.item.bytes>0&&!editor.content
-  useEffect(()=>{
-    setShowSource(false)
-    setImportedHtml(null)
-    setHtmlLoadError('')
-    if(!selectedId||!importedHtmlItem)return
-    const abort=new AbortController()
-    void fetch('/space-api/items/'+selectedId+'/file',{signal:abort.signal}).then(r=>{
-      if(!r.ok)throw new Error('No se pudo leer el HTML original')
-      return r.text()
-    }).then(html=>{if(!abort.signal.aborted)setImportedHtml({id:selectedId,html})})
-      .catch(()=>{if(!abort.signal.aborted)setHtmlLoadError('No se pudo cargar la vista visual del archivo.')})
-    return ()=>abort.abort()
-  },[selectedId,importedHtmlItem])
-  const htmlSource=importedHtmlItem
-    ? importedHtml&&importedHtml.id===selectedId?importedHtml.html:undefined
-    : editor?.content
+  const binaryItem=editor!==null&&editor.item.bytes>0
+  const htmlItem=editor!==null&&!binaryItem&&isSpaceHtml(editor.item,editor.content)
+  const htmlSource=editor?.content
+  useEffect(()=>{setShowSource(false)},[selectedId])
   const mutate=(change:Partial<Editor>):void=>{
     setEditor(e=>e?{...e,...change,dirty:true}:e)
     setStatus('Cambios pendientes')
@@ -522,7 +492,7 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
         </div>
         {history.length>0&&<div className={css.history}><strong>Versiones recuperables</strong>
           {history.map(h=><button type="button" key={h.revision} onClick={()=>{void restore(h.revision)}}>Restaurar v{h.revision} · {h.title}</button>)}</div>}
-        {editor.item.kind==='slides'&&<div className={css.deck}>
+        {!binaryItem&&editor.item.kind==='slides'&&<div className={css.deck}>
           <nav aria-label="Diapositivas" className={css.slideList}>
             {deck.slides.map((s,i)=><button type="button" key={i} aria-current={slideIndex===i?'true':undefined}
               onClick={()=>setSlideIndex(i)}><small>{i+1}</small>{s.title||'Sin título'}</button>)}
@@ -553,7 +523,7 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
             }}>Exportar PowerPoint (.pptx)</a>
           </div>
         </div>}
-        {editor.item.kind==='sheet'&&<div className={css.sheetEditor}>
+        {!binaryItem&&editor.item.kind==='sheet'&&<div className={css.sheetEditor}>
           {sheet.columns.length>0?<><div className={css.sheetScroll}><table><thead><tr><th>#</th>{sheet.columns.map((c,i)=>
             <th key={i}><input aria-label={'Columna '+(i+1)} value={c}
               onChange={e=>updateSheet({...sheet,columns:sheet.columns.map((v,j)=>j===i?e.currentTarget.value:v)})}/></th>)}</tr></thead>
@@ -573,16 +543,17 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
             })}
           }}>Exportar Excel (.xlsx)</a>
         </div>}
-        {editor.item.kind==='image'&&imageUrl&&<img className={css.image} alt={editor.title} src={imageUrl}/>}
-        {(editor.item.kind==='file'||editor.item.kind==='image')&&editor.item.bytes>0&&
-          <a className={css.export} href={'/space-api/items/'+editor.item.id+'/file'} download={editor.title}>Descargar archivo original</a>}
-        {htmlItem&&htmlSource===undefined&&<p role="status">{htmlLoadError||'Cargando vista visual…'}</p>}
+        {binaryItem&&<>
+          <UniversalFileViewer key={editor.item.id} id={editor.item.id} title={editor.title} mime={editor.item.mime}
+            renderHtml={html=><SpaceHtmlViewer html={spaceHtmlSource(html)} title={editor.title}/>}/>
+          <a className={css.export} href={'/space-api/items/'+editor.item.id+'/file'} download={editor.title}>Descargar archivo original</a>
+        </>}
         {htmlItem&&htmlSource!==undefined&&!showSource&&
           <SpaceHtmlViewer key={editor.item.id} html={spaceHtmlSource(htmlSource)} title={editor.title}/>}
         {htmlItem&&htmlSource!==undefined&&showSource&&
           <div className={css.textEditor}><textarea aria-label="Código fuente HTML" spellCheck={false}
-            readOnly={importedHtmlItem} value={htmlSource} onChange={e=>mutate({content:e.currentTarget.value})}/></div>}
-        {!htmlItem&&editor.item.kind!=='slides'&&editor.item.kind!=='sheet'&&editor.item.kind!=='file'&&editor.item.kind!=='image'&&
+            value={htmlSource} onChange={e=>mutate({content:e.currentTarget.value})}/></div>}
+        {!binaryItem&&!htmlItem&&editor.item.kind!=='slides'&&editor.item.kind!=='sheet'&&editor.item.kind!=='file'&&editor.item.kind!=='image'&&
           <div className={css.textEditor}><textarea aria-label="Contenido editable" spellCheck={editor.item.kind==='document'}
             value={editor.content} onChange={e=>mutate({content:e.currentTarget.value})}/></div>}
       </>}
