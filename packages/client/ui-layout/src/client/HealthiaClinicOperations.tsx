@@ -86,7 +86,7 @@ export function restoreClinicalNote(encounter:ClinicalEncounter):{
 }
 
 export function HealthiaClinicOperations({ area, selectedPatientId, onPatientChange, onNavigate,
-  accessOnly=false, onSessionReady, requestedStep, onEditorState, entry, onEntryHandled }: {
+  accessOnly=false, deferredAccess=false, onSessionReady, requestedStep, onEditorState, entry, onEntryHandled }: {
   onEntryHandled?:((sequence:number)=>void)|undefined
   entry?:{kind:'patient'|'encounter';sequence:number}|undefined
   area:Area
@@ -94,12 +94,14 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
   requestedStep?:ClinicalEditorRequest|undefined
   onEditorState?:((state:ClinicalEditorViewState|null)=>void)|undefined
   accessOnly?:boolean
+  deferredAccess?:boolean
   onSessionReady?:()=>void
   selectedPatientId?:string
   onPatientChange?:(id:string)=>void
   onNavigate?:(area:Area)=>void
 }) {
   const [mode,setMode]=useState<Mode>('loading')
+  const [accessExpanded,setAccessExpanded]=useState(false)
   const [session,setSession]=useState<ClinicalSession|null>(null)
   const [patients,setPatients]=useState<readonly ClinicalPatient[]>([])
   const [encounters,setEncounters]=useState<readonly ClinicalEncounter[]>([])
@@ -265,7 +267,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
       if(logoDraft!==null){setLogo(logoDraft);setLogoDraft(null)}
       if(!accessOnly)await refreshLists(s)
       readyRef.current=true
-      if(accessOnly)onSessionReady?.()
+      onSessionReady?.()
     } catch(err) {
       setPassword('')
       setError(err instanceof Error?err.message:'No se pudo autenticar la clínica')
@@ -427,13 +429,24 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
       <a href="/health" target="_blank" rel="noopener noreferrer">Diagnóstico del servicio protegido</a>
     </div>
   </div>
-  if(mode==='login'||mode==='setup')return <section className={accessOnly?css.accessPanel:css.panel} aria-label="Acceso clínico protegido">
-    {!accessOnly&&brandMark}
+  if((mode==='login'||mode==='setup')&&(!accessOnly||deferredAccess)&&!accessExpanded)return <section className={css.lockedWorkspace} aria-label="Acceso clínico protegido">
+    <div className={css.lockIcon} aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14v3"/></svg></div>
+    <div className={css.lockCopy}><span className={css.lockEyebrow}>EXPEDIENTES PRIVADOS</span>
+      <h3>{mode==='setup'?'Configura tu clínica':'Tu espacio clínico está protegido'}</h3>
+      <p>{mode==='setup'?'Crea el acceso institucional una sola vez.':'Desbloquea el expediente para continuar. Si ya tienes una sesión clínica activa, puedes recuperarla sin repetir las credenciales.'}</p>
+    </div>
+    <div className={css.lockActions}>
+      <button type="button" className={css.primary} onClick={()=>setAccessExpanded(true)}>{mode==='setup'?'Configurar clínica':'Desbloquear clínica'}</button>
+      {mode==='login'&&<button type="button" className={css.accessSecondary} onClick={()=>{setMode('loading');setConnectionRetry(v=>v+1)}}>Comprobar sesión</button>}
+    </div>
+  </section>
+  if(mode==='login'||mode==='setup')return <section className={accessOnly&&!deferredAccess?css.accessPanel:css.accessCard} aria-label="Acceso clínico protegido">
+    {(!accessOnly||deferredAccess)&&<div className={css.accessHeading}><span className={css.lockEyebrow}>ACCESO SEGURO</span><button type="button" className={css.accessSecondary} disabled={busy} onClick={()=>{setPassword('');setError('');setAccessExpanded(false)}}>Cerrar</button></div>}
     <h3>{mode==='setup'?'Inicializar clínica local':'Inicio de sesión profesional'}</h3>
     <p>{mode==='setup'
       ? 'La clínica es local y cifrada. Crea el administrador con una contraseña de 6 caracteres o más; recomendamos 12 o más. Guárdala fuera de PHOENIX: también protege el cifrado del expediente.'
       : 'La misma identidad profesional del servicio /health; nunca uses las credenciales en el chat de Kira.'}</p>
-    <form className={css.form} autoComplete="off" onSubmit={event=>{void authenticated(event)}}>
+    <form className={css.accessForm} autoComplete="off" onSubmit={event=>{void authenticated(event)}}>
       {mode==='setup'&&<label>Centro o institución
         <input required maxLength={120} value={organization} onChange={e=>setOrganization(e.target.value)}/>
       </label>}
@@ -442,11 +455,11 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
         <small>PNG, JPG o WebP · máximo 160 KB. Sin imagen se utilizará el logo de Healthia.</small>
       </label>}
       <label>Usuario profesional
-        <input required maxLength={80} value={user} onChange={e=>setUser(e.target.value)}/>
+        <input autoComplete="username" required maxLength={80} value={user} onChange={e=>setUser(e.target.value)}/>
       </label>
       <label>Contraseña
         <input required type="password" minLength={6} maxLength={256} value={password}
-          autoComplete="off" onChange={e=>setPassword(e.target.value)}/>
+          autoComplete={mode==='setup'?'new-password':'current-password'} onChange={e=>setPassword(e.target.value)}/>
       </label>
       <button className={css.primary} type="submit" disabled={busy||password.length<6}>
         {busy?'Verificando…':mode==='setup'?'Crear clínica local':'Acceder'}
@@ -492,7 +505,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
               setBusy(true);setError('')
               void api.logout(session).then(()=>{
                 setSession(null);setPatients([]);setEncounters([])
-                setPatientId('');setEncounterId('');setMode('login')
+                setPatientId('');setEncounterId('');setAccessExpanded(false);setMode('login');onSessionReady?.()
               }).catch(()=>{
                 setError('No se pudo cerrar la sesión en el Host. Reintenta antes de abandonar el equipo.')
               }).finally(()=>setBusy(false))
@@ -552,6 +565,28 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
       </div>}
       {creatingPatient&&canManagePatients&&<form className={css.form} onSubmit={event=>{void addPatient(event)}} autoComplete="off">
         <h3>Nuevo paciente</h3>
+        <p>Identidad, contacto y datos de admisión. El expediente interno se asigna al guardar; documento y teléfono no son su identificador principal.</p>
+        <div className={css.admissionGrid}>
+          <label>Nombre completo<input required maxLength={160} value={name} onChange={e=>{setName(e.target.value);setIdentityMatches(null)}}/></label>
+          <label>Fecha de nacimiento<input type="date" required value={birthDate} max={new Date().toISOString().slice(0,10)}
+            onChange={e=>{setBirthDate(e.target.value);setIdentityMatches(null)}}/></label>
+          <label>Sexo registrado al nacer (opcional)
+            <select value={sexAtBirth} onChange={e=>setSexAtBirth(e.target.value as typeof sexAtBirth)}>
+              <option value="">No documentado</option>
+              <option value="female">Femenino</option><option value="male">Masculino</option>
+              <option value="intersex">Intersexual</option><option value="unknown">Desconocido</option>
+            </select>
+          </label>
+          <label>Tipo de documento<select value={documentType} onChange={e=>{setDocumentType(e.target.value as typeof documentType);setIdentityMatches(null)}}>
+            <option value="cedula">Cédula dominicana</option><option value="passport">Pasaporte</option><option value="other">Otro documento</option>
+          </select></label>
+          <label>Número de documento (opcional)<input maxLength={32} value={documentNumber}
+            onChange={e=>{setDocumentNumber(e.target.value);setIdentityMatches(null)}}/></label>
+          <label>Teléfono (opcional)<input maxLength={35} type="tel" value={phone}
+            onChange={e=>{setPhone(e.target.value);setIdentityMatches(null)}}/></label>
+          <label>Correo (opcional)<input type="email" maxLength={254} value={email}
+            onChange={e=>{setEmail(e.target.value);setIdentityMatches(null)}}/></label>
+        </div>
         <div className={css.intakeAssistant} aria-label="Admisión conversacional protegida">
           <strong>Cuéntame los datos del paciente</strong>
           <p>Escribe en una sola entrada. Los datos reconocidos se proponen antes de llenar los campos vacíos; no se envían al chat general.</p>
@@ -575,28 +610,6 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
             </>}
             {!birthDate&&!intakeProposal.dateOfBirth&&<p>ASK · ¿Cuál es la fecha de nacimiento? La edad referida no sustituye una fecha verificada.</p>}
           </div>}
-        </div>
-        <p>Identidad, contacto y datos de admisión. El expediente interno se asigna al guardar; documento y teléfono no son su identificador principal.</p>
-        <div className={css.admissionGrid}>
-          <label>Nombre completo<input required maxLength={160} value={name} onChange={e=>{setName(e.target.value);setIdentityMatches(null)}}/></label>
-          <label>Fecha de nacimiento<input type="date" required value={birthDate} max={new Date().toISOString().slice(0,10)}
-            onChange={e=>{setBirthDate(e.target.value);setIdentityMatches(null)}}/></label>
-          <label>Sexo registrado al nacer (opcional)
-            <select value={sexAtBirth} onChange={e=>setSexAtBirth(e.target.value as typeof sexAtBirth)}>
-              <option value="">No documentado</option>
-              <option value="female">Femenino</option><option value="male">Masculino</option>
-              <option value="intersex">Intersexual</option><option value="unknown">Desconocido</option>
-            </select>
-          </label>
-          <label>Tipo de documento<select value={documentType} onChange={e=>{setDocumentType(e.target.value as typeof documentType);setIdentityMatches(null)}}>
-            <option value="cedula">Cédula dominicana</option><option value="passport">Pasaporte</option><option value="other">Otro documento</option>
-          </select></label>
-          <label>Número de documento (opcional)<input maxLength={32} value={documentNumber}
-            onChange={e=>{setDocumentNumber(e.target.value);setIdentityMatches(null)}}/></label>
-          <label>Teléfono (opcional)<input maxLength={35} type="tel" value={phone}
-            onChange={e=>{setPhone(e.target.value);setIdentityMatches(null)}}/></label>
-          <label>Correo (opcional)<input type="email" maxLength={254} value={email}
-            onChange={e=>{setEmail(e.target.value);setIdentityMatches(null)}}/></label>
         </div>
         {intakeTemplate&&<fieldset className={css.admissionFields}><legend>Datos complementarios de admisión</legend>
           <div className={css.admissionGrid}>{intakeTemplate.fields.map(field=>
@@ -681,9 +694,26 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
       {selectedPatient&&!creatingEncounter&&!patientEncounters.length&&
         <p className={css.emptyState}>Este paciente aún no tiene consultas accesibles. Utiliza «Nueva consulta» para iniciar la atención.</p>}
       {selectedEncounter&&currentNote&&<div className={css.encounter}>
+        <p className={css.notice}>Consulta · versión {selectedEncounter.version} · {selectedEncounter.status}
+          {selectedEncounter.status==='signed'?' · Solo lectura': ' · Borrador pendiente de revisión y firma'}</p>
+        <div className={css.consultationGrid} data-assistance={canManageEncounters&&selectedEncounter.status!=='signed'?'available':'none'}>
+        <div className={css.consultationEditor}>
+        {selectedEncounter.status==='signed' ? <div className={css.panel}>
+          <strong>Consulta firmada · protegida contra edición</strong>
+          <pre>{selectedEncounter.history}</pre>
+          <p className={css.notice}>Firmada por {selectedEncounter.signedBy??'profesional autorizado'} ·
+            {selectedEncounter.signedAt??'fecha protegida'}. No admite sobrescritura; correcciones mediante adenda.</p>
+        </div> : <HealthiaClinicalNote key={selectedEncounter.id+':'+noteReload} initialKind={currentNote.kind}
+          initialValues={currentNote.values} patient={selectedPatient} encounterVersion={selectedEncounter.version}
+          requestedStep={requestedStep} onEditorState={onEditorState} onDirtyChange={setDirtyEncounter} {...(session?.actor.role==='clinician'&&session.actor.username===selectedEncounter.practitioner?{verifyIcd11:(code:string)=>api.verifyIcd11(session,code)}:{})} {...(canManageEncounters&&session?.actor.username===selectedEncounter.practitioner?{onSave:saveNote}:{})}
+          {...(session?.actor.role==='clinician'&&session.actor.username===selectedEncounter.practitioner&&selectedEncounter.status==='draft'?{
+            loadModels:()=>api.editorModels(session),
+            refineField:(field:string,text:string,model:import('./HealthiaClinicalApi.ts').ClinicalEditorModel,confirmed:boolean)=>api.refineEditorField(session,selectedEncounter,field,text,model,confirmed),
+          }:{})}/>}
+        </div>
         {canManageEncounters&&selectedEncounter.status!=='signed'&&<section className={css.interviewCard}
           aria-label="Ask clínico protegido">
-          <div className={css.interviewHeader}><strong>Ask · interrogatorio clínico</strong>
+          <div className={css.interviewHeader}><span className={css.contextEyebrow}>ASISTENCIA CLÍNICA · LOCAL</span><strong>Ask · interrogatorio clínico</strong>
             <small>Preguntas del servicio local; ninguna respuesta se envía al chat de Kira.</small>
           </div>
           <p className={css.notice}>Registra únicamente lo que refiere el paciente o lo verificado.
@@ -721,20 +751,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
             }}>Preparar borrador desde el interrogatorio</button>}
         </section>}
 
-        <p className={css.notice}>Consulta · versión {selectedEncounter.version} · {selectedEncounter.status}
-          {selectedEncounter.status==='signed'?' · Solo lectura': ' · Borrador pendiente de revisión y firma'}</p>
-        {selectedEncounter.status==='signed' ? <div className={css.panel}>
-          <strong>Consulta firmada · protegida contra edición</strong>
-          <pre>{selectedEncounter.history}</pre>
-          <p className={css.notice}>Firmada por {selectedEncounter.signedBy??'profesional autorizado'} ·
-            {selectedEncounter.signedAt??'fecha protegida'}. No admite sobrescritura; correcciones mediante adenda.</p>
-        </div> : <HealthiaClinicalNote key={selectedEncounter.id+':'+noteReload} initialKind={currentNote.kind}
-          initialValues={currentNote.values} patient={selectedPatient} encounterVersion={selectedEncounter.version}
-          requestedStep={requestedStep} onEditorState={onEditorState} onDirtyChange={setDirtyEncounter} {...(session?.actor.role==='clinician'&&session.actor.username===selectedEncounter.practitioner?{verifyIcd11:(code:string)=>api.verifyIcd11(session,code)}:{})} {...(canManageEncounters&&session?.actor.username===selectedEncounter.practitioner?{onSave:saveNote}:{})}
-          {...(session?.actor.role==='clinician'&&session.actor.username===selectedEncounter.practitioner&&selectedEncounter.status==='draft'?{
-            loadModels:()=>api.editorModels(session),
-            refineField:(field:string,text:string,model:import('./HealthiaClinicalApi.ts').ClinicalEditorModel,confirmed:boolean)=>api.refineEditorField(session,selectedEncounter,field,text,model,confirmed),
-          }:{})}/>}
+        </div>
         <button type="button" className={css.printAction} disabled={dirtyEncounter} onClick={()=>{
           try {
             printProtectedClinicalDocument({
