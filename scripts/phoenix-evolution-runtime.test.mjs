@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { runEvolution, summarizeEvolutionEvents } from '../packages/core/tool-living/src/evolution.ts'
+import { IdleEvolutionCache, inferEvolutionIntent, runEvolution, summarizeEvolutionEvents } from '../packages/core/tool-living/src/evolution.ts'
 
 const run = (operation, input) => runEvolution(operation, JSON.stringify(input))
 const rows = Array.from({length: 5}, (_, i) => [
@@ -73,4 +73,23 @@ test('live session projection bounds the scan and returns counters, never event 
   assert.deepEqual(result.recommendations,['investigate-retry-pattern'])
   assert.equal(result.qualityVerified,false)
   assert.ok(!JSON.stringify(result).includes('DO_NOT_COPY'))
+})
+
+test('idle consolidation replaces snapshots and isolates live sessions', () => {
+  const cache = new IdleEvolutionCache(), a = {}, b = {}
+  const events = [{type:'llm/retry-started',data:{}},{type:'llm/retry-started',data:{}}]
+  cache.observe(a, 2, events)
+  assert.deepEqual(cache.read(a).recommendations,['investigate-retry-pattern'])
+  assert.equal(cache.read(b),undefined)
+  cache.read(a).recommendations.length = 0
+  assert.equal(cache.read(a).recommendations.length,1)
+  cache.observe(a, 3, [{type:'turn/end',data:{reason:{kind:'completed'}}}])
+  assert.deepEqual(cache.read(a).recommendations,[])
+})
+test('intent classification works from actual explicit Spanish and English tasks', () => {
+  assert.equal(inferEvolutionIntent('Arreglar el timeout de Gemma'),'debugging')
+  assert.equal(inferEvolutionIntent('Cambiar de modelo'),'switching')
+  assert.equal(inferEvolutionIntent('Diseñar la arquitectura'),'planning')
+  assert.equal(inferEvolutionIntent('Aprender una habilidad'),'learning')
+  assert.equal(inferEvolutionIntent('Hola'),'unknown')
 })
