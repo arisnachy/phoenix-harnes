@@ -2,6 +2,7 @@
 
 import { randomBytes } from 'node:crypto'
 import { runEvolution, summarizeEvolutionEvents } from './evolution.ts'
+import { assessSelfInitiative, SELF_GOALS } from './self-initiative.ts'
 import { inspectSystemEnvironment, searchLocalApps } from './system-proprioception.ts'
 import { confirmAdaptiveExternalAction, type AdaptiveApprovalService } from './approved-action.ts'
 import type { Context } from '@phoenix-ai/cordis'
@@ -298,6 +299,20 @@ export function apply(ctx: Context): void {
     presentCall:()=>({card:'generic',title:'PHOENIX · Evolution',kind:'read' as const}),
   }))
 
+  ctx.systemPrompt.section({name:'phoenix:self-initiative',order:118,text:'PHOENIX is an adaptive operational system, not just a chat. Within the current user-authorized task, take initiative: if the user goal, current model limitations, missing capability, resource pressure or an observed failure makes adaptation useful, inspect actual state and choose the smallest suitable available tool without requiring the user to name it. Use phoenix_self_assess when the next approach is unclear or after repeated failures; use system_runtime_inspect for tools, system_environment_inspect for resource or Host questions, and phoenix_evolution_analyze for actual recent session evidence. Do not run diagnostics on unrelated ordinary turns. Avoid repeated identical failed calls; prefer a verified alternate approach, preserve the user task and distinguish observations from guesses. Propose reversible interface changes using adaptive_control and the actual current revision. Existing permissions, explicit approvals, privacy, and model selection remain authoritative; never silently grant access, modify the core, switch providers, install software or start background tasks. Verify outcomes through real readback or tests; report limitations and rollback options, not invented success. The user can stop or override adaptation.'})
+  ctx.tools.register(defineTool({
+    name:'phoenix_self_assess',
+    description:'Choose a grounded next self-management step from actual recent calling-session event counts and currently registered tool names. Use proactively when a task is blocked, adaptation is useful, resources are uncertain, or tool selection is unclear. Read-only; does not execute repairs or confer authorization.',
+    parameters:{goal:{type:'string',required:true,enum:SELF_GOALS}},
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    execute(args,exec){
+      const events=exec.agent?.session.events
+      if(events===undefined)throw Error('SELF_ASSESS_CALLING_SESSION_REQUIRED')
+      return Promise.resolve(JSON.stringify(assessSelfInitiative(args.goal,events,ctx.tools.schemas().map(schema=>schema.name))))
+    },
+    presentCall:()=>({card:'generic',title:'PHOENIX · Autoevaluación y próxima acción',kind:'read' as const}),
+  }))
   ctx.systemPrompt.section({ name: 'tool:living', order: 115, text: LIVING_CREATION_POLICY })
   ctx.systemPrompt.section({name:'phoenix:self-navigation',order:116,text:'PHOENIX can inspect and adapt its native General navigation through a user-reviewed generative-ui block: {"component":"adaptive_control","version":1,"props":{"appId":"general","operation":"native-menu","menuAction":"inspect"}}. The live browser receipt lists menu IDs, labels, registered destinations and revision. Ask the user to share that receipt if not visible to you. For open use menuAction open and sectionId; rename uses sectionId,label,expectedRevision; move uses sectionId,direction up/down,expectedRevision; add uses a new sectionId beginning shortcut-, label, target (home/tasks/connectors/team/library/healthia), expectedRevision; remove only shortcuts; restore uses expectedRevision. Never guess revisions. The browser requires preflight and user apply. This is local navigation only, not permission for configuration secrets, clinical actions, arbitrary code or core edits. For active Host tools use system_runtime_inspect and for machine state system_environment_inspect. Do not claim execution without the browser receipt.'})
   ctx.tools.register(defineTool({
