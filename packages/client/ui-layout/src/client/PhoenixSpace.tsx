@@ -28,6 +28,155 @@ const createContents:Partial<Record<SpaceKind,string>>={
 }
 const ICON:Record<SpaceKind,string>={document:'DOC',slides:'PPT',sheet:'XLS',image:'IMG',game:'JGO',app:'APP',code:'DEV',file:'FILE'}
 const TEMPLATE_TYPES:SpaceKind[]=['document','slides','sheet','game','app','code']
+
+export function isSpaceHtml(item:Pick<Item,'kind'|'mime'|'title'>,content:string):boolean {
+  return /(?:\/|\+)html$/iu.test(item.mime)||/\.html?$/iu.test(item.title)
+    || /^\s*(?:<!doctype\s+html\b|<html\b|<head\b|<body\b)/iu.test(content)
+    || (item.kind==='game'&&/^\s*</u.test(content))
+}
+export function spaceHtmlSource(content:string):string {
+  if(!/^\s*\{/u.test(content))return content
+  try{
+    const bundle=JSON.parse(content) as {entry?:unknown;html?:unknown;files?:unknown}
+    const files=bundle.files
+    if(files&&typeof files==='object'&&!Array.isArray(files)&&typeof bundle.entry==='string'){
+      const map=files as Record<string,unknown>
+      const entry=map[bundle.entry]
+      if(typeof entry==='string')return inlineBundledImages(bundle.entry,entry,map)
+    }
+    if(typeof bundle.html==='string')return bundle.html
+  }catch{/* Keep original source when it is not a bundle */}
+  return content
+}
+export function spacePreviewDocument(html:string,allowImages=false):string {
+  // Policy precedes every authored element. No same-origin or host API access.
+  const policy="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' data:; img-src data: blob:"
+    +(allowImages?' https:':'')+"; font-src data:; media-src data: blob:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+  return '<!doctype html><meta http-equiv="Content-Security-Policy" content="'+policy+'">'+html.replace(/^\s*<!doctype[^>]*>/iu,'')
+}
+function SpaceHtmlViewer({html,title}:{html:string;title:string}){
+  const [external,setExternal]=useState(false)
+  return <div style={{display:'flex',flexDirection:'column',gap:8,minWidth:0,flex:'1 0 auto'}}>
+    {/(?:https?:)?\/\//iu.test(html)&&<button type="button" aria-pressed={external} style={{alignSelf:'flex-end'}}
+      onClick={()=>setExternal(v=>!v)}>{external?'Bloquear imágenes externas':'Cargar imágenes externas (HTTPS)'}</button>}
+    <iframe title={title+' · Vista visual'} className={css.gamePreview}
+      style={{height:'max(500px, 68vh)',borderRadius:12}}
+      sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={spacePreviewDocument(html,external)}/>
+  </div>
+}
+
+// Same bounded image-bundle resolver used by the conversation mini-app viewer.
+/** Resolve image assets bundled with a HARDNESS HTML mini-app without exposing
+ * arbitrary host paths or relaxing the isolated preview's network policy.
+ */
+type AssetMap = Readonly<Record<string, unknown>>
+
+const MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
+}
+const IMAGE_DATA = /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=]+$/iu
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/u
+const MAX_ASSET_CHARS = 12 * 1024 * 1024
+
+function normalizedPath(value: string): string | undefined {
+  const path = value.replace(/\\/gu, '/').replace(/^\/+/, '')
+  if (path.length === 0 || path.includes('\0')) return undefined
+  const parts: string[] = []
+  for (const item of path.split('/')) {
+    if (item === '' || item === '.') continue
+    if (item === '..') {
+      if (parts.length === 0) return undefined
+      parts.pop()
+    } else {
+      parts.push(item)
+    }
+  }
+  return parts.length === 0 ? undefined : parts.join('/')
+}
+
+function assetUri(path: string, raw: unknown): string | undefined {
+  const ext = /\.([^.]+)$/u.exec(path)?.[1]?.toLowerCase()
+  const mime = ext === undefined ? undefined : MIME_BY_EXTENSION[ext]
+  if (mime === undefined) return undefined
+  let value: unknown = raw
+  if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
+    const record = raw as Readonly<Record<string, unknown>>
+    const declared = record.mime ?? record.mediaType
+    if (declared !== undefined && declared !== mime) return undefined
+    value = record.base64 ?? record.data
+  }
+  if (typeof value !== 'string' || value.length === 0 || value.length > MAX_ASSET_CHARS) return undefined
+  if (IMAGE_DATA.test(value)) return value.startsWith('data:' + mime + ';') ? value : undefined
+  if (!BASE64.test(value) || value.length % 4 !== 0) return undefined
+  return 'data:' + mime + ';base64,' + value
+}
+
+/** Replace only references to known bundled raster images.
+ * Bare URLs, absolute host paths, traversal outside the bundle, and unknown
+ * files are never converted into network requests.
+ * @param entry - Relative path of the entry HTML document.
+ * @param html - Entry document contents.
+ * @param files - Companion files indexed by relative path.
+ * @param includeStylesheets - Whether to embed companion stylesheets.
+ * @returns HTML with matching bundled image references embedded.
+ */
+function inlineBundledImages(entry: string, html: string, files: AssetMap, includeStylesheets = true): string {
+  const normalizedEntry = normalizedPath(entry)
+  if (normalizedEntry === undefined) return html
+  const directory = normalizedEntry.includes('/') ? normalizedEntry.slice(0, normalizedEntry.lastIndexOf('/') + 1) : ''
+  const resources = new Map<string, string>()
+  for (const [name, raw] of Object.entries(files)) {
+    const normalized = normalizedPath(name)
+    if (normalized === undefined) continue
+    const uri = assetUri(normalized, raw)
+    if (uri !== undefined) resources.set(normalized, uri)
+  }
+  if (resources.size === 0) return html
+  const resolve = (reference: string): string | undefined => {
+    if (/^(?:[a-z][a-z\d+.-]*:|\/\/|#)/iu.test(reference)) return undefined
+    let decoded: string
+    try { decoded = decodeURIComponent(reference.split(/[?#]/u, 1)[0] ?? '') } catch { return undefined }
+    const key = normalizedPath(reference.startsWith('/') ? decoded : directory + decoded)
+    return key === undefined ? undefined : resources.get(key)
+  }
+  // Quoted HTML asset attributes, including picture/srcset (single-candidate).
+  let output = html.replace(/\b(src|poster|href)\s*=\s*(["'])(.*?)\2/giu, (original, attribute: string, quote: string, raw: string) => {
+    // Only resource-bearing attributes are altered. Links to other documents
+    // remain regular links rather than becoming navigable data URLs.
+    if (attribute.toLowerCase() === 'href' && !/\.(?:png|jpe?g|gif|webp)(?:[?#]|$)/iu.test(raw)) return original
+    const uri = resolve(raw)
+    return uri === undefined ? original : attribute + '=' + quote + uri + quote
+  })
+  output = output.replace(/\b(srcset)\s*=\s*(["'])(.*?)\2/giu, (_original: string, attribute: string, quote: string, raw: string) => {
+    const candidates = raw.split(',').map(candidate => {
+      const matched = /^(\s*)(\S+)(\s+.*)?$/u.exec(candidate)
+      if (matched === null) return candidate
+      const uri = resolve(matched[2] ?? '')
+      return uri === undefined ? candidate : (matched[1] ?? '') + uri + (matched[3] ?? '')
+    })
+    return attribute + '=' + quote + candidates.join(',') + quote
+  })
+  output = output.replace(/url\(\s*(["']?)([^'"()]+)\1\s*\)/giu, (original, _quote: string, raw: string) => {
+    const uri = resolve(raw.trim())
+    return uri === undefined ? original : 'url("' + uri + '")'
+  })
+  if (!includeStylesheets) return output
+  // Inline only actual CSS files shipped with this same artifact, preserving
+  // their own relative image paths. Remote stylesheets remain blocked.
+  return output.replace(/<link\b[^>]*>/giu, original => {
+    if (!/\brel\s*=\s*(["'])stylesheet\1/iu.test(original)) return original
+    const match = /\bhref\s*=\s*(["'])(.*?)\1/iu.exec(original)
+    const reference = match?.[2]
+    if (reference === undefined || /^(?:[a-z][a-z\d+.-]*:|\/\/|#)/iu.test(reference)) return original
+    const key = normalizedPath(reference.startsWith('/') ? reference : directory + reference.split(/[?#]/u, 1)[0])
+    if (key === undefined || !/\.css$/iu.test(key)) return original
+    const css = files[key]
+    if (typeof css !== 'string' || css.length > MAX_ASSET_CHARS) return original
+    const safeCss = inlineBundledImages(key, css, files, false).replace(/<\/style/giu, '<\\/style')
+    return '<style data-phoenix-bundled-css="true">' + safeCss + '</style>'
+  })
+}
+
 function safeDeck(raw:string):Deck {
   try{
     const obj:unknown=JSON.parse(raw)
@@ -63,9 +212,6 @@ async function api<T>(path:string,data?:Record<string,unknown>,method='GET'):Pro
     throw new Error(typeof error==='string'?error:'No se pudo completar la operación')
   }
   return value as T
-}
-function saveFileName(title:string,extension:string):string {
-  return (title.replace(/[^a-z0-9áéíóúüñ._ -]/giu,'-').slice(0,90)||'phoenix')+'.'+extension
 }
 async function migrateLegacyGames():Promise<number> {
   if(typeof indexedDB==='undefined')return 0
@@ -104,7 +250,9 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
   const [createKind,setCreateKind]=useState<SpaceKind>('document')
   const [editor,setEditor]=useState<Editor|null>(null)
   const [slideIndex,setSlideIndex]=useState(0)
-  const [previewGame,setPreviewGame]=useState(false)
+  const [showSource,setShowSource]=useState(false)
+  const [importedHtml,setImportedHtml]=useState<{id:string;html:string}|null>(null)
+  const [htmlLoadError,setHtmlLoadError]=useState('')
   const [history,setHistory]=useState<Array<{revision:number;title:string;changedAt:string}>>([])
   const [error,setError]=useState('')
   const [status,setStatus]=useState('')
@@ -147,6 +295,24 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
     }).catch(()=>setImageUrl(''))
     return ()=>{cancelled=true;if(url)URL.revokeObjectURL(url)}
   },[selectedId,editor?.item.kind,editor?.item.bytes])
+  const htmlItem=editor!==null&&isSpaceHtml(editor.item,editor.content)
+  const importedHtmlItem=htmlItem&&editor!==null&&editor.item.bytes>0&&!editor.content
+  useEffect(()=>{
+    setShowSource(false)
+    setImportedHtml(null)
+    setHtmlLoadError('')
+    if(!selectedId||!importedHtmlItem)return
+    const abort=new AbortController()
+    void fetch('/space-api/items/'+selectedId+'/file',{signal:abort.signal}).then(r=>{
+      if(!r.ok)throw new Error('No se pudo leer el HTML original')
+      return r.text()
+    }).then(html=>{if(!abort.signal.aborted)setImportedHtml({id:selectedId,html})})
+      .catch(()=>{if(!abort.signal.aborted)setHtmlLoadError('No se pudo cargar la vista visual del archivo.')})
+    return ()=>abort.abort()
+  },[selectedId,importedHtmlItem])
+  const htmlSource=importedHtmlItem
+    ? importedHtml&&importedHtml.id===selectedId?importedHtml.html:undefined
+    : editor?.content
   const mutate=(change:Partial<Editor>):void=>{
     setEditor(e=>e?{...e,...change,dirty:true}:e)
     setStatus('Cambios pendientes')
@@ -214,7 +380,7 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
   }
   const openItem=async(id:string):Promise<void>=>{
     if(editor?.dirty&&!(await persist(editor)))return
-    setBusy(true);setError('');setPreviewGame(false);setHistory([])
+    setBusy(true);setError('');setShowSource(false);setHistory([])
     try{
       const {item}=await api<{item:Item}>('/items/'+id)
       setEditor({item,title:item.title,content:item.content,space:item.space,dirty:false})
@@ -343,6 +509,8 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
         <div className={css.editHeader}>
           <button type="button" onClick={backToLibrary}>← Biblioteca</button>
           <span>{LABEL[editor.item.kind]} · versión {editor.item.revision}</span>
+          {htmlItem&&<button type="button" aria-pressed={showSource} onClick={()=>setShowSource(v=>!v)}>
+            {showSource?'Vista visual':'Ver código'}</button>}
           <button type="button" disabled={!editor.dirty||busy} onClick={()=>{void persist(editor)}}>Guardar</button>
           <button type="button" onClick={()=>{void loadHistory()}}>Versiones</button>
           <button type="button" onClick={()=>{void changeDeletion(!editor.item.deleted)}}>{editor.item.deleted?'Restaurar':'Papelera'}</button>
@@ -407,14 +575,16 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
         </div>}
         {editor.item.kind==='image'&&imageUrl&&<img className={css.image} alt={editor.title} src={imageUrl}/>}
         {(editor.item.kind==='file'||editor.item.kind==='image')&&editor.item.bytes>0&&
-          <a className={css.export} href={'/space-api/items/'+editor.item.id+'/file'} download={saveFileName(editor.title,'bin')}>Descargar archivo original</a>}
-        {editor.item.kind!=='slides'&&editor.item.kind!=='sheet'&&editor.item.kind!=='file'&&editor.item.kind!=='image'&&
+          <a className={css.export} href={'/space-api/items/'+editor.item.id+'/file'} download={editor.title}>Descargar archivo original</a>}
+        {htmlItem&&htmlSource===undefined&&<p role="status">{htmlLoadError||'Cargando vista visual…'}</p>}
+        {htmlItem&&htmlSource!==undefined&&!showSource&&
+          <SpaceHtmlViewer key={editor.item.id} html={spaceHtmlSource(htmlSource)} title={editor.title}/>}
+        {htmlItem&&htmlSource!==undefined&&showSource&&
+          <div className={css.textEditor}><textarea aria-label="Código fuente HTML" spellCheck={false}
+            readOnly={importedHtmlItem} value={htmlSource} onChange={e=>mutate({content:e.currentTarget.value})}/></div>}
+        {!htmlItem&&editor.item.kind!=='slides'&&editor.item.kind!=='sheet'&&editor.item.kind!=='file'&&editor.item.kind!=='image'&&
           <div className={css.textEditor}><textarea aria-label="Contenido editable" spellCheck={editor.item.kind==='document'}
             value={editor.content} onChange={e=>mutate({content:e.currentTarget.value})}/></div>}
-        {editor.item.kind==='game'&&<><button type="button" onClick={()=>setPreviewGame(v=>!v)}>
-          {previewGame?'Cerrar vista previa':'Vista previa aislada'}</button>
-          {previewGame&&<iframe title="Vista previa del juego" className={css.gamePreview}
-            sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={editor.content}/>}</>}
       </>}
     </div>
   </section>
