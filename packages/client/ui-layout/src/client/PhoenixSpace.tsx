@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import css from './PhoenixSpace.module.css'
 import { UniversalFileViewer } from './UniversalFileEngine.tsx'
+import type { SpaceSpecializedProps } from './index.ts'
 
 type SpaceKind='document'|'slides'|'sheet'|'image'|'game'|'app'|'code'|'file'
 type Item={id:string;kind:SpaceKind;space:string;title:string;mime:string;content:string;
@@ -43,7 +44,18 @@ export function spaceHtmlSource(content:string):string {
     if(files&&typeof files==='object'&&!Array.isArray(files)&&typeof bundle.entry==='string'){
       const map=files as Record<string,unknown>
       const entry=map[bundle.entry]
-      if(typeof entry==='string')return inlineBundledImages(bundle.entry,entry,map)
+      if(typeof entry==='string'){
+        const html=inlineBundledImages(bundle.entry,entry,map)
+        const folder=bundle.entry.includes('/')?bundle.entry.slice(0,bundle.entry.lastIndexOf('/')+1):''
+        return html.replace(/<script\b([^>]*?)\bsrc\s*=\s*(["'])([^"']+)\2([^>]*)>\s*<\/script>/giu,(original,_before:string,_q:string,src:string,_after:string)=>{
+          if(/^(?:[a-z][a-z\d+.-]*:|\/\/)/iu.test(src)||!/\.js$/iu.test(src))return original
+          const key=normalizedPath(src.startsWith('/')?src:folder+src)
+          const code=key===undefined?undefined:map[key]
+          // Only classic scripts are inlined; module imports require a real package runtime.
+          if(typeof code!=='string'||code.length>500000||/\btype\s*=\s*["']module["']/iu.test(original))return original
+          return '<script>'+code.replace(/<\/script/giu,'<\\/script')+'</script>'
+        })
+      }
     }
     if(typeof bundle.html==='string')return bundle.html
   }catch{/* Keep original source when it is not a bundle */}
@@ -55,14 +67,41 @@ export function spacePreviewDocument(html:string,allowImages=false):string {
     +(allowImages?' https:':'')+"; font-src data:; media-src data: blob:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
   return '<!doctype html><meta http-equiv="Content-Security-Policy" content="'+policy+'">'+html.replace(/^\s*<!doctype[^>]*>/iu,'')
 }
-function SpaceHtmlViewer({html,title}:{html:string;title:string}){
+export function spaceGodotUrl(source:string):string|undefined {
+  try {
+    const value=JSON.parse(source) as {engine?:unknown;structureChecked?:unknown;url?:unknown}
+    if(value.engine==='godot'&&value.structureChecked===true&&typeof value.url==='string'
+      && /^\/phoenix-games\/godot\/[0-9a-f]{48}\/index\.html$/u.test(value.url))return value.url
+  }catch{/* Invalid or stale descriptor stays inert */}
+  return undefined
+}
+function SpaceGodotViewer({source,title}:{source:string;title:string}){
+  const url=spaceGodotUrl(source)
+  const [revision,setRevision]=useState(0)
+  const [playing,setPlaying]=useState(true)
+  const frame=useRef<HTMLIFrameElement>(null)
+  return url?<section aria-label="Reproductor Godot" style={{display:'grid',gap:8}}>
+    <div><button type="button" onClick={()=>setPlaying(v=>!v)}>{playing?'Detener':'Jugar'}</button>
+      <button type="button" onClick={()=>{setPlaying(true);setRevision(v=>v+1)}}>Reiniciar</button>
+      <button type="button" onClick={()=>{void frame.current?.requestFullscreen?.().catch(()=>{})}}>Pantalla completa</button></div>
+    {playing&&<iframe key={revision} ref={frame} title={title+' · Godot'} src={url} sandbox="allow-scripts allow-pointer-lock" allow="autoplay; fullscreen" allowFullScreen referrerPolicy="no-referrer" className={css.gamePreview} style={{height:'68vh'}}/>}
+    <small>Requiere que la exportación local de Godot permanezca disponible.</small>
+  </section>:<p role="alert">La exportación Godot no tiene una dirección local válida.</p>
+}
+function SpaceHtmlViewer({html,title,game=false}:{html:string;title:string;game?:boolean}){
   const [external,setExternal]=useState(false)
+  const [playing,setPlaying]=useState(true)
+  const [revision,setRevision]=useState(0)
+  const frame=useRef<HTMLIFrameElement>(null)
   return <div style={{display:'flex',flexDirection:'column',gap:8,minWidth:0,flex:'1 0 auto'}}>
     {/(?:https?:)?\/\//iu.test(html)&&<button type="button" aria-pressed={external} style={{alignSelf:'flex-end'}}
       onClick={()=>setExternal(v=>!v)}>{external?'Bloquear imágenes externas':'Cargar imágenes externas (HTTPS)'}</button>}
-    <iframe title={title+' · Vista visual'} className={css.gamePreview}
+    {game&&<div><button type="button" onClick={()=>setPlaying(v=>!v)}>{playing?'Detener':'Jugar'}</button>
+      <button type="button" onClick={()=>{setPlaying(true);setRevision(v=>v+1)}}>Reiniciar</button>
+      <button type="button" onClick={()=>{void frame.current?.requestFullscreen?.().catch(()=>{})}}>Pantalla completa</button></div>}
+    {playing&&<iframe ref={frame} key={revision} title={title+' · Vista visual'} className={css.gamePreview}
       style={{height:'max(500px, 68vh)',borderRadius:12}}
-      sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={spacePreviewDocument(html,external)}/>
+      sandbox={game?"allow-scripts allow-pointer-lock":"allow-scripts"} allowFullScreen={game} referrerPolicy="no-referrer" srcDoc={spacePreviewDocument(html,external)}/>}
   </div>
 }
 
@@ -240,7 +279,7 @@ async function migrateLegacyGames():Promise<number> {
     }
   })
 }
-export function PhoenixSpace({onClose}:{onClose:()=>void}) {
+export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;renderSpecialized?:(input:SpaceSpecializedProps)=>ReactNode}) {
   const [items,setItems]=useState<Summary[]>([])
   const [query,setQuery]=useState('')
   const [kind,setKind]=useState<SpaceKind|'all'>('all')
@@ -281,6 +320,8 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
   const binaryItem=editor!==null&&editor.item.bytes>0
   const htmlItem=editor!==null&&!binaryItem&&isSpaceHtml(editor.item,editor.content)
   const htmlSource=editor?.content
+  const godotItem=editor!==null&&!binaryItem&&editor.item.mime==='application/vnd.phoenix.game+godot-web'
+  const sceneItem=editor!==null&&!binaryItem&&editor.item.mime==='application/vnd.phoenix.scene3d+json'
   const markdownItem=editor!==null&&!binaryItem&&!htmlItem&&editor.item.kind==='document'
   useEffect(()=>{setShowSource(false)},[selectedId])
   const mutate=(change:Partial<Editor>):void=>{
@@ -479,9 +520,14 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
         <div className={css.editHeader}>
           <button type="button" onClick={backToLibrary}>← Biblioteca</button>
           <span>{LABEL[editor.item.kind]} · versión {editor.item.revision}</span>
-          {(htmlItem||markdownItem)&&<button type="button" aria-pressed={showSource} onClick={()=>setShowSource(v=>!v)}>
+          {(htmlItem||markdownItem||sceneItem||godotItem)&&<button type="button" aria-pressed={showSource} onClick={()=>setShowSource(v=>!v)}>
             {showSource?'Vista visual':markdownItem?'Editar documento':'Ver código'}</button>}
           <button type="button" disabled={!editor.dirty||busy} onClick={()=>{void persist(editor)}}>Guardar</button>
+          <button type="button" onClick={()=>{
+            window.dispatchEvent(new CustomEvent('phoenix:space-consult-file',{detail:{
+              id:editor.item.id,title:editor.title,mime:editor.item.mime,kind:editor.item.kind,revision:editor.item.revision
+            }}))
+          }}>Consultar a Kira</button>
           <button type="button" onClick={()=>{void loadHistory()}}>Versiones</button>
           <button type="button" onClick={()=>{void changeDeletion(!editor.item.deleted)}}>{editor.item.deleted?'Restaurar':'Papelera'}</button>
         </div>
@@ -544,15 +590,24 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
           }}>Exportar Excel (.xlsx)</a>
         </div>}
         {binaryItem&&<>
+          <div className={css.leadingActions}>
+            <button type="button" onClick={()=>{
+              if(!window.confirm('Abrir una copia con la aplicación asociada del sistema. Solo continúa si confías en el archivo. ¿Abrir?'))return
+              void api<{opened:boolean}>('/items/'+editor.item.id+'/open-native',{confirm:true},'POST')
+                .then(()=>setStatus('Solicitud de apertura nativa enviada')).catch(e=>setError(String(e)))
+            }}>Abrir con aplicación del equipo</button>
+          </div>
           <UniversalFileViewer key={editor.item.id} id={editor.item.id} title={editor.title} mime={editor.item.mime}
-            renderHtml={html=><SpaceHtmlViewer html={spaceHtmlSource(html)} title={editor.title}/>}/>
+            renderHtml={html=><SpaceHtmlViewer html={spaceHtmlSource(html)} title={editor.title} game={editor.item.kind==='game'}/>} {...renderSpecialized?{renderSpecialized}:{}}/>
           <a className={css.export} href={'/space-api/items/'+editor.item.id+'/file'} download={editor.title}>Descargar archivo original</a>
         </>}
         {htmlItem&&htmlSource!==undefined&&!showSource&&
-          <SpaceHtmlViewer key={editor.item.id} html={spaceHtmlSource(htmlSource)} title={editor.title}/>}
+          <SpaceHtmlViewer key={editor.item.id} html={spaceHtmlSource(htmlSource)} title={editor.title} game={editor.item.kind==='game'}/>}
         {htmlItem&&htmlSource!==undefined&&showSource&&
           <div className={css.textEditor}><textarea aria-label="Código fuente HTML" spellCheck={false}
             value={htmlSource} onChange={e=>mutate({content:e.currentTarget.value})}/></div>}
+        {godotItem&&!showSource&&<SpaceGodotViewer source={editor.content} title={editor.title}/>}
+        {sceneItem&&!showSource&&(renderSpecialized?.({format:'scene',data:editor.content,title:editor.title})??<p>Motor 3D no disponible en esta sesión.</p>)}
         {markdownItem&&!showSource&&<article aria-label="Vista visual del documento" style={{background:'var(--dsw-alias-bg-layer-1,#fff)',border:'1px solid #8883',borderRadius:12,padding:'clamp(18px,4vw,48px)',lineHeight:1.65,overflowWrap:'anywhere'}}>
           {editor.content.split(/\r?\n/u).map((line,i)=>{
             const heading=/^(#{1,6})\s+(.*)$/u.exec(line)
@@ -562,7 +617,7 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
             return line.trim()?<div key={i} style={{whiteSpace:'pre-wrap'}}>{line.replace(/^[-*]\s+/u,'• ')}</div>:<div key={i} style={{height:10}}/>
           })}
         </article>}
-        {!binaryItem&&!htmlItem&&(!markdownItem||showSource)&&editor.item.kind!=='slides'&&editor.item.kind!=='sheet'&&editor.item.kind!=='file'&&editor.item.kind!=='image'&&
+        {!binaryItem&&!htmlItem&&(!(markdownItem||godotItem||sceneItem)||showSource)&&editor.item.kind!=='slides'&&editor.item.kind!=='sheet'&&editor.item.kind!=='file'&&editor.item.kind!=='image'&&
           <div className={css.textEditor}><textarea aria-label="Contenido editable" spellCheck={editor.item.kind==='document'}
             value={editor.content} onChange={e=>mutate({content:e.currentTarget.value})}/></div>}
       </>}

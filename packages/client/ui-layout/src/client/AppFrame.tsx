@@ -35,7 +35,7 @@ import type { AdaptiveLiveSnapshot } from './AdaptiveLiveSlots.ts'
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
   & PropsRuntime<'root'>
-  & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'shell.overlay' | 'shell.workspace'>
+  & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'shell.overlay' | 'shell.workspace' | 'space.specialized'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
   & { readonly inspectRuntime?: (() => AdaptiveLiveSnapshot) | undefined }
 
@@ -657,7 +657,7 @@ export function AppFrame({
       </div>
       <>
         <CenterColumn adaptiveActive={adaptiveActive}>
-          {spaceOpen && <PhoenixSpace onClose={() => setSpaceOpen(false)} />}
+          {spaceOpen && <PhoenixSpace onClose={() => setSpaceOpen(false)} renderSpecialized={input => renderSlot('space.specialized', input)} />}
           {search && (
             <div className={css.adaptiveSearch} aria-label="Búsqueda en aplicaciones">
               <div className={css.adaptiveSearchHeader}>
