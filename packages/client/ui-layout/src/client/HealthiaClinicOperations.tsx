@@ -86,7 +86,7 @@ export function restoreClinicalNote(encounter:ClinicalEncounter):{
 }
 
 export function HealthiaClinicOperations({ area, selectedPatientId, onPatientChange, onNavigate,
-  accessOnly=false, onSessionReady, requestedStep, onEditorState, entry, onEntryHandled }: {
+  accessOnly=false, deferredAccess=false, onSessionReady, requestedStep, onEditorState, entry, onEntryHandled }: {
   onEntryHandled?:((sequence:number)=>void)|undefined
   entry?:{kind:'patient'|'encounter';sequence:number}|undefined
   area:Area
@@ -94,12 +94,14 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
   requestedStep?:ClinicalEditorRequest|undefined
   onEditorState?:((state:ClinicalEditorViewState|null)=>void)|undefined
   accessOnly?:boolean
+  deferredAccess?:boolean
   onSessionReady?:()=>void
   selectedPatientId?:string
   onPatientChange?:(id:string)=>void
   onNavigate?:(area:Area)=>void
 }) {
   const [mode,setMode]=useState<Mode>('loading')
+  const [accessExpanded,setAccessExpanded]=useState(false)
   const [session,setSession]=useState<ClinicalSession|null>(null)
   const [patients,setPatients]=useState<readonly ClinicalPatient[]>([])
   const [encounters,setEncounters]=useState<readonly ClinicalEncounter[]>([])
@@ -427,13 +429,24 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
       <a href="/health" target="_blank" rel="noopener noreferrer">Diagnóstico del servicio protegido</a>
     </div>
   </div>
-  if(mode==='login'||mode==='setup')return <section className={accessOnly?css.accessPanel:css.panel} aria-label="Acceso clínico protegido">
-    {!accessOnly&&brandMark}
+  if((mode==='login'||mode==='setup')&&(!accessOnly||deferredAccess)&&!accessExpanded)return <section className={css.lockedWorkspace} aria-label="Acceso clínico protegido">
+    <div className={css.lockIcon} aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14v3"/></svg></div>
+    <div className={css.lockCopy}><span className={css.lockEyebrow}>EXPEDIENTES PRIVADOS</span>
+      <h3>{mode==='setup'?'Configura tu clínica':'Tu espacio clínico está protegido'}</h3>
+      <p>{mode==='setup'?'Crea el acceso institucional una sola vez.':'Desbloquea el expediente para continuar. Si ya tienes una sesión clínica activa, puedes recuperarla sin repetir las credenciales.'}</p>
+    </div>
+    <div className={css.lockActions}>
+      <button type="button" className={css.primary} onClick={()=>setAccessExpanded(true)}>{mode==='setup'?'Configurar clínica':'Desbloquear clínica'}</button>
+      {mode==='login'&&<button type="button" className={css.accessSecondary} onClick={()=>{setMode('loading');setConnectionRetry(v=>v+1)}}>Comprobar sesión</button>}
+    </div>
+  </section>
+  if(mode==='login'||mode==='setup')return <section className={accessOnly&&!deferredAccess?css.accessPanel:css.accessCard} aria-label="Acceso clínico protegido">
+    {(!accessOnly||deferredAccess)&&<div className={css.accessHeading}><span className={css.lockEyebrow}>ACCESO SEGURO</span><button type="button" className={css.accessSecondary} onClick={()=>{setPassword('');setError('');setAccessExpanded(false)}}>Cerrar</button></div>}
     <h3>{mode==='setup'?'Inicializar clínica local':'Inicio de sesión profesional'}</h3>
     <p>{mode==='setup'
       ? 'La clínica es local y cifrada. Crea el administrador con una contraseña de 6 caracteres o más; recomendamos 12 o más. Guárdala fuera de PHOENIX: también protege el cifrado del expediente.'
       : 'La misma identidad profesional del servicio /health; nunca uses las credenciales en el chat de Kira.'}</p>
-    <form className={css.form} autoComplete="off" onSubmit={event=>{void authenticated(event)}}>
+    <form className={css.accessForm} autoComplete="off" onSubmit={event=>{void authenticated(event)}}>
       {mode==='setup'&&<label>Centro o institución
         <input required maxLength={120} value={organization} onChange={e=>setOrganization(e.target.value)}/>
       </label>}
@@ -442,11 +455,11 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
         <small>PNG, JPG o WebP · máximo 160 KB. Sin imagen se utilizará el logo de Healthia.</small>
       </label>}
       <label>Usuario profesional
-        <input required maxLength={80} value={user} onChange={e=>setUser(e.target.value)}/>
+        <input autoComplete="username" required maxLength={80} value={user} onChange={e=>setUser(e.target.value)}/>
       </label>
       <label>Contraseña
         <input required type="password" minLength={6} maxLength={256} value={password}
-          autoComplete="off" onChange={e=>setPassword(e.target.value)}/>
+          autoComplete={mode==='setup'?'new-password':'current-password'} onChange={e=>setPassword(e.target.value)}/>
       </label>
       <button className={css.primary} type="submit" disabled={busy||password.length<6}>
         {busy?'Verificando…':mode==='setup'?'Crear clínica local':'Acceder'}
@@ -492,7 +505,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
               setBusy(true);setError('')
               void api.logout(session).then(()=>{
                 setSession(null);setPatients([]);setEncounters([])
-                setPatientId('');setEncounterId('');setMode('login')
+                setPatientId('');setEncounterId('');setAccessExpanded(false);setMode('login')
               }).catch(()=>{
                 setError('No se pudo cerrar la sesión en el Host. Reintenta antes de abandonar el equipo.')
               }).finally(()=>setBusy(false))
