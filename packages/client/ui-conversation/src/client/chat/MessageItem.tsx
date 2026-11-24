@@ -14,6 +14,7 @@ import type { ChatNodeOwnerProps, ChatNodeViewProps, ChatViewSlotProps } from '.
 import { ReferenceIcon } from '../ReferenceIcon.tsx'
 import { CompactionItem } from './CompactionItem.tsx'
 import { ContextInjectionRow } from './ContextInjectionRow.tsx'
+import { splitSheetMessage } from './active-sheet-context.ts'
 import { MessageIconActions } from './MessageIconActions.tsx'
 import { formatStructuredError } from './structured-error.ts'
 import { isTeamMention, parseDirectedTeamMessage } from './team-recipient.ts'
@@ -332,8 +333,9 @@ function UserStyleBubble({
   t: ChatViewSlotProps['t']
 }): ReactNode {
   const { text, images, files, rest } = contentParts(content)
-  const addressed = parseDirectedTeamMessage(text)
-  const visibleText = addressed?.body ?? text
+  const sheetMessage=splitSheetMessage(text)
+  const addressed = parseDirectedTeamMessage(sheetMessage.text)
+  const visibleText = addressed?.body ?? sheetMessage.text
   const truncated = (total: number): string => t('json.truncated', { total })
   const showBubble = visibleText !== '' || rest.length > 0
   return (
@@ -360,13 +362,14 @@ function UserStyleBubble({
           {projectUserText(visibleText, referenceLabels)}
           {rest.map((block, i) => <JsonBlock key={i} label={t('message.extraBlock')} payload={block} truncatedLabel={truncated} />)}
         </div>}
+        {sheetMessage.attachment&&<div className={css.referenceSummary}>▤ {sheetMessage.attachment.title} · revisión {sheetMessage.attachment.revision} adjunta</div>}
         {referenceLabels.length > 0 && (
           <div className={css.referenceSummary}>
             {t('message.referenceSummary', { labels: referenceLabels.join(t('message.referenceSeparator')) })}
           </div>
         )}
       </div>
-      {actions?.(text)}
+      {actions?.(sheetMessage.text)}
     </div>
   )
 }

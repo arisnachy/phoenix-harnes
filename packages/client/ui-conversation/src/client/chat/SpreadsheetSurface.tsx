@@ -233,21 +233,26 @@ export function exportSheetCsv(columns: readonly string[], rows: readonly (reado
 export interface SpreadsheetPatchSpec {
   readonly component:'spreadsheet_patch'
   readonly version:1
-  readonly props:{readonly id:string;readonly expectedRevision?:number;readonly editToken?:string;readonly edits:readonly {readonly cell:string;readonly before:string;readonly after:string}[]}
+  readonly props:{readonly id:string;readonly expectedRevision?:number;readonly editToken?:string;readonly layout?:{readonly columns:readonly string[];readonly rows:readonly (readonly string[])[]};readonly edits:readonly {readonly cell:string;readonly before:string;readonly after:string}[]}
 }
 export function parseSpreadsheetPatch(value:unknown):SpreadsheetPatchSpec|null{
   if(!isRecord(value)||!keys(value,['component','version','props'])||value.component!=='spreadsheet_patch'||value.version!==1||!isRecord(value.props))return null
   const p=value.props
-  if(!keys(p,['id','edits','expectedRevision','editToken'])||typeof p.id!=='string'||!/^[a-z][a-z0-9_-]{1,63}$/.test(p.id)||!Array.isArray(p.edits)||p.edits.length<1||p.edits.length>100||(p.expectedRevision!==undefined&&(!Number.isSafeInteger(p.expectedRevision)||Number(p.expectedRevision)<0))||(p.editToken!==undefined&&(typeof p.editToken!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/iu.test(p.editToken))))return null
+  if(!keys(p,['id','edits','expectedRevision','editToken','layout'])||typeof p.id!=='string'||!/^[a-z][a-z0-9_-]{1,63}$/.test(p.id)||(p.expectedRevision!==undefined&&(!Number.isSafeInteger(p.expectedRevision)||Number(p.expectedRevision)<0))||(p.editToken!==undefined&&(typeof p.editToken!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/iu.test(p.editToken))))return null
+  const edits=p.edits??[]
+  if(!Array.isArray(edits)||edits.length>100)return null
+  if(p.layout!==undefined){
+    if(!Number.isSafeInteger(p.expectedRevision)||edits.length!==0||!isRecord(p.layout)||!keys(p.layout,['columns','rows'])||!parseSpreadsheet({component:'spreadsheet',version:1,props:{id:p.id,title:'Layout',columns:p.layout.columns,rows:p.layout.rows}}))return null
+  }else if(!edits.length)return null
   const seen=new Set<string>()
-  for(const e of p.edits){
+  for(const e of edits){
     if(!isRecord(e)||!keys(e,['cell','before','after'])||typeof e.cell!=='string'||!/^([A-P])(?:[2-9]|[1-9][0-9]|1[0-9]{2}|20[01])$/.test(e.cell)||seen.has(e.cell)||typeof e.before!=='string'||typeof e.after!=='string'||e.before.length>300||e.after.length>300)return null
     seen.add(e.cell)
   }
-  return value as unknown as SpreadsheetPatchSpec
+  return {...value,props:{...p,edits}} as unknown as SpreadsheetPatchSpec
 }
 type SheetFormat={bold?:boolean;italic?:boolean;number?:'general'|'currency'|'percent'}
-type SheetDraft={columns:string[];rows:string[][];revision:number;previous?:string[][];formats?:Record<string,SheetFormat>}
+type SheetDraft={columns:string[];rows:string[][];revision:number;previous?:string[][];previousColumns?:string[];previousFormats?:Record<string,SheetFormat>;formats?:Record<string,SheetFormat>}
 function validFormats(value:unknown):value is Record<string,SheetFormat>{
   if(!isRecord(value)||Object.keys(value).length>3200)return false
   return Object.entries(value).every(([address,format])=>/^[A-P](?:[2-9]|[1-9]\d|1\d{2}|20[01])$/u.test(address)
@@ -258,6 +263,7 @@ function validFormats(value:unknown):value is Record<string,SheetFormat>{
 }
 const SHEET_EVENT='phoenix:sheet-draft-updated'
 const draftKey=(id:string,conversationId?:string)=>'phoenix:sheet:v2:'+encodeURIComponent(conversationId??'local-preview')+':'+id
+function validColumns(v:unknown):v is string[]{return Array.isArray(v)&&v.length>=1&&v.length<=16&&v.every(c=>typeof c==='string'&&c.trim()&&c.length<=60)}
 function validRows(value:unknown,width:number):value is string[][]{
   return Array.isArray(value)&&value.length<=200&&value.every(r=>Array.isArray(r)&&r.length===width&&r.every(v=>typeof v==='string'&&v.length<=300))
 }
@@ -266,7 +272,7 @@ export function readSheetDraft(store:Pick<Storage,'getItem'>,key:string):SheetDr
   if(raw===null)return null
   if(raw.length>4000000)throw Error('SHEET_DRAFT_INVALID')
   const v:unknown=JSON.parse(raw)
-  if(!isRecord(v)||!Array.isArray(v.columns)||v.columns.length<1||v.columns.length>16||!v.columns.every(c=>typeof c==='string'&&c.trim()&&c.length<=60)||!validRows(v.rows,v.columns.length)||!Number.isSafeInteger(v.revision)||Number(v.revision)<0||(v.previous!==undefined&&!validRows(v.previous,v.columns.length))||(v.formats!==undefined&&!validFormats(v.formats)))throw Error('SHEET_DRAFT_INVALID')
+  if(!isRecord(v)||!Array.isArray(v.columns)||v.columns.length<1||v.columns.length>16||!v.columns.every(c=>typeof c==='string'&&c.trim()&&c.length<=60)||!validRows(v.rows,v.columns.length)||!Number.isSafeInteger(v.revision)||Number(v.revision)<0||(v.previousColumns!==undefined&&!validColumns(v.previousColumns))||(v.previous!==undefined&&!validRows(v.previous,Array.isArray(v.previousColumns)?v.previousColumns.length:v.columns.length))||(v.previousFormats!==undefined&&!validFormats(v.previousFormats))||(v.formats!==undefined&&!validFormats(v.formats)))throw Error('SHEET_DRAFT_INVALID')
   return v as unknown as SheetDraft
 }
 function writeSheetDraft(store:Pick<Storage,'getItem'|'setItem'>,key:string,draft:SheetDraft,expectedRaw:string|null):void{
@@ -276,13 +282,18 @@ function writeSheetDraft(store:Pick<Storage,'getItem'|'setItem'>,key:string,draf
   if(store.getItem(key)!==encoded)throw Error('SHEET_WRITE_UNVERIFIED')
 }
 export function applySpreadsheetPatch(store:Pick<Storage,'getItem'|'setItem'>,key:string,spec:SpreadsheetPatchSpec):{draft:SheetDraft;changed:readonly {cell:string;value:string}[];recalculated:readonly {cell:string;value:string}[]}{
-  if(!parseSpreadsheetPatch(spec))throw Error('SHEET_PATCH_INVALID')
+  const parsed=parseSpreadsheetPatch(spec)
+  if(!parsed)throw Error('SHEET_PATCH_INVALID')
   const raw=store.getItem(key),current=readSheetDraft(store,key)
   if(!current)throw Error('SHEET_NOT_FOUND')
   if(spec.props.expectedRevision!==undefined&&current.revision!==spec.props.expectedRevision)throw Error('SHEET_STALE_REVISION')
-  const rows=current.rows.map(r=>[...r])
-  for(const edit of spec.props.edits){
+  const layout=parsed.props.layout
+  const columns=layout?[...layout.columns]:current.columns
+  const rows=layout?layout.rows.map(r=>[...r]):current.rows.map(r=>[...r])
+  for(const edit of parsed.props.edits){
     const pos=reference(edit.cell)!
+    if(pos[0]<0||pos[0]>=200||pos[1]>=columns.length)throw Error('SHEET_RANGE_'+edit.cell)
+    if(pos[0]>=rows.length&&edit.before==='')while(rows.length<=pos[0])rows.push(columns.map(()=>''))
     if(rows[pos[0]]?.[pos[1]]!==edit.before)throw Error('SHEET_CONFLICT_'+edit.cell)
     rows[pos[0]]![pos[1]]=edit.after
   }
@@ -294,9 +305,9 @@ export function applySpreadsheetPatch(store:Pick<Storage,'getItem'|'setItem'>,ke
     if(typeof after==='string'&&after!==before)throw Error('SHEET_FORMULA_ERROR_'+columnLetter(c)+String(r+2))
     if(after!==before&&recalculated.length<100)recalculated.push({cell:columnLetter(c)+String(r+2),value:String(after)})
   }
-  const draft:SheetDraft={columns:current.columns,rows,revision:current.revision+1,previous:current.rows,...(current.formats?{formats:current.formats}:{})}
+  const draft:SheetDraft={columns,rows,revision:current.revision+1,previous:current.rows,previousColumns:current.columns,...(current.formats?{previousFormats:current.formats,...(!layout?{formats:current.formats}:{})}:{})}
   writeSheetDraft(store,key,draft,raw)
-  return {draft,changed:spec.props.edits.map(e=>({cell:e.cell,value:e.after})),recalculated}
+  return {draft,changed:parsed.props.edits.map(e=>({cell:e.cell,value:e.after})),recalculated}
 }
 /** A completed assistant response applies its guarded edit to the SAME mounted draft.
  * Exactly-once CAS rejects stale or repeated message replays. No navigation step. */
@@ -316,7 +327,7 @@ export function SpreadsheetPatch({spec,conversationId,allowAuto=false}:{spec:Spr
       try{localStorage.setItem(proofKey,'applied')}catch{/* original edit remains durable */}
       window.dispatchEvent(new CustomEvent(SHEET_EVENT,{detail:key}))
       setDone(true)
-      setReceipt('Aplicado y verificado en la misma hoja · v'+result.draft.revision+'. '+[...result.changed,...result.recalculated].map(c=>c.cell+' = '+c.value).join(' · '))
+      setReceipt('Aplicado y verificado en la misma hoja · v'+result.draft.revision+' · '+result.draft.rows.length+' filas × '+result.draft.columns.length+' columnas. '+[...result.changed,...result.recalculated].map(c=>c.cell+' = '+c.value).join(' · '))
       window.dispatchEvent(new CustomEvent('phoenix:studio-verified',{detail:key}))
     }catch{
       setReceipt('Cambio no aplicado: la hoja o el valor anterior no coincide, hay una fórmula inválida o no se pudo verificar el guardado.')
@@ -440,8 +451,9 @@ export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:
           saved={columns:[...initial.current.columns],rows:initial.current.rows.map(r=>[...r]),revision:0}
           writeSheetDraft(localStorage,key,saved,raw)
         }
-        if(JSON.stringify(saved.columns)!==JSON.stringify(initial.current.columns))throw Error('SHEET_COLUMNS_CONFLICT')
+        // The saved revision, including structural edits, is authoritative.
         latest.current=saved
+        setSelected(([r,c])=>[Math.max(0,Math.min(r,saved.rows.length-1)),Math.max(0,Math.min(c,saved.columns.length-1))])
         setRows(saved.rows);setVersion(saved.revision);setReady(true)
         setLegacyAvailable(localStorage.getItem('phoenix:sheet:'+spec.props.id)!==null)
       }catch{setReady(false);setError('No se pudo abrir la hoja guardada sin riesgo de sobrescribirla.')}
@@ -457,16 +469,30 @@ export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:
     try{
       const raw=localStorage.getItem(key),current=readSheetDraft(localStorage,key)
       if(!current||!latest.current||current.revision!==latest.current.revision||!validRows(next,current.columns.length))throw Error('SHEET_CONFLICT')
-      const draft:SheetDraft={columns:current.columns,rows:next,revision:current.revision+1,previous:current.rows,...(current.formats?{formats:current.formats}:{})}
+      const draft:SheetDraft={columns:current.columns,rows:next,revision:current.revision+1,previous:current.rows,previousColumns:current.columns,...(current.formats?{formats:current.formats,previousFormats:current.formats}:{})}
       writeSheetDraft(localStorage,key,draft,raw)
       if(remember)setUndo(old=>[...old.slice(-19),current.rows])
       latest.current=draft;setRows(next);setVersion(draft.revision);setError('')
       window.dispatchEvent(new CustomEvent(SHEET_EVENT,{detail:key}))
     }catch{setError('Cambio no guardado: la hoja cambió o el almacenamiento no está disponible.');window.dispatchEvent(new CustomEvent(SHEET_EVENT,{detail:key}))}
   }
+  const undoRevision=():void=>{
+    try{
+      const raw=localStorage.getItem(key),current=readSheetDraft(localStorage,key)
+      if(!current?.previous||current.revision!==latest.current?.revision)return
+      const draft:SheetDraft={columns:current.previousColumns??current.columns,rows:current.previous,revision:current.revision+1,previous:current.rows,previousColumns:current.columns,...(current.previousFormats?{formats:current.previousFormats}:{}),...(current.formats?{previousFormats:current.formats}:{})}
+      writeSheetDraft(localStorage,key,draft,raw)
+      setUndo(old=>old.slice(0,-1))
+      window.dispatchEvent(new CustomEvent(SHEET_EVENT,{detail:key}))
+    }catch{setError('No se pudo restaurar la revisión anterior.')}
+  }
   const update=(r:number,c:number,value:string):void=>{
     if(value.length>300)return
-    change((latest.current?.rows??rows).map((row,ri)=>ri===r?row.map((cell,ci)=>ci===c?value:cell):[...row]))
+    const current=latest.current
+    if(!current||r<0||r>=200||c<0||c>=current.columns.length)return
+    const expanded=current.rows.map(row=>[...row])
+    while(expanded.length<=r)expanded.push(current.columns.map(()=>''))
+    change(expanded.map((row,ri)=>ri===r?row.map((cell,ci)=>ci===c?value:cell):[...row]))
   }
   const share=()=>{
     const current=latest.current
@@ -479,12 +505,12 @@ export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:
   const importLegacy=()=>{
     try{
       const data:unknown=JSON.parse(localStorage.getItem('phoenix:sheet:'+spec.props.id)??'null')
-      if(!validRows(data,spec.props.columns.length))throw Error('invalid')
+      if(!validRows(data,(latest.current?.columns??spec.props.columns).length))throw Error('invalid')
       change(data);setLegacyAvailable(false)
     }catch{setError('La copia anterior no es compatible.')}
   }
   const download = (): void => {
-    const blob = new Blob([exportSheetCsv(spec.props.columns, rows)], { type: 'text/csv;charset=utf-8' })
+    const blob = new Blob([exportSheetCsv(latest.current?.columns??spec.props.columns, rows)], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     anchor.href = url
@@ -535,9 +561,10 @@ export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:
     if (!file) return
     if (file.size > 2_000_000) { setError('El CSV supera el límite de 2 MB.'); return }
     void file.text().then(content => {
-      const parsed = parseSheetCsv(content, spec.props.columns.length)
+      const columns=latest.current?.columns??spec.props.columns
+      const parsed = parseSheetCsv(content, columns.length)
       if (!parsed) { setError('CSV inválido o columnas incompatibles.'); return }
-      const body = parsed[0]?.every((cell, index) => cell === spec.props.columns[index])
+      const body = parsed[0]?.every((cell, index) => cell === columns[index])
         ? parsed.slice(1) : parsed
       if (body.length > 200) { setError('El límite es de 200 filas.'); return }
       change(body)
@@ -575,18 +602,19 @@ export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:
     if(!fmt?.number||fmt.number==='general'||!Number.isFinite(n)||String(evaluated).trim()==='')return String(evaluated??'')
     return fmt.number==='currency'?new Intl.NumberFormat('es-DO',{style:'currency',currency:'DOP'}).format(n):new Intl.NumberFormat('es-DO',{style:'percent',maximumFractionDigits:2}).format(n)
   }
-  const gridRows=rows.map((row,r)=>({row,r})).filter(({row})=>!query||row.some(cell=>cell.toLocaleLowerCase('es').includes(query.toLocaleLowerCase('es'))))
+  const visibleRows=host&&!query&&rows.length<15?[...rows,...Array.from({length:15-rows.length},()=> (latest.current?.columns??spec.props.columns).map(()=>''))]:rows
+  const gridRows=visibleRows.map((row,r)=>({row,r})).filter(({row})=>!query||row.some(cell=>cell.toLocaleLowerCase('es').includes(query.toLocaleLowerCase('es'))))
   const editor=<section className={host?css.studioSheet:css.surface+' '+css.studioSheet} data-live-studio={host?"sheet":undefined} data-generative-ui="spreadsheet" data-sheet-draft-key={key}>
     <header className={css.heading}><PhoenixUiIcon name="table" />
       <div><h3>{spec.props.title}</h3><p>Hoja editable · fórmulas en tiempo real · v{version}</p></div>{host&&<button type="button" className={css.studioClose} onClick={()=>closeStudio()} aria-label="Cerrar editor de hoja">×</button>}</header>
     <>
       <div className={css.excelTitle}><span className={css.excelLogo}>▦</span><strong>PHOENIX Sheets</strong><span className={css.excelBookTitle}>{spec.props.title}</span><span className={css.excelSaved}>Guardado local · v{version}</span></div>
-      <nav className={css.excelTabs} aria-label="Cinta de opciones de la hoja">
+      <div className={css.excelTabs} role="group" aria-label="Cinta de opciones de la hoja">
         {(['Archivo','Inicio','Insertar','Fórmulas','Datos','Vista'] as const).map(tab=><button key={tab} type="button" aria-current={ribbon===tab?'page':undefined} onClick={()=>setRibbon(tab)}>{tab}</button>)}
-      </nav>
+      </div>
       <div className={css.excelRibbon} role="toolbar" aria-label={ribbon}>
         {ribbon==='Archivo'&&<><button onClick={()=>{void saveToLibrary()}}>Guardar</button><button onClick={()=>{void saveToLibrary(true)}}>Exportar XLSX</button><button onClick={download}>Descargar CSV</button></>}
-        {ribbon==='Inicio'&&<><button onClick={()=>{const prev=latest.current?.previous;if(prev)change(prev,false)}} disabled={!latest.current?.previous} aria-label="Deshacer modificación">↶ Deshacer</button><button aria-pressed={!!selectedFormat?.bold} onClick={()=>setFormat('bold',!selectedFormat?.bold)}><strong>N</strong> Negrita</button><button aria-pressed={!!selectedFormat?.italic} onClick={()=>setFormat('italic',!selectedFormat?.italic)}><em>C</em> Cursiva</button><button onClick={()=>setFormat('number','currency')}>RD$ Moneda</button><button onClick={()=>setFormat('number','percent')}>% Porcentaje</button><button onClick={()=>setFormat('number','general')}>General</button></>}
+        {ribbon==='Inicio'&&<><button onClick={undoRevision} disabled={!latest.current?.previous} aria-label="Deshacer modificación">↶ Deshacer</button><button aria-pressed={!!selectedFormat?.bold} onClick={()=>setFormat('bold',!selectedFormat?.bold)}><strong>N</strong> Negrita</button><button aria-pressed={!!selectedFormat?.italic} onClick={()=>setFormat('italic',!selectedFormat?.italic)}><em>C</em> Cursiva</button><button onClick={()=>setFormat('number','currency')}>RD$ Moneda</button><button onClick={()=>setFormat('number','percent')}>% Porcentaje</button><button onClick={()=>setFormat('number','general')}>General</button></>}
         {ribbon==='Insertar'&&<><button onClick={addRow}>＋ Nueva fila</button><button onClick={()=>insertFormula('SUM')}>Σ Autosuma</button></>}
         {ribbon==='Fórmulas'&&(['SUM','AVERAGE','MIN','MAX'] as const).map(name=><button key={name} onClick={()=>insertFormula(name)}>{name}</button>)}
         {ribbon==='Datos'&&<><input aria-label="Buscar en hoja" placeholder="Buscar valores…" value={query} onChange={event=>setQuery(event.currentTarget.value)}/><button onClick={()=>sortBySelected()}>Ordenar A–Z</button><button onClick={()=>sortBySelected(true)}>Ordenar Z–A</button></>}
@@ -594,7 +622,7 @@ export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:
         <label className={css.excelPin}><input type="checkbox" checked={pinned} onChange={e=>setPinned(e.currentTarget.checked)}/> Fijar editor</label>
       </div>
     </>
-    <div className={css.formulaBar}><span>{columnLetter(selected[1])+String(selected[0]+2)}</span><strong>fx</strong><input aria-label="Barra de fórmulas" disabled={!ready||!rows[selected[0]]} value={rows[selected[0]]?.[selected[1]]??""} onChange={e=>update(selected[0],selected[1],e.currentTarget.value)}/></div>
+    <div className={css.formulaBar}><span>{columnLetter(selected[1])+String(selected[0]+2)}</span><strong>fx</strong><input aria-label="Barra de fórmulas" disabled={!ready} value={rows[selected[0]]?.[selected[1]]??""} onChange={e=>update(selected[0],selected[1],e.currentTarget.value)}/></div>
     <div className={css.sheetScroll} role="region" aria-label={spec.props.title} tabIndex={0} data-grid-lines={gridLines?"on":"off"}>
       <table className={css.sheet} style={{fontSize:zoom/100*12+"px"}}>
         <thead><tr><th scope="col" className={css.excelCorner}>{""}</th>{(latest.current?.columns??spec.props.columns).map((label,c)=><th key={c} scope="col" title={label}>{columnLetter(c)}</th>)}</tr></thead>
@@ -623,15 +651,10 @@ export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:
     {error && <p role="alert" className={css.error}>{error}</p>}
     <div className={css.actions}>
       <button type="button" disabled={!ready||rows.length >= 200} onClick={() =>
-        change([...rows.map(row => [...row]), spec.props.columns.map(() => '')])}>
+        change([...rows.map(row => [...row]), (latest.current?.columns??spec.props.columns).map(() => '')])}>
         <PhoenixUiIcon name="plus" size={15} /> Fila
       </button>
-      <button type="button" disabled={!ready||(!latest.current?.previous&&undo.length===0)} onClick={() => {
-        const prev=latest.current?.previous??undo[undo.length-1]
-        if(!prev)return
-        change(prev,false)
-        setUndo(current=>current.slice(0,-1))
-      }}><PhoenixUiIcon name="reset" size={15} /> Deshacer</button>
+      <button type="button" disabled={!ready||(!latest.current?.previous&&undo.length===0)} onClick={undoRevision}><PhoenixUiIcon name="reset" size={15} /> Deshacer</button>
       <label className={css.fileButton}><PhoenixUiIcon name="file" size={15}/> Importar CSV
         <input type="file" accept=".csv,text/csv" onChange={importCsv} /></label>
       <button type="button" onClick={download}><PhoenixUiIcon name="download" size={15} /> CSV</button>
