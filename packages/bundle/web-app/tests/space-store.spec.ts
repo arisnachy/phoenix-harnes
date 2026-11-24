@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PhoenixSpaceStore, phoenixSpaceRoot, validateSpacePayload } from '../src/space-store.ts'
+import { parseSpaceClipboard, syntheticSpaceDataset } from '../src/space-workflows.ts'
 import { exportPptx, exportXlsx, zipOffice } from '../src/space-office.ts'
 
 const roots:string[]=[]
@@ -118,5 +119,65 @@ describe('native PowerPoint and Excel exports',()=>{
     expect(files['xl/worksheets/sheet1.xml']).not.toContain('<f>WEBSERVICE')
     expect(files['xl/workbook.xml']).toContain('fullCalcOnLoad')
     expect(()=>exportXlsx(JSON.stringify({columns:[],rows:[]}))).toThrow()
+  })
+})
+describe('connected workspace revisions and provenance',()=>{
+  it('does not create revisions for unchanged writes and previews history without mutation',()=>{
+    const db=store(), item=db.create(payload('original'))
+    expect(db.update(item.id,1,{content:'original'}).revision).toBe(1)
+    expect(db.history(item.id)).toHaveLength(0)
+    db.update(item.id,1,{content:'new'})
+    expect(db.version(item.id,1)?.content).toBe('original')
+    expect(db.get(item.id)?.content).toBe('new')
+  })
+  it('forks and merges only explicit unchanged-parent alternatives',()=>{
+    const db=store(), parent=db.create(payload('base'))
+    const a=db.fork(parent.id,1,'Variant A'), b=db.fork(parent.id,1,'Variant B')
+    db.update(a.id,1,{content:'approved'})
+    db.update(b.id,1,{content:'other'})
+    expect(db.get(parent.id)?.content).toBe('base')
+    expect(db.mergeFork(a.id,2,1).content).toBe('approved')
+    expect(()=>db.mergeFork(b.id,2,2)).toThrow('CONFLICT')
+    expect(db.get(parent.id)?.title).toBe(parent.title)
+    expect(db.version(parent.id,1)?.content).toBe('base')
+  })
+  it('detects transitive staleness, rejects cycles and isolates spaces',()=>{
+    const db=store(), a=db.create(payload('source')), b=db.create(payload('report')), c=db.create(payload('slides'))
+    const other=db.create({...payload(),space:'other'})
+    db.setDependencies(b.id,1,[{id:a.id,revision:1}])
+    db.setDependencies(c.id,1,[{id:b.id,revision:1}])
+    expect(db.dependencies(c.id).stale).toBe(false)
+    expect(()=>db.setDependencies(a.id,1,[{id:c.id,revision:1}])).toThrow(/cíclica/)
+    expect(()=>db.setDependencies(a.id,1,[{id:other.id,revision:1}])).toThrow(/inválida/)
+    db.update(a.id,1,{content:'changed'})
+    expect(db.dependencies(c.id).stale).toBe(true)
+    expect(()=>db.setDependencies(b.id,1,[{id:a.id,revision:1}])).toThrow('CONFLICT')
+    db.setDependencies(b.id,1,[{id:a.id,revision:2}])
+    expect(db.dependencies(c.id).stale).toBe(false)
+    db.update(a.id,2,{deleted:true})
+    expect(db.dependencies(c.id).stale).toBe(true)
+  })
+  it('bounds active alternatives and rejects binary forks',()=>{
+    const db=store(), parent=db.create(payload())
+    for(let i=0;i<8;i++)db.fork(parent.id,1,'Alternative '+i)
+    expect(()=>db.fork(parent.id,1,'Overflow')).toThrow(/Límite/)
+    const imported=db.importFile('file.txt','text/plain',Buffer.from('x'))
+    expect(()=>db.fork(imported.id,1,'Copy')).toThrow()
+  })
+})
+
+describe('explicit clipboard and fictional fixtures',()=>{
+  it('parses TSV with quoted fields, rejects malformed rows and neutralizes formulas',()=>{
+    expect(parseSpaceClipboard('name\tvalue\r\n"A\tB"\t=HYPERLINK("x")')).toEqual({columns:['name','value'],rows:[['A\tB',"'=HYPERLINK(\"x\")"]]})
+    expect(parseSpaceClipboard('x\ty\n-12\t+5').rows).toEqual([['-12','+5']])
+    expect(()=>parseSpaceClipboard('a\tb\n1')).toThrow()
+    expect(()=>parseSpaceClipboard('a\ta\n1\t2')).toThrow()
+  })
+  it('generates reproducible clearly fictional and bounded data',()=>{
+    const fixture=syntheticSpaceDataset(42,10)
+    expect(fixture).toEqual(syntheticSpaceDataset(42,10))
+    expect(fixture).not.toEqual(syntheticSpaceDataset(43,10))
+    expect(fixture.rows.every(r=>r[5]==='FICTICIO'&&Number(r[4])===Math.max(0,Number(r[2])-Number(r[3])))).toBe(true)
+    expect(()=>syntheticSpaceDataset(42,1001)).toThrow()
   })
 })

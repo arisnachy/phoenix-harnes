@@ -89,3 +89,12 @@
 @media(max-width:860px){.root{grid-template-columns:64px minmax(0,1fr)}.rail{padding:12px 5px}.railTitle{font-size:10px;overflow-wrap:anywhere;padding:6px 2px}.railAction{font-size:9px!important;padding:7px 4px!important}.railCaption,.railNote{display:none}.deck{grid-template-columns:1fr}.slideList{flex-direction:row;max-height:90px}.slideList button{min-width:110px}}
 @media(max-width:500px){.root{grid-template-columns:1fr}.rail{display:none}.main{padding:0 12px 22px}.topbarTitle strong{font-size:19px}.exitActions{padding-right:0}.close{width:32px;height:32px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.tile{min-height:135px;padding:12px!important}}
 @media(prefers-reduced-motion:reduce){.tile{transition:none!important}}
+/* Explicit readable mode stays local to the native library, not arbitrary iframe content. */
+.root[data-readable=true]{font-size:18px;line-height:1.7}
+.root[data-readable=true] button,.root[data-readable=true] label,.root[data-readable=true] input,.root[data-readable=true] textarea,.root[data-readable=true] select,.root[data-readable=true] small,.root[data-readable=true] .tileInfo strong{font-size:16px!important;line-height:1.6}
+.root[data-readable=true] button,.root[data-readable=true] input:not([type=checkbox]),.root[data-readable=true] select{min-height:44px}
+.root[data-readable=true] .tile{box-shadow:none}
+.root[data-readable=true] *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+.root[data-readable=true] :focus-visible{outline:3px solid currentColor!important;outline-offset:3px}
+.root[data-readable=true] .exitActions{flex-wrap:wrap;padding-right:0}
+@media(prefers-reduced-motion:reduce){.root *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
