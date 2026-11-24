@@ -565,6 +565,28 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
       </div>}
       {creatingPatient&&canManagePatients&&<form className={css.form} onSubmit={event=>{void addPatient(event)}} autoComplete="off">
         <h3>Nuevo paciente</h3>
+        <p>Identidad, contacto y datos de admisión. El expediente interno se asigna al guardar; documento y teléfono no son su identificador principal.</p>
+        <div className={css.admissionGrid}>
+          <label>Nombre completo<input required maxLength={160} value={name} onChange={e=>{setName(e.target.value);setIdentityMatches(null)}}/></label>
+          <label>Fecha de nacimiento<input type="date" required value={birthDate} max={new Date().toISOString().slice(0,10)}
+            onChange={e=>{setBirthDate(e.target.value);setIdentityMatches(null)}}/></label>
+          <label>Sexo registrado al nacer (opcional)
+            <select value={sexAtBirth} onChange={e=>setSexAtBirth(e.target.value as typeof sexAtBirth)}>
+              <option value="">No documentado</option>
+              <option value="female">Femenino</option><option value="male">Masculino</option>
+              <option value="intersex">Intersexual</option><option value="unknown">Desconocido</option>
+            </select>
+          </label>
+          <label>Tipo de documento<select value={documentType} onChange={e=>{setDocumentType(e.target.value as typeof documentType);setIdentityMatches(null)}}>
+            <option value="cedula">Cédula dominicana</option><option value="passport">Pasaporte</option><option value="other">Otro documento</option>
+          </select></label>
+          <label>Número de documento (opcional)<input maxLength={32} value={documentNumber}
+            onChange={e=>{setDocumentNumber(e.target.value);setIdentityMatches(null)}}/></label>
+          <label>Teléfono (opcional)<input maxLength={35} type="tel" value={phone}
+            onChange={e=>{setPhone(e.target.value);setIdentityMatches(null)}}/></label>
+          <label>Correo (opcional)<input type="email" maxLength={254} value={email}
+            onChange={e=>{setEmail(e.target.value);setIdentityMatches(null)}}/></label>
+        </div>
         <div className={css.intakeAssistant} aria-label="Admisión conversacional protegida">
           <strong>Cuéntame los datos del paciente</strong>
           <p>Escribe en una sola entrada. Los datos reconocidos se proponen antes de llenar los campos vacíos; no se envían al chat general.</p>
@@ -588,28 +610,6 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
             </>}
             {!birthDate&&!intakeProposal.dateOfBirth&&<p>ASK · ¿Cuál es la fecha de nacimiento? La edad referida no sustituye una fecha verificada.</p>}
           </div>}
-        </div>
-        <p>Identidad, contacto y datos de admisión. El expediente interno se asigna al guardar; documento y teléfono no son su identificador principal.</p>
-        <div className={css.admissionGrid}>
-          <label>Nombre completo<input required maxLength={160} value={name} onChange={e=>{setName(e.target.value);setIdentityMatches(null)}}/></label>
-          <label>Fecha de nacimiento<input type="date" required value={birthDate} max={new Date().toISOString().slice(0,10)}
-            onChange={e=>{setBirthDate(e.target.value);setIdentityMatches(null)}}/></label>
-          <label>Sexo registrado al nacer (opcional)
-            <select value={sexAtBirth} onChange={e=>setSexAtBirth(e.target.value as typeof sexAtBirth)}>
-              <option value="">No documentado</option>
-              <option value="female">Femenino</option><option value="male">Masculino</option>
-              <option value="intersex">Intersexual</option><option value="unknown">Desconocido</option>
-            </select>
-          </label>
-          <label>Tipo de documento<select value={documentType} onChange={e=>{setDocumentType(e.target.value as typeof documentType);setIdentityMatches(null)}}>
-            <option value="cedula">Cédula dominicana</option><option value="passport">Pasaporte</option><option value="other">Otro documento</option>
-          </select></label>
-          <label>Número de documento (opcional)<input maxLength={32} value={documentNumber}
-            onChange={e=>{setDocumentNumber(e.target.value);setIdentityMatches(null)}}/></label>
-          <label>Teléfono (opcional)<input maxLength={35} type="tel" value={phone}
-            onChange={e=>{setPhone(e.target.value);setIdentityMatches(null)}}/></label>
-          <label>Correo (opcional)<input type="email" maxLength={254} value={email}
-            onChange={e=>{setEmail(e.target.value);setIdentityMatches(null)}}/></label>
         </div>
         {intakeTemplate&&<fieldset className={css.admissionFields}><legend>Datos complementarios de admisión</legend>
           <div className={css.admissionGrid}>{intakeTemplate.fields.map(field=>
@@ -694,6 +694,20 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
       {selectedPatient&&!creatingEncounter&&!patientEncounters.length&&
         <p className={css.emptyState}>Este paciente aún no tiene consultas accesibles. Utiliza «Nueva consulta» para iniciar la atención.</p>}
       {selectedEncounter&&currentNote&&<div className={css.encounter}>
+        <p className={css.notice}>Consulta · versión {selectedEncounter.version} · {selectedEncounter.status}
+          {selectedEncounter.status==='signed'?' · Solo lectura': ' · Borrador pendiente de revisión y firma'}</p>
+        {selectedEncounter.status==='signed' ? <div className={css.panel}>
+          <strong>Consulta firmada · protegida contra edición</strong>
+          <pre>{selectedEncounter.history}</pre>
+          <p className={css.notice}>Firmada por {selectedEncounter.signedBy??'profesional autorizado'} ·
+            {selectedEncounter.signedAt??'fecha protegida'}. No admite sobrescritura; correcciones mediante adenda.</p>
+        </div> : <HealthiaClinicalNote key={selectedEncounter.id+':'+noteReload} initialKind={currentNote.kind}
+          initialValues={currentNote.values} patient={selectedPatient} encounterVersion={selectedEncounter.version}
+          requestedStep={requestedStep} onEditorState={onEditorState} onDirtyChange={setDirtyEncounter} {...(session?.actor.role==='clinician'&&session.actor.username===selectedEncounter.practitioner?{verifyIcd11:(code:string)=>api.verifyIcd11(session,code)}:{})} {...(canManageEncounters&&session?.actor.username===selectedEncounter.practitioner?{onSave:saveNote}:{})}
+          {...(session?.actor.role==='clinician'&&session.actor.username===selectedEncounter.practitioner&&selectedEncounter.status==='draft'?{
+            loadModels:()=>api.editorModels(session),
+            refineField:(field:string,text:string,model:import('./HealthiaClinicalApi.ts').ClinicalEditorModel,confirmed:boolean)=>api.refineEditorField(session,selectedEncounter,field,text,model,confirmed),
+          }:{})}/>}
         {canManageEncounters&&selectedEncounter.status!=='signed'&&<section className={css.interviewCard}
           aria-label="Ask clínico protegido">
           <div className={css.interviewHeader}><strong>Ask · interrogatorio clínico</strong>
@@ -734,20 +748,6 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
             }}>Preparar borrador desde el interrogatorio</button>}
         </section>}
 
-        <p className={css.notice}>Consulta · versión {selectedEncounter.version} · {selectedEncounter.status}
-          {selectedEncounter.status==='signed'?' · Solo lectura': ' · Borrador pendiente de revisión y firma'}</p>
-        {selectedEncounter.status==='signed' ? <div className={css.panel}>
-          <strong>Consulta firmada · protegida contra edición</strong>
-          <pre>{selectedEncounter.history}</pre>
-          <p className={css.notice}>Firmada por {selectedEncounter.signedBy??'profesional autorizado'} ·
-            {selectedEncounter.signedAt??'fecha protegida'}. No admite sobrescritura; correcciones mediante adenda.</p>
-        </div> : <HealthiaClinicalNote key={selectedEncounter.id+':'+noteReload} initialKind={currentNote.kind}
-          initialValues={currentNote.values} patient={selectedPatient} encounterVersion={selectedEncounter.version}
-          requestedStep={requestedStep} onEditorState={onEditorState} onDirtyChange={setDirtyEncounter} {...(session?.actor.role==='clinician'&&session.actor.username===selectedEncounter.practitioner?{verifyIcd11:(code:string)=>api.verifyIcd11(session,code)}:{})} {...(canManageEncounters&&session?.actor.username===selectedEncounter.practitioner?{onSave:saveNote}:{})}
-          {...(session?.actor.role==='clinician'&&session.actor.username===selectedEncounter.practitioner&&selectedEncounter.status==='draft'?{
-            loadModels:()=>api.editorModels(session),
-            refineField:(field:string,text:string,model:import('./HealthiaClinicalApi.ts').ClinicalEditorModel,confirmed:boolean)=>api.refineEditorField(session,selectedEncounter,field,text,model,confirmed),
-          }:{})}/>}
         <button type="button" className={css.printAction} disabled={dirtyEncounter} onClick={()=>{
           try {
             printProtectedClinicalDocument({
