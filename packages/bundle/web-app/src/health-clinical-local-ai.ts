@@ -11,6 +11,27 @@ export interface ClinicalLocalAiSuggestion extends Omit<ClinicalNoteProposal,'so
   readonly requiresClinicianReview:true
 }
 type Fetcher=typeof fetch
+
+/** Verify the loopback server reports a local GGUF architecture before sending
+ * protected text. A local-looking alias alone is not proof of local execution. */
+export async function verifyProtectedOllamaModel(model:string,fetcher:Fetcher=fetch):Promise<void>{
+  if(!/^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,99}$/u.test(model)||/(?:^|[/:.-])cloud(?:$|[/:.-])/iu.test(model))
+    throw Error('CLINICAL_LOCAL_AI_MODEL_NOT_CONFIGURED')
+  const response=await fetcher('http://127.0.0.1:11434/api/show',{
+    method:'POST',headers:{'content-type':'application/json','accept':'application/json'},
+    body:JSON.stringify({model}),signal:AbortSignal.timeout(5000),redirect:'error',
+  })
+  if(!response.ok)throw Error('CLINICAL_LOCAL_AI_MODEL_UNVERIFIED')
+  const data:unknown=await response.json()
+  if(!data||typeof data!=='object'||Array.isArray(data))throw Error('CLINICAL_LOCAL_AI_MODEL_UNVERIFIED')
+  const x=data as Record<string,unknown>
+  if(x.remote_host||x.remote_model||x.remoteHost||x.remoteModel||x.cloud===true)throw Error('CLINICAL_LOCAL_AI_REMOTE_MODEL')
+  const details=x.details as {format?:unknown}|undefined
+  const info=x.model_info as Record<string,unknown>|undefined
+  if(details?.format!=='gguf'||typeof info?.['general.architecture']!=='string'||!info['general.architecture'])
+    throw Error('CLINICAL_LOCAL_AI_MODEL_UNVERIFIED')
+}
+
 export async function refineProtectedHistoryLocal(
   original:ClinicalNoteProposal,
   config:{enabled:boolean;model:string|undefined;fetcher?:Fetcher},
@@ -25,6 +46,7 @@ export async function refineProtectedHistoryLocal(
     ||typeof original.suggestedHistory!=='string'||original.suggestedHistory.length>3900)
     throw Error('CLINICAL_INVALID_DRAFT')
   const fetcher=config.fetcher??fetch
+  await verifyProtectedOllamaModel(model,fetcher)
   const prompt=[
     'TAREA: mejora exclusivamente la redacción en español de los hechos clínicos DOCUMENTADOS.',
     'No introduzcas nuevos síntomas, signos vitales, fechas, dosis, diagnósticos, negativos, recomendaciones ni tratamientos.',
@@ -85,6 +107,8 @@ export async function discoverProtectedLocalAiModel(
   const eligible=models.slice(0,80).flatMap(item=>{
     if(!item||typeof item!=='object'||Array.isArray(item))return []
     const row=item as {name?:unknown;model?:unknown;details?:{family?:unknown}}
+    const remote=item as Record<string,unknown>
+    if(remote.remote_host||remote.remote_model||remote.remoteHost||remote.remoteModel||remote.cloud===true)return []
     const name=row.name??row.model
     return typeof name==='string'&&name.length<=100
       &&/^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/u.test(name)
@@ -117,6 +141,8 @@ export async function listProtectedLocalAiModels(fetcher:Fetcher=fetch):Promise<
   for(const row of rows.slice(0,100)){
     if(!row||typeof row!=='object'||Array.isArray(row))continue
     const entry=row as {name?:unknown;model?:unknown}
+    const remote=row as Record<string,unknown>
+    if(remote.remote_host||remote.remote_model||remote.remoteHost||remote.remoteModel||remote.cloud===true)continue
     const name=entry.name??entry.model
     if(typeof name!=='string'||name.length>100
       ||!/^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/u.test(name)
