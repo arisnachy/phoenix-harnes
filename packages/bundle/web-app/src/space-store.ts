@@ -8,6 +8,7 @@ import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync }
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
+import { summarizeSpaceSheet } from './space-workflows.ts'
 
 export type SpaceKind = 'document'|'slides'|'sheet'|'image'|'game'|'app'|'code'|'file'
 export interface SpaceItem {
@@ -77,7 +78,9 @@ export class PhoenixSpaceStore {
       'CREATE TABLE IF NOT EXISTS space_forks(child_id TEXT PRIMARY KEY,parent_id TEXT NOT NULL,base_revision INTEGER NOT NULL);'+
       'CREATE INDEX IF NOT EXISTS space_fork_parent ON space_forks(parent_id);'+
       'CREATE TABLE IF NOT EXISTS space_dependencies(target_id TEXT NOT NULL,source_id TEXT NOT NULL,source_revision INTEGER NOT NULL,PRIMARY KEY(target_id,source_id));'+
-      'CREATE INDEX IF NOT EXISTS space_dependency_source ON space_dependencies(source_id);'
+      'CREATE INDEX IF NOT EXISTS space_dependency_source ON space_dependencies(source_id);'+
+      'CREATE TABLE IF NOT EXISTS space_derivations(target_id TEXT PRIMARY KEY,source_id TEXT NOT NULL,generated_revision INTEGER NOT NULL);'+
+      'CREATE INDEX IF NOT EXISTS space_derivation_source ON space_derivations(source_id);'
     )
   }
   close():void{this.db.close()}
@@ -136,9 +139,51 @@ export class PhoenixSpaceStore {
         .run(title,content,space,deleted?1:0,now,id,expected)
       if(written.changes!==1)throw new Error('CONFLICT')
       this.db.prepare('DELETE FROM space_history WHERE item_id=? AND revision NOT IN (SELECT revision FROM space_history WHERE item_id=? ORDER BY revision DESC LIMIT 30)').run(id,id)
+      if(current.kind==='sheet')this.refreshDerived(id)
       if(transaction)this.db.exec('COMMIT')
     }catch(error){if(transaction)this.db.exec('ROLLBACK');throw error}
     return this.get(id)!
+  }
+
+
+  /** Establish an opt-in live transformation once. A manually changed result is never overwritten. */
+  deriveSummary(id:string,expected:number,kind:unknown):SpaceItem{
+    if(kind!=='document'&&kind!=='slides')throw Error('Tipo inválido')
+    this.db.exec('BEGIN IMMEDIATE')
+    try{
+      const source=this.get(id)
+      if(!source||source.deleted||source.kind!=='sheet'||source.bytes>0)throw Error('Hoja no encontrada')
+      if(source.revision!==expected)throw Error('CONFLICT')
+      const content=summarizeSpaceSheet(source.content,kind)
+      const existing=this.bySource('derived-summary-v1:'+id+':'+kind)
+      if(existing){
+        if(existing.deleted||existing.space!==source.space)throw Error('Resultado no disponible')
+        this.db.exec('COMMIT')
+        return existing
+      }
+      const result=this.create({kind,space:source.space,title:kind==='document'?'Resumen conectado':'Presentación conectada',
+        mime:kind==='document'?'text/markdown':'application/vnd.phoenix.slides+json',content,sourceKey:'derived-summary-v1:'+id+':'+kind})
+      this.db.prepare('INSERT INTO space_dependencies(target_id,source_id,source_revision) VALUES (?,?,?)').run(result.id,id,expected)
+      this.db.prepare('INSERT INTO space_derivations(target_id,source_id,generated_revision) VALUES (?,?,?)').run(result.id,id,result.revision)
+      this.db.exec('COMMIT')
+      return result
+    }catch(error){this.db.exec('ROLLBACK');throw error}
+  }
+  /** Called within the source transaction. Invalid inputs leave the old output stale. */
+  private refreshDerived(sourceId:string):void{
+    const source=this.get(sourceId)
+    if(!source||source.deleted||source.kind!=='sheet')return
+    const links=this.db.prepare('SELECT target_id,generated_revision FROM space_derivations WHERE source_id=? LIMIT 2').all(sourceId) as Array<{target_id:string;generated_revision:number}>
+    for(const link of links){
+      const target=this.get(link.target_id)
+      if(!target||target.deleted||target.space!==source.space||target.revision!==link.generated_revision||
+        (target.kind!=='document'&&target.kind!=='slides'))continue
+      let content:string
+      try{content=summarizeSpaceSheet(source.content,target.kind)}catch{continue}
+      const updated=this.updateInternal(target.id,target.revision,{content},false)
+      this.db.prepare('UPDATE space_derivations SET generated_revision=? WHERE target_id=?').run(updated.revision,target.id)
+      this.db.prepare('UPDATE space_dependencies SET source_revision=? WHERE target_id=? AND source_id=?').run(source.revision,target.id,source.id)
+    }
   }
 
   /** Return a prior version without changing the active item. */
@@ -192,6 +237,7 @@ export class PhoenixSpaceStore {
       const target=this.get(id)
       if(!target||target.deleted)throw new Error('Elemento no encontrado')
       if(target.revision!==expected)throw new Error('CONFLICT')
+      if(this.db.prepare('SELECT target_id FROM space_derivations WHERE target_id=?').get(id))throw Error('Relación automática: edición manual de dependencias no permitida')
       const seen=new Set<string>()
       for(const entry of raw){
         if(!entry||typeof entry!=='object'||typeof entry.id!=='string'||!Number.isSafeInteger(entry.revision))throw new Error('Dependencia inválida')
