@@ -1,20 +1,70 @@
-<p align="center">
-  <img src="docs/phoenix-logo.svg" alt="PHOENIX — Universal AI Harness" width="520">
-</p>
+<p align="center"><img src="apps/web/public/phoenix-emblem.png" alt="PHOENIX" width="180"></p>
 
-# PHOENIX
+# PHOENIX AI Harness
 
-[English](README.md) | 中文
+[English](README.md) | [Español](README.es.md) | 中文
 
-**PHOENIX 是一个通用、与模型提供方无关的 AI agent harness，面向 local-first 与自带 provider 的工作流。**
+**开源 AI 工作空间：统一的智能体体验，多种模型选择。**
 
-项目围绕智能模型选择、持久连续性、仓库智能、工具、多 agent 执行、恢复、评估和有边界的自我改进构建。各项能力会逐步落地；在仓库 gate 真正通过之前，不会把它们描述成已完成。
+PHOENIX 是由多米尼加共和国的 **Arisnachy Gómez Díaz 博士** 创建并领导的通用、本地优先 AI 智能体工作空间。Kira 将对话、工具、模型、专业智能体与工作产物整合到同一个环境。用户可以选择适合任务的 AI 引擎，而不必围绕某个提供方重建工作流程。
+
+**你的模型，你的工作空间，你的 AI。**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-amber.svg)](LICENSE) [![GitHub stars](https://img.shields.io/github/stars/arisnachy/phoenix-harnes?style=flat)](https://github.com/arisnachy/phoenix-harnes/stargazers) [![GitHub release](https://img.shields.io/github/v/release/arisnachy/phoenix-harnes)](https://github.com/arisnachy/phoenix-harnes/releases) [![GitHub downloads](https://img.shields.io/github/downloads/arisnachy/phoenix-harnes/total)](https://github.com/arisnachy/phoenix-harnes/releases)
+
+[开始使用](#run) · [Windows 版本](https://github.com/arisnachy/phoenix-harnes/releases) · [社区](https://github.com/arisnachy/phoenix-harnes/discussions) · [报告问题](https://github.com/arisnachy/phoenix-harnes/issues)
+
+## 你可以做什么
+
+| 能力 | PHOENIX 提供的功能 |
+| --- | --- |
+| Kira 与 Living Team | 在受支持的会话中保持智能体身份、协作、可见活动、回复和任务交接。 |
+| 模型自由 | 受支持的云服务商、API 凭据、可用时的官方 ChatGPT/Codex 账户连接、Ollama 与受管理本地推理。 |
+| 自适应工作空间 | 对话界面结合上下文界面、MiniBrowser、表单与产物预览；布局与同步仍在完善。 |
+| 文档与数据 | 处理文件、电子表格、结构化数据、报告和生成产物；格式与编辑能力因界面而异。 |
+| 研究与分析 | 按领域发现来源、带引用的研究工作流、数据分析及报告准备；需核实来源和实时数据。 |
+| 软件开发 | 在配置权限下检查仓库、编辑代码、执行终端与工具、运行测试及受支持的 Git 流程。 |
+| 记忆与连续性 | 持久会话历史、上下文和恢复机制；可用性取决于安装的运行时。 |
+| Healthia | 分阶段开发中的临床工作空间：患者记录、就诊表单和临床文档；需要专业人员审核。 |
+| 体育智能 | 体育数据研究与来源验证；覆盖范围与实时可用性会变化。 |
+| 演进与自适应智能 | 评估、恢复、专业智能体选择和有边界的改进实验；不宣称自主训练或保证性能。 |
+
+## PHOENIX 如何工作
+
+```mermaid
+flowchart TD
+    U["用户"] --> K["Kira · 协调"]
+    K --> M["模型"]
+    K --> S["专业智能体"]
+    K --> T["工具与权限"]
+    K <--> W["自适应工作空间"]
+    K <--> H["会话历史"]
+    M --> L["本地模型"]
+    M --> C["云提供方"]
+    T --> R["研究"]
+    T --> D["代码与自动化"]
+    T --> F["文档与数据"]
+    T --> P["临床及体育模块"]
+    W --> A["产物与结果"]
+    classDef core fill:#3c2a19,color:#fff,stroke:#f0a649,stroke-width:2px
+    class K core
+```
+
+## 从请求到交付
+
+```mermaid
+flowchart LR
+    A["请求"] --> B["规划与选择"] --> C["执行"] --> D{"验证"} --> E["交付"]
+    D --> F["恢复或调整"] --> B
+```
 
 ## 开发状态
 
-PHOENIX 正在积极开发。仓库展示、Web UI、PWA 元数据、浏览器标题和视觉系统均以 PHOENIX 作为产品身份。
+PHOENIX 正在积极开发。图示描述产品架构，并非界面截图或认证。以上包含可用组件与持续完善的集成；各流程取决于版本、提供方、硬件、权限和测试。Healthia 不作为已认证医疗器械宣传，体育分析不保证结果。请查看文档和发布说明了解当前限制。
 
-为保持与上游运行时兼容，部分内部包名和 CLI 标识会暂时保留；PHOENIX 则通过彼此隔离、可测试的下游层持续演进。这些实现细节不定义产品身份。
+### 技术文档
+
+[Kira Teams](packages/client/ui-kira-teams/README.md) · [Contextual UI](docs/product/PHOENIX_UNIVERSAL_CONTEXTUAL_UI.md) · [Universal Intelligence](docs/phoenix-universal-intelligence-3.0.md) · [Healthia](docs/healthia-chat-first-intake-architecture.md) · [Research Studio](docs/phoenix-research-studio-2.1.md) · [Sports](docs/sports/SPORTS_SOURCE_VERIFICATION.md) · [Evolution](docs/evolution/PHOENIX_EVOLUTION_V16.md)
 
 ## Run
 
@@ -86,14 +136,6 @@ Windows 安装、IDE 打包、原生 sandbox 边界与 continuity 状态参见 [
 
 面向 agent：请遵循 [AGENTS.md](AGENTS.md)。
 
-## 上游基础与署名
+## 许可证与第三方署名
 
-PHOENIX 是基于 [DeepSeek Harness](https://github.com/arisnachy/phoenix-harnes) 构建的下游演进项目；该项目是由 [DeepSeek AI](https://deepseek.com) 开发并采用 MIT 许可证的开源 agent harness。其插件架构由 [Cordis](https://github.com/cordiverse/cordis) 驱动，设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper)。
-
-PHOENIX 不声称拥有上游代码的作者身份。上游署名与许可证声明会被保留，同时 PHOENIX 专属工作会明确作为下游演进进行区分。
-
-## 许可证
-
-[MIT](LICENSE)
-
-第三方依赖及其许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+PHOENIX 是产品身份。现有版权声明，包括继承代码和内置第三方代码的声明，保留于 [LICENSE](LICENSE)、[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [vendor/README.md](vendor/README.md)。不主张第三方代码的作者身份。
