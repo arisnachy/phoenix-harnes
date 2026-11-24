@@ -217,3 +217,14 @@ it('exports real web ZIP entries without installing dependencies and rejects uns
   expect(()=>exportStaticSpaceApp(JSON.stringify({...bundle,files:{...bundle.files,'CON.js':'x'}}))).toThrow()
   expect(()=>exportStaticSpaceApp(JSON.stringify({...bundle,files:{...bundle.files,'secret.js':'phoenix-control://v1?token=secret'}}))).toThrow()
 })
+
+it('bounds large revision history without deleting active content or bypassing fork quota through trash',()=>{
+  const db=store(), item=db.create(payload('x'.repeat(700000)))
+  for(let i=1;i<=14;i++)db.update(item.id,i,{content:String(i).padEnd(700000,'x')})
+  expect(db.history(item.id).length).toBeLessThanOrEqual(11)
+  expect(db.get(item.id)?.revision).toBe(15)
+  expect(db.version(item.id,14)?.content.startsWith('13')).toBe(true)
+  const forks=Array.from({length:8},(_,i)=>db.fork(item.id,15,'Variant '+i))
+  db.update(forks[0]!.id,1,{deleted:true})
+  expect(()=>db.fork(item.id,15,'Overflow')).toThrow(/Límite/)
+})
