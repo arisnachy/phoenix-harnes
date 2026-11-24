@@ -871,6 +871,13 @@ export class HealthClinicStore {
   }
   /** A clinician's work-in-progress stays encrypted and outside the general chat. */
   private draftKey(actor:Actor,scope:string):string {
+    if(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(scope)){
+      if(!['clinician','psychologist'].includes(actor.role))fail('Acceso al borrador de consulta no autorizado')
+      const encounter=this.find(actor,'encounters',scope).data
+      if(encounter.practitioner!==actor.username||encounter.status==='signed')
+        fail('Acceso al borrador de consulta no autorizado')
+      return createHash('sha256').update(actor.org+'\0'+actor.username+'\0ask:'+scope).digest('hex')
+    }
     if(!/^(workspace|patients|encounters|appointments|orders|prescriptions|inventory|invoices|followups|assignments|staff|backups|audit)$/u.test(scope))
       fail('Sección de borrador no permitida')
     return createHash('sha256').update(actor.org+'\0'+actor.username+'\0'+scope).digest('hex')
@@ -885,6 +892,15 @@ export class HealthClinicStore {
   }
   saveClinicalDraft(actor:Actor,scope: string,input:unknown):{savedAt:string} {
     const id=this.draftKey(actor,scope),body=obj(input),incoming=obj(body.values)
+    if(/^[0-9a-f-]{36}$/u.test(scope)){
+      const encounter=this.find(actor,'encounters',scope)
+      if(incoming.encounterVersion!==String(encounter.row.version))
+        fail('Conflicto de edición: recarga la consulta')
+      if(Object.keys(incoming).some(key=>!['encounterVersion','answerKey','answerText'].includes(key))
+        ||typeof incoming.answerKey!=='string'||typeof incoming.answerText!=='string'
+        ||incoming.answerText.length>1600||!this.interviewGuide(actor,scope).nextQuestions.some(q=>q.key===incoming.answerKey))
+        fail('Borrador de interrogatorio inválido')
+    }
     if(Object.keys(incoming).length>100||JSON.stringify(body).length>60_000)
       fail('Borrador clínico demasiado grande')
     const values:Record<string,string|boolean>={}
