@@ -128,11 +128,35 @@ export function nativeMenuOperation(store:Store,raw:unknown,apply=false):{state:
   const next={revision:current.revision+1,entries}
   if(!validRevision(next))throw Error('INVALID_NATIVE_MENU_RESULT')
   if(apply){
-    checkpoint(store,current)
-    store.setItem(NATIVE_MENU_KEY,JSON.stringify({current:next,previous:current}))
-    const observed=read(store).current
-    if(JSON.stringify(observed)!==JSON.stringify(next))throw Error('NATIVE_MENU_VERIFY_FAILED')
-    checkpoint(store,observed)
+    // Critical local change: require an independently readable recovery point.
+    const before=store.getItem(NATIVE_MENU_KEY)
+    const backup=JSON.stringify(current)
+    store.setItem(NATIVE_CHECKPOINT_KEY,backup)
+    if(store.getItem(NATIVE_CHECKPOINT_KEY)!==backup)throw Error('NATIVE_MENU_CHECKPOINT_FAILED')
+    if(store.getItem(NATIVE_MENU_KEY)!==before)throw Error('STALE_NATIVE_MENU_REVISION')
+    const payload=JSON.stringify({current:next,previous:current})
+    try{
+      store.setItem(NATIVE_MENU_KEY,payload)
+      const observed=read(store).current
+      if(JSON.stringify(observed)!==JSON.stringify(next))throw Error('NATIVE_MENU_VERIFY_FAILED')
+      checkpoint(store,observed)
+    }catch{
+      // Never overwrite a valid, unrelated revision from another window.
+      const raw=store.getItem(NATIVE_MENU_KEY)
+      if(raw===before)throw Error('NATIVE_MENU_WRITE_FAILED_UNCHANGED')
+      if(raw!==payload){
+        try{read(store);throw Error('NATIVE_MENU_CONCURRENT_CHANGE')}
+        catch(error){if(error instanceof Error&&error.message==='NATIVE_MENU_CONCURRENT_CHANGE')throw error}
+      }
+      const restored:NativeRevision={revision:next.revision+1,entries:current.entries}
+      if(!validRevision(restored))throw Error('NATIVE_MENU_ROLLBACK_FAILED')
+      try{
+        store.setItem(NATIVE_MENU_KEY,JSON.stringify({current:restored,previous:current}))
+        if(JSON.stringify(read(store).current)!==JSON.stringify(restored))throw Error('verify')
+        checkpoint(store,restored)
+      }catch{throw Error('NATIVE_MENU_ROLLBACK_FAILED')}
+      throw Error('NATIVE_MENU_CHANGE_REVERTED')
+    }
   }
   return {state:apply?next:current,reason:apply?'NATIVE_MENU_SAVED':'NATIVE_MENU_PREFLIGHT'}
 }

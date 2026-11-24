@@ -135,6 +135,7 @@ export class DynamicCordisRunnerService extends TypertRemoteService {
   private readonly registry = new DynamicCordisRegistry()
   private readonly inspectRegistry: CordisInspectRegistryService
   private readonly starting = new Map<CordisDynamicPluginId, Promise<DynamicCordisHostHalfResult>>()
+  private readonly stopping = new Set<CordisDynamicPluginId>()
   private readonly resolved: ResolvedConfig
   private group: Fiber | undefined
 
@@ -464,6 +465,11 @@ export class DynamicCordisRunnerService extends TypertRemoteService {
   async stop(agent: Agent, pluginId: CordisDynamicPluginId): Promise<DynamicCordisStopResponse> {
     const plugin = this.owned(agent, pluginId)
     if (plugin === undefined) return { ok: false, reason: 'plugin-missing', message: missingPluginMessage(pluginId) }
+    const inFlight = this.starting.get(pluginId)
+    if (inFlight !== undefined) {
+      this.stopping.add(pluginId)
+      try { await inFlight.catch(() => undefined) } finally { this.stopping.delete(pluginId) }
+    }
     const pending = this.registry.pendingRequestFor(pluginId)
     if (plugin.run === undefined && pending === undefined) {
       return { ok: false, reason: 'not-running', message: `dynamic plugin "${pluginId}" is not running` }
@@ -847,6 +853,14 @@ export class DynamicCordisRunnerService extends TypertRemoteService {
         startedHere: false,
       }
     }
+    // Fast rollback is limited to an active, healthy Host-only version. A
+    // Client package needs its own page acknowledgement; never claim it restored here.
+    const previous = mode === 'update' && definition.clientCode === undefined
+      && plugin.run !== undefined && plugin.run.packageId === plugin.currentPackageId
+      && missingFor(this.ctx, plugin.run).length === 0
+      ? plugin.packages.get(plugin.run.packageId) : undefined
+    const recovery = previous?.hostCode !== undefined && previous.clientCode === undefined
+      ? previous : undefined
     if (plugin.run !== undefined) await this.retract(plugin)
     if (mode === 'update' || plugin.currentPackageId === undefined) plugin.nextPackageId = definition.packageId
     const run: DynamicCordisRun = {
@@ -859,7 +873,33 @@ export class DynamicCordisRunnerService extends TypertRemoteService {
     }
     if (definition.hostCode !== undefined) {
       const failure = await this.startHost(plugin, definition.hostCode, run)
-      if (failure !== undefined) return { ok: false, ...failure }
+      if (failure !== undefined) {
+        if (recovery !== undefined && !this.stopping.has(plugin.pluginId)) {
+          // Keep the entire rollback inside the existing per-plugin transition.
+          // One attempt only; no retry loop, no new approval or permission.
+          const rollbackPlan: ActivationPlan = { plugin, definition: recovery, mode: 'run' }
+          const rollbackAttempt = this.createAttempt(rollbackPlan)
+          plugin.latestRun = rollbackAttempt
+          try {
+            const restored = await this.startFresh(rollbackPlan, undefined, false, rollbackAttempt)
+            const healthy = restored.ok && restored.waitingFor.length === 0
+            if (!healthy && plugin.run?.packageId === recovery.packageId) await this.retract(plugin)
+            return { ok: false, ...failure, message: failure.message + (healthy
+              ? ' [PHOENIX restored previous Host version]'
+              : ' [PHOENIX rollback failed; extension isolated]') }
+          } catch {
+            if (plugin.run?.packageId === recovery.packageId) {
+              try { await this.retract(plugin) } catch { /* report failure; do not retry */ }
+            }
+            return { ok: false, ...failure, message: failure.message + ' [PHOENIX rollback failed; verify extension state]' }
+          } finally {
+            // Preserve rejected candidate diagnostics and the last good version.
+            plugin.latestRun = attempt
+            plugin.nextPackageId = definition.packageId
+          }
+        }
+        return { ok: false, ...failure }
+      }
     }
     plugin.run = run
     this.ctx.emit('cordis/dynamic-package', {
