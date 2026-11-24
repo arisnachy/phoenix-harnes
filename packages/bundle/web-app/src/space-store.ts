@@ -174,7 +174,7 @@ export class PhoenixSpaceStore {
     }catch(error){this.db.exec('ROLLBACK');throw error}
   }
   private inheritRestriction(source:string,target:string):void{
-    if(this.distributionPolicy(source).restricted)this.db.prepare('INSERT OR IGNORE INTO space_restricted(item_id) VALUES (?)').run(target)
+    if(this.distributionPolicy(source).restricted)this.db.prepare('WITH RECURSIVE descendants(id) AS (SELECT ? UNION SELECT d.target_id FROM space_dependencies d JOIN descendants a ON d.source_id=a.id UNION SELECT f.child_id FROM space_forks f JOIN descendants a ON f.parent_id=a.id) INSERT OR IGNORE INTO space_restricted(item_id) SELECT id FROM descendants').run(target)
   }
 
   /** Establish an opt-in live transformation once. A manually changed result is never overwritten. */
@@ -188,7 +188,7 @@ export class PhoenixSpaceStore {
       const content=summarizeSpaceSheet(source.content,kind)
       const existing=this.bySource('derived-summary-v1:'+id+':'+kind)
       if(existing){
-        if(existing.deleted||existing.space!==source.space)throw Error('Resultado no disponible')
+        if(existing.deleted||existing.space!==source.space||existing.kind!==kind||!this.db.prepare('SELECT target_id FROM space_derivations WHERE target_id=? AND source_id=?').get(existing.id,id))throw Error('Resultado no disponible')
         this.db.exec('COMMIT')
         return existing
       }
