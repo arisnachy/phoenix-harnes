@@ -13,6 +13,7 @@ import { HealthClinicStore, healthKinds, type ClinicActor } from './health-store
 import { renderHealthPage } from './health-ui.ts'
 import { createPatientPortalHandler } from './health-patient-routes.ts'
 import { HEALTH_CLINICAL_TOOLS, runHealthClinicalTool } from './health-clinical-tools.ts'
+import { verifyIcd11Code } from './health-icd11.ts'
 import { discoverClinicalModels, runClinicalModel, runClinicalContextReview, type HostClinicalLlm } from './health-clinical-models.ts'
 
 type Kind = Parameters<HealthClinicStore['list']>[1]
@@ -345,6 +346,16 @@ export function registerHealthRoutes(ctx:Context):void {
         }
       }
       // First-party, local-only tool catalog: contains no patient data and no arbitrary code.
+      if(operation==='icd11-verify'&&id===undefined&&method==='POST'){
+        if(actor.role!=='clinician')throw Error('Permiso clínico insuficiente')
+        const body=await readBody(req,1024)
+        if(Object.keys(body).some(key=>key!=='code'))throw Error('Solo se admite un código sin datos clínicos')
+        const clientId=process.env.PHOENIX_WHO_ICD_CLIENT_ID,clientSecret=process.env.PHOENIX_WHO_ICD_CLIENT_SECRET
+        if(!clientId||!clientSecret){reply(res,503,{error:'Credenciales OMS no configuradas'});return}
+        try{reply(res,200,{verification:await verifyIcd11Code(body.code,{clientId,clientSecret})})}
+        catch{reply(res,422,{error:'No se confirmó el código con la OMS'})}
+        return
+      }
       if(operation==='clinical-tool-catalog'&&id===undefined&&method==='GET'){
         if(actor.role!=='clinician')throw new Error('Permiso clínico insuficiente')
         reply(res,200,{tools:HEALTH_CLINICAL_TOOLS});return
