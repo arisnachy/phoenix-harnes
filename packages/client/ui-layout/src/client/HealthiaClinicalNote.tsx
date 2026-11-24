@@ -370,7 +370,7 @@ export function HealthiaClinicalNote({
         <div className={css.steps} role="group" aria-label="Secciones de historia clínica">
           {CLINICAL_EDITOR_STEPS.map((item,index) => (
             <button key={item.id} type="button" className={item.id === section ? css.stepActive : css.step}
-              aria-pressed={item.id === section} onClick={() => { setSection(item.id); setPreview(false) }}>
+              aria-pressed={item.id === section} data-documented={documentedSections.split(',').includes(item.id)} onClick={() => { setSection(item.id); setPreview(false) }}>
               <span className={css.stepIndex} aria-hidden="true">{index+1}</span><span>{item.label}</span>
             </button>
           ))}
