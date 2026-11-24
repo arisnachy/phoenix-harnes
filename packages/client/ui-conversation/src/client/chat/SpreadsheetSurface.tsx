@@ -274,7 +274,7 @@ export function applySpreadsheetPatch(store:Pick<Storage,'getItem'|'setItem'>,ke
     if(typeof after==='string'&&after!==before)throw Error('SHEET_FORMULA_ERROR_'+columnLetter(c)+String(r+2))
     if(after!==before&&recalculated.length<100)recalculated.push({cell:columnLetter(c)+String(r+2),value:String(after)})
   }
-  const draft:SheetDraft={columns:current.columns,rows,revision:current.revision+1,previous:current.rows,...current.formats?{formats:current.formats}:{}}
+  const draft:SheetDraft={columns:current.columns,rows,revision:current.revision+1,previous:current.rows,...(current.formats?{formats:current.formats}:{})}
   writeSheetDraft(store,key,draft,raw)
   return {draft,changed:spec.props.edits.map(e=>({cell:e.cell,value:e.after})),recalculated}
 }
@@ -411,7 +411,7 @@ export function SpreadsheetSurface({spec,conversationId,onAction}:{readonly spec
     try{
       const raw=localStorage.getItem(key),current=readSheetDraft(localStorage,key)
       if(!current||!latest.current||current.revision!==latest.current.revision||!validRows(next,current.columns.length))throw Error('SHEET_CONFLICT')
-      const draft:SheetDraft={columns:current.columns,rows:next,revision:current.revision+1,previous:current.rows,...current.formats?{formats:current.formats}:{}}
+      const draft:SheetDraft={columns:current.columns,rows:next,revision:current.revision+1,previous:current.rows,...(current.formats?{formats:current.formats}:{})}
       writeSheetDraft(localStorage,key,draft,raw)
       if(remember)setUndo(old=>[...old.slice(-19),current.rows])
       latest.current=draft;setRows(next);setVersion(draft.revision);setError('')
@@ -563,7 +563,7 @@ export function SpreadsheetSurface({spec,conversationId,onAction}:{readonly spec
                 title={cell.startsWith('=') ? cell : undefined}
                 onFocus={() => {setActive(address);setSelected([r,c])}} onBlur={() => setActive('')}
                 onPaste={event=>paste(event,r,c)}
-                onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();document.querySelector<HTMLInputElement>('[data-sheet-draft-key="'+key+'"] input[aria-label="'+columnLetter(c)+String(r+3)+'"]')?.focus()}}
+                onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();document.querySelector<HTMLInputElement>('[data-sheet-draft-key="'+key+'"] input[aria-label="'+columnLetter(c)+String(r+3)+'"]')?.focus()}}}
                 onChange={event => update(r, c, event.currentTarget.value)} />
             </td>
           })}</tr>)}</tbody>
