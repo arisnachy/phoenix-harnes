@@ -358,6 +358,24 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
       setStatus('')
     }catch(e){setError(String(e))}finally{setBusy(false)}
   }
+  useEffect(()=>{
+    const select=(event:Event)=>{
+      const id=(event as CustomEvent<{id?:unknown}>).detail?.id
+      if(typeof id==='string'&&/^[a-f0-9-]{36}$/u.test(id))void openItem(id)
+    }
+    window.addEventListener('phoenix:space-select-file',select)
+    return ()=>window.removeEventListener('phoenix:space-select-file',select)
+  },[editor])
+  // Refresh a clean editor when Kira or another chat card commits a new revision.
+  useEffect(()=>{
+    if(!selectedId||editor?.dirty)return
+    let disposed=false
+    const timer=window.setInterval(()=>{void api<{item:Item}>('/items/'+selectedId).then(({item})=>{
+      if(disposed||item.deleted)return
+      setEditor(current=>!current||current.dirty||current.item.id!==item.id||current.item.revision>=item.revision?current:{item,title:item.title,content:item.content,space:item.space,dirty:false})
+    }).catch(()=>{})},2000)
+    return ()=>{disposed=true;window.clearInterval(timer)}
+  },[selectedId,editor?.dirty])
   const create=async():Promise<void>=>{
     setBusy(true);setError('')
     try{

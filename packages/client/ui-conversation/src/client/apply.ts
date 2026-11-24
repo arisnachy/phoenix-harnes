@@ -30,6 +30,7 @@ import { InputBar } from './skeleton/InputBar.tsx'
 import { EnterBehaviorRow } from './settings/EnterBehaviorRow.tsx'
 import type { EnterBehaviorRowInjected } from './settings/EnterBehaviorRow.tsx'
 import { ChatView } from './chat/ChatView.tsx'
+import { configureSharedBinaryViewer } from './chat/SharedFileSurface.tsx'
 import { StatsLine } from './chat/StatsLine.tsx'
 import { ApprovalPanel } from './skeleton/ApprovalPanel.tsx'
 import { todoDockEntry } from './skeleton/TodoPanel.tsx'
@@ -155,6 +156,7 @@ export function apply(ctx: Context): void {
   const sessions = ctx.sessions
   const workspaces = ctx.workspaces
   const layout = ctx.layout
+  ctx.effect(()=>configureSharedBinaryViewer(input=>layout.renderSpaceFile?.(input)), 'space: shared binary viewer')
   const slots = ctx.slots
 
   const disposeVoiceRemote = configureVoiceAssistantRemote(
@@ -358,6 +360,18 @@ export function apply(ctx: Context): void {
         window.dispatchEvent(new Event('phoenix:adaptive-app-mission-failed'))
       }
     }
+    const onSharedFileConsult=(event:Event):void=>{
+      const d=(event as CustomEvent<unknown>).detail
+      if(!d||typeof d!=='object')return
+      const v=d as Record<string,unknown>
+      if(typeof v.id!=='string'||!/^[a-f0-9-]{36}$/u.test(v.id)||!Number.isInteger(v.revision)||typeof v.title!=='string'||v.title.length>180)return
+      const id=sessions.list.getSnapshot().current
+      if(id===undefined)return
+      try{const shell=inputHub.shell(id)
+        if(shell.snapshot.draft.trim()||shell.snapshot.imageIds.length){shell.notify('info','Conserva el borrador actual antes de consultar el archivo.');return}
+        shell.actions.setDraft('Trabajemos con el archivo de Espacio '+v.id+' (revisión '+String(v.revision)+', título '+JSON.stringify(v.title)+'). Lee su versión actual con phoenix_file antes de modificarlo. ')
+      }catch{/* Preserve existing draft */}
+    }
     const onAiFieldDraft = (event: Event): void => {
       const detail:unknown=(event as CustomEvent<unknown>).detail
       if(!detail||typeof detail!=='object'||Array.isArray(detail))return
@@ -404,6 +418,7 @@ export function apply(ctx: Context): void {
         window.dispatchEvent(new Event('phoenix:adaptive-app-mission-failed'))
       }
     }
+    window.addEventListener('phoenix:shared-file-consult',onSharedFileConsult)
     window.addEventListener('phoenix:adaptive-form-action-draft', onActionDraft)
     window.addEventListener('phoenix:adaptive-ai-field-draft', onAiFieldDraft)
     window.addEventListener('phoenix:adaptive-self-inspect', onInspectWorkspace)
@@ -415,6 +430,7 @@ export function apply(ctx: Context): void {
       window.removeEventListener('phoenix:adaptive-form-mission', onForm)
       window.removeEventListener('phoenix:adaptive-form-inspect', onInspectForm)
       window.removeEventListener('phoenix:adaptive-self-inspect', onInspectWorkspace)
+      window.removeEventListener('phoenix:shared-file-consult',onSharedFileConsult)
       window.removeEventListener('phoenix:adaptive-form-action-draft', onActionDraft)
       window.removeEventListener('phoenix:adaptive-ai-field-draft', onAiFieldDraft)
     }

@@ -192,6 +192,8 @@ export function AppFrame({
   const [viewport, setViewport] = useState(() => window.innerWidth)
   const [adaptiveApp, setAdaptiveApp] = useState<string>('general')
   const [spaceOpen, setSpaceOpen] = useState(false)
+  const [spaceFileRequest,setSpaceFileRequest]=useState<{id:string}|null>(null)
+  useEffect(()=>{if(spaceOpen&&spaceFileRequest){window.dispatchEvent(new CustomEvent('phoenix:space-select-file',{detail:spaceFileRequest}));setSpaceFileRequest(null)}},[spaceOpen,spaceFileRequest])
   const [customApps, setCustomApps] = useState<readonly AdaptiveAppBlueprint[]>(readAdaptiveApps)
   // The sidebar's document library and the session/workspace library are
   // different destinations. Never subscribe both to the legacy event:
@@ -199,6 +201,12 @@ export function AppFrame({
   // Keep the conversation/composer mounted; ask Space to flush edits before exit.
   useEffect(() => {
     const openSpace = (): void => { setSpaceOpen(true) }
+    const openFile=(event:Event):void=>{
+      const id=(event as CustomEvent<{id?:unknown}>).detail?.id
+      if(typeof id!=='string'||!/^[a-f0-9-]{36}$/u.test(id))return
+      setSpaceFileRequest({id});setSpaceOpen(true)
+    }
+    window.addEventListener('phoenix:space-open-file',openFile)
     const requestClose = (): void => {
       window.dispatchEvent(new Event('phoenix:space-request-close'))
     }
@@ -207,6 +215,7 @@ export function AppFrame({
     window.addEventListener('phoenix:open-workspace-library', requestClose)
     window.addEventListener('phoenix:adaptive-workspace', requestClose)
     return () => {
+      window.removeEventListener('phoenix:space-open-file',openFile)
       window.removeEventListener('phoenix:open-space', openSpace)
       window.removeEventListener('phoenix:close-space', requestClose)
       window.removeEventListener('phoenix:open-workspace-library', requestClose)
