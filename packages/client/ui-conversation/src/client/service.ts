@@ -20,6 +20,7 @@ import type { QueueAction, QueueItemId } from './contract/queue.ts'
 import type { ComposerBlocks, DraftAttachmentId, SessionInputResolver } from './contract/input.ts'
 import type { InputSubmitMode } from './contract/composer-submission.ts'
 import { messageWithProfileReference, savedPhotoForSelfImageRequest } from './portrait-reference.ts'
+import { prepareSheetPrompt,revokeSheetGrant } from './chat/active-sheet-context.ts'
 
 /**
  * The outward conversation face (`ctx.conversation`): the scope-addressed
@@ -172,9 +173,15 @@ export class ConversationController extends Service implements IConversation {
     }
     const uploaded = await this.serializeAttachments(files)
     const contextualText = messageWithProfileReference(text, portraitReference !== undefined)
-    const content = [...uploaded, ...(contextualText === '' ? [] : [{ type: 'text' as const, text: contextualText }])]
-    const result = await session.prompt(content, mode, signal)
-    if (!result.ok) return { kind: 'error' }
+    const sheetContext=prepareSheetPrompt(String(session.sessionId),contextualText)
+    const sentText=sheetContext?.text??contextualText
+    const content = [...uploaded, ...(sentText === '' ? [] : [{ type: 'text' as const, text: sentText }])]
+    let result:Awaited<ReturnType<SessionFace['prompt']>>
+    try{result=await session.prompt(content,mode,signal)}catch(error){
+      if(sheetContext)revokeSheetGrant(String(session.sessionId),sheetContext.token)
+      throw error
+    }
+    if (!result.ok){if(sheetContext)revokeSheetGrant(String(session.sessionId),sheetContext.token);return { kind: 'error' }}
     this.releaseDraftImages(attachments)
     return { kind: 'success' }
   }

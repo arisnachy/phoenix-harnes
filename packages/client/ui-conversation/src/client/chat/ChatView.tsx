@@ -233,7 +233,8 @@ export function ChatView({
     return chatNodes.some((node) => {
       if (node.kind !== 'user' && node.kind !== 'steering') return false
       const message = node.data as UserMessageNode
-      return message.time >= floor && userMessageText(message) === expectedText
+      const received=userMessageText(message)
+      return message.time>=floor&&(received===expectedText||received.startsWith(expectedText+'\n\n[PHOENIX: contexto de hoja activa adjuntado.'))
     })
   }, [chatNodes, pendingSubmit])
   // Host steering acknowledgement is a transport mirror of the same local
