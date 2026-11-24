@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { CanvasAction } from './GenerativeCanvas.tsx'
 import { PhoenixUiIcon } from '@phoenix-ai/dsh-client-ui-primitives'
@@ -226,7 +226,16 @@ export function parseSpreadsheetPatch(value:unknown):SpreadsheetPatchSpec|null{
   }
   return value as unknown as SpreadsheetPatchSpec
 }
-type SheetDraft={columns:string[];rows:string[][];revision:number;previous?:string[][]}
+type SheetFormat={bold?:boolean;italic?:boolean;number?:'general'|'currency'|'percent'}
+type SheetDraft={columns:string[];rows:string[][];revision:number;previous?:string[][];formats?:Record<string,SheetFormat>}
+function validFormats(value:unknown):value is Record<string,SheetFormat>{
+  if(!isRecord(value)||Object.keys(value).length>3200)return false
+  return Object.entries(value).every(([address,format])=>/^[A-P](?:[2-9]|[1-9]\d|1\d{2}|20[01])$/u.test(address)
+    &&isRecord(format)&&keys(format,['bold','italic','number'])
+    &&(format.bold===undefined||typeof format.bold==='boolean')
+    &&(format.italic===undefined||typeof format.italic==='boolean')
+    &&(format.number===undefined||['general','currency','percent'].includes(String(format.number))))
+}
 const SHEET_EVENT='phoenix:sheet-draft-updated'
 const draftKey=(id:string,conversationId?:string)=>'phoenix:sheet:v2:'+encodeURIComponent(conversationId??'local-preview')+':'+id
 function validRows(value:unknown,width:number):value is string[][]{
@@ -237,7 +246,7 @@ export function readSheetDraft(store:Pick<Storage,'getItem'>,key:string):SheetDr
   if(raw===null)return null
   if(raw.length>4000000)throw Error('SHEET_DRAFT_INVALID')
   const v:unknown=JSON.parse(raw)
-  if(!isRecord(v)||!Array.isArray(v.columns)||v.columns.length<1||v.columns.length>16||!v.columns.every(c=>typeof c==='string'&&c.trim()&&c.length<=60)||!validRows(v.rows,v.columns.length)||!Number.isSafeInteger(v.revision)||Number(v.revision)<0||(v.previous!==undefined&&!validRows(v.previous,v.columns.length)))throw Error('SHEET_DRAFT_INVALID')
+  if(!isRecord(v)||!Array.isArray(v.columns)||v.columns.length<1||v.columns.length>16||!v.columns.every(c=>typeof c==='string'&&c.trim()&&c.length<=60)||!validRows(v.rows,v.columns.length)||!Number.isSafeInteger(v.revision)||Number(v.revision)<0||(v.previous!==undefined&&!validRows(v.previous,v.columns.length))||(v.formats!==undefined&&!validFormats(v.formats)))throw Error('SHEET_DRAFT_INVALID')
   return v as unknown as SheetDraft
 }
 function writeSheetDraft(store:Pick<Storage,'getItem'|'setItem'>,key:string,draft:SheetDraft,expectedRaw:string|null):void{
@@ -264,13 +273,16 @@ export function applySpreadsheetPatch(store:Pick<Storage,'getItem'|'setItem'>,ke
     if(typeof after==='string'&&after!==before)throw Error('SHEET_FORMULA_ERROR_'+columnLetter(c)+String(r+2))
     if(after!==before&&recalculated.length<100)recalculated.push({cell:columnLetter(c)+String(r+2),value:String(after)})
   }
-  const draft:SheetDraft={columns:current.columns,rows,revision:current.revision+1,previous:current.rows}
+  const draft:SheetDraft={columns:current.columns,rows,revision:current.revision+1,previous:current.rows,...current.formats?{formats:current.formats}:{}}
   writeSheetDraft(store,key,draft,raw)
   return {draft,changed:spec.props.edits.map(e=>({cell:e.cell,value:e.after})),recalculated}
 }
+/** A completed assistant response applies its guarded edit to the SAME mounted draft.
+ * Exactly-once CAS rejects stale or repeated message replays. No navigation step. */
 export function SpreadsheetPatch({spec,conversationId}:{spec:SpreadsheetPatchSpec;conversationId?:string|undefined}):ReactNode{
   const [receipt,setReceipt]=useState('')
   const [done,setDone]=useState(false)
+  const attempted=useRef(false)
   const key=draftKey(spec.props.id,conversationId)
   const apply=()=>{
     try{
@@ -278,18 +290,21 @@ export function SpreadsheetPatch({spec,conversationId}:{spec:SpreadsheetPatchSpe
       const result=applySpreadsheetPatch(localStorage,key,spec)
       window.dispatchEvent(new CustomEvent(SHEET_EVENT,{detail:key}))
       setDone(true)
-      setReceipt('Cambio guardado en la misma hoja · v'+result.draft.revision+'. '+[...result.changed,...result.recalculated].map(c=>c.cell+' = '+c.value).join(' · '))
+      setReceipt('Aplicado y verificado en la misma hoja · v'+result.draft.revision+'. '+[...result.changed,...result.recalculated].map(c=>c.cell+' = '+c.value).join(' · '))
       window.dispatchEvent(new CustomEvent('phoenix:studio-verified',{detail:key}))
-    }catch{setReceipt('No se aplicó el cambio: hoja no disponible, valor anterior distinto, fórmula inválida o almacenamiento no verificable. Comparte el estado actual y vuelve a intentarlo.')}
+    }catch{
+      setReceipt('Cambio no aplicado: la hoja o el valor anterior no coincide, hay una fórmula inválida o no se pudo verificar el guardado.')
+    }
   }
-  return <section className={css.surface} data-generative-ui="spreadsheet_patch">
-    <header className={css.heading}><PhoenixUiIcon name="table"/><div><h3>Editar hoja existente</h3><p>{spec.props.id}</p></div></header>
-    <p>{spec.props.edits.map(e=>e.cell+': '+e.before+' → '+e.after).join(' · ')}</p>
-    <div className={css.actions}>
-      <button type="button" disabled={done||!conversationId} onClick={apply}>{done?'Cambio aplicado':'Aplicar a la hoja actual'}</button>
-      <button type="button" onClick={()=>{const target=Array.from(document.querySelectorAll<HTMLElement>('[data-sheet-draft-key]')).find(el=>el.dataset.sheetDraftKey===key);target?.scrollIntoView({block:'center',behavior:'smooth'})}}>Volver a la hoja</button>
-    </div>
-    {receipt&&<p role={done?'status':'alert'}>{receipt}</p>}
+  useEffect(()=>{
+    if(attempted.current||!conversationId)return
+    attempted.current=true
+    apply()
+  },[conversationId])
+  return <section className={css.patchReceipt} data-generative-ui="spreadsheet_patch" role="status">
+    <PhoenixUiIcon name={done?'check':'table'} size={15}/>
+    <span>{receipt||'Aplicando cambio a la hoja actual…'}</span>
+    {!done&&receipt&&<button type="button" onClick={apply}>Reintentar</button>}
   </section>
 }
 
@@ -298,6 +313,12 @@ export function SpreadsheetSurface({spec,conversationId,onAction}:{readonly spec
   const [rows,setRows]=useState<string[][]>(()=>spec.props.rows.map(row=>[...row]))
   const [active,setActive]=useState('')
   const [selected,setSelected]=useState<[number,number]>([0,0])
+  const [ribbon,setRibbon]=useState<'Archivo'|'Inicio'|'Insertar'|'Fórmulas'|'Datos'|'Vista'>('Inicio')
+  const [query,setQuery]=useState('')
+  const [zoom,setZoom]=useState(100)
+  const [gridLines,setGridLines]=useState(true)
+  const studioOwner=useId()
+  const [dismissed,setDismissed]=useState(false)
   const [host,setHost]=useState<HTMLElement|null>(null)
   const [pinned,setPinned]=useState(false)
   const anchorRef=useRef<HTMLDivElement|null>(null)
@@ -312,17 +333,52 @@ export function SpreadsheetSurface({spec,conversationId,onAction}:{readonly spec
   const latest=useRef<SheetDraft|null>(null)
   const key=draftKey(spec.props.id,conversationId)
   const initial=useRef(spec.props)
-  useEffect(()=>{
-    const finished=(event:Event)=>{if((event as CustomEvent<unknown>).detail===key&&!pinned)setHost(null)}
-    window.addEventListener('phoenix:studio-verified',finished)
-    return()=>window.removeEventListener('phoenix:studio-verified',finished)
-  },[key,pinned])
+  const closeStudio=()=>{
+    if(host?.dataset.studioOwner===studioOwner){
+      delete host.dataset.studioOwner
+      delete host.dataset.studioPinned
+    }
+    setHost(null)
+    setDismissed(true)
+  }
   const openStudio=()=>{
     const area=anchorRef.current?.closest('[data-conversation-scroll]')
     const target=area?.querySelector<HTMLElement>(':scope > [data-live-studio-host]')
-    if(!target||target.childElementCount||area?.querySelector(':scope > [data-adaptive-inline-host] > *')){setError('Cierra el espacio activo antes de abrir este editor.');return}
-    setHost(target);setError('')
+    if(!target||area?.querySelector(':scope > [data-adaptive-inline-host] > *'))return
+    if(target.dataset.studioOwner&&target.dataset.studioPinned==='true'&&target.dataset.studioOwner!==studioOwner)return
+    target.dataset.studioOwner=studioOwner
+    window.dispatchEvent(new CustomEvent('phoenix:studio-owner',{detail:studioOwner}))
+    setHost(target)
+    setDismissed(false)
   }
+  useEffect(()=>{
+    const onOwner=(event:Event)=>{
+      if((event as CustomEvent<string>).detail!==studioOwner&&host){
+        setHost(null);setDismissed(true)
+      }
+    }
+    const onVerified=(event:Event)=>{
+      if((event as CustomEvent<string>).detail===key&&!pinned)closeStudio()
+    }
+    window.addEventListener('phoenix:studio-owner',onOwner)
+    window.addEventListener('phoenix:studio-verified',onVerified)
+    return()=>{
+      window.removeEventListener('phoenix:studio-owner',onOwner)
+      window.removeEventListener('phoenix:studio-verified',onVerified)
+    }
+  },[host,studioOwner,key,pinned])
+  useEffect(()=>{
+    if(ready&&conversationId&&!dismissed&&!host)openStudio()
+  },[ready,conversationId,dismissed,host])
+  useEffect(()=>()=>{
+    if(host?.dataset.studioOwner===studioOwner){
+      delete host.dataset.studioOwner
+      delete host.dataset.studioPinned
+    }
+  },[host,studioOwner])
+  useEffect(()=>{
+    if(host?.dataset.studioOwner===studioOwner)host.dataset.studioPinned=pinned?'true':'false'
+  },[host,studioOwner,pinned])
   useEffect(()=>{
     const sync=()=>{
       try{
@@ -349,7 +405,7 @@ export function SpreadsheetSurface({spec,conversationId,onAction}:{readonly spec
     try{
       const raw=localStorage.getItem(key),current=readSheetDraft(localStorage,key)
       if(!current||!latest.current||current.revision!==latest.current.revision||!validRows(next,current.columns.length))throw Error('SHEET_CONFLICT')
-      const draft:SheetDraft={columns:current.columns,rows:next,revision:current.revision+1,previous:current.rows}
+      const draft:SheetDraft={columns:current.columns,rows:next,revision:current.revision+1,previous:current.rows,...current.formats?{formats:current.formats}:{}}
       writeSheetDraft(localStorage,key,draft,raw)
       if(remember)setUndo(old=>[...old.slice(-19),current.rows])
       latest.current=draft;setRows(next);setVersion(draft.revision);setError('')
@@ -435,24 +491,73 @@ export function SpreadsheetSurface({spec,conversationId,onAction}:{readonly spec
       change(body)
     }).catch(() => setError('No se pudo leer el archivo.'))
   }
+  const selectedCell=columnLetter(selected[1])+String(selected[0]+2)
+  const selectedFormat=latest.current?.formats?.[selectedCell]
+  const setFormat=(field:'bold'|'italic'|'number',value:boolean|'general'|'currency'|'percent')=>{
+    try{
+      const old=localStorage.getItem(key),current=readSheetDraft(localStorage,key)
+      if(!current||current.revision!==latest.current?.revision)throw Error('STALE')
+      const formats={...current.formats,[selectedCell]:{...current.formats?.[selectedCell],[field]:value}}
+      const next:SheetDraft={...current,formats,revision:current.revision+1}
+      writeSheetDraft(localStorage,key,next,old)
+      latest.current=next;setVersion(next.revision)
+      window.dispatchEvent(new CustomEvent(SHEET_EVENT,{detail:key}))
+    }catch{setError('Formato no guardado: verifica la revisión actual.')}
+  }
+  const addRow=()=>{if(rows.length<200)change([...rows.map(row=>[...row]),(latest.current?.columns??spec.props.columns).map(()=>'')])}
+  const insertFormula=(name:'SUM'|'AVERAGE'|'MIN'|'MAX')=>{
+    if(!rows[selected[0]]||selected[0]<=0){setError('Selecciona una celda debajo de los valores.');return}
+    update(selected[0],selected[1],'='+name+'('+columnLetter(selected[1])+'2:'+columnLetter(selected[1])+String(selected[0]+1)+')')
+  }
+  const sortBySelected=(reverse=false)=>{
+    if(rows.some(row=>row.some(cell=>cell.startsWith('=')))){setError('No se ordenó: esta hoja contiene fórmulas con referencias y requiere ordenación compatible.');return}
+    const sorted=rows.map(row=>[...row]).sort((a,b)=>(a[selected[1]]??'').localeCompare(b[selected[1]]??'','es',{numeric:true}))
+    if(reverse)sorted.reverse()
+    change(sorted)
+  }
+  const displayValue=(cell:string,r:number,c:number):string=>{
+    if(active===r+':'+c)return cell
+    const evaluated=cell.startsWith('=')?computed[r]?.[c]:cell
+    const fmt=latest.current?.formats?.[columnLetter(c)+String(r+2)]
+    const n=typeof evaluated==='number'?evaluated:Number(evaluated)
+    if(!fmt?.number||fmt.number==='general'||!Number.isFinite(n)||String(evaluated).trim()==='')return String(evaluated??'')
+    return fmt.number==='currency'?new Intl.NumberFormat('es-DO',{style:'currency',currency:'DOP'}).format(n):new Intl.NumberFormat('es-DO',{style:'percent',maximumFractionDigits:2}).format(n)
+  }
+  const gridRows=rows.map((row,r)=>({row,r})).filter(({row})=>!query||row.some(cell=>cell.toLocaleLowerCase('es').includes(query.toLocaleLowerCase('es'))))
   const editor=<section className={host?css.studioSheet:css.surface} data-live-studio={host?"sheet":undefined} data-generative-ui="spreadsheet" data-sheet-draft-key={key}>
     <header className={css.heading}><PhoenixUiIcon name="table" />
-      <div><h3>{spec.props.title}</h3><p>Hoja editable · fórmulas en tiempo real · v{version}</p></div>{host&&<button type="button" className={css.studioClose} onClick={()=>setHost(null)} aria-label="Cerrar editor de hoja">×</button>}</header>
-    {host&&<div className={css.sheetRibbon}><button type="button" onClick={()=>{void saveToLibrary()}}>Guardar</button><button type="button" onClick={()=>{void saveToLibrary(true)}}>Exportar XLSX</button><label><input type="checkbox" checked={pinned} onChange={e=>setPinned(e.currentTarget.checked)}/> Mantener abierto</label></div>}
+      <div><h3>{spec.props.title}</h3><p>Hoja editable · fórmulas en tiempo real · v{version}</p></div>{host&&<button type="button" className={css.studioClose} onClick={closeStudio} aria-label="Cerrar editor de hoja">×</button>}</header>
+    {host&&<>
+      <div className={css.excelTitle}><span className={css.excelLogo}>▦</span><strong>PHOENIX Sheets</strong><span className={css.excelBookTitle}>{spec.props.title}</span><span className={css.excelSaved}>Guardado local · v{version}</span></div>
+      <nav className={css.excelTabs} aria-label="Cinta de opciones de la hoja">
+        {(['Archivo','Inicio','Insertar','Fórmulas','Datos','Vista'] as const).map(tab=><button key={tab} type="button" aria-current={ribbon===tab?'page':undefined} onClick={()=>setRibbon(tab)}>{tab}</button>)}
+      </nav>
+      <div className={css.excelRibbon} role="toolbar" aria-label={ribbon}>
+        {ribbon==='Archivo'&&<><button onClick={()=>{void saveToLibrary()}}>Guardar</button><button onClick={()=>{void saveToLibrary(true)}}>Exportar XLSX</button><button onClick={download}>Descargar CSV</button></>}
+        {ribbon==='Inicio'&&<><button onClick={()=>{const prev=latest.current?.previous;if(prev)change(prev,false)}} disabled={!latest.current?.previous} aria-label="Deshacer modificación">↶ Deshacer</button><button aria-pressed={!!selectedFormat?.bold} onClick={()=>setFormat('bold',!selectedFormat?.bold)}><strong>N</strong> Negrita</button><button aria-pressed={!!selectedFormat?.italic} onClick={()=>setFormat('italic',!selectedFormat?.italic)}><em>C</em> Cursiva</button><button onClick={()=>setFormat('number','currency')}>RD$ Moneda</button><button onClick={()=>setFormat('number','percent')}>% Porcentaje</button><button onClick={()=>setFormat('number','general')}>General</button></>}
+        {ribbon==='Insertar'&&<><button onClick={addRow}>＋ Nueva fila</button><button onClick={()=>insertFormula('SUM')}>Σ Autosuma</button></>}
+        {ribbon==='Fórmulas'&&(['SUM','AVERAGE','MIN','MAX'] as const).map(name=><button key={name} onClick={()=>insertFormula(name)}>{name}</button>)}
+        {ribbon==='Datos'&&<><input aria-label="Buscar en hoja" placeholder="Buscar valores…" value={query} onChange={event=>setQuery(event.currentTarget.value)}/><button onClick={()=>sortBySelected()}>Ordenar A–Z</button><button onClick={()=>sortBySelected(true)}>Ordenar Z–A</button></>}
+        {ribbon==='Vista'&&<><button onClick={()=>setZoom(z=>Math.max(75,z-25))}>− Zoom</button><span>{zoom}%</span><button onClick={()=>setZoom(z=>Math.min(150,z+25))}>＋ Zoom</button><label><input type="checkbox" checked={gridLines} onChange={e=>setGridLines(e.currentTarget.checked)}/> Cuadrícula</label></>}
+        <label className={css.excelPin}><input type="checkbox" checked={pinned} onChange={e=>setPinned(e.currentTarget.checked)}/> Fijar editor</label>
+      </div>
+    </>}
     {host&&<div className={css.formulaBar}><span>{columnLetter(selected[1])+String(selected[0]+2)}</span><strong>fx</strong><input aria-label="Barra de fórmulas" disabled={!ready||!rows[selected[0]]} value={rows[selected[0]]?.[selected[1]]??""} onChange={e=>update(selected[0],selected[1],e.currentTarget.value)}/></div>}
-    <div className={css.sheetScroll} role="region" aria-label={spec.props.title} tabIndex={0}>
-      <table className={css.sheet}>
-        <thead><tr><th scope="col">#</th>{spec.props.columns.map((label, c) =>
-          <th key={c} scope="col">{columnLetter(c)} · {label}</th>)}</tr></thead>
-        <tbody>{rows.map((row, r) => <tr key={r}><th scope="row">{r + 2}</th>
+    <div className={css.sheetScroll} role="region" aria-label={spec.props.title} tabIndex={0} data-grid-lines={gridLines?"on":"off"}>
+      <table className={css.sheet} style={host?{fontSize:zoom/100*12+"px"}:undefined}>
+        <thead><tr><th scope="col" className={css.excelCorner}>{host?"": "#"}</th>{(latest.current?.columns??spec.props.columns).map((label,c)=><th key={c} scope="col" title={label}>{host?columnLetter(c):columnLetter(c)+" · "+label}</th>)}</tr></thead>
+        <tbody>{host&&<tr className={css.excelHeaderRow}><th scope="row">1</th>{(latest.current?.columns??spec.props.columns).map((label,c)=><td key={c} title={"Encabezado "+label}>{label}</td>)}</tr>}{gridRows.map(({row,r}) => <tr key={r}><th scope="row">{r + 2}</th>
           {row.map((cell, c) => {
             const address = r + ':' + c
-            return <td key={c}>
+            const fmt=latest.current?.formats?.[columnLetter(c)+String(r+2)]
+            return <td key={c} data-selected={host&&selected[0]===r&&selected[1]===c?'true':undefined}>
               <input disabled={!ready} aria-label={columnLetter(c) + String(r + 2)}
-                value={active === address || !cell.startsWith('=') ? cell : String(computed[r]?.[c] ?? '')}
+                style={{fontWeight:fmt?.bold?'bold':undefined,fontStyle:fmt?.italic?'italic':undefined}}
+                value={displayValue(cell,r,c)}
                 title={cell.startsWith('=') ? cell : undefined}
                 onFocus={() => {setActive(address);setSelected([r,c])}} onBlur={() => setActive('')}
                 onPaste={event=>paste(event,r,c)}
+                onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();document.querySelector<HTMLInputElement>('[data-sheet-draft-key="'+key+'"] input[aria-label="'+columnLetter(c)+String(r+3)+'"]')?.focus()}}
                 onChange={event => update(r, c, event.currentTarget.value)} />
             </td>
           })}</tr>)}</tbody>
@@ -474,7 +579,7 @@ export function SpreadsheetSurface({spec,conversationId,onAction}:{readonly spec
         <input type="file" accept=".csv,text/csv" onChange={importCsv} /></label>
       <button type="button" onClick={download}><PhoenixUiIcon name="download" size={15} /> CSV</button>
       <button type="button" disabled={!ready} onClick={() => { void saveToLibrary() }}>Guardar en Espacio</button>
-      {!host&&<button type="button" disabled={!ready||!conversationId} onClick={openStudio}>Abrir editor</button>}
+      {!host&&dismissed&&<button type="button" disabled={!ready||!conversationId} onClick={openStudio}>Volver a editar</button>}
       {onAction&&<button type="button" disabled={!ready} onClick={share}>Editar con Kira</button>}
       {legacyAvailable&&<button type="button" disabled={!ready} onClick={importLegacy}>Recuperar copia anterior</button>}
     </div>
@@ -483,5 +588,5 @@ export function SpreadsheetSurface({spec,conversationId,onAction}:{readonly spec
       Los cambios se guardan solo en este navegador. CSV no conserva las fórmulas como Excel;
       Exportar XLSX conserva las fórmulas admitidas; este editor no importa libros XLSX ni admite todas las funciones de Excel.</p>
   </section>
-  return <><div ref={anchorRef}>{host?<div className={css.surface}><strong>{spec.props.title}</strong><p>Editor activo · v{version}</p><button type="button" onClick={()=>setHost(null)}>Volver al chat</button></div>:editor}</div>{host&&createPortal(editor,host)}</>
+  return <><div ref={anchorRef}>{host?<div className={css.sheetAnchorStatus} role="status"><PhoenixUiIcon name="table" size={15}/><span>Hoja actual visible en PHOENIX Studio · v{version}</span></div>:editor}</div>{host&&createPortal(editor,host)}</>
 }

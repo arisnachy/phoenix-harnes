@@ -552,7 +552,6 @@ export function ChatView({
     const column = columnRef.current
     const local = listRef.current
     if (column === null || local === null || typeof ResizeObserver === 'undefined') return
-    const scrollport = scrollerOf(local)
     const composer = local.closest('[data-conversation-scroll]')?.querySelector<HTMLElement>('[data-composer-seat]') ?? null
     const observer = new ResizeObserver(() => { followRef.current?.() })
     observer.observe(column)
