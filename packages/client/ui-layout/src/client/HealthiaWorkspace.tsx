@@ -184,7 +184,7 @@ export function HealthiaWorkspace({
         )}
         {!isPatient && (active === 'encounters' || active === 'patients') &&
           <HealthiaClinicOperations area={active} selectedPatientId={selectedClinicalPatient}
-            onPatientChange={setSelectedClinicalPatient} onNavigate={onSectionChange} entry={entry} onEntryHandled={sequence=>setEntry(previous=>previous?.sequence===sequence?undefined:previous)} requestedStep={requestedStep} onEditorState={onEditorState} />}
+            onPatientChange={setSelectedClinicalPatient} onNavigate={onSectionChange} onSessionReady={()=>setClinicalRefresh(value=>value+1)} entry={entry} onEntryHandled={sequence=>setEntry(previous=>previous?.sequence===sequence?undefined:previous)} requestedStep={requestedStep} onEditorState={onEditorState} />}
         {!isPatient && (active === 'appointments' || active === 'documents' || active === 'management') &&
           (clinical.status==='authenticated'
             ?<HealthiaOperationsBoard section={active} selectedPatientId={selectedClinicalPatient}
