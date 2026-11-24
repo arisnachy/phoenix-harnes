@@ -27,8 +27,8 @@ import { NATIVE_MENU_KEY, readNativeMenu, nativeMenuOperation, type NativeTarget
 import css from './SidebarRoot.module.css'
 // Keep runtime navigation local to the sidebar plugin (client bundle purity).
 const HEALTHIA_NAV = {
-  doctor: [{id:'overview',label:'Inicio clínico'},{id:'patients',label:'Pacientes'},{id:'encounters',label:'Consultas'},{id:'records',label:'Historia clínica'},{id:'prescriptions',label:'Recetas e informes'},{id:'forms',label:'Formularios'},{id:'capabilities',label:'Capacidades'},{id:'exchange',label:'Intercambios'}],
-  patient: [{id:'overview',label:'Mi espacio'},{id:'appointments',label:'Citas'},{id:'records',label:'Mi expediente'},{id:'documents',label:'Documentos'},{id:'consent',label:'Autorizaciones'},{id:'capabilities',label:'Capacidades'},{id:'exchange',label:'Compartir con mi médico'}],
+  doctor: [{id:'overview',label:'Inicio clínico'},{id:'appointments',label:'Agenda'},{id:'patients',label:'Pacientes'},{id:'encounters',label:'Consultas'},{id:'documents',label:'Documentos'},{id:'management',label:'Gestión'},{id:'tools',label:'Herramientas'}],
+  patient: [{id:'overview',label:'Mi espacio'},{id:'appointments',label:'Citas'},{id:'records',label:'Mi expediente'},{id:'documents',label:'Documentos'},{id:'consent',label:'Autorizaciones'}],
 } as const
 
 /**
