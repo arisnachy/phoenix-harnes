@@ -1,0 +1,10 @@
+# PHOENIX AI Harness
+
+> Open-source, provider-agnostic AI agent workspace for supported local and cloud models. Independent downstream project led by Arisnachy Gómez Díaz in the Dominican Republic. Active development, MIT license, upstream attribution preserved.
+
+- [Official source and documentation](https://github.com/arisnachy/phoenix-harnes)
+- [English README](https://github.com/arisnachy/phoenix-harnes/blob/main/README.md)
+- [Spanish README](https://github.com/arisnachy/phoenix-harnes/blob/main/README.es.md)
+- [Published releases](https://github.com/arisnachy/phoenix-harnes/releases)
+- [Issues](https://github.com/arisnachy/phoenix-harnes/issues)
+- [Upstream attribution](https://github.com/arisnachy/phoenix-harnes/blob/main/README.md#upstream-foundation-and-attribution)

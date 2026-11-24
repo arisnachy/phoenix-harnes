@@ -1,3 +1,0 @@
-PHOENIX automatic updater smoke probe 3
-
-Purpose: verify supervised development-branch updates activate through an isolated runtime without mutating the source checkout.

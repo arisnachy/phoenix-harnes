@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://arisnachy.github.io/phoenix-harnes/sitemap.xml

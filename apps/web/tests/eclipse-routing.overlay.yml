@@ -1,3 +1,0 @@
-# The settings scenario uses a deterministic Codex catalog and never calls a model.
-- id: llm-pi-ai
-  disabled: true

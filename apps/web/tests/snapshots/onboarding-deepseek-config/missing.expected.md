@@ -1,8 +1,0 @@
-- dialog "连接 PHOENIX":
-  - heading "连接 PHOENIX" [level=2]
-  - paragraph: 为 PHOENIX 主聊天配置模型提供方。此 API 凭据与你的 ChatGPT / Codex 订阅相互独立。
-  - text: API 密钥
-  - textbox "API 密钥":
-    - /placeholder: 输入 API 密钥
-  - button "稍后配置"
-  - button "保存并继续" [disabled]

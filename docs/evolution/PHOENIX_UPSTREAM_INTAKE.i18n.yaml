@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write docs/evolution/PHOENIX_UPSTREAM_INTAKE.md
-PHOENIX_UPSTREAM_INTAKE.md: 2cc06d13e7c959bd1cf7f84e65f92af41e11ac6e
-PHOENIX_UPSTREAM_INTAKE.zh.md: 0deb6681eedf7acd5fa026da7bc667d83325f00c
