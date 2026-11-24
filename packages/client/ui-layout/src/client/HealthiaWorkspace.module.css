@@ -129,3 +129,13 @@ button.quickCard:focus-visible {outline:2px solid var(--dsw-specific-phoenix-acc
 .shell .tab,.shell .activeTab{flex:none;padding:8px 11px;border-radius:9px;font-size:11px;line-height:1.2;font-weight:550}
 .shell .activeTab{border-color:var(--dsw-specific-phoenix-accent);background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-specific-phoenix-accent);font-weight:700}
 .shell .titleRow{margin-bottom:0}
+
+/* Chat-native surface: collapse without unmounting the active editor. */
+.workspaceContent{display:grid;gap:12px;min-width:0}
+.workspaceContent[hidden]{display:none}
+.manualNavigation{font-size:12px;color:var(--dsw-alias-label-secondary)}
+.manualNavigation summary{cursor:pointer;width:fit-content;padding:5px 0}
+.manualNavigation[open] .tabs{margin-top:8px}
+.shell{min-height:0;gap:9px}
+.shell>.titleRow{border-bottom:0;padding-bottom:3px}
+.shell>.titleRow h2{font-size:16px}
