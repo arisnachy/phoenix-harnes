@@ -91,7 +91,7 @@ const xml=(s:string):Document=>{
   return doc
 }
 type OfficePart={title:string;rows:string[][]}
-type PackageView={label:string;parts:OfficePart[];entries:Entry[]}
+type PackageView={label:string;parts:OfficePart[];entries:Entry[];html?:string;images?:{name:string;uri:string}[]}
 export async function inspectPackage(bytes:Uint8Array):Promise<PackageView>{
   const entries=readZipDirectory(bytes)
   const byName=new Map(entries.map(e=>[e.name,e]))
@@ -103,10 +103,28 @@ export async function inspectPackage(bytes:Uint8Array):Promise<PackageView>{
     return xml(decoder.decode(await zipEntry(bytes,e)))
   }
   const parts:OfficePart[]=[]
+  const imageMime:Record<string,string>={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',webp:'image/webp',gif:'image/gif'}
+  const imageUri=async(e:Entry):Promise<string|undefined>=>{
+    const mime=imageMime[e.name.toLowerCase().split('.').pop()||'']
+    if(!mime||e.size>Math.min(budget,1_500_000))return undefined
+    budget-=e.size
+    const raw=await zipEntry(bytes,e)
+    if(detectFile(raw,e.name,mime).mime!==mime)return undefined
+    let binary=''
+    for(let i=0;i<raw.length;i+=16384)binary+=String.fromCharCode(...raw.subarray(i,i+16384))
+    return 'data:'+mime+';base64,'+btoa(binary)
+  }
+  const officeImages=async():Promise<{name:string;uri:string}[]>=>{
+    const result:{name:string;uri:string}[]=[]
+    for(const e of entries.filter(e=>/^(?:word|ppt|xl)\/media\//u.test(e.name)).slice(0,30)){
+      try{const uri=await imageUri(e);if(uri)result.push({name:e.name,uri})}catch{/* Unavailable image does not hide document */}
+    }
+    return result
+  }
   if(byName.has('word/document.xml')){
     const doc=await read('word/document.xml')
     parts.push({title:'Documento',rows:tags(doc,'p').slice(0,1500).map(p=>[tags(p,'t').map(t=>t.textContent||'').join('')])})
-    return {label:'Word (DOCX) · contenido estructurado',parts,entries}
+    return {label:'Word (DOCX) · contenido estructurado',parts,entries,images:await officeImages()}
   }
   const slides=entries.filter(e=>/^ppt\/slides\/slide\d+\.xml$/u.test(e.name))
     .sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true})).slice(0,60)
@@ -115,7 +133,7 @@ export async function inspectPackage(bytes:Uint8Array):Promise<PackageView>{
       const doc=await read(e.name)
       parts.push({title:'Diapositiva '+(i+1),rows:tags(doc,'p').slice(0,200).map(p=>[tags(p,'t').map(t=>t.textContent||'').join('')])})
     }
-    return {label:'PowerPoint (PPTX) · contenido estructurado',parts,entries}
+    return {label:'PowerPoint (PPTX) · contenido estructurado',parts,entries,images:await officeImages()}
   }
   const sheets=entries.filter(e=>/^xl\/worksheets\/sheet\d+\.xml$/u.test(e.name))
     .sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true})).slice(0,20)
@@ -129,12 +147,28 @@ export async function inspectPackage(bytes:Uint8Array):Promise<PackageView>{
       }))
       parts.push({title:'Hoja '+(i+1),rows})
     }
-    return {label:'Excel (XLSX) · valores disponibles',parts,entries}
+    return {label:'Excel (XLSX) · valores disponibles',parts,entries,images:await officeImages()}
   }
   if(byName.has('content.xml')){
     const doc=await read('content.xml')
     parts.push({title:'Contenido',rows:tags(doc,'p').slice(0,1500).map(p=>[p.textContent||''])})
     return {label:'OpenDocument · contenido estructurado',parts,entries}
+  }
+  const entry=entries.filter(e=>/(?:^|\/)index\.html?$/iu.test(e.name))
+    .sort((a,b)=>a.name.length-b.name.length)[0]
+  if(entry&&entry.size<=1_500_000){
+    const files:Record<string,string>=Object.create(null) as Record<string,string>
+    budget-=entry.size
+    files[entry.name]=decoder.decode(await zipEntry(bytes,entry))
+    for(const e of entries.slice(0,1000)){
+      if(e.name===entry.name||e.name.startsWith('/')||e.name.includes('\\')||e.name.split('/').includes('..'))continue
+      try{
+        if(/\.css$/iu.test(e.name)&&e.size<=Math.min(budget,500000)){
+          budget-=e.size;files[e.name]=decoder.decode(await zipEntry(bytes,e))
+        }else{const uri=await imageUri(e);if(uri)files[e.name]=uri}
+      }catch{/* Missing companion resources are not fetched from the host */}
+    }
+    return {label:'Aplicación web empaquetada · HTML/CSS/imágenes',parts,entries,html:JSON.stringify({entry:entry.name,files})}
   }
   return {label:'Archivo comprimido ZIP',parts,entries}
 }
@@ -159,7 +193,7 @@ type Loaded={format:FileFormat;url:string;text:string;pack?:PackageView;note?:st
 export function UniversalFileViewer({id,title,mime,renderHtml}:{id:string;title:string;mime:string;renderHtml:(html:string)=>ReactNode}){
   const [loaded,setLoaded]=useState<Loaded|null>(null)
   const [error,setError]=useState('')
-  const [tab,setTab]=useState<'visual'|'info'>('visual')
+  const [tab,setTab]=useState<'visual'|'info'|'source'>('visual')
   const [part,setPart]=useState(0)
   useEffect(()=>{
     const abort=new AbortController();let url=''
@@ -185,9 +219,10 @@ export function UniversalFileViewer({id,title,mime,renderHtml}:{id:string;title:
     <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
       <strong>{pack?.label||f.label}</strong>
       <button type="button" aria-pressed={tab==='visual'} onClick={()=>setTab('visual')}>Vista visual</button>
+      {(f.mode==='html'||f.mode==='table')&&<button type="button" aria-pressed={tab==='source'} onClick={()=>setTab('source')}>Ver contenido original</button>}
       <button type="button" aria-pressed={tab==='info'} onClick={()=>setTab('info')}>Información</button>
     </div>
-    {tab==='info'?<dl><dt>Nombre</dt><dd>{title}</dd><dt>Tipo declarado</dt><dd>{mime}</dd><dt>Tipo detectado</dt><dd>{f.mime}</dd><dt>Motor</dt><dd>{f.mode}</dd></dl>:<>
+    {tab==='info'?<dl><dt>Nombre</dt><dd>{title}</dd><dt>Tipo declarado</dt><dd>{mime}</dd><dt>Tipo detectado</dt><dd>{f.mime}</dd><dt>Motor</dt><dd>{f.mode}</dd></dl>:tab==='source'?<pre style={{whiteSpace:'pre-wrap',overflow:'auto',maxHeight:'65vh'}}>{loaded.text.slice(0,500000)}</pre>:<>
       {f.mode==='html'&&renderHtml(loaded.text)}
       {f.mode==='image'&&<img alt={title} src={loaded.url} style={{maxWidth:'100%',maxHeight:'70vh',objectFit:'contain',margin:'auto'}}/>}
       {f.mode==='pdf'&&<object aria-label={title} data={loaded.url} type="application/pdf" style={{width:'100%',height:'70vh'}}><p>El navegador no ofrece visor PDF. Descarga el original.</p></object>}
@@ -197,11 +232,13 @@ export function UniversalFileViewer({id,title,mime,renderHtml}:{id:string;title:
       {f.mode==='table'&&<Grid rows={parseDelimited(loaded.text,title.toLowerCase().endsWith('.tsv')?'\t':',')}/>}
       {f.mode==='text'&&<pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere',maxHeight:'65vh',overflow:'auto'}}>{loaded.text.slice(0,500000)}</pre>}
       {f.mode==='archive'&&<>{loaded.note&&<p role="status">{loaded.note}</p>}
+        {pack?.html&&renderHtml(pack.html)}
         {pack&&pack.parts.length>0&&<><p>Vista de contenido, no conserva toda la composición, imágenes, fórmulas ni animaciones del original.</p>
           <select aria-label="Sección del documento" value={part} onChange={e=>setPart(Number(e.currentTarget.value))}>
             {pack.parts.map((p,i)=><option key={i} value={i}>{p.title}</option>)}
           </select><Grid rows={pack.parts[part]?.rows||[]}/></>}
-        {pack&&<details open={pack.parts.length===0}><summary>Archivos internos ({pack.entries.length})</summary><ul>
+        {pack?.images&&pack.images.length>0&&<details><summary>Imágenes integradas ({pack.images.length})</summary><div style={{display:'flex',flexWrap:'wrap',gap:12}}>{pack.images.map(img=><figure key={img.name} style={{margin:0,maxWidth:240}}><img src={img.uri} alt={img.name} style={{maxWidth:'100%',maxHeight:180}}/><figcaption>{img.name.split('/').pop()}</figcaption></figure>)}</div></details>}
+        {pack&&<details open={pack.parts.length===0&&!pack.html}><summary>Archivos internos ({pack.entries.length})</summary><ul>
           {pack.entries.slice(0,500).map((e,i)=><li key={i}>{e.name} · {e.size} bytes</li>)}</ul></details>}
       </>}
       {f.mode==='unsupported'&&<p>Este formato requiere un adaptador especializado o una aplicación externa. El original se conserva y no se ejecuta automáticamente.</p>}
