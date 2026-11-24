@@ -1,6 +1,6 @@
 /** Strict per-session header/body content inserted into the resident conversation layout. */
 
-import { useEffect, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import clsx from 'clsx'
 import type { SessionId, SessionListState, SessionSummary } from '@phoenix-ai/dsh-client-runtime/client'
 import type {
@@ -212,6 +212,17 @@ export function ConversationSession({
   const summaryBlank = useSessions(s => s.byId[sessionId]?.blank)
   // `?? null`: persisted snapshots from before the inspect field rehydrate without it.
   const inspect = useStore(s => s.inspect ?? null)
+  const [adaptiveActive,setAdaptiveActive]=useState(false)
+  useEffect(()=>{
+    const update=(event:Event)=>{
+      const app=(event as CustomEvent<{app?:unknown}>).detail?.app
+      setAdaptiveActive(typeof app==='string'&&(app==='healthia'||/^app-[a-z0-9-]{1,45}$/u.test(app)))
+    }
+    window.addEventListener('phoenix:adaptive-workspace-state',update)
+    window.dispatchEvent(new Event('phoenix:adaptive-workspace-state-request'))
+    return()=>window.removeEventListener('phoenix:adaptive-workspace-state',update)
+  },[])
+
 
   useEffect(() => () => {
     releaseSessionImages(sessionId)
@@ -226,7 +237,7 @@ export function ConversationSession({
         actions={actions}
         bindDraftMirror={bindDraftMirror}
       />
-      {blank && composerPhase === 'blank' && summaryBlank !== false
+      {!adaptiveActive && blank && composerPhase === 'blank' && summaryBlank !== false
         ? null
         : (
           <div className={css.viewArea}>
