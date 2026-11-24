@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import css from './PhoenixSpace.module.css'
+import { parseSheetRecipe, replaySheetRecipe, type SheetStep } from './SheetDemonstration.ts'
 import { UniversalFileViewer } from './UniversalFileEngine.tsx'
 import type { SpaceSpecializedProps } from './index.ts'
 
@@ -278,6 +279,65 @@ async function migrateLegacyGames():Promise<number> {
       }
     }
   })
+}
+
+
+function SheetMimic({sheet,space,onApply}:{sheet:Sheet;space:string;onApply:(sheet:Sheet)=>void}){
+  const [recording,setRecording]=useState(false)
+  const [steps,setSteps]=useState<SheetStep[]>([])
+  const [title,setTitle]=useState('')
+  const [message,setMessage]=useState('')
+  const [recipes,setRecipes]=useState<Summary[]>([])
+  const [selected,setSelected]=useState('')
+  const [preview,setPreview]=useState<{before:string;after:Sheet}|null>(null)
+  const [busy,setBusy]=useState(false)
+  const actions:readonly {id:SheetStep;label:string}[]=[
+    {id:'trim',label:'Limpiar espacios'},{id:'remove-empty-rows',label:'Quitar filas vacías'},
+    {id:'append-row',label:'Agregar fila'},{id:'append-column',label:'Agregar columna'},
+  ]
+  const perform=async(fn:()=>Promise<void>)=>{if(busy)return;setBusy(true);setMessage('');try{await fn()}catch(e){setMessage(String(e))}finally{setBusy(false)}}
+  const step=(action:SheetStep)=>{
+    try{
+      if(recording&&steps.length>=16)throw Error('Máximo de 16 operaciones por demostración')
+      onApply(replaySheetRecipe(sheet,[action]))
+      if(recording)setSteps(old=>[...old,action])
+      setPreview(null)
+    }catch(e){setMessage(String(e))}
+  }
+  return <details className={css.history}>
+    <summary>Demostraciones reutilizables de hojas</summary>
+    <p>Graba únicamente operaciones estructurales explícitas. No se capturan valores, pantalla ni teclas.</p>
+    <button type="button" disabled={busy} onClick={()=>{setRecording(v=>!v);if(!recording){setSteps([]);setPreview(null)}}}>{recording?'Terminar demostración':'Grabar demostración'}</button>
+    {actions.map(action=><button key={action.id} type="button" disabled={busy} onClick={()=>step(action.id)}>{action.label}</button>)}
+    {steps.length>0&&<p role="status">{steps.length} operaciones: {steps.map(s=>actions.find(a=>a.id===s)?.label).join(' → ')}</p>}
+    {!recording&&steps.length>0&&<>
+      <label>Nombre del procedimiento<input value={title} maxLength={120} onChange={e=>setTitle(e.currentTarget.value)}/></label>
+      <button type="button" disabled={busy||!title.trim()} onClick={()=>{void perform(async()=>{
+        const recipe=parseSheetRecipe(steps)
+        const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(recipe))))).map(b=>b.toString(16).padStart(2,'0')).join('')
+        await api('/items',{kind:'code',space,title,mime:'application/vnd.phoenix.sheet-recipe+json',content:JSON.stringify({version:1,steps:recipe}),sourceKey:'sheet-recipe-v1:'+space+':'+digest},'POST')
+        setMessage('Procedimiento guardado sin duplicar valores ni pasos idénticos.')
+      })}}>Guardar procedimiento</button>
+    </>}
+    <button type="button" disabled={busy||recording} onClick={()=>{void perform(async()=>{
+      const result=await api<{items:Summary[]}>('/items?space='+encodeURIComponent(space)+'&kind=code')
+      setRecipes(result.items.filter(i=>i.mime==='application/vnd.phoenix.sheet-recipe+json'))
+    })}}>Cargar procedimientos</button>
+    {recipes.length>0&&<label>Procedimiento<select value={selected} onChange={e=>{setSelected(e.currentTarget.value);setPreview(null)}}><option value="">Seleccionar</option>{recipes.map(i=><option key={i.id} value={i.id}>{i.title}</option>)}</select></label>}
+    {selected&&<button type="button" disabled={busy||recording} onClick={()=>{void perform(async()=>{
+      const result=await api<{item:Item}>('/items/'+selected)
+      if(result.item.deleted||result.item.space!==space||result.item.mime!=='application/vnd.phoenix.sheet-recipe+json')throw Error('Procedimiento inválido')
+      const recipe=JSON.parse(result.item.content) as {version?:unknown;steps?:unknown}
+      if(recipe.version!==1)throw Error('Versión inválida')
+      setPreview({before:JSON.stringify(sheet),after:replaySheetRecipe(sheet,recipe.steps)})
+    })}}>Simular en esta hoja</button>}
+    {preview&&<>
+      <p>Resultado: {preview.after.rows.length} filas · {preview.after.columns.length} columnas. Sin guardar todavía.</p>
+      <button type="button" disabled={busy||JSON.stringify(sheet)!==preview.before} onClick={()=>{onApply(preview.after);setPreview(null)}}>Aplicar resultado a la hoja</button>
+      <button type="button" onClick={()=>setPreview(null)}>Descartar simulación</button>
+    </>}
+    {message&&<p role="status">{message}</p>}
+  </details>
 }
 
 type DependencyStatus={sources:Array<{id:string;revision:number;currentRevision:number|null;stale:boolean}>;stale:boolean;truncated:boolean}
@@ -684,6 +744,7 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
               <button type="button" disabled={sheet.columns.length>=40} onClick={()=>updateSheet({columns:[...sheet.columns,'Nueva columna'],rows:sheet.rows.map(r=>[...r,''])})}>+ Columna</button>
               <button type="button" disabled={sheet.rows.length<=1} onClick={()=>updateSheet({...sheet,rows:sheet.rows.slice(0,-1)})}>− Fila</button>
             </div></>:<textarea value={editor.content} onChange={e=>mutate({content:e.currentTarget.value})}/>}
+          {sheet.columns.length>0&&<SheetMimic key={editor.item.id} sheet={sheet} space={editor.space} onApply={updateSheet}/>}
           <p>Fórmulas Excel compatibles: usa =SUM(B2:B10), =AVERAGE(...), referencias y operaciones. Excel recalcula al abrir.</p>
           <a className={css.export} href={'/space-api/items/'+editor.item.id+'/export?format=xlsx'} onClick={e=>{
             if(editor.dirty){e.preventDefault();void persist(editor).then(()=>{
