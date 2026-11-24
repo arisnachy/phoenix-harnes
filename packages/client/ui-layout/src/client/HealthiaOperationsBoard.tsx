@@ -10,6 +10,18 @@ import { printProtectedClinicalDocument } from './HealthiaClinicalPrint.ts'
 import css from './HealthiaOperationsBoard.module.css'
 
 const api=new HealthiaClinicalApi()
+const ORDER_SERVICES:readonly {id:string;label:string;modality:'laboratory'|'imaging'}[]=[
+  {id:'laboratory',label:'Laboratorio clínico',modality:'laboratory'},
+  {id:'xray',label:'Radiografía',modality:'imaging'},
+  {id:'ultrasound',label:'Sonografía',modality:'imaging'},
+  {id:'ct',label:'Tomografía',modality:'imaging'},
+  {id:'mri',label:'Resonancia magnética',modality:'imaging'},
+  {id:'mammography',label:'Mamografía',modality:'imaging'},
+  {id:'nuclear',label:'Medicina nuclear',modality:'imaging'},
+  {id:'imaging',label:'Otra imagen diagnóstica',modality:'imaging'},
+]
+const serviceLabel=(value:unknown)=>ORDER_SERVICES.find(s=>s.id===value)?.label??'Imagen diagnóstica'
+const priorityLabel=(value:unknown)=>value==='stat'?'Inmediata':value==='urgent'?'Urgente':'Programada'
 type Section='appointments'|'documents'|'management'
 type Desk='appointments'|'followups'|'orders'|'prescriptions'|'invoices'|'team'
 type Role=ClinicalSession['actor']['role']
@@ -81,8 +93,11 @@ export function HealthiaOperationsBoard({section,selectedPatientId,onPatientChan
   const selectedEncounter=signedEncounters.find(e=>e.id===form.encounterId)
   const currentPatient=patients.find(p=>p.id===(selectedEncounter?.patientId??patientId))
   const calcDose=clinicianDoseCalculation(form.weightKg,form.mgPerKg,form.maxDoseMg)
+  const orderService=ORDER_SERVICES.find(s=>s.id===form.service)??ORDER_SERVICES[0]!
+  const [serviceFilter,setServiceFilter]=useState('all')
+  const shownRecords=active==='orders'&&serviceFilter!=='all'?records.filter(item=>(item.service??item.modality)===serviceFilter):records
 
-  useEffect(()=>{setDesk(STAGES[section][0]!);setForm({});setSafety(false);setNotice('');setError('')},[section])
+  useEffect(()=>{setDesk(STAGES[section][0]!);setForm({});setSafety(false);setServiceFilter('all');setNotice('');setError('')},[section])
   useEffect(()=>{if(selectedPatientId!==undefined)setPatientId(selectedPatientId)},[selectedPatientId])
   useEffect(()=>{
     let live=true
@@ -160,8 +175,10 @@ export function HealthiaOperationsBoard({section,selectedPatientId,onPatientChan
           startsAt:new Date(form.startsAt??'').toISOString(),reason:form.reason}
         if(active==='followups')payload={patientId,assignedTo:form.assignedTo||session.actor.username,
           dueAt:new Date(form.dueAt??'').toISOString(),description:form.description}
-        if(active==='orders')payload={encounterId:form.encounterId,modality:form.modality||'laboratory',
-          description:form.description}
+        if(active==='orders')payload={encounterId:form.encounterId,modality:orderService.modality,service:orderService.id,
+          priority:form.priority||'routine',description:form.description,
+          ...(form.clinicalQuestion?.trim()?{clinicalQuestion:form.clinicalQuestion}:{}),
+          ...(form.preparation?.trim()?{preparation:form.preparation}:{})}
         if(active==='prescriptions'){
           if(!safety)throw Error('Debe completar la revisión farmacológica antes de recetar.')
           payload={encounterId:form.encounterId,medication:form.medication,
@@ -230,11 +247,19 @@ export function HealthiaOperationsBoard({section,selectedPatientId,onPatientChan
           </select>
         </label>}
         {active==='orders'&&<>
-          <label className={css.field}>Modalidad
-            <select value={form.modality??'laboratory'} onChange={e=>put('modality',e.currentTarget.value)}>
-              <option value="laboratory">Analítica / laboratorio</option><option value="imaging">Imagen diagnóstica</option>
+          <label className={css.field}>Servicio destinatario
+            <select value={orderService.id} onChange={e=>put('service',e.currentTarget.value)}>
+              {ORDER_SERVICES.map(service=><option key={service.id} value={service.id}>{service.label}</option>)}
             </select>
-          </label>{textarea('description','Estudio, región, indicación y preparación')}
+          </label>
+          <label className={css.field}>Prioridad
+            <select value={form.priority??'routine'} onChange={e=>put('priority',e.currentTarget.value)}>
+              <option value="routine">Programada</option><option value="urgent">Urgente</option><option value="stat">Inmediata</option>
+            </select>
+          </label>
+          {textarea('description',orderService.modality==='laboratory'?'Analíticas solicitadas':'Estudio y región anatómica')}
+          {field('clinicalQuestion','Pregunta clínica o indicación','text',false)}
+          {field('preparation','Preparación o instrucciones específicas','text',false)}
         </>}
         {active==='prescriptions'&&<>
           {field('medication','Principio activo, presentación y concentración')}
@@ -297,7 +322,8 @@ export function HealthiaOperationsBoard({section,selectedPatientId,onPatientChan
       </button>
     </form>}
     <div className={css.listHeader}><strong>{active==='team'?'Equipo y acceso vigente':'Registros autorizados'}</strong>
-      <small>{active==='team'?assignments.length:records.length} resultados</small></div>
+      <small>{active==='team'?assignments.length:shownRecords.length} resultados</small></div>
+    {active==='orders'&&<label className={css.field}>Filtrar por servicio<select value={serviceFilter} onChange={e=>setServiceFilter(e.currentTarget.value)}><option value="all">Todos los servicios</option>{ORDER_SERVICES.map(s=><option value={s.id} key={s.id}>{s.label}</option>)}</select></label>}
     {loading&&<p role="status" className={css.message}>Actualizando registros…</p>}
     {active==='team'?<div className={css.list}>
       {assignments.map((a,i)=><article className={css.record} key={a.patientId+':'+a.staffId+':'+i}>
@@ -314,8 +340,9 @@ export function HealthiaOperationsBoard({section,selectedPatientId,onPatientChan
       </article>)}
       {!assignments.length&&<p className={css.message}>Todavía no hay asignaciones registradas.</p>}
     </div>:<div className={css.list}>
-      {records.map(item=><article key={item.id} className={css.record}>
+      {shownRecords.map(item=><article key={item.id} className={css.record}>
         <div className={css.recordBody}><strong>{label(item)}</strong>
+          {active==='orders'&&<small>{serviceLabel(item.service??item.modality)} · {priorityLabel(item.priority)}</small>}
           <small>{patients.find(p=>p.id===item.patientId)?.name??'Paciente vinculado'} · {moment(item.startsAt??item.dueAt??item.createdAt)}</small>
           <span className={css.recordStatus}>{item.status??(active==='invoices'?'Cuenta abierta':'Registrado')}</span>
           {active==='invoices'&&<small>{euro(item.paidCents)} pagado de {euro(item.amountCents)}</small>}
@@ -324,7 +351,7 @@ export function HealthiaOperationsBoard({section,selectedPatientId,onPatientChan
           <button type="button" onClick={()=>{
             try{
               printProtectedClinicalDocument({
-                title:TITLE[active],
+                title:active==='orders'?'Solicitud · '+serviceLabel(item.service??item.modality):TITLE[active],
                 institution:session.actor.org,
                 patientName:patients.find(p=>p.id===item.patientId)?.name??'Paciente autorizado',
                 patientId:typeof item.patientId==='string'?item.patientId:'No aplica',
@@ -333,6 +360,7 @@ export function HealthiaOperationsBoard({section,selectedPatientId,onPatientChan
                 status:active==='prescriptions'&&item.status==='prescribed'?'signed':item.status??'registrado',
                 sections:[
                   {heading:'Descripción',body:label(item)},
+                  ...(active==='orders'?[{heading:'Prioridad',body:priorityLabel(item.priority)},{heading:'Pregunta clínica',body:typeof item.clinicalQuestion==='string'?item.clinicalQuestion:''},{heading:'Preparación',body:typeof item.preparation==='string'?item.preparation:''}]:[]),
                   {heading:'Indicaciones',body:typeof item.directions==='string'?item.directions:''},
                   {heading:'Resultado',body:typeof item.result==='string'?item.result:''},
                   ...(active==='invoices'?[{heading:'Cuenta administrativa (NO fiscal)',
