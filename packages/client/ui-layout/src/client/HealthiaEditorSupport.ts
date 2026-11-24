@@ -10,7 +10,7 @@ export const CLINICAL_EDITOR_STEPS=[
 export type ClinicalEditorStep=typeof CLINICAL_EDITOR_STEPS[number]['id']
 export const VITAL_IDS=['sys','dia','hr','rr','temp','sat','weight','height'] as const
 type VitalId=typeof VITAL_IDS[number]
-export const DIAGNOSIS_IDS=['assessment','differential','diagnosisStatus','secondaryDiagnosis','codeSystem','icd10'] as const
+export const DIAGNOSIS_IDS=['assessment','differential','diagnosisStatus','secondaryDiagnosis','codeSystem','icd10','icd11','icd11Evidence'] as const
 export function clinicalEditorStep(value:unknown):value is ClinicalEditorStep {
   return CLINICAL_EDITOR_STEPS.some(x=>x.id===value)
 }
