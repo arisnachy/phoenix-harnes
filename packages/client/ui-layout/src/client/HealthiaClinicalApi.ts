@@ -429,6 +429,14 @@ export class HealthiaClinicalApi {
       throw Error('Guía de entrevista no verificable')
     return guide as unknown as ClinicalInterviewGuide
   }
+  async verifyIcd11(session:ClinicalSession,code:string):Promise<{code:string;release:string;source:string;verifiedAt:string}>{
+    if(!/^[0-9A-Z]{4,7}(?:\.[0-9A-Z]{1,4})?$/u.test(code))throw Error('Introduce un código simple CIE-11')
+    const data=object(object(await this.request('icd11-verify','POST',session,{code})).verification)
+    if(data.code!==code||typeof data.release!=='string'||typeof data.source!=='string'||typeof data.verifiedAt!=='string'
+      ||data.source!=='https://id.who.int/icd/release/11/'+data.release+'/mms/codeinfo/'+encodeURIComponent(code))
+      throw Error('No se confirmó la verificación oficial')
+    return {code,release:data.release,source:data.source,verifiedAt:data.verifiedAt}
+  }
   async loadInterviewDraft(session:ClinicalSession,current:ClinicalEncounter):Promise<{key:string;text:string}|null> {
     if(!UUID.test(current.id))throw Error('Consulta inválida')
     const response=object(await this.request('clinical-draft/'+current.id,'GET',session))
