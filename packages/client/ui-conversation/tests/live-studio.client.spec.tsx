@@ -48,4 +48,23 @@ describe('Live Studio',()=>{
   expect(evaluateSheetCell(rows,5,1)).toBe(-12.35)
   expect(evaluateSheetCell(rows,6,1)).toBe(8)
  })
+ it('builds the entire budget in the existing mounted editor, and undoes the structural edit',()=>{
+  const blank:SpreadsheetSpec={component:'spreadsheet',version:1,props:{id:'family-budget',title:'Presupuesto',columns:['Fecha','Concepto','Categoría','Monto','Notas'],rows:[['','','','','']]}}
+  const {rerender}=render(<div data-conversation-scroll=""><div data-live-studio-host=""/><SpreadsheetSurface spec={blank} conversationId="family"/><div data-composer-seat=""><textarea aria-label="Chat"/></div></div>)
+  fireEvent.click(screen.getByRole('checkbox',{name:'Fijar editor'}))
+  const composer=screen.getByRole('textbox',{name:'Chat'})
+  const original=screen.getByRole('textbox',{name:'A2'})
+  const grant=prepareSheetPrompt('family','Organiza un presupuesto familiar')!
+  const layout={columns:['Concepto','Ingreso','Gasto','Balance'],rows:[['Salario','','','=B2-C2'],['Comida','','','=B3-C3'],['Transporte','','','=B4-C4'],['Total','=SUM(B2:B4)','=SUM(C2:C4)','=B5-C5']]}
+  const operation:SpreadsheetPatchSpec={component:'spreadsheet_patch',version:1,props:{id:'family-budget',expectedRevision:0,editToken:grant.token,layout,edits:[]}}
+  rerender(<div data-conversation-scroll=""><div data-live-studio-host=""/><SpreadsheetSurface spec={blank} conversationId="family"/><SpreadsheetPatch spec={operation} conversationId="family" allowAuto/><div data-composer-seat=""><textarea aria-label="Chat"/></div></div>)
+  expect(screen.getByRole('textbox',{name:'A2'})).toBe(original)
+  expect((original as HTMLInputElement).value).toBe('Salario')
+  expect((screen.getByRole('textbox',{name:'A5'}) as HTMLInputElement).value).toBe('Total')
+  expect(screen.getByRole('textbox',{name:'Chat'})).toBe(composer)
+  expect(document.querySelectorAll('[data-live-studio="sheet"]')).toHaveLength(1)
+  fireEvent.click(screen.getByRole('button',{name:'Deshacer'}))
+  expect((original as HTMLInputElement).value).toBe('')
+  expect(screen.getByText('Fecha')).toBeDefined()
+ })
 })
