@@ -8,7 +8,6 @@
 import { useEffect, useState } from 'react'
 import { HealthiaClinicalApi } from './HealthiaClinicalApi.ts'
 import type { ClinicalPatient, ClinicResource, ClinicalSession } from './HealthiaClinicalApi.ts'
-import { HealthiaClinicOperations } from './HealthiaClinicOperations.tsx'
 import css from './HealthiaClinicDashboard.module.css'
 
 const api=new HealthiaClinicalApi()
@@ -39,12 +38,12 @@ function ClinicalIcon({kind}:{kind:Page}) {
   </svg>
 }
 
-export function HealthiaClinicDashboard({onNavigate,onPatientChange,accessStatus,onSessionReady,onStart}:{
+export function HealthiaClinicDashboard({onNavigate,onPatientChange,accessStatus,onRequestAccess,onStart}:{
   onStart?:(kind:'patient'|'encounter')=>void
   onNavigate:(section:string)=>void
   onPatientChange:(patientId:string)=>void
   accessStatus:'authenticated'|'locked'|'unavailable'
-  onSessionReady:()=>void
+  onRequestAccess:()=>void
 }) {
   const [session,setSession]=useState<ClinicalSession|null>(null)
   const [patients,setPatients]=useState<readonly ClinicalPatient[]>([])
@@ -52,7 +51,6 @@ export function HealthiaClinicDashboard({onNavigate,onPatientChange,accessStatus
   const [search,setSearch]=useState('')
   const [error,setError]=useState('')
   const [loading,setLoading]=useState(false)
-  const [showAccess,setShowAccess]=useState(false)
 
   useEffect(()=>{
     if(accessStatus!=='authenticated'){
@@ -145,8 +143,7 @@ export function HealthiaClinicDashboard({onNavigate,onPatientChange,accessStatus
             ?'Utiliza la cuenta de tu institución. Al acceder aparecerán los pacientes y citas reales.'
             :'El servicio local no respondió. Puedes explorar el entorno y comprobar la conexión aquí.'}
         </p>
-        <button type="button" className={css.secondary} aria-expanded={showAccess} onClick={()=>setShowAccess(value=>!value)}>{showAccess?'Ocultar acceso protegido':'Abrir acceso protegido'}</button>
-        {showAccess&&<HealthiaClinicOperations area="patients" accessOnly onSessionReady={onSessionReady}/>}
+        <button type="button" className={css.secondary} onClick={onRequestAccess}>Abrir acceso protegido</button>
       </aside>
     </div>}
 
