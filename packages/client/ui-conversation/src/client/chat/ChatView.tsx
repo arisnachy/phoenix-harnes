@@ -24,7 +24,9 @@ const FOLLOW_THRESHOLD = 24
 
 /** Active column host when present; otherwise the view-local scroller. */
 function scrollerOf(from: HTMLElement): HTMLElement {
-  return (from.closest('[data-conversation-scroll]')) ?? from
+  const outer=from.closest<HTMLElement>('[data-conversation-scroll]')
+  if(outer?.querySelector(':scope > [data-live-studio-host] > [data-live-studio], :scope > [data-live-studio-host] > [data-space-with-chat="true"]'))return from
+  return outer ?? from
 }
 
 interface PagingAnchor {
@@ -489,7 +491,18 @@ export function ChatView({
       && el.scrollTop <= 240) requestOlderRef.current?.()
   }
 
-  // Bind the scroll listener on the resolved scrollport once per mount;
+  const [studioScroll,setStudioScroll]=useState(false)
+  useEffect(()=>{
+    const local=listRef.current
+    const host=local?.closest('[data-conversation-scroll]')?.querySelector('[data-live-studio-host]')
+    if(!host||!local||typeof MutationObserver==='undefined')return
+    const sync=()=>setStudioScroll(scrollerOf(local)===local)
+    sync()
+    const observer=new MutationObserver(sync)
+    observer.observe(host,{childList:true,subtree:true,attributes:true,attributeFilter:['data-space-with-chat','data-live-studio']})
+    return()=>observer.disconnect()
+  },[])
+  // Bind the scroll listener to the current resolved scrollport;
   // reader-input attribution rides the observed-top ledger, not per-device
   // input listeners.
   useEffect(() => {
@@ -518,7 +531,7 @@ export function ChatView({
       el.removeEventListener('wheel', onWheel)
       el.removeEventListener('keydown', onKeyDown)
     }
-  }, [])
+  }, [studioScroll])
 
   // The ref starts null and is assigned every render, so the placeholder
   // initializer a function initial value would need never exists.
@@ -540,12 +553,12 @@ export function ChatView({
     const local = listRef.current
     if (column === null || local === null || typeof ResizeObserver === 'undefined') return
     const scrollport = scrollerOf(local)
-    const composer = scrollport.querySelector<HTMLElement>('[data-composer-seat]')
+    const composer = local.closest('[data-conversation-scroll]')?.querySelector<HTMLElement>('[data-composer-seat]') ?? null
     const observer = new ResizeObserver(() => { followRef.current?.() })
     observer.observe(column)
     if (composer !== null) observer.observe(composer)
     return () => { observer.disconnect() }
-  }, [])
+  }, [studioScroll])
 
   // Release the request latch after a new head lands, or once the backend
   // finishes an unsuccessful/empty request. No uncontrolled pagination loop.
