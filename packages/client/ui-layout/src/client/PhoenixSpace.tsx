@@ -433,6 +433,7 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
   const [readable,setReadable]=useState(false)
   const [createKind,setCreateKind]=useState<SpaceKind>('document')
   const [editor,setEditor]=useState<Editor|null>(null)
+  const [withChat,setWithChat]=useState(false)
   const [slideIndex,setSlideIndex]=useState(0)
   const [showSource,setShowSource]=useState(false)
   const [clipboardText,setClipboardText]=useState('')
@@ -447,6 +448,27 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
   const saving=useRef(false)
   const migrated=useRef(false)
   const selectedId=editor?.item.id
+  useEffect(()=>{
+    const before=(event:Event)=>{
+      const detail=(event as CustomEvent<{id?:string}>).detail
+      if(editor&&editor.item.id===detail?.id&&(editor.dirty||saving.current))event.preventDefault()
+    }
+    const edited=(event:Event)=>{
+      const detail=(event as CustomEvent<{id?:string;revision?:number}>).detail
+      if(typeof detail?.id!=='string'||!Number.isSafeInteger(detail.revision))return
+      setRevisionCounter(n=>n+1)
+      if(editor?.item.id!==detail.id)return
+      void api<{item:Item}>('/items/'+detail.id).then(({item})=>{
+        setEditor(current=>{
+          if(!current||current.item.id!==item.id||current.dirty||saving.current||item.revision<=current.item.revision)return current
+          return {item,title:item.title,content:item.content,space:item.space,dirty:false}
+        })
+      }).catch(()=>setError('No se pudo refrescar el archivo.'))
+    }
+    window.addEventListener('phoenix:space-before-agent-edit',before)
+    window.addEventListener('phoenix:space-agent-edited',edited)
+    return()=>{window.removeEventListener('phoenix:space-before-agent-edit',before);window.removeEventListener('phoenix:space-agent-edited',edited)}
+  },[editor])
   useEffect(()=>{
     let cancelled=false
     const timer=window.setTimeout(()=>{
@@ -629,7 +651,7 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
   const updateSheet=(newSheet:Sheet):void=>mutate({content:JSON.stringify(newSheet)})
   const currentSlide=deck.slides[slideIndex]
   const filteredSpaces=[...new Set(items.map(x=>x.space))]
-  return <section className={css.root} role="region" aria-label="PHOENIX Espacio" data-phoenix-space="" data-readable={readable?"true":"false"}>
+  return <section className={css.root} role="region" aria-label="PHOENIX Espacio" data-phoenix-space="" data-space-with-chat={withChat&&editor?"true":undefined} data-readable={readable?"true":"false"}>
     <aside className={css.rail}>
       <div className={css.railTitle}>Espacio</div>
       <button className={css.railAction} type="button" onClick={()=>{setEditor(null);setTrash(false);setKind('all');setSpace('all')}}>Todo</button>
@@ -698,12 +720,16 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
           {(htmlItem||markdownItem||sceneItem||godotItem)&&<button type="button" aria-pressed={showSource} onClick={()=>setShowSource(v=>!v)}>
             {showSource?'Vista visual':markdownItem?'Editar documento':'Ver código'}</button>}
           <button type="button" disabled={!editor.dirty||busy} onClick={()=>{void persist(editor)}}>Guardar</button>
-          <button type="button" onClick={()=>{void api<{restricted:boolean}>('/items/'+editor.item.id+'/distribution').then(policy=>{
+          <button type="button" disabled={editor.dirty||busy} onClick={()=>{void api<{restricted:boolean}>('/items/'+editor.item.id+'/distribution').then(policy=>{
             if(policy.restricted){setError('Consulta bloqueada por la política de distribución de esta creación');return}
+            const supported=!binaryItem&&['text/markdown','application/vnd.phoenix.slides+json','application/vnd.phoenix.sheet+json'].includes(editor.item.mime)&&editor.content.length<=24000
             window.dispatchEvent(new CustomEvent('phoenix:space-consult-file',{detail:{
-              id:editor.item.id,title:editor.title,mime:editor.item.mime,kind:editor.item.kind,revision:editor.item.revision
+              id:editor.item.id,title:editor.title,mime:editor.item.mime,kind:editor.item.kind,revision:editor.item.revision,
+              ...(supported?{content:editor.content}:{})
             }}))
+            setWithChat(true)
           }).catch(e=>setError(String(e)))}}>Consultar a Kira</button>
+          <button type="button" aria-pressed={withChat} onClick={()=>setWithChat(v=>!v)}>{withChat?'Ampliar archivo':'Mostrar chat al lado'}</button>
           <button type="button" onClick={()=>{void loadHistory()}}>Versiones</button>
           <button type="button" onClick={()=>{void changeDeletion(!editor.item.deleted)}}>{editor.item.deleted?'Restaurar':'Papelera'}</button>
         </div>
