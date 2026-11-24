@@ -87,3 +87,28 @@ describe('PHOENIX clinical API boundary',()=>{
       .rejects.toThrow('no coincide')
   })
 })
+
+describe('Persistent protected ASK',()=>{
+  it('recovers only matching encounter versions and confirms persistence',async()=>{
+    let version='1'
+    const calls:RequestInit[]=[]
+    const api=new HealthiaClinicalApi(vi.fn(async (_path:string,init?:RequestInit)=>{
+      calls.push(init!)
+      if(init?.method==='GET')return result({draft:{values:{encounterVersion:version,answerKey:'onset',answerText:'Dato ficticio'}}})
+      if(init?.method==='PATCH')return result({savedAt:'2026-11-24T12:00:00Z'})
+      return result({cleared:true})
+    }) as unknown as typeof fetch)
+    expect(await api.loadInterviewDraft(session,visit)).toEqual({key:'onset',text:'Dato ficticio'})
+    version='2'
+    expect(await api.loadInterviewDraft(session,visit)).toBeNull()
+    await api.saveInterviewDraft(session,visit,'onset','Dato ficticio')
+    expect(JSON.parse(String(calls.at(-1)?.body)).values.encounterVersion).toBe('1')
+    expect((calls.at(-1)?.headers as Record<string,string>)['x-phoenix-csrf']).toBe(session.csrf)
+    await api.clearInterviewDraft(session,visit)
+    expect(calls.at(-1)?.method).toBe('POST')
+  })
+  it('does not report saved when the clinical host rejects the draft',async()=>{
+    const api=new HealthiaClinicalApi(vi.fn(async()=>result({error:'conflict'},409)) as unknown as typeof fetch)
+    await expect(api.saveInterviewDraft(session,visit,'onset','Dato ficticio')).rejects.toThrow()
+  })
+})

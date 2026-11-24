@@ -10,7 +10,7 @@ import type { ClinicalSession, ClinicalPatient, ClinicalEncounter, ClinicalIntak
 import { HealthiaPatientDossier } from './HealthiaPatientDossier.tsx'
 import { HealthiaClinicalNote, formatClinicalNoteParts, NOTE_KINDS } from './HealthiaClinicalNote.tsx'
 import type { ClinicalNoteValues, ClinicalNoteKind } from './HealthiaClinicalNote.tsx'
-import type { ClinicalEditorRequest, ClinicalEditorViewState } from './HealthiaEditorSupport.ts'
+import { parseClinicalIntake, type ClinicalIntakePatch, type ClinicalEditorRequest, type ClinicalEditorViewState } from './HealthiaEditorSupport.ts'
 import { printProtectedClinicalDocument } from './HealthiaClinicalPrint.ts'
 import css from './HealthiaClinicOperations.module.css'
 
@@ -54,6 +54,7 @@ export function restoreClinicalNote(encounter:ClinicalEncounter):{
     'Diagnósticos adicionales y su evidencia':'secondaryDiagnosis',
     'Terminología o variante de codificación utilizada':'codeSystem',
     'CIE-10 sugerido (requiere verificación)':'icd10',
+    'CIE-11 propuesto':'icd11','Evidencia de consulta OMS (CIE-11)':'icd11Evidence',
     'Analíticas consideradas (las órdenes se emiten por separado)':'tests',
     'Imágenes diagnósticas consideradas (no emitidas)':'imaging',
     'Derivaciones e interconsultas consideradas':'referrals',
@@ -85,7 +86,9 @@ export function restoreClinicalNote(encounter:ClinicalEncounter):{
 }
 
 export function HealthiaClinicOperations({ area, selectedPatientId, onPatientChange, onNavigate,
-  accessOnly=false, onSessionReady, requestedStep, onEditorState }: {
+  accessOnly=false, onSessionReady, requestedStep, onEditorState, entry, onEntryHandled }: {
+  onEntryHandled?:((sequence:number)=>void)|undefined
+  entry?:{kind:'patient'|'encounter';sequence:number}|undefined
   area:Area
   /** Reuse exactly the professional login/setup flow without rendering patient records. */
   requestedStep?:ClinicalEditorRequest|undefined
@@ -112,6 +115,8 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
   const [logoError,setLogoError]=useState('')
   const [connectionRetry,setConnectionRetry]=useState(0)
   const [name,setName]=useState('')
+  const [intakeText,setIntakeText]=useState('')
+  const [intakeProposal,setIntakeProposal]=useState<ClinicalIntakePatch|null>(null)
   const [birthDate,setBirthDate]=useState('')
   const [sexAtBirth,setSexAtBirth]=useState<''|'female'|'male'|'intersex'|'unknown'>('')
   const [email,setEmail]=useState('')
@@ -132,16 +137,28 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
   const [notice,setNotice]=useState('')
   const [creatingPatient,setCreatingPatient]=useState(false)
   const [creatingEncounter,setCreatingEncounter]=useState(false)
+  const lastEntry=useRef<number|undefined>(undefined)
   const [interviewGuide,setInterviewGuide]=useState<ClinicalInterviewGuide|null>(null)
   const [answerKey,setAnswerKey]=useState('')
   const [answerText,setAnswerText]=useState('')
+  const [askDraftState,setAskDraftState]=useState<'loading'|'ready'|'saving'|'saved'|'error'>('loading')
+  const askDraftEpoch=useRef(0)
   const [signChecked,setSignChecked]=useState(false)
   const [dirtyEncounter,setDirtyEncounter]=useState(false)
-  useEffect(()=>{setDirtyEncounter(false);setSignChecked(false)},[encounterId,patientId])
+  const [noteReload,setNoteReload]=useState(0)
+  useEffect(()=>{setDirtyEncounter(false);setSignChecked(false);setAnswerKey('');setAnswerText('')},[encounterId,patientId])
   const readyRef=useRef(false)
   const userRole=session?.actor.role
   const canManagePatients=userRole==='admin'||userRole==='clinician'||userRole==='reception'
   const canManageEncounters=userRole==='clinician'||userRole==='psychologist'
+  useEffect(()=>{
+    if(accessOnly||mode!=='ready'||!entry||lastEntry.current===entry.sequence)return
+    if(entry.kind==='patient'&&area==='patients'&&canManagePatients){
+      lastEntry.current=entry.sequence;setCreatingPatient(true);onEntryHandled?.(entry.sequence)
+    }else if(entry.kind==='encounter'&&area==='encounters'&&canManageEncounters&&!dirtyEncounter){
+      lastEntry.current=entry.sequence;setEncounterId('');setCreatingEncounter(true);onEntryHandled?.(entry.sequence)
+    }
+  },[accessOnly,mode,entry,area,canManagePatients,canManageEncounters,dirtyEncounter,onEntryHandled])
   const selectedPatient=patients.find(p=>p.id===patientId)
   const normalizedSearch=patientSearch.trim().toLocaleLowerCase('es')
   const visiblePatients=patients.filter(p=>!normalizedSearch||
@@ -275,7 +292,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
       setPatients(prev=>[record,...prev])
       setPatientId(record.id)
       setEncounterId('')
-      setName('');setBirthDate('');setEmail('');setPhone('');setSexAtBirth('')
+      setName('');setBirthDate('');setEmail('');setPhone('');setSexAtBirth('');setIntakeText('');setIntakeProposal(null)
       setDocumentNumber('');setAdmissionNotes('');setCustomFields({})
       setIdentityMatches(null);setConfirmDistinct(false);setDistinctReason('')
       setCreatingPatient(false)
@@ -339,6 +356,35 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
 
 
   useEffect(()=>{
+    const epoch=++askDraftEpoch.current
+    setAnswerKey('');setAnswerText('');setAskDraftState('loading')
+    if(!session||!selectedEncounter||selectedEncounter.status==='signed'||selectedEncounter.practitioner!==session.actor.username||!canManageEncounters)return
+    void api.loadInterviewDraft(session,selectedEncounter).then(draft=>{
+      if(epoch!==askDraftEpoch.current)return
+      if(draft){setAnswerKey(draft.key);setAnswerText(draft.text);setAskDraftState('saved')}
+      else setAskDraftState('ready')
+    }).catch(()=>{if(epoch===askDraftEpoch.current)setAskDraftState('error')})
+    return ()=>{askDraftEpoch.current++}
+  },[session,selectedEncounter?.id,selectedEncounter?.version,canManageEncounters])
+  const pauseInterview=async():Promise<void>=>{
+    if(!session||!selectedEncounter||!answerKey||busy||askDraftState==='saving')return
+    const epoch=askDraftEpoch.current
+    setAskDraftState('saving')
+    try{
+      await api.saveInterviewDraft(session,selectedEncounter,answerKey,answerText)
+      if(epoch===askDraftEpoch.current)setAskDraftState('saved')
+    }catch{if(epoch===askDraftEpoch.current)setAskDraftState('error')}
+  }
+  const discardInterview=async():Promise<void>=>{
+    if(!session||!selectedEncounter||busy||askDraftState==='saving')return
+    const epoch=askDraftEpoch.current
+    setAskDraftState('saving')
+    try{
+      await api.clearInterviewDraft(session,selectedEncounter)
+      if(epoch===askDraftEpoch.current){setAnswerKey('');setAnswerText('');setAskDraftState('ready')}
+    }catch{if(epoch===askDraftEpoch.current)setAskDraftState('error')}
+  }
+  useEffect(()=>{
     setInterviewGuide(null)
     if(!session||!selectedEncounter||selectedEncounter.status==='signed'||!canManageEncounters)return
     let active=true
@@ -349,8 +395,8 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
   },[session,selectedEncounter?.id,selectedEncounter?.version,canManageEncounters])
   const mutateEncounter=async(
     operation:(current:ClinicalEncounter)=>Promise<ClinicalEncounter>,message:string
-  ):Promise<void>=>{
-    if(!selectedEncounter||busy)return
+  ):Promise<boolean>=>{
+    if(!selectedEncounter||busy)return false
     setBusy(true);setError('');setNotice('')
     try{
       const updated=await operation(selectedEncounter)
@@ -359,14 +405,17 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
       setEncounters(items=>items.map(item=>item.id===updated.id?updated:item))
       setNotice(message)
       setSignChecked(false)
-    }catch(err){setError(err instanceof Error?err.message:'La operación no quedó confirmada')}
+      return true
+    }catch(err){setError(err instanceof Error?err.message:'La operación no quedó confirmada');return false}
     finally{setBusy(false)}
   }
   const submitInterview=():void=>{
-    if(!session||!answerKey||!answerText.trim()||!selectedEncounter)return
+    if(!session||!answerKey||!answerText.trim()||!selectedEncounter||busy||askDraftState==='saving')return
+    const epoch=askDraftEpoch.current
     void mutateEncounter(record=>api.answerInterview(session,record,answerKey,answerText),
-      'Respuesta registrada en el interrogatorio protegido.')
-    setAnswerKey('');setAnswerText('')
+      'Respuesta registrada en el interrogatorio protegido.').then(saved=>{
+        if(saved&&epoch===askDraftEpoch.current){setAnswerKey('');setAnswerText('');setAskDraftState('ready')}
+      })
   }
   if(mode==='loading')return <div className={css.status} role="status">Comprobando la sesión clínica local…</div>
   if(mode==='unavailable')return <div className={css.panel} role="status">
@@ -502,7 +551,31 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
         {visiblePatients.length>50&&<p className={css.notice}>Mostrando 50 de {visiblePatients.length}. Precisa la búsqueda.</p>}
       </div>}
       {creatingPatient&&canManagePatients&&<form className={css.form} onSubmit={event=>{void addPatient(event)}} autoComplete="off">
-        <h3>Registro de paciente · admisión protegida</h3>
+        <h3>Nuevo paciente</h3>
+        <div className={css.intakeAssistant} aria-label="Admisión conversacional protegida">
+          <strong>Cuéntame los datos del paciente</strong>
+          <p>Escribe en una sola entrada. Los datos reconocidos se proponen antes de llenar los campos vacíos; no se envían al chat general.</p>
+          <textarea aria-label="Datos de admisión en lenguaje natural" maxLength={4000} rows={3} value={intakeText}
+            placeholder="Crea paciente Ana Pérez, edad: 42 años, sexo: femenino, fecha de nacimiento: 1984-03-12, correo: ana@example.com"
+            onChange={e=>{setIntakeText(e.currentTarget.value);setIntakeProposal(null)}}/>
+          <button type="button" disabled={!intakeText.trim()||busy} onClick={()=>setIntakeProposal(parseClinicalIntake(intakeText))}>Organizar datos</button>
+          {intakeProposal&&<div role="status" className={css.intakeProposal}>
+            {Object.entries(intakeProposal).length===0?<p>No se reconocieron campos explícitos. Usa nombre, fecha de nacimiento, sexo, correo o teléfono.</p>:<>
+              <dl>{Object.entries(intakeProposal).map(([key,value])=><div key={key}><dt>{({name:'Nombre',dateOfBirth:'Fecha de nacimiento',sexAtBirth:'Sexo',email:'Correo',phone:'Teléfono',age:'Edad referida',birthplace:'Lugar de nacimiento'} as Record<string,string>)[key]??key}</dt><dd>{value}</dd></div>)}</dl>
+              <button type="button" disabled={busy} onClick={()=>{
+                if(intakeProposal.name&&!name.trim())setName(intakeProposal.name)
+                if(intakeProposal.dateOfBirth&&!birthDate)setBirthDate(intakeProposal.dateOfBirth)
+                if(intakeProposal.sexAtBirth&&!sexAtBirth)setSexAtBirth(intakeProposal.sexAtBirth)
+                if(intakeProposal.email&&!email.trim())setEmail(intakeProposal.email)
+                if(intakeProposal.phone&&!phone.trim())setPhone(intakeProposal.phone)
+                const supplemental=[intakeProposal.age?'Edad referida: '+intakeProposal.age+' años':'',intakeProposal.birthplace?'Lugar de nacimiento referido: '+intakeProposal.birthplace:''].filter(Boolean).join('\n')
+                if(supplemental&&!admissionNotes.trim())setAdmissionNotes(supplemental)
+                setIdentityMatches(null);setConfirmDistinct(false);setDistinctReason('');setIntakeProposal(null)
+              }}>Completar campos vacíos</button>
+            </>}
+            {!birthDate&&!intakeProposal.dateOfBirth&&<p>ASK · ¿Cuál es la fecha de nacimiento? La edad referida no sustituye una fecha verificada.</p>}
+          </div>}
+        </div>
         <p>Identidad, contacto y datos de admisión. El expediente interno se asigna al guardar; documento y teléfono no son su identificador principal.</p>
         <div className={css.admissionGrid}>
           <label>Nombre completo<input required maxLength={160} value={name} onChange={e=>{setName(e.target.value);setIdentityMatches(null)}}/></label>
@@ -617,17 +690,23 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
             Ante signos de alarma, realiza valoración inmediata; la guía no determina un diagnóstico.</p>
           {(interviewGuide?.nextQuestions??[]).map(question=><button type="button" key={question.key}
             className={answerKey===question.key?css.interviewQuestionActive:css.interviewQuestion}
-            onClick={()=>{setAnswerKey(question.key);setAnswerText('')}}>
+            disabled={busy||askDraftState==='loading'||askDraftState==='saving'||!!answerText.trim()&&answerKey!==question.key}
+            onClick={()=>{if(answerKey!==question.key){setAnswerKey(question.key);setAnswerText('');setAskDraftState('ready')}}}>
             {question.question}
           </button>)}
           {answerKey&&<div className={css.interviewAnswer}>
             <label>Respuesta documentada por el profesional
-              <textarea maxLength={1600} rows={3} value={answerText}
-                onChange={e=>setAnswerText(e.currentTarget.value)}/>
+              <textarea maxLength={1600} rows={3} value={answerText} disabled={busy||askDraftState==='saving'}
+                onChange={e=>{setAnswerText(e.currentTarget.value);setAskDraftState('ready')}}/>
             </label>
-            <button className={css.primary} type="button" disabled={busy||!answerText.trim()}
+            <button className={css.primary} type="button" disabled={busy||askDraftState==='saving'||!answerText.trim()}
               onClick={submitInterview}>Guardar respuesta en consulta</button>
+            <button type="button" disabled={busy||askDraftState==='saving'} onClick={()=>{void pauseInterview()}}>Guardar y continuar después</button>
+            <button type="button" disabled={busy||askDraftState==='saving'} onClick={()=>{void discardInterview()}}>Descartar respuesta sin guardar</button>
           </div>}
+          {askDraftState==='saved'&&<p role="status" className={css.notice}>Borrador cifrado confirmado. Puede recuperarse al reabrir esta consulta mientras no cambie su versión.</p>}
+          {askDraftState==='error'&&<p role="alert" className={css.notice}>No se confirmó el borrador. Conserva el texto en esta vista y reintenta el guardado.</p>}
+          {!interviewGuide&&<p className={css.notice}>Guía aún no disponible. Puedes continuar documentando la historia manualmente.</p>}
           {interviewGuide&&interviewGuide.nextQuestions.length===0&&
             <p className={css.notice}>No quedan preguntas pendientes de esta guía; comprueba si necesitas ampliar la entrevista.</p>}
           {Object.entries(selectedEncounter.interviewAnswers??{}).length>0&&
@@ -636,9 +715,9 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
                 <p key={key}>{key.replaceAll('_',' ')}: {value}</p>)}
             </div>}
           {!selectedEncounter.history.trim()&&Object.keys(selectedEncounter.interviewAnswers??{}).length>0&&
-            <button type="button" disabled={busy} onClick={()=>{
-              if(session)void mutateEncounter(record=>api.draftEncounterFromInterview(session,record),
-                'Borrador construido a partir de las respuestas registradas; requiere revisión profesional.')
+            <button type="button" disabled={busy||dirtyEncounter||!!answerText.trim()||askDraftState==='saving'} onClick={()=>{
+              if(session&&!dirtyEncounter&&!answerText.trim())void mutateEncounter(record=>api.draftEncounterFromInterview(session,record),
+                'Borrador construido a partir de las respuestas registradas; requiere revisión profesional.').then(saved=>{if(saved)setNoteReload(value=>value+1)})
             }}>Preparar borrador desde el interrogatorio</button>}
         </section>}
 
@@ -649,9 +728,9 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
           <pre>{selectedEncounter.history}</pre>
           <p className={css.notice}>Firmada por {selectedEncounter.signedBy??'profesional autorizado'} ·
             {selectedEncounter.signedAt??'fecha protegida'}. No admite sobrescritura; correcciones mediante adenda.</p>
-        </div> : <HealthiaClinicalNote key={selectedEncounter.id} initialKind={currentNote.kind}
+        </div> : <HealthiaClinicalNote key={selectedEncounter.id+':'+noteReload} initialKind={currentNote.kind}
           initialValues={currentNote.values} patient={selectedPatient} encounterVersion={selectedEncounter.version}
-          requestedStep={requestedStep} onEditorState={onEditorState} onDirtyChange={setDirtyEncounter} {...(canManageEncounters&&session?.actor.username===selectedEncounter.practitioner?{onSave:saveNote}:{})}
+          requestedStep={requestedStep} onEditorState={onEditorState} onDirtyChange={setDirtyEncounter} {...(session?.actor.role==='clinician'&&session.actor.username===selectedEncounter.practitioner?{verifyIcd11:(code:string)=>api.verifyIcd11(session,code)}:{})} {...(canManageEncounters&&session?.actor.username===selectedEncounter.practitioner?{onSave:saveNote}:{})}
           {...(session?.actor.role==='clinician'&&session.actor.username===selectedEncounter.practitioner&&selectedEncounter.status==='draft'?{
             loadModels:()=>api.editorModels(session),
             refineField:(field:string,text:string,model:import('./HealthiaClinicalApi.ts').ClinicalEditorModel,confirmed:boolean)=>api.refineEditorField(session,selectedEncounter,field,text,model,confirmed),
@@ -685,8 +764,8 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
             <p>Comprueba identidad, motivo, enfermedad actual, antecedentes, exploración, diagnóstico,
               códigos, plan, indicaciones y datos faltantes antes de marcar la versión como revisada.</p>
             {dirtyEncounter&&<p role="status">Guarda los cambios del editor antes de revisar la consulta.</p>}
-            <button className={css.primary} type="button" disabled={busy||dirtyEncounter} onClick={()=>{
-              if(session&&!dirtyEncounter)void mutateEncounter(record=>api.reviewEncounter(session,record),
+            <button className={css.primary} type="button" disabled={busy||dirtyEncounter||!!answerText.trim()||askDraftState==='saving'} onClick={()=>{
+              if(session&&!dirtyEncounter&&!answerText.trim())void mutateEncounter(record=>api.reviewEncounter(session,record),
                 'Versión de la consulta revisada. Requiere firma explícita.')
             }}>Marcar esta versión como revisada</button>
           </div>}
@@ -697,8 +776,8 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
             <label className={css.signCheck}><input type="checkbox" checked={signChecked}
               onChange={e=>setSignChecked(e.currentTarget.checked)}/>
               He revisado la historia, las decisiones y los datos de este paciente.</label>
-            <button className={css.primary} type="button" disabled={busy||!signChecked||dirtyEncounter} onClick={()=>{
-              if(session&&!dirtyEncounter)void mutateEncounter(record=>api.signEncounter(session,record),
+            <button className={css.primary} type="button" disabled={busy||!signChecked||dirtyEncounter||!!answerText.trim()||askDraftState==='saving'} onClick={()=>{
+              if(session&&!dirtyEncounter&&!answerText.trim())void mutateEncounter(record=>api.signEncounter(session,record),
                 'Consulta firmada por el servicio clínico protegido.')
             }}>Firmar consulta revisada</button>
           </div>}

@@ -121,3 +121,14 @@
 .accessPanel .form input{width:100%;min-height:39px}
 .accessPanel .form button.primary{width:100%;justify-self:stretch;min-height:39px;margin-top:2px}
 .accessPanel .error{font-size:11px}
+
+/* Protected, task-first conversational intake. */
+.intakeAssistant{display:grid;gap:9px;padding:16px;border-radius:15px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);min-width:0}
+.intakeAssistant>strong{font-size:15px}.intakeAssistant p{margin:0;font-size:12px;line-height:1.55;color:var(--dsw-alias-label-secondary)}
+.intakeAssistant textarea{min-height:76px;resize:vertical;width:100%;box-sizing:border-box}
+.intakeAssistant button{justify-self:start}
+.intakeProposal{display:grid;gap:10px;padding:12px;border:1px solid var(--dsw-alias-border-l2);border-radius:12px;animation:healthiaIntakeIn .18s ease-out}
+.intakeProposal dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr));gap:9px;margin:0}
+.intakeProposal dt{font-size:11px;color:var(--dsw-alias-label-secondary)}.intakeProposal dd{margin:3px 0;font-size:13px;overflow-wrap:anywhere}
+@keyframes healthiaIntakeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.intakeProposal{animation:none}}
