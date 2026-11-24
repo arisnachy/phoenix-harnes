@@ -451,6 +451,7 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
   const editorNow=useRef(editor)
   editorNow.current=editor
   const selectedId=editor?.item.id
+  useEffect(()=>{setWithChat(Boolean(selectedId))},[selectedId])
   useEffect(()=>{
     const before=(event:Event)=>{
       const detail=(event as CustomEvent<{id?:string}>).detail
