@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PhoenixSpaceStore, phoenixSpaceRoot, validateSpacePayload } from '../src/space-store.ts'
+import { parseSpaceClipboard, syntheticSpaceDataset } from '../src/space-workflows.ts'
 import { exportPptx, exportXlsx, zipOffice } from '../src/space-office.ts'
 
 const roots:string[]=[]
@@ -162,5 +163,21 @@ describe('connected workspace revisions and provenance',()=>{
     expect(()=>db.fork(parent.id,1,'Overflow')).toThrow(/Límite/)
     const imported=db.importFile('file.txt','text/plain',Buffer.from('x'))
     expect(()=>db.fork(imported.id,1,'Copy')).toThrow()
+  })
+})
+
+describe('explicit clipboard and fictional fixtures',()=>{
+  it('parses TSV with quoted fields, rejects malformed rows and neutralizes formulas',()=>{
+    expect(parseSpaceClipboard('name\tvalue\r\n"A\tB"\t=HYPERLINK("x")')).toEqual({columns:['name','value'],rows:[['A\tB',"'=HYPERLINK(\"x\")"]]})
+    expect(parseSpaceClipboard('x\ty\n-12\t+5').rows).toEqual([['-12','+5']])
+    expect(()=>parseSpaceClipboard('a\tb\n1')).toThrow()
+    expect(()=>parseSpaceClipboard('a\ta\n1\t2')).toThrow()
+  })
+  it('generates reproducible clearly fictional and bounded data',()=>{
+    const fixture=syntheticSpaceDataset(42,10)
+    expect(fixture).toEqual(syntheticSpaceDataset(42,10))
+    expect(fixture).not.toEqual(syntheticSpaceDataset(43,10))
+    expect(fixture.rows.every(r=>r[5]==='FICTICIO'&&Number(r[4])===Math.max(0,Number(r[2])-Number(r[3])))).toBe(true)
+    expect(()=>syntheticSpaceDataset(42,1001)).toThrow()
   })
 })
