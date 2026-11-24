@@ -23,6 +23,7 @@ import {
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { SidebarRootComponentProps } from './contract/slots.ts'
 import { TaskCenter } from './TaskCenter.tsx'
+import { NATIVE_MENU_KEY, readNativeMenu, nativeMenuOperation, type NativeTarget } from './NativeSelfMenu.ts'
 import css from './SidebarRoot.module.css'
 // Keep runtime navigation local to the sidebar plugin (client bundle purity).
 const HEALTHIA_NAV = {
@@ -55,6 +56,7 @@ export function SidebarRoot({
   // The old 150ms settle timer blocked the rail and retained costly wide rows.
   const wide = !collapsed
   const [tasksOpen, setTasksOpen] = useState(false)
+  const [nativeMenu,setNativeMenu]=useState(()=>readNativeMenu(window.localStorage))
   const [adaptive, setAdaptive] = useState<{
     app: string; role: 'doctor' | 'patient'; section: string
     title?: string; palette?: 'pearl'|'ocean'|'sage'|'iris'|'amber'
@@ -111,6 +113,42 @@ export function SidebarRoot({
     window.dispatchEvent(new Event('phoenix:open-space'))
   }
 
+  // Native self commands share the existing explicit chat preflight/apply channel.
+  const navigateNative = (target:NativeTarget):void => {
+    if(target==='home'){closeSpace();startSession()}
+    else if(target==='tasks'){closeSpace();setTasksOpen(true)}
+    else if(target==='connectors')openFeature('connectors',t('nav.connectors'))
+    else if(target==='team'){closeSpace();window.dispatchEvent(new Event('phoenix:toggle-team-directory'))}
+    else if(target==='library')openLibrary()
+    else if(target==='healthia'){closeSpace();navigateAdaptive('healthia','doctor')}
+  }
+  const nativeLabel=(target:NativeTarget):string=>target==='healthia'?'Healthia':t(('nav.'+target) as Parameters<typeof t>[0])
+  useEffect(()=>{
+    const onControl=(event:Event):void=>{
+      const value=(event as CustomEvent<unknown>).detail
+      if(!value||typeof value!=='object')return
+      const r=value as {requestId?:unknown;phase?:unknown;command?:{operation?:unknown}}
+      if(r.command?.operation!=='native-menu'||typeof r.requestId!=='string'||r.requestId.length>90||!['preflight','apply'].includes(String(r.phase)))return
+      let ok=false,reason='INVALID_NATIVE_MENU_COMMAND'
+      try{
+        const result=nativeMenuOperation(window.localStorage,r.command,r.phase==='apply')
+        if(r.phase==='apply'){
+          setNativeMenu(result.state)
+          if(result.opened){
+            if(adaptive.app!=='general')navigateAdaptive('general')
+            navigateNative(result.opened)
+          }
+        }
+        ok=true
+        reason=result.reason+' · '+JSON.stringify({revision:result.state.revision,entries:result.state.entries.map(entry=>({...entry,label:entry.label??nativeLabel(entry.target)}))})
+      }catch(error){reason=error instanceof Error&&/^[A-Z_]+$/u.test(error.message)?error.message:'NATIVE_MENU_STORAGE_FAILED'}
+      window.dispatchEvent(new CustomEvent('phoenix:adaptive-control-result',{detail:{requestId:r.requestId,phase:r.phase,ok,reason}}))
+    }
+    const onStorage=(event:StorageEvent):void=>{if(event.key===NATIVE_MENU_KEY||event.key===null)setNativeMenu(readNativeMenu(window.localStorage))}
+    window.addEventListener('phoenix:adaptive-control-request',onControl)
+    window.addEventListener('storage',onStorage)
+    return ()=>{window.removeEventListener('phoenix:adaptive-control-request',onControl);window.removeEventListener('storage',onStorage)}
+  })
   // Rail-in only crossfades a live collapse: a refresh straight into the
   // collapsed state renders the rail statically (no delay-hidden icons).
   const everWide = useRef(!collapsed)
@@ -267,27 +305,19 @@ export function SidebarRoot({
         </nav>
       ) : (
       <nav className={css.primaryNavigation} aria-label="Navegación principal">
-        <button type="button" className={css.navLink} aria-label={t('nav.home')} title={wide ? undefined : t('nav.home')} onClick={() => { closeSpace(); startSession() }}>
-          <svg viewBox="0 0 24 24" width={wide ? 19 : 18} height={wide ? 19 : 18}
-            fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z" />
-          </svg>{wide && <span>{t('nav.home')}</span>}
-        </button>
-        <button type="button" className={css.navLink} aria-label={t('nav.tasks')} title={wide ? undefined : t('nav.tasks')} onClick={() => { closeSpace(); setTasksOpen(true) }}>
-          <svg viewBox="0 0 24 24" width={wide ? 19 : 18} height={wide ? 19 : 18}
-            fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" /><path d="M12 6v6l4 2" />
-          </svg>{wide && <span>{t('nav.tasks')}</span>}
-        </button>
-        <button type="button" className={css.navLink} aria-label={t('nav.connectors')} title={wide ? undefined : t('nav.connectors')} onClick={() => { openFeature('connectors', t('nav.connectors')) }}>
-          <IconPlugOutline16 size={wide ? 19 : 18} />{wide && <span>{t('nav.connectors')}</span>}
-        </button>
-        <button type="button" className={css.navLink} aria-label={t('nav.team')} title={wide ? undefined : t('nav.team')} onClick={() => { closeSpace(); window.dispatchEvent(new Event('phoenix:toggle-team-directory')) }}>
-          <IconAgentPresetOutline16 size={wide ? 19 : 18} />{wide && <span>{t('nav.team')}</span>}
-        </button>
-        <button type="button" className={css.navLink} aria-label={t('nav.library')} title={wide ? undefined : t('nav.library')} onClick={openLibrary}>
-          <IconFolderOpenOutline16 size={wide ? 19 : 18} />{wide && <span>{t('nav.library')}</span>}
-        </button>
+        {nativeMenu.entries.map(entry=>{
+          const title=entry.label??nativeLabel(entry.target)
+          return <button key={entry.id} type="button" className={css.navLink} aria-label={title} title={wide?undefined:title}
+            onClick={()=>navigateNative(entry.target)} data-native-menu-id={entry.id}>
+            {entry.target==='home'?<svg viewBox="0 0 24 24" width={wide?19:18} height={wide?19:18} fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/></svg>
+              :entry.target==='tasks'?<svg viewBox="0 0 24 24" width={wide?19:18} height={wide?19:18} fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>
+              :entry.target==='connectors'?<IconPlugOutline16 size={wide?19:18}/>
+              :entry.target==='team'?<IconAgentPresetOutline16 size={wide?19:18}/>
+              :entry.target==='library'?<IconFolderOpenOutline16 size={wide?19:18}/>
+              :<PhoenixLogo size={wide?19:18}/>}
+            {wide&&<span>{title}</span>}
+          </button>
+        })}
       </nav>
       )}
 

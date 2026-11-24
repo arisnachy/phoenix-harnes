@@ -257,6 +257,8 @@ export function AppFrame({
       if (Object.keys(request).some(key => !['requestId','phase','command','binding'].includes(key))
         || typeof request.requestId !== 'string' || request.requestId.length > 90
         || (request.phase !== 'preflight' && request.phase !== 'apply')) return
+      // Native navigation commands are owned by SidebarRoot, not the adaptive app controller.
+      if (request.command && typeof request.command==='object' && (request.command as {operation?:unknown}).operation==='native-menu') return
       const command = parseAdaptiveControl(request.command)
       let ok = false
       let reason = 'INVALID_COMMAND'
