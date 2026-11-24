@@ -280,6 +280,7 @@ export function readSheetDraft(store:Pick<Storage,'getItem'>,key:string):SheetDr
 function writeSheetDraft(store:Pick<Storage,'getItem'|'setItem'>,key:string,draft:SheetDraft,expectedRaw:string|null):void{
   if(store.getItem(key)!==expectedRaw)throw Error('SHEET_CONFLICT')
   const encoded=JSON.stringify(draft)
+  if(encoded.length>4000000)throw Error('SHEET_DRAFT_TOO_LARGE')
   store.setItem(key,encoded)
   if(store.getItem(key)!==encoded)throw Error('SHEET_WRITE_UNVERIFIED')
 }
@@ -623,7 +624,7 @@ export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:
   const saveNative=(native:NativeWorkbook,expected:number):number|null=>{
     try{
       const raw=localStorage.getItem(key),current=readSheetDraft(localStorage,key)
-      if(!current||current.revision!==expected||!validNativeWorkbook(native))throw Error('NATIVE_CONFLICT')
+      if(!current||current.revision!==expected||!validNativeWorkbook(native)||native.workbook.id!==(current.native?.workbook.id??'phoenix-'+spec.props.id))throw Error('NATIVE_CONFLICT')
       const projection=projectNativeWorkbook(native)
       const draft:SheetDraft={columns:projection?.columns??current.columns,rows:projection?.rows??current.rows,revision:current.revision+1,native,previous:current.rows,previousColumns:current.columns,...(current.native?{previousNative:current.native}:{}),...(current.formats?{previousFormats:current.formats}:{})}
       writeSheetDraft(localStorage,key,draft,raw)
@@ -631,6 +632,20 @@ export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:
       window.dispatchEvent(new CustomEvent(SHEET_EVENT,{detail:key}))
       return draft.revision
     }catch{setError('No se guardó el último cambio del motor. Descarga la recuperación antes de cerrar.');return null}
+  }
+  const confirmNativeLoaded=(native:NativeWorkbook,expected:number):number|null=>{
+    try{
+      const raw=localStorage.getItem(key),current=readSheetDraft(localStorage,key)
+      if(!current||current.revision!==expected||native.workbook.id!==(current.native?.workbook.id??'phoenix-'+spec.props.id))return null
+      const expectedNative=current.native??createNativeWorkbook(spec.props.id,spec.props.title,current.columns,current.rows)
+      const observedProjection=projectNativeWorkbook(native),expectedProjection=projectNativeWorkbook(expectedNative)
+      if(JSON.stringify(observedProjection)!==JSON.stringify(expectedProjection))throw Error('NATIVE_READBACK_MISMATCH')
+      if(!current.native)return saveNative(native,expected)
+      // Persist calculated caches with the same content revision; preserve recovery.
+      writeSheetDraft(localStorage,key,{...current,native},raw)
+      latest.current={...current,native}
+      return expected
+    }catch{setError('El motor no confirmó la revisión guardada. El archivo anterior sigue disponible.');return null}
   }
   const downloadNative=()=>{
     const current=latest.current
@@ -642,7 +657,7 @@ export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:
   const nativeState=useMemo(()=>latest.current?.native??createNativeWorkbook(spec.props.id,spec.props.title,latest.current?.columns??spec.props.columns,rows),[version,rows,spec.props.id,spec.props.title])
   const nativeEditor=<section className={css.nativeOffice} data-live-studio={host?'sheet':undefined} data-generative-ui="spreadsheet" data-sheet-draft-key={key}>
     <div className={css.nativeOfficeTop}><strong>{spec.props.title}</strong><span>Univer · v{version}</span><details><summary>Archivo</summary><button type="button" onClick={downloadNative} disabled={!latest.current?.native}>Guardar copia del libro</button><button type="button" onClick={undoRevision} disabled={!latest.current?.previous}>Restaurar revisión anterior</button><button type="button" onClick={detach}>Desvincular de Kira</button></details><label><input type="checkbox" checked={pinned} onChange={e=>setPinned(e.currentTarget.checked)}/> Fijar</label>{host&&<button type="button" onClick={()=>closeStudio()} aria-label="Cerrar editor de hoja">×</button>}</div>
-    <UniverFrame native={nativeState} revision={version} onSave={saveNative} onSelection={(r,c)=>{if(c>=0&&c<16&&r>=0&&r<=200)nativeSelection.current=columnLetter(c)+String(r+1)}} onFailure={message=>{setError(message);setOfficeFailed(true)}}/>
+    <UniverFrame native={nativeState} revision={version} onSave={saveNative} onLoaded={confirmNativeLoaded} onSelection={(r,c)=>{if(c>=0&&c<16&&r>=0&&r<=200)nativeSelection.current=columnLetter(c)+String(r+1)}} onFailure={(message,startup)=>{setError(message);if(startup)setOfficeFailed(true)}}/>
     {error&&<p role="alert" className={css.error}>{error}</p>}
     {latest.current?.native&&!projectNativeWorkbook(latest.current.native)&&<p role="status" className={css.error}>Libro conservado. El rango actual supera el puente de edición de Kira.</p>}
   </section>

@@ -50,7 +50,7 @@ function encodeCell(raw:string,prior:unknown):Obj{
   // A value or formula replacement must not retain stale rich text or cached results.
   for(const k of ['v','f','p','t','si','ref'])delete cell[k]
   if(raw.startsWith('='))cell.f=raw
-  else if(raw!==''&&/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/u.test(raw)&&Number.isFinite(Number(raw))){cell.v=Number(raw);cell.t=2}
+  else if(raw!==''&&/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/u.test(raw)&&Number.isFinite(Number(raw))&&String(Number(raw))===raw){cell.v=Number(raw);cell.t=2}
   else if(raw!==''){cell.v=raw;cell.t=1}
   return cell
 }
