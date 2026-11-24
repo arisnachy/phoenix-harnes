@@ -86,7 +86,7 @@ export function restoreClinicalNote(encounter:ClinicalEncounter):{
 }
 
 export function HealthiaClinicOperations({ area, selectedPatientId, onPatientChange, onNavigate,
-  accessOnly=false, deferredAccess=false, onSessionReady, requestedStep, onEditorState, entry, onEntryHandled }: {
+  accessOnly=false, deferredAccess=false, onRequestAccess, onSessionReady, requestedStep, onEditorState, entry, onEntryHandled }: {
   onEntryHandled?:((sequence:number)=>void)|undefined
   entry?:{kind:'patient'|'encounter';sequence:number}|undefined
   area:Area
@@ -95,6 +95,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
   onEditorState?:((state:ClinicalEditorViewState|null)=>void)|undefined
   accessOnly?:boolean
   deferredAccess?:boolean
+  onRequestAccess?:()=>void
   onSessionReady?:()=>void
   selectedPatientId?:string
   onPatientChange?:(id:string)=>void
@@ -429,14 +430,14 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
       <a href="/health" target="_blank" rel="noopener noreferrer">Diagnóstico del servicio protegido</a>
     </div>
   </div>
-  if((mode==='login'||mode==='setup')&&(!accessOnly||deferredAccess)&&!accessExpanded)return <section className={css.lockedWorkspace} aria-label="Acceso clínico protegido">
+  if((mode==='login'||mode==='setup')&&(!accessOnly||deferredAccess||onRequestAccess)&&(!accessExpanded||onRequestAccess))return <section className={css.lockedWorkspace} aria-label="Acceso clínico protegido">
     <div className={css.lockIcon} aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14v3"/></svg></div>
     <div className={css.lockCopy}><span className={css.lockEyebrow}>EXPEDIENTES PRIVADOS</span>
       <h3>{mode==='setup'?'Configura tu clínica':'Tu espacio clínico está protegido'}</h3>
       <p>{mode==='setup'?'Crea el acceso institucional una sola vez.':'Desbloquea el expediente para continuar. Si ya tienes una sesión clínica activa, puedes recuperarla sin repetir las credenciales.'}</p>
     </div>
     <div className={css.lockActions}>
-      <button type="button" className={css.primary} onClick={()=>setAccessExpanded(true)}>{mode==='setup'?'Configurar clínica':'Desbloquear clínica'}</button>
+      <button type="button" className={css.primary} onClick={()=>{if(onRequestAccess)onRequestAccess();else setAccessExpanded(true)}}>{mode==='setup'?'Configurar clínica':'Desbloquear clínica'}</button>
       {mode==='login'&&<button type="button" className={css.accessSecondary} onClick={()=>{setMode('loading');setConnectionRetry(v=>v+1)}}>Comprobar sesión</button>}
     </div>
   </section>
