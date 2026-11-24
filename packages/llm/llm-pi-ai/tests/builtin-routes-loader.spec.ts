@@ -11,6 +11,7 @@ import Loader from '@phoenix-ai/cordis-plugin-loader'
 import Include from '@phoenix-ai/cordis-plugin-include'
 import LlmRuntime from '@phoenix-ai/dsh-llm'
 import * as LlmPiAi from '../src/index.ts'
+import { resolveProfiles, DEFAULT_PHOENIX_LOCAL_STREAM_IDLE_TIMEOUT_MS } from '../src/config.ts'
 import { assemble } from './assemble.ts'
 import { textEvents } from './mock-server.ts'
 
@@ -72,6 +73,15 @@ async function loadBareModelRuntime(): Promise<Context> {
 }
 
 describe('llm-pi-ai built-in route lifecycle', () => {
+  it('does not shadow the slow local prefill budget when injecting the built-in route', () => {
+    const local = resolveProfiles({
+      [LlmPiAi.PHOENIX_LOCAL_PROVIDER]: LlmPiAi.phoenixLocalProfile(),
+    }).get(LlmPiAi.PHOENIX_LOCAL_PROVIDER)
+    expect(local?.streamIdleTimeoutMs).toBe(DEFAULT_PHOENIX_LOCAL_STREAM_IDLE_TIMEOUT_MS)
+    expect(local?.streamIdleTimeoutMs).toBe(540_000)
+    expect(local?.timeoutMs).toBe(720_000)
+  })
+
   it('streams Phoenix Local without requiring an API key', async () => {
     let authorization: string | undefined
     localServer = createServer((request, response) => {
