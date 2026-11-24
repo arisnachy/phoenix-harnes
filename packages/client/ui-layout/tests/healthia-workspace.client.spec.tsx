@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useState } from 'react'
+import { HealthiaClinicalNote, formatClinicalNoteParts } from '../src/client/HealthiaClinicalNote.tsx'
 import { parseClinicalIntake } from '../src/client/HealthiaEditorSupport.ts'
 import { HealthiaWorkspace, HEALTHIA_NAV, type HealthiaRole } from '../src/client/HealthiaWorkspace.tsx'
 
@@ -182,5 +183,27 @@ describe('Compact clinical access',()=>{
     expect(screen.queryByLabelText('Contraseña')).toBeNull()
     fireEvent.click(screen.getByRole('button',{name:'Desbloquear clínica'}))
     expect((screen.getByLabelText('Contraseña') as HTMLInputElement).value).toBe('')
+  })
+})
+
+
+describe('Native clinical editor continuity',()=>{
+  it('preserves the current draft while moving between clinical sections',()=>{
+    render(<HealthiaClinicalNote/>)
+    const interview=screen.getByRole('button',{name:'Entrevista'})
+    expect(interview.getAttribute('data-documented')).toBe('false')
+    fireEvent.change(screen.getByLabelText('Motivo de consulta'),{target:{value:'Motivo sintético'}})
+    expect(interview.getAttribute('data-documented')).toBe('true')
+    fireEvent.click(screen.getByRole('button',{name:'Signos vitales'}))
+    fireEvent.change(screen.getByLabelText('Frecuencia cardíaca · lpm'),{target:{value:'76'}})
+    fireEvent.click(interview)
+    expect((screen.getByLabelText('Motivo de consulta') as HTMLInputElement).value).toBe('Motivo sintético')
+    fireEvent.click(screen.getByRole('button',{name:'Signos vitales'}))
+    expect((screen.getByLabelText('Frecuencia cardíaca · lpm') as HTMLInputElement).value).toBe('76')
+  })
+  it('includes CIE-11 verification evidence in the persisted assessment',()=>{
+    const parts=formatClinicalNoteParts('first',{icd11:'SYNTHETIC',icd11Evidence:'Synthetic test evidence'})
+    expect(parts.assessment).toContain('CIE-11 propuesto: SYNTHETIC')
+    expect(parts.assessment).toContain('Evidencia de consulta OMS (CIE-11): Synthetic test evidence')
   })
 })
