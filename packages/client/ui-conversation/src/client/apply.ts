@@ -372,6 +372,20 @@ export function apply(ctx: Context): void {
         window.dispatchEvent(new Event('phoenix:adaptive-app-mission-failed'))
       }
     }
+    const onSpaceFile = (event: Event):void=>{
+      const detail:unknown=(event as CustomEvent<unknown>).detail
+      if(!detail||typeof detail!=='object'||Array.isArray(detail))return
+      const v=detail as Record<string,unknown>
+      if(typeof v.id!=='string'||!/^[a-f0-9-]{36}$/u.test(v.id)||typeof v.title!=='string'||v.title.length>180
+        ||typeof v.mime!=='string'||v.mime.length>120||typeof v.kind!=='string'||!Number.isInteger(v.revision))return
+      const id=sessions.list.getSnapshot().current
+      if(id===undefined)return
+      try{
+        const shell=inputHub.shell(id)
+        if(shell.snapshot.draft.trim()||shell.snapshot.imageIds.length){shell.notify('info','Conserva tu borrador antes de consultar el archivo.');return}
+        shell.actions.setDraft('Ayúdame a trabajar con este archivo de PHOENIX Espacio. Estos son sus metadatos; no se ha adjuntado el contenido todavía: '+JSON.stringify({id:v.id,title:v.title,mime:v.mime,kind:v.kind,revision:v.revision}))
+      }catch{/* Keep current draft intact */}
+    }
     const onAiFieldDraft = (event: Event): void => {
       const detail:unknown=(event as CustomEvent<unknown>).detail
       if(!detail||typeof detail!=='object'||Array.isArray(detail))return
@@ -418,6 +432,7 @@ export function apply(ctx: Context): void {
         window.dispatchEvent(new Event('phoenix:adaptive-app-mission-failed'))
       }
     }
+    window.addEventListener('phoenix:space-consult-file', onSpaceFile)
     window.addEventListener('phoenix:adaptive-form-action-draft', onActionDraft)
     window.addEventListener('phoenix:adaptive-ai-field-draft', onAiFieldDraft)
     window.addEventListener('phoenix:adaptive-self-inspect', onInspectWorkspace)
@@ -429,6 +444,7 @@ export function apply(ctx: Context): void {
       window.removeEventListener('phoenix:adaptive-form-mission', onForm)
       window.removeEventListener('phoenix:adaptive-form-inspect', onInspectForm)
       window.removeEventListener('phoenix:adaptive-self-inspect', onInspectWorkspace)
+      window.removeEventListener('phoenix:space-consult-file', onSpaceFile)
       window.removeEventListener('phoenix:adaptive-form-action-draft', onActionDraft)
       window.removeEventListener('phoenix:adaptive-ai-field-draft', onAiFieldDraft)
     }
