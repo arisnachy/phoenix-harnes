@@ -297,3 +297,14 @@
 @media (max-width: 980px) {
   .adaptiveWorkspacePane { border-right: 0; border-bottom: 1px solid var(--dsw-alias-border-l2); }
 }
+
+/* The user explicitly enters file-and-chat mode. Normal chat and library retain
+   their original layout, and the actual editor stays mounted on the left. */
+.centerCol:has(> [data-space-with-chat='true']){flex-direction:row}
+.centerCol > [data-space-with-chat='true']{position:relative;inset:auto;order:0;flex:0 0 58%;width:58%;height:100%;min-width:0;border-right:1px solid var(--dsw-alias-border-l1)}
+.centerCol:has(> [data-space-with-chat='true']) > .conversationPane{flex:1 1 42%;width:42%;--dsh-chat-floating-overlay-axis-shift:0px}
+@media(max-width:1050px){
+  .centerCol:has(> [data-space-with-chat='true']){flex-direction:column}
+  .centerCol > [data-space-with-chat='true']{flex:0 0 52%;width:100%;height:52%;border-right:0;border-bottom:1px solid var(--dsw-alias-border-l1)}
+  .centerCol:has(> [data-space-with-chat='true']) > .conversationPane{flex:1 1 48%;width:100%}
+}
