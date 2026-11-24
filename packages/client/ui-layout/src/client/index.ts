@@ -42,8 +42,11 @@ declare module '@phoenix-ai/dsh-client-ui-slots' {
      * surfaces and Cordis rich content share this rail and may stack vertically.
      */
     'shell.workspace': { kind: 'list'; scope: 'root' }
+    'space.specialized': { kind: 'single'; scope: 'root'; owner: SpaceSpecializedProps }
   }
 }
+
+export interface SpaceSpecializedProps { format: 'scene'|'gltf'; data: string|Uint8Array; title: string }
 
 /** Sidebar owner share: live column state from the frame's concession solve. */
 export interface SidebarOwnerProps {
@@ -75,6 +78,7 @@ export function apply(ctx: ClientContext): void {
         'details': { kind: 'single', scope: 'session' },
         'shell.overlay': { kind: 'list', scope: 'root' },
         'shell.workspace': { kind: 'list', scope: 'root' },
+        'space.specialized': { kind: 'single', scope: 'root' },
       },
       store: createLayoutStore,
       inject: (actions: PanelActions) => {
