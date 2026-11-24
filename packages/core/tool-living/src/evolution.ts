@@ -69,6 +69,8 @@ function paired(rows: Observation[], baseline: string, candidate: string) {
   }
   return { baseline: summary(base), candidate: summary(next), improved, regressed, excluded,
     evidence: base.length >= 5 ? 'paired-observations' : 'insufficient',
+    discordancePValue: discordanceProbability(improved, regressed),
+    matchedFixtureCount: base.length,
     causalProof: false, trustedEvidence: false,
     reviewCandidate: base.length >= 5 && improved > 0 && regressed === 0 && excluded === 0,
     mayPromote: false }
@@ -185,4 +187,49 @@ export function summarizeEvolutionEvents(events: readonly { type: string; data: 
     completedTurns: completed, failedTurns: failed, abortedTurns: aborted,
     toolCalls: calls, toolResults: results, toolErrors, retries,
     qualityVerified: false, recommendations, rawRowsRetained: 0, writes: 0 }
+}
+
+/** Infer an advisory operational intent from explicit task language, not a user profile. */
+export function inferEvolutionIntent(text: string): string {
+  const value = text.slice(0, 2048).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+  if (/\b(?:error|timeout|fall[oa]|fallando|reparar|arreglar|arregla|corrige|corregir|debug|fix|regression|regresion)\b/u.test(value)) return 'debugging'
+  if (/\b(?:cambiar|switch|transferir|continuar|resume|reanudar)\b/u.test(value)
+      && /\b(?:modelo|model|proveedor|provider)\b/u.test(value)) return 'switching'
+  if (/\b(?:aprende|aprender|learning|learn|habilidad|skill|dreaming|experiencia)\b/u.test(value)) return 'learning'
+  if (/\b(?:plan|planificar|planning|arquitectura|architecture|dependencia|dependency|gemelo|twin)\b/u.test(value)) return 'planning'
+  return 'unknown'
+}
+
+/** One aggregate per live session object. No timers, history or durable copies. */
+export class IdleEvolutionCache {
+  private readonly cache = new WeakMap<object, { seq: number; result: ReturnType<typeof summarizeEvolutionEvents> }>()
+
+  /** Reuse the aggregate when the same session boundary is observed twice. */
+  observe(session: object, seq: number, events: readonly {type: string; data: unknown}[]) {
+    const previous = this.cache.get(session)
+    if (previous?.seq === seq) return previous.result
+    const result = summarizeEvolutionEvents(events)
+    this.cache.set(session, { seq, result })
+    return result
+  }
+
+  /** Return a detached aggregate, or no data before an idle transition. */
+  read(session: object) {
+    const result = this.cache.get(session)?.result
+    return result === undefined ? undefined : { ...result, recommendations: [...result.recommendations] }
+  }
+}
+
+/** Exact two-sided sign test for discordant paired binary results. */
+function discordanceProbability(improved: number, regressed: number): number {
+  const n = improved + regressed
+  if (n === 0) return 1
+  const tail = Math.min(improved, regressed)
+  let term = 2 ** -n
+  let sum = term
+  for (let k = 1; k <= tail; k++) {
+    term *= (n - k + 1) / k
+    sum += term
+  }
+  return Math.min(1, 2 * sum)
 }
