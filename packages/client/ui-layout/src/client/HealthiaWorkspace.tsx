@@ -68,6 +68,8 @@ export function HealthiaWorkspace({
   const [output, setOutput] = useState<AdaptiveOutput>('inline')
   const [draftError, setDraftError] = useState('')
   const [showEditor, setShowEditor] = useState(false)
+  const [minimized, setMinimized] = useState(false)
+  const [entry, setEntry] = useState<{kind:'patient'|'encounter';sequence:number}|undefined>()
   const [clinical, setClinical] = useState<ClinicalRouteStatus>({
     status: 'unavailable', role: null, patientPortal: 'not-verified',
   })
@@ -77,6 +79,12 @@ export function HealthiaWorkspace({
   const isPatient = role === 'patient'
   const active = HEALTHIA_NAV[role].some(item => item.id === section) ? section : 'overview'
   const capabilities = describeAdaptiveApp('healthia')?.capabilities ?? []
+  useEffect(() => { setMinimized(false) }, [section, role, requestedStep])
+  const start = (kind:'patient'|'encounter'):void => {
+    setEntry(previous=>({kind,sequence:(previous?.sequence??0)+1}))
+    setMinimized(false)
+    onSectionChange(kind==='patient'?'patients':'encounters')
+  }
   useEffect(() => {
     let mounted = true
     void probeClinicalSession().then(status => { if (mounted) setClinical(status) })
@@ -115,7 +123,7 @@ export function HealthiaWorkspace({
     <section className={css.shell} aria-label="Espacio clínico de PHOENIX">
       <header className={css.titleRow}>
         <div>
-          <span className={css.eyebrow}>ESPACIO CLÍNICO</span>
+          <span className={css.eyebrow}>{minimized ? 'ESPACIO CLÍNICO · EN PAUSA VISUAL' : 'ESPACIO CLÍNICO'}</span>
           <h2>{HEALTHIA_NAV[role].find(item => item.id === active)?.label}</h2>
         </div>
         <div className={css.actions}>
@@ -128,9 +136,11 @@ export function HealthiaWorkspace({
                 onClick={() => onRoleChange('patient')}>Paciente</button>
             </div>
           </details>
+          <button className={css.action} type="button" aria-expanded={!minimized} onClick={()=>setMinimized(value=>!value)}>{minimized?'Restaurar espacio clínico':'Minimizar espacio clínico'}</button>
           <button className={css.action} type="button" onClick={onReturn}>Volver al chat</button>
         </div>
       </header>
+      <div className={css.workspaceContent} hidden={minimized}>
       {isPatient && (
         <div className={css.sessionStrip} role="status">
           <span className={css.notice}>
@@ -143,6 +153,8 @@ export function HealthiaWorkspace({
 
         </div>
       )}
+      <details className={css.manualNavigation} open={isPatient||undefined}>
+      <summary>Accesos manuales</summary>
       <nav className={css.tabs} aria-label="Secciones del espacio clínico">
         {HEALTHIA_NAV[role].map(item => (
           <button key={item.id} type="button" aria-current={item.id === active ? 'page' : undefined}
@@ -150,9 +162,10 @@ export function HealthiaWorkspace({
             onClick={() => onSectionChange(item.id)}>{item.label}</button>
         ))}
       </nav>
+      </details>
       <div className={css.body}>
         {active === 'overview' && (!isPatient
-          ? <HealthiaClinicDashboard onNavigate={onSectionChange}
+          ? <HealthiaClinicDashboard onNavigate={onSectionChange} onStart={start}
               onPatientChange={setSelectedClinicalPatient}
               accessStatus={clinical.status}
               onSessionReady={() => setClinicalRefresh(value => value + 1)}/>
@@ -170,7 +183,7 @@ export function HealthiaWorkspace({
         )}
         {!isPatient && (active === 'encounters' || active === 'patients') &&
           <HealthiaClinicOperations area={active} selectedPatientId={selectedClinicalPatient}
-            onPatientChange={setSelectedClinicalPatient} onNavigate={onSectionChange} requestedStep={requestedStep} onEditorState={onEditorState} />}
+            onPatientChange={setSelectedClinicalPatient} onNavigate={onSectionChange} entry={entry} requestedStep={requestedStep} onEditorState={onEditorState} />}
         {!isPatient && (active === 'appointments' || active === 'documents' || active === 'management') &&
           <HealthiaOperationsBoard section={active} selectedPatientId={selectedClinicalPatient}
             onPatientChange={setSelectedClinicalPatient}/>}
@@ -250,6 +263,7 @@ export function HealthiaWorkspace({
           {isPatient ? 'Portal protegido del paciente' : 'Servicio clínico protegido'}
         </a>
       </details>}
+      </div>
     </section>
   )
 }
