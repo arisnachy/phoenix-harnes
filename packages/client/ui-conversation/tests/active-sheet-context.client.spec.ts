@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import {describe,it,expect} from 'vitest'
-import {activateSheetContext,disconnectSheetContext,prepareSheetPrompt,consumeSheetGrant,revokeSheetGrant} from '../src/client/chat/active-sheet-context.ts'
+import {activateSheetContext,disconnectSheetContext,prepareSheetPrompt,consumeSheetGrant,revokeSheetGrant,splitSheetMessage} from '../src/client/chat/active-sheet-context.ts'
 describe('active sheet capability and replay protection',()=>{
   it('captures current cells and authorizes one exact session/revision only',()=>{
     let revision=3
@@ -25,5 +25,13 @@ describe('active sheet capability and replay protection',()=>{
     activateSheetContext('session-x','owner',()=>({id:'budget',title:'Budget',revision:0,selection:'A2',columns:['A'],rows:[['x']]}))
     disconnectSheetContext('session-x','owner')
     expect(prepareSheetPrompt('session-x','Hello')).toBeUndefined()
+  })
+  it('shows the user instruction without dumping internal data into the conversation',()=>{
+    activateSheetContext('clean','owner',()=>({id:'budget',title:'Presupuesto',revision:0,selection:'A2',columns:['A'],rows:[['x']]}))
+    try{
+      const grant=prepareSheetPrompt('clean','Organiza mi presupuesto')!
+      expect(splitSheetMessage(grant.text)).toEqual({text:'Organiza mi presupuesto',attachment:{title:'Presupuesto',revision:0}})
+      expect(splitSheetMessage('mensaje normal')).toEqual({text:'mensaje normal'})
+    }finally{disconnectSheetContext('clean','owner')}
   })
 })

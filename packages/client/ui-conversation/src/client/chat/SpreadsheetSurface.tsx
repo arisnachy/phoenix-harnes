@@ -302,7 +302,7 @@ export function applySpreadsheetPatch(store:Pick<Storage,'getItem'|'setItem'>,ke
     const cell=rows[r]![c]!
     if(!cell.startsWith('='))continue
     const before=evaluateSheetCell(current.rows,r,c),after=evaluateSheetCell(rows,r,c)
-    if(typeof after==='string'&&after!==before)throw Error('SHEET_FORMULA_ERROR_'+columnLetter(c)+String(r+2))
+    if(typeof after==='string'&&(layout||after!==before))throw Error('SHEET_FORMULA_ERROR_'+columnLetter(c)+String(r+2))
     if(after!==before&&recalculated.length<100)recalculated.push({cell:columnLetter(c)+String(r+2),value:String(after)})
   }
   const draft:SheetDraft={columns,rows,revision:current.revision+1,previous:current.rows,previousColumns:current.columns,...(current.formats?{previousFormats:current.formats,...(!layout?{formats:current.formats}:{})}:{})}
@@ -453,7 +453,8 @@ export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:
         }
         // The saved revision, including structural edits, is authoritative.
         latest.current=saved
-        setSelected(([r,c])=>[Math.max(0,Math.min(r,saved.rows.length-1)),Math.max(0,Math.min(c,saved.columns.length-1))])
+        const rowCount=saved.rows.length,columnCount=saved.columns.length
+        setSelected(([r,c])=>[Math.max(0,Math.min(r,rowCount-1)),Math.max(0,Math.min(c,columnCount-1))])
         setRows(saved.rows);setVersion(saved.revision);setReady(true)
         setLegacyAvailable(localStorage.getItem('phoenix:sheet:'+spec.props.id)!==null)
       }catch{setReady(false);setError('No se pudo abrir la hoja guardada sin riesgo de sobrescribirla.')}
