@@ -4,7 +4,7 @@ import { AGENT_A, CLIENT_CODE, setup } from './helpers.ts'
 const HOST = 'return { apply() {} }'
 
 describe('dynamic Plugin versions', () => {
-  it('keeps currentPackageId when an update fails and clears nextPackageId after rollback', async () => {
+  it('automatically restores a healthy Host version after an update fails and preserves failed candidate diagnostics', async () => {
     const { runner } = await setup()
     const first = runner.define({
       sessionId: AGENT_A.id,
@@ -28,7 +28,7 @@ describe('dynamic Plugin versions', () => {
       currentPackageId: first.packageId,
       nextPackageId: second.packageId,
     })
-    expect(runner.inventory()[0]?.activeRun).toBeUndefined()
+    expect(runner.inventory()[0]?.activeRun).toMatchObject({packageId:first.packageId})
 
     await expect(runner.run(AGENT_A, first.pluginId, first.packageId, 'run')).resolves.toMatchObject({ ok: true })
     expect(runner.inventory()[0]).toMatchObject({
@@ -36,6 +36,17 @@ describe('dynamic Plugin versions', () => {
       activeRun: { packageId: first.packageId },
     })
     expect(runner.inventory()[0]?.nextPackageId).toBeUndefined()
+  })
+
+  it('does not restart a previously stopped Host extension after a failed update',async()=>{
+    const {runner}=await setup()
+    const first=runner.define({sessionId:AGENT_A.id,plugin:{kind:'new',idPrefix:'clock'},name:'v1',purpose:'test',code:{host:HOST}})
+    await runner.run(AGENT_A,first.pluginId,first.packageId,'run')
+    await runner.stop(AGENT_A,first.pluginId)
+    const second=runner.define({sessionId:AGENT_A.id,plugin:{kind:'existing',pluginId:first.pluginId},name:'v2',purpose:'test',code:{host:'throw new Error("bad")'}})
+    await expect(runner.run(AGENT_A,first.pluginId,second.packageId,'update')).resolves.toMatchObject({ok:false,reason:'host-half-failed'})
+    expect(runner.inventory()[0]?.activeRun).toBeUndefined()
+    expect(runner.inventory()[0]?.currentPackageId).toBe(first.packageId)
   })
 
   it('cancels and retracts a Host activation owned by the pending approval', async () => {

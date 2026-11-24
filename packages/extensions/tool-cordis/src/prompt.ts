@@ -43,7 +43,7 @@ Before creating, modifying, or repairing a Plugin, load the cordis-plugin-develo
 - currentPackageId is the most recent fully successful Package. Stopping, starting an update, or failing an update does not clear it.
 - nextPackageId is the target awaiting approval, being attempted, awaiting Client activation, or most recently failed.
 - A single check mark authorizes only the current Package; double check marks authorize future versions of the same Plugin. A grant remains in effect after a technical failure.
-- An update stops the old Run before starting the target Package. Failure does not automatically restart the old version; retry next with update or roll back to current with run.
+- An update stops the old Run before starting the target Package. On a Host-only startup failure, the runner attempts one automatic restoration of the previously active healthy Host-only version. Check actual activeRun and the failure receipt before claiming recovery. Browser/client updates and later runtime faults require their own verification; if restoration fails, isolate the extension and do not loop. Never restart a user-stopped extension autonomously.
 
 When the user enters @pluginId, the system injects identity, the default base Package, version pointers, and runtime status, but not source code:
 

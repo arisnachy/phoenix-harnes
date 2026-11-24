@@ -56,3 +56,23 @@ describe('automatic native self recovery',()=>{
     expect(recoverNativeMenu(store,100).status).toBe('unavailable')
   })
 })
+
+describe('native menu transaction safety',()=>{
+  it('refuses to modify the menu if the recovery checkpoint cannot be saved',()=>{
+    const data=new Map<string,string>()
+    const store={getItem:(key:string)=>data.get(key)??null,setItem:(key:string,value:string)=>{if(key===NATIVE_CHECKPOINT_KEY)throw Error('disk full');data.set(key,value)}}
+    expect(()=>nativeMenuOperation(store,cmd('rename',{sectionId:'home',label:'New',expectedRevision:0}),true)).toThrow()
+    expect(store.getItem(NATIVE_MENU_KEY)).toBeNull()
+  })
+  it('restores the old configuration after a corrupt write and invalidates the failed revision',()=>{
+    const data=new Map<string,string>()
+    let corrupt=true
+    const store={getItem:(key:string)=>data.get(key)??null,setItem:(key:string,value:string)=>{
+      if(key===NATIVE_MENU_KEY&&corrupt){corrupt=false;data.set(key,'{corrupt');return}
+      data.set(key,value)
+    }}
+    expect(()=>nativeMenuOperation(store,cmd('rename',{sectionId:'home',label:'New',expectedRevision:0}),true)).toThrow('NATIVE_MENU_CHANGE_REVERTED')
+    expect(readNativeMenu(store).revision).toBe(2)
+    expect(readNativeMenu(store).entries[0]?.label).toBeUndefined()
+  })
+})
