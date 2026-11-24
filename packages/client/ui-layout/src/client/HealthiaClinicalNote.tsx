@@ -287,6 +287,7 @@ export function HealthiaClinicalNote({
     setMessage('')
   }
   const reset = (): void => {
+    icdEpoch.current++;setIcdBusy(false);setIcdStatus('')
     generation.current++;setAiBusy(false);setProposal(null);setAiField('');setVitalDraft(null);setQuick('')
     setValues({...initialValues});setKind(initialKind)
     baseline.current=formatClinicalNote(initialKind,initialValues)
@@ -296,7 +297,7 @@ export function HealthiaClinicalNote({
     setMessage('Cambios de esta vista descartados. Los registros previamente guardados no se han modificado.')
   }
   const save = async (): Promise<void> => {
-    if (!onSave || !hasContent || saving || hasInvalidVitals) return
+    if (!onSave || !hasContent || saving || hasInvalidVitals || icdBusy) return
     setSaving(true)
     setMessage('')
     try {
@@ -412,7 +413,7 @@ export function HealthiaClinicalNote({
           <button type="button" className={css.secondary} disabled={section==='interview'} onClick={()=>{setSection(CLINICAL_EDITOR_STEPS[CLINICAL_EDITOR_STEPS.findIndex(s=>s.id===section)-1]!.id);setPreview(false)}}>Anterior</button>
           <button type="button" className={css.secondary} disabled={section==='plan'} onClick={()=>{setSection(CLINICAL_EDITOR_STEPS[CLINICAL_EDITOR_STEPS.findIndex(s=>s.id===section)+1]!.id);setPreview(false)}}>Siguiente</button>
           <button type="submit" className={css.primary} disabled={!hasContent}>Vista previa de nota</button>
-          {onSave && <button type="button" className={css.primary} disabled={!hasContent || saving || hasInvalidVitals || aiBusy}
+          {onSave && <button type="button" className={css.primary} disabled={!hasContent || saving || hasInvalidVitals || aiBusy || icdBusy}
             onClick={() => { void save() }}>{saving ? 'Guardando…' : 'Guardar borrador clínico'}</button>}
           <button type="button" className={css.secondary} onClick={reset} disabled={!hasContent || saving}>Descartar cambios</button>
         </div>
