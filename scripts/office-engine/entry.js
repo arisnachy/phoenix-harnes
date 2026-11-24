@@ -30,23 +30,38 @@ univerAPI.addEvent(univerAPI.Event.SelectionChanged,({selections})=>{
   const range=selections?.[0]?.range
   if(range)post({type:'selection',row:range.startRow,column:range.startColumn})
 })
-window.addEventListener('message',event=>{
+window.addEventListener('message',async event=>{
   if(event.origin!==target||event.source!==parent||event.data?.channel!==CHANNEL)return
   const d=event.data
   if(d.type==='load'){
     // Never silently discard a local edit awaiting acknowledgement.
-    if(pending||dirty){blocked=true;status.textContent='Conflicto de edición. Tu libro permanece abierto; descarga una copia antes de recargar.';post({type:'error'});return}
+    if(pending||dirty||loading){blocked=true;status.textContent='Conflicto de edición. Tu libro permanece abierto; descarga una copia antes de recargar.';post({type:'error'});return}
     loading=true
+    const app=document.getElementById('app')
+    app.style.pointerEvents='none'
     try{
       if(workbook)univerAPI.disposeUnit(workbook.getId())
       workbook=univerAPI.createWorkbook(d.native.workbook)
       const active=workbook.getSheets().find(s=>s.getSheetId()===d.native.sheetId)
       if(active)workbook.setActiveSheet(active)
       revision=d.revision
-      last=JSON.stringify(capture())
+      const engine=univerAPI.getFormula()
+      engine.executeCalculation()
+      await engine.onCalculationResultApplied(10000)
+      const native=capture()
+      const computed={}
+      const selected=workbook.getActiveSheet()
+      const cellData=native.workbook.sheets[native.sheetId].cellData
+      for(const [r,cols] of Object.entries(cellData))for(const [c,cell] of Object.entries(cols))if(cell?.f&&Number(r)<201&&Number(c)<16&&Object.keys(computed).length<100){
+        const address=String.fromCharCode(65+Number(c))+String(Number(r)+1)
+        computed[address]=selected.getRange(address).getValue()
+      }
+      last=JSON.stringify(native)
+      pending=true
+      post({type:'loaded',native,revision,computed})
       status.textContent=''
     }catch{post({type:'error'});status.textContent='No se pudo abrir esta revisión.'}
-    finally{loading=false}
+    finally{loading=false;app.style.pointerEvents=''}
   }else if(d.type==='ack'){
     revision=d.revision;pending=false;flush()
   }else if(d.type==='conflict'){
