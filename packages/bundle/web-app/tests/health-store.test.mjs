@@ -848,6 +848,7 @@ test('ASK drafts are encrypted, scoped to an owned encounter and version checked
   db.close()
   const reopened=new HealthClinicStore(path)
   t.after(()=>{try{reopened.close()}catch{}})
+  reopened.login('clinicaladmin',PASSWORD)
   const restored=reopened.login('ask_doctor',PASSWORD).actor
   assert.deepEqual(reopened.getClinicalDraft(restored,e.id).values,payload.values)
   const updated=reopened.update(restored,'encounters',e.id,e.version,{action:'answer',field:key,answer:secret})
