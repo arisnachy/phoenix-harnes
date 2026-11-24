@@ -696,6 +696,8 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
       {selectedEncounter&&currentNote&&<div className={css.encounter}>
         <p className={css.notice}>Consulta · versión {selectedEncounter.version} · {selectedEncounter.status}
           {selectedEncounter.status==='signed'?' · Solo lectura': ' · Borrador pendiente de revisión y firma'}</p>
+        <div className={css.consultationGrid} data-assistance={canManageEncounters&&selectedEncounter.status!=='signed'?'available':'none'}>
+        <div className={css.consultationEditor}>
         {selectedEncounter.status==='signed' ? <div className={css.panel}>
           <strong>Consulta firmada · protegida contra edición</strong>
           <pre>{selectedEncounter.history}</pre>
@@ -708,9 +710,10 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
             loadModels:()=>api.editorModels(session),
             refineField:(field:string,text:string,model:import('./HealthiaClinicalApi.ts').ClinicalEditorModel,confirmed:boolean)=>api.refineEditorField(session,selectedEncounter,field,text,model,confirmed),
           }:{})}/>}
+        </div>
         {canManageEncounters&&selectedEncounter.status!=='signed'&&<section className={css.interviewCard}
           aria-label="Ask clínico protegido">
-          <div className={css.interviewHeader}><strong>Ask · interrogatorio clínico</strong>
+          <div className={css.interviewHeader}><span className={css.contextEyebrow}>ASISTENCIA CLÍNICA · LOCAL</span><strong>Ask · interrogatorio clínico</strong>
             <small>Preguntas del servicio local; ninguna respuesta se envía al chat de Kira.</small>
           </div>
           <p className={css.notice}>Registra únicamente lo que refiere el paciente o lo verificado.
@@ -748,6 +751,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
             }}>Preparar borrador desde el interrogatorio</button>}
         </section>}
 
+        </div>
         <button type="button" className={css.printAction} disabled={dirtyEncounter} onClick={()=>{
           try {
             printProtectedClinicalDocument({
