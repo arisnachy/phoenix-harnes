@@ -149,3 +149,40 @@ export function runEvolution(operation: string, raw: string): unknown {
     default: throw new Error('EVOLUTION_UNKNOWN_OPERATION')
   }
 }
+
+/** Project recent real events from the calling session, not model-invented data.
+ * Never return event payloads, identifiers, text or tool arguments. */
+export function summarizeEvolutionEvents(events: readonly { type: string; data: unknown }[]) {
+  const recent = events.slice(-128)
+  let completed = 0, failed = 0, aborted = 0, retries = 0, calls = 0, results = 0, toolErrors = 0
+  for (const event of recent) {
+    if (event.type === 'tool/call') calls++
+    else if (event.type === 'llm/retry-started') retries++
+    else if (event.type === 'tool/result') {
+      results++
+      const data = event.data as {error?: unknown; message?: {content?: unknown}} | null
+      if (data && (data.error !== undefined || (Array.isArray(data.message?.content)
+        && data.message.content.some((part: unknown) => {
+          if (!part || typeof part !== 'object') return false
+          const p = part as {type?: unknown; isError?: unknown}
+          return p.type === 'tool-result' && p.isError === true
+        })))) toolErrors++
+    } else if (event.type === 'turn/end') {
+      const data = event.data as {reason?: {kind?: unknown}} | null
+      const kind = data?.reason?.kind
+      if (kind === 'completed') completed++
+      else if (kind === 'aborted') aborted++
+      else if (kind === 'blocked' || kind === 'error') failed++
+    }
+  }
+  const recommendations = [
+    ...(retries >= 2 ? ['investigate-retry-pattern'] : []),
+    ...(toolErrors >= 2 ? ['investigate-tool-failure-pattern'] : []),
+    ...(failed >= 2 ? ['review-blocked-turns'] : []),
+  ]
+  return { schema:'phoenix.evolution.session-metrics.v1', scope:'calling-session-recent-events',
+    sampledEvents: recent.length, truncated: events.length > recent.length,
+    completedTurns: completed, failedTurns: failed, abortedTurns: aborted,
+    toolCalls: calls, toolResults: results, toolErrors, retries,
+    qualityVerified: false, recommendations, rawRowsRetained: 0, writes: 0 }
+}
