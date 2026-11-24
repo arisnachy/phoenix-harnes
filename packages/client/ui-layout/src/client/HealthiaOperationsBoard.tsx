@@ -82,7 +82,7 @@ export function HealthiaOperationsBoard({section,selectedPatientId,onPatientChan
   const currentPatient=patients.find(p=>p.id===(selectedEncounter?.patientId??patientId))
   const calcDose=clinicianDoseCalculation(form.weightKg,form.mgPerKg,form.maxDoseMg)
 
-  useEffect(()=>{setDesk(STAGES[section][0]!);setForm({});setNotice('');setError('')},[section])
+  useEffect(()=>{setDesk(STAGES[section][0]!);setForm({});setSafety(false);setNotice('');setError('')},[section])
   useEffect(()=>{if(selectedPatientId!==undefined)setPatientId(selectedPatientId)},[selectedPatientId])
   useEffect(()=>{
     let live=true
@@ -117,7 +117,7 @@ export function HealthiaOperationsBoard({section,selectedPatientId,onPatientChan
     return()=>{live=false}
   },[session,active])
 
-  const put=(id:string,value:string):void=>{setForm(old=>({...old,[id]:value}));setError('');setNotice('')}
+  const put=(id:string,value:string):void=>{setForm(old=>({...old,[id]:value}));setSafety(false);setError('');setNotice('')}
   const selectPatient=(id:string):void=>{setPatientId(id);onPatientChange?.(id);setForm({});setSafety(false)}
   const field=(id:string,title:string,type='text',required=true,placeholder='')=><label key={id} className={css.field}>
     {title}<input type={type} value={form[id]??''} required={required} placeholder={placeholder}
@@ -193,7 +193,7 @@ export function HealthiaOperationsBoard({section,selectedPatientId,onPatientChan
     <nav className={css.tabs} aria-label="Módulos autorizados">
       {options.map(item=><button type="button" key={item} aria-current={item===active?'page':undefined}
         className={item===active?css.active:css.tab}
-        onClick={()=>{setDesk(item);setForm({});setNotice('');setError('')}}>{TITLE[item]}</button>)}
+        onClick={()=>{setDesk(item);setForm({});setSafety(false);setNotice('');setError('')}}>{TITLE[item]}</button>)}
     </nav>
     {(error||notice)&&<p role={error?'alert':'status'} className={error?css.error:css.message}>{error||notice}</p>}
     {canCreate&&<form className={css.form} onSubmit={e=>{void submit(e)}}>
