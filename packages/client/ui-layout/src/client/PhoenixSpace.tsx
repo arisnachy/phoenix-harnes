@@ -355,6 +355,7 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
   const [space,setSpace]=useState('all')
   const [trash,setTrash]=useState(false)
   const [mode,setMode]=useState<'grid'|'list'>('grid')
+  const [readable,setReadable]=useState(false)
   const [createKind,setCreateKind]=useState<SpaceKind>('document')
   const [editor,setEditor]=useState<Editor|null>(null)
   const [slideIndex,setSlideIndex]=useState(0)
@@ -553,7 +554,7 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
   const updateSheet=(newSheet:Sheet):void=>mutate({content:JSON.stringify(newSheet)})
   const currentSlide=deck.slides[slideIndex]
   const filteredSpaces=[...new Set(items.map(x=>x.space))]
-  return <section className={css.root} role="region" aria-label="PHOENIX Espacio" data-phoenix-space="">
+  return <section className={css.root} role="region" aria-label="PHOENIX Espacio" data-phoenix-space="" data-readable={readable?"true":"false"}>
     <aside className={css.rail}>
       <div className={css.railTitle}>Espacio</div>
       <button className={css.railAction} type="button" onClick={()=>{setEditor(null);setTrash(false);setKind('all');setSpace('all')}}>Todo</button>
@@ -575,6 +576,7 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
           <strong>PHOENIX · Espacio</strong><span>Biblioteca, editores y proyectos</span>
         </div>
         <div className={css.exitActions}>
+          <button type="button" aria-pressed={readable} onClick={()=>{setReadable(v=>!v);if(!readable)setMode("list")}}>Lectura accesible</button>
           <button type="button" className={css.close} onClick={closeSpace} aria-label="Cerrar Biblioteca">×</button>
         </div>
       </header>
