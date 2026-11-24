@@ -762,3 +762,7 @@
   overflow-x: hidden;
   scrollbar-gutter: stable;
 }
+
+:global([data-conversation-scroll]:has(> [data-live-studio-host] > [data-live-studio], > [data-live-studio-host] > [data-space-with-chat='true']):not(:has(> [data-adaptive-inline-host] > *))) .root{flex:1 1 auto;height:100%;min-height:0;min-width:0;overflow:hidden}
+:global([data-conversation-scroll]:has(> [data-live-studio-host] > [data-live-studio], > [data-live-studio-host] > [data-space-with-chat='true']):not(:has(> [data-adaptive-inline-host] > *))) .root>.scroll{flex:1 1 auto;height:100%;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable;padding-inline:14px}
+:global([data-conversation-scroll]:has(> [data-live-studio-host] > [data-live-studio], > [data-live-studio-host] > [data-space-with-chat='true']):not(:has(> [data-adaptive-inline-host] > *))) .root>.scroll .column{max-width:100%;transform:none}

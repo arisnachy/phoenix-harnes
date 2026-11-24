@@ -11,7 +11,7 @@ describe('live sheet editor',()=>{
     render(<><SpreadsheetSurface spec={spec} conversationId="session-a"/><SpreadsheetPatch spec={patch} conversationId="session-a"/></>)
     const original=screen.getByRole('textbox',{name:'B2'}) as HTMLInputElement
     expect(original.value).toBe('8000')
-    fireEvent.click(screen.getByRole('button',{name:'Aplicar a la hoja actual'}))
+    // Patch applies automatically on mount
     expect(screen.getByRole('textbox',{name:'B2'})).toBe(original)
     expect(original.value).toBe('900')
     expect((screen.getByRole('textbox',{name:'D2'}) as HTMLInputElement).value).toBe('-6300')

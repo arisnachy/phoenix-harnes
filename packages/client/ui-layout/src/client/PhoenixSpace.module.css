@@ -105,3 +105,5 @@
 .root[data-space-with-chat='true'] .exitActions{padding-right:0}
 .root[data-space-with-chat='true'] .deck{grid-template-columns:minmax(80px,22%) minmax(0,1fr)}
 .root[data-space-with-chat='true'] .topbarTitle strong{font-size:17px}
+
+.root[data-space-with-chat='true']{position:relative;inset:auto;width:100%;height:100%;min-width:0;flex:1;z-index:auto}
