@@ -6,7 +6,9 @@ export interface AdaptiveWorkspaceProposalSpec {
   readonly version: 1
   readonly props: {
     readonly appId: string
-    readonly operation: 'open' | 'find' | 'add-section' | 'rename-section' | 'remove-section' | 'palette' | 'rename-field' | 'remove-field' | 'set-binding' | 'set-field-kind' | 'set-required' | 'set-field-ai' | 'restore-form' | 'add-widget' | 'remove-widget' | 'rename-widget' | 'move-widget' | 'set-widget-span'
+    readonly operation: 'native-menu' | 'open' | 'find' | 'add-section' | 'rename-section' | 'remove-section' | 'palette' | 'rename-field' | 'remove-field' | 'set-binding' | 'set-field-kind' | 'set-required' | 'set-field-ai' | 'restore-form' | 'add-widget' | 'remove-widget' | 'rename-widget' | 'move-widget' | 'set-widget-span'
+    readonly menuAction?: 'inspect'|'open'|'rename'|'move'|'add'|'remove'|'restore'
+    readonly target?: 'home'|'tasks'|'connectors'|'team'|'library'|'healthia'
     readonly sectionId?: string
     readonly fieldId?: string
     readonly label?: string
@@ -41,6 +43,17 @@ export function parseAdaptiveWorkspaceProposal(input: unknown): AdaptiveWorkspac
     || !v.props || typeof v.props !== 'object' || Array.isArray(v.props)) return null
   const p = v.props as Record<string,unknown>
   const base = ['appId','operation']
+  if(p.operation==='native-menu'){
+    const action=p.menuAction as string
+    const keys:Record<string,string[]>={inspect:[],open:['sectionId'],rename:['sectionId','label','expectedRevision'],move:['sectionId','direction','expectedRevision'],add:['sectionId','label','target','expectedRevision'],remove:['sectionId','expectedRevision'],restore:['expectedRevision']}
+    if(p.appId!=='general'||typeof action!=='string'||!Object.hasOwn(keys,action)||!allowed(p,[...base,'menuAction',...keys[action]!]))return null
+    if(!['inspect','restore'].includes(action)&&(typeof p.sectionId!=='string'||!ID.test(p.sectionId)))return null
+    if(!['inspect','open'].includes(action)&&(!Number.isSafeInteger(p.expectedRevision)||Number(p.expectedRevision)<0))return null
+    if(['add','rename'].includes(action)&&(!goodText(p.label)||/[<>]/u.test(p.label)))return null
+    if(action==='add'&&(!String(p.sectionId).startsWith('shortcut-')||!['home','tasks','connectors','team','library','healthia'].includes(String(p.target))))return null
+    if(action==='move'&&!['up','down'].includes(String(p.direction)))return null
+    return {component:'adaptive_control',version:1,props:p as unknown as AdaptiveWorkspaceProposalSpec['props']}
+  }
   if (typeof p.appId !== 'string' || !['general','healthia'].includes(p.appId) && !APP.test(p.appId)) return null
   if (!['open','find','add-section','rename-section','remove-section','palette','rename-field','remove-field','set-binding','set-field-kind','set-required','set-field-ai','restore-form','add-widget','remove-widget','rename-widget','move-widget','set-widget-span'].includes(p.operation as string)) return null
   const operation = p.operation
@@ -102,6 +115,7 @@ export function parseAdaptiveWorkspaceProposal(input: unknown): AdaptiveWorkspac
   return {component:'adaptive_control',version:1,props:p as unknown as AdaptiveWorkspaceProposalSpec['props']}
 }
 const nameOf: Record<AdaptiveWorkspaceProposalSpec['props']['operation'],string> = {
+  'native-menu':'Control de navegación nativa',
   open:'Abrir espacio / sección',find:'Buscar componentes',
   'add-section':'Agregar menú / sección',
   'rename-section':'Renombrar sección','remove-section':'Ocultar sección (sin borrar formularios)',
@@ -150,6 +164,7 @@ export function AdaptiveWorkspaceProposal({spec}:{spec:AdaptiveWorkspaceProposal
       {spec.props.palette ? ` · ${spec.props.palette}` : ''}
       {spec.props.widgetKind ? ` · ${spec.props.widgetKind}` : ''}
       {spec.props.widgetId ? ` · ${spec.props.widgetId}` : ''}
+      {spec.props.menuAction ? ` · ${spec.props.menuAction}` : ''}{spec.props.target ? ` · ${spec.props.target}` : ''}{spec.props.direction ? ` · ${spec.props.direction}` : ''}
       {spec.props.query ? ` · Buscar: ${spec.props.query}` : ''}</p>
     <div className={css.actions}>
       <button className={css.secondary} type="button" disabled={status === 'checking'||status === 'applying'||status === 'done'}
