@@ -239,7 +239,7 @@ export function HealthiaClinicalNote({
     onEditorState?.({step:section,binding,visibleFieldIds:visibleIds?visibleIds.split(','):[],
       filledFields,dirty,hasEncounter,canEdit,modelEnabled,busy:saving||aiBusy||icdBusy,
       ...(activeFieldId&&visibleIds.split(',').includes(activeFieldId)?{activeFieldId}:{}),
-      completedSections:CLINICAL_EDITOR_STEPS.filter(item=>documentedSections.split(',').includes(item.id)).map(item=>item.id),
+      documentedSections:CLINICAL_EDITOR_STEPS.filter(item=>documentedSections.split(',').includes(item.id)).map(item=>item.id),
       ...(nextSection?{nextSection}:{})})
   },[onEditorState,section,binding,visibleIds,filledFields,dirty,hasEncounter,canEdit,modelEnabled,saving,aiBusy,icdBusy,activeFieldId,documentedSections,nextSection])
   useEffect(()=>{
