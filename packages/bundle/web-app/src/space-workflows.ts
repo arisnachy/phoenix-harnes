@@ -49,7 +49,7 @@ export function summarizeSpaceSheet(content:string,kind:'document'|'slides'):str
     const v=Number(text)
     return Number.isFinite(v)&&Math.abs(v)<=1e12?v:null
   }
-  const stats=columns.map((column,i)=>{
+  const stats=columns.map((_column,i)=>{
     const values=rows.map(row=>numberOf(row[i]!)).filter((v):v is number=>v!==null)
     // Omit names and cell values: only column indices and aggregates.
     return {column:i+1,n:values.length,mean:values.length?values.reduce((sum,v)=>sum+v,0)/values.length:null}
