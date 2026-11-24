@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { activateSheetContext,disconnectSheetContext,consumeSheetGrant,type ActiveSheetSnapshot } from './active-sheet-context.ts'
 import type { CanvasAction } from './GenerativeCanvas.tsx'
 import { PhoenixUiIcon } from '@phoenix-ai/dsh-client-ui-primitives'
 import css from './InteractiveUi.module.css'
@@ -213,12 +214,12 @@ export function exportSheetCsv(columns: readonly string[], rows: readonly (reado
 export interface SpreadsheetPatchSpec {
   readonly component:'spreadsheet_patch'
   readonly version:1
-  readonly props:{readonly id:string;readonly expectedRevision?:number;readonly edits:readonly {readonly cell:string;readonly before:string;readonly after:string}[]}
+  readonly props:{readonly id:string;readonly expectedRevision?:number;readonly editToken?:string;readonly edits:readonly {readonly cell:string;readonly before:string;readonly after:string}[]}
 }
 export function parseSpreadsheetPatch(value:unknown):SpreadsheetPatchSpec|null{
   if(!isRecord(value)||!keys(value,['component','version','props'])||value.component!=='spreadsheet_patch'||value.version!==1||!isRecord(value.props))return null
   const p=value.props
-  if(!keys(p,['id','edits','expectedRevision'])||typeof p.id!=='string'||!/^[a-z][a-z0-9_-]{1,63}$/.test(p.id)||!Array.isArray(p.edits)||p.edits.length<1||p.edits.length>100||(p.expectedRevision!==undefined&&(!Number.isSafeInteger(p.expectedRevision)||Number(p.expectedRevision)<0)))return null
+  if(!keys(p,['id','edits','expectedRevision','editToken'])||typeof p.id!=='string'||!/^[a-z][a-z0-9_-]{1,63}$/.test(p.id)||!Array.isArray(p.edits)||p.edits.length<1||p.edits.length>100||(p.expectedRevision!==undefined&&(!Number.isSafeInteger(p.expectedRevision)||Number(p.expectedRevision)<0))||(p.editToken!==undefined&&(typeof p.editToken!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/iu.test(p.editToken))))return null
   const seen=new Set<string>()
   for(const e of p.edits){
     if(!isRecord(e)||!keys(e,['cell','before','after'])||typeof e.cell!=='string'||!/^([A-P])(?:[2-9]|[1-9][0-9]|1[0-9]{2}|20[01])$/.test(e.cell)||seen.has(e.cell)||typeof e.before!=='string'||typeof e.after!=='string'||e.before.length>300||e.after.length>300)return null
@@ -280,7 +281,7 @@ export function applySpreadsheetPatch(store:Pick<Storage,'getItem'|'setItem'>,ke
 }
 /** A completed assistant response applies its guarded edit to the SAME mounted draft.
  * Exactly-once CAS rejects stale or repeated message replays. No navigation step. */
-export function SpreadsheetPatch({spec,conversationId}:{spec:SpreadsheetPatchSpec;conversationId?:string|undefined}):ReactNode{
+export function SpreadsheetPatch({spec,conversationId,allowAuto=false}:{spec:SpreadsheetPatchSpec;conversationId?:string|undefined;allowAuto?:boolean}):ReactNode{
   const [receipt,setReceipt]=useState('')
   const [done,setDone]=useState(false)
   const attempted=useRef(false)
@@ -303,14 +304,18 @@ export function SpreadsheetPatch({spec,conversationId}:{spec:SpreadsheetPatchSpe
     }
   }
   useEffect(()=>{
-    if(attempted.current||!conversationId)return
+    if(attempted.current||!conversationId||!allowAuto)return
+    if(!consumeSheetGrant(conversationId,spec.props.id,spec.props.expectedRevision,spec.props.editToken)){
+      setReceipt('Edición sin autorización vigente o con revisión antigua. No se ejecutó automáticamente.')
+      return
+    }
     attempted.current=true
     apply()
-  },[conversationId])
+  },[conversationId,allowAuto])
   return <section className={css.patchReceipt} data-generative-ui="spreadsheet_patch" role="status">
     <PhoenixUiIcon name={done?'check':'table'} size={15}/>
-    <span>{receipt||'Aplicando cambio a la hoja actual…'}</span>
-    {!done&&receipt&&<button type="button" onClick={apply}>Reintentar</button>}
+    <span>{receipt||'Edición propuesta · no se ejecuta al recuperar el historial.'}</span>
+    {!done&&<button type="button" disabled={!conversationId} onClick={apply}>Aplicar manualmente</button>}
   </section>
 }
 
@@ -339,20 +344,34 @@ export function SpreadsheetSurface({spec,conversationId,onAction}:{readonly spec
   const latest=useRef<SheetDraft|null>(null)
   const key=draftKey(spec.props.id,conversationId)
   const initial=useRef(spec.props)
-  const closeStudio=()=>{
+  const selectedRef=useRef(selected)
+  selectedRef.current=selected
+  const snapshot=():ActiveSheetSnapshot|null=>{
+    try{
+      const current=readSheetDraft(localStorage,key)
+      if(!current)return null
+      return {id:spec.props.id,title:spec.props.title,revision:current.revision,selection:columnLetter(selectedRef.current[1])+String(selectedRef.current[0]+2),columns:current.columns,rows:current.rows}
+    }catch{return null}
+  }
+  const [contextAttached,setContextAttached]=useState(false)
+  const detach=()=>{if(conversationId)disconnectSheetContext(conversationId,studioOwner);setContextAttached(false)}
+  const closeStudio=(explicit=true)=>{
     if(host?.dataset.studioOwner===studioOwner){
       delete host.dataset.studioOwner
       delete host.dataset.studioPinned
     }
     setHost(null)
     setDismissed(true)
+    if(explicit)detach()
   }
   const openStudio=()=>{
     const area=anchorRef.current?.closest('[data-conversation-scroll]')
     const target=area?.querySelector<HTMLElement>(':scope > [data-live-studio-host]')
     if(!target||area?.querySelector(':scope > [data-adaptive-inline-host] > *'))return
     if(target.dataset.studioOwner&&target.dataset.studioPinned==='true'&&target.dataset.studioOwner!==studioOwner)return
+    if(target.querySelector(':scope > [data-phoenix-space]'))return
     target.dataset.studioOwner=studioOwner
+    if(conversationId){activateSheetContext(conversationId,studioOwner,snapshot);setContextAttached(true)}
     window.dispatchEvent(new CustomEvent('phoenix:studio-owner',{detail:studioOwner}))
     setHost(target)
     setDismissed(false)
@@ -360,19 +379,26 @@ export function SpreadsheetSurface({spec,conversationId,onAction}:{readonly spec
   useEffect(()=>{
     const onOwner=(event:Event)=>{
       if((event as CustomEvent<string>).detail!==studioOwner){
-        setHost(null);setDismissed(true)
+        setHost(null);setDismissed(true);detach()
       }
     }
     const onVerified=(event:Event)=>{
-      if((event as CustomEvent<string>).detail===key&&!pinned)closeStudio()
+      if((event as CustomEvent<string>).detail===key&&!pinned)closeStudio(false)
     }
+    const onSubmit=(event:Event)=>{
+      const detail=(event as CustomEvent<{session:string;id:string}>).detail
+      if(detail?.session===conversationId&&detail.id===spec.props.id&&contextAttached&&!host)openStudio()
+    }
+    window.addEventListener('phoenix:studio-user-submit',onSubmit)
     window.addEventListener('phoenix:studio-owner',onOwner)
     window.addEventListener('phoenix:studio-verified',onVerified)
     return()=>{
+      window.removeEventListener('phoenix:studio-user-submit',onSubmit)
       window.removeEventListener('phoenix:studio-owner',onOwner)
       window.removeEventListener('phoenix:studio-verified',onVerified)
     }
-  },[host,studioOwner,key,pinned])
+  },[host,studioOwner,key,pinned,contextAttached,conversationId])
+  useEffect(()=>()=>{if(conversationId)disconnectSheetContext(conversationId,studioOwner)},[conversationId,studioOwner])
   useEffect(()=>{
     if(ready&&conversationId&&!dismissed&&!host)openStudio()
   },[ready,conversationId,dismissed,host])
@@ -532,7 +558,7 @@ export function SpreadsheetSurface({spec,conversationId,onAction}:{readonly spec
   const gridRows=rows.map((row,r)=>({row,r})).filter(({row})=>!query||row.some(cell=>cell.toLocaleLowerCase('es').includes(query.toLocaleLowerCase('es'))))
   const editor=<section className={host?css.studioSheet:css.surface} data-live-studio={host?"sheet":undefined} data-generative-ui="spreadsheet" data-sheet-draft-key={key}>
     <header className={css.heading}><PhoenixUiIcon name="table" />
-      <div><h3>{spec.props.title}</h3><p>Hoja editable · fórmulas en tiempo real · v{version}</p></div>{host&&<button type="button" className={css.studioClose} onClick={closeStudio} aria-label="Cerrar editor de hoja">×</button>}</header>
+      <div><h3>{spec.props.title}</h3><p>Hoja editable · fórmulas en tiempo real · v{version}</p></div>{host&&<button type="button" className={css.studioClose} onClick={()=>closeStudio()} aria-label="Cerrar editor de hoja">×</button>}</header>
     {host&&<>
       <div className={css.excelTitle}><span className={css.excelLogo}>▦</span><strong>PHOENIX Sheets</strong><span className={css.excelBookTitle}>{spec.props.title}</span><span className={css.excelSaved}>Guardado local · v{version}</span></div>
       <nav className={css.excelTabs} aria-label="Cinta de opciones de la hoja">
@@ -594,6 +620,7 @@ export function SpreadsheetSurface({spec,conversationId,onAction}:{readonly spec
       {onAction&&<button type="button" disabled={!ready} onClick={share}>Editar con Kira</button>}
       {legacyAvailable&&<button type="button" disabled={!ready} onClick={importLegacy}>Recuperar copia anterior</button>}
     </div>
+    {contextAttached&&<p className={css.disclaimer}>Hoja activa: al enviar un mensaje a Kira se adjuntan sus valores y revisión actuales (hasta 24.000 caracteres). <button type="button" onClick={detach}>Desvincular del chat</button></p>}
     {libraryStatus && <p role="status" className={css.disclaimer}>{libraryStatus}</p>}
     <p className={css.disclaimer}>Fórmulas permitidas: referencias A2:P201, + − × ÷, SUM, AVERAGE, MIN, MAX.
       Los cambios se guardan solo en este navegador. CSV no conserva las fórmulas como Excel;

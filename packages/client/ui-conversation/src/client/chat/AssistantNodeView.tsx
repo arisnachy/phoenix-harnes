@@ -70,6 +70,7 @@ export const AssistantNodeView = memo(function AssistantNodeView({
       mentions={mentions}
       onUiAction={onUiAction}
       conversationId={String(sessionId)}
+      allowArtifactAuto={owner!==undefined&&data.status==='settled'}
       t={t}
     />
   )

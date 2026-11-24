@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup,fireEvent,render,screen } from '@testing-library/react'
 import { afterEach,beforeEach,describe,expect,it } from 'vitest'
+import { prepareSheetPrompt } from '../src/client/chat/active-sheet-context.ts'
 import { SpreadsheetSurface,SpreadsheetPatch,type SpreadsheetSpec,type SpreadsheetPatchSpec } from '../src/client/chat/SpreadsheetSurface.tsx'
 const spec:SpreadsheetSpec={component:'spreadsheet',version:1,props:{id:'studio-budget',title:'Budget',columns:['Concept','Budget','Spent','Remaining'],rows:[['Food','8000','7200','=B2-C2']]}}
 const patch:SpreadsheetPatchSpec={component:'spreadsheet_patch',version:1,props:{id:'studio-budget',edits:[{cell:'B2',before:'8000',after:'900'}]}}
@@ -13,7 +14,10 @@ describe('Live Studio',()=>{
   expect(document.querySelector('[data-live-studio-host] > [data-live-studio]')).not.toBeNull()
   expect(screen.queryByRole('button',{name:'Abrir editor'})).toBeNull()
   expect(screen.getByRole('textbox',{name:'Barra de fórmulas'})).toBeDefined()
-  rerender(<div data-conversation-scroll=""><div data-live-studio-host=""/><SpreadsheetSurface spec={spec} conversationId="session-a"/><SpreadsheetPatch spec={patch} conversationId="session-a"/><div data-composer-seat=""><textarea aria-label="Chat"/></div></div>)
+  const grant=prepareSheetPrompt('session-a','Cambia B2 a 900')!
+  expect(grant.text).toContain('"revision":0')
+  const livePatch={...patch,props:{...patch.props,expectedRevision:0,editToken:grant.token}}
+  rerender(<div data-conversation-scroll=""><div data-live-studio-host=""/><SpreadsheetSurface spec={spec} conversationId="session-a"/><SpreadsheetPatch spec={livePatch} conversationId="session-a" allowAuto/><div data-composer-seat=""><textarea aria-label="Chat"/></div></div>)
   expect(screen.getByRole('textbox',{name:'Chat'})).toBe(composer)
   expect((screen.getByRole('textbox',{name:'B2'}) as HTMLInputElement).value).toBe('900')
   expect((screen.getByRole('textbox',{name:'D2'}) as HTMLInputElement).value).toBe('-6300')
@@ -23,7 +27,10 @@ describe('Live Studio',()=>{
   const {rerender}=render(<div data-conversation-scroll=""><div data-live-studio-host=""/><SpreadsheetSurface spec={spec} conversationId="session-a"/></div>)
   expect(document.querySelector('[data-live-studio-host] > [data-live-studio]')).not.toBeNull()
   fireEvent.click(screen.getByRole('checkbox',{name:'Fijar editor'}))
-  rerender(<div data-conversation-scroll=""><div data-live-studio-host=""/><SpreadsheetSurface spec={spec} conversationId="session-a"/><SpreadsheetPatch spec={patch} conversationId="session-a"/></div>)
+  const grant=prepareSheetPrompt('session-a','Cambia B2 a 900')!
+  expect(grant.text).toContain('"revision":0')
+  const livePatch={...patch,props:{...patch.props,expectedRevision:0,editToken:grant.token}}
+  rerender(<div data-conversation-scroll=""><div data-live-studio-host=""/><SpreadsheetSurface spec={spec} conversationId="session-a"/><SpreadsheetPatch spec={livePatch} conversationId="session-a" allowAuto/></div>)
   expect(document.querySelector('[data-live-studio-host] > [data-live-studio]')).not.toBeNull()
   fireEvent.paste(screen.getByRole('textbox',{name:'B2'}),{clipboardData:{getData:()=> '1000\t8000'}})
   expect((screen.getByRole('textbox',{name:'D2'}) as HTMLInputElement).value).toBe('-7000')
