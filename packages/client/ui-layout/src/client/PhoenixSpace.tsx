@@ -389,6 +389,7 @@ function ConnectedSpaceControls({item,dirty,onOpen}:{item:Item;dirty:boolean;onO
           const result=await api<{item:Item}>(path+'/derive',{revision:item.revision,kind,confirm:true},'POST')
           await onOpen(result.item.id)
         })}}>{kind==='document'?'Crear informe conectado':'Crear presentación conectada'}</button>)}</div>}
+        {!dirty&&['app','game','code'].includes(item.kind)&&<a href={'/space-api'+path+'/export?format=web-zip'} download>Descargar paquete web ZIP (HTML)</a>}
         <a href={'/space-api'+path+'/export?format=portable'} download>Exportar fuente portable</a>
       </>}
       {deps&&<>
