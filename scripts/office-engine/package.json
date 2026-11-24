@@ -1,0 +1,12 @@
+{
+  "name": "phoenix-local-office-engine",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@univerjs/presets": "1.6.1",
+    "@univerjs/preset-sheets-core": "1.6.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "rxjs": "7.8.2"
+  }
+}

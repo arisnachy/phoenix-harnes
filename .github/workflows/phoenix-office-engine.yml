@@ -1,0 +1,38 @@
+name: PHOENIX Univer Office engine
+on:
+  pull_request:
+    branches: [main, stable]
+    paths:
+      - 'scripts/office-engine/**'
+      - 'scripts/build-office-engine.mjs'
+      - 'apps/web/package.json'
+      - 'packages/client/ui-conversation/src/client/chat/native-workbook.ts'
+      - 'packages/client/ui-conversation/src/client/chat/UniverFrame.tsx'
+      - 'packages/client/ui-conversation/src/client/chat/SpreadsheetSurface.tsx'
+      - '.github/workflows/phoenix-office-engine.yml'
+permissions:
+  contents: read
+jobs:
+  office:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build real local Univer SDK
+        run: node scripts/build-office-engine.mjs
+        env:
+          PHOENIX_REQUIRE_OFFICE_ENGINE: '1'
+      - name: Verify workbook preservation
+        run: pnpm exec vitest run packages/client/ui-conversation/tests/native-workbook.client.spec.ts packages/client/ui-conversation/tests/live-studio.client.spec.tsx
+      - name: Install Chromium
+        run: pnpm --dir apps/web exec playwright install --with-deps chromium
+      - name: Open bundled Univer in browser
+        run: node apps/web/office-engine-smoke.mjs
