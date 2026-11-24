@@ -385,6 +385,10 @@ function ConnectedSpaceControls({item,dirty,onOpen}:{item:Item;dirty:boolean;onO
             await onOpen(result.item.id)
           })}}>Fusionar con original</button>
         </>}
+        {item.kind==='sheet'&&<div><p>Generar resultados conectados. Se actualizarán al guardar esta hoja mientras no se editen manualmente.</p>{(['document','slides'] as const).map(kind=><button key={kind} type="button" disabled={busy||dirty} onClick={()=>{void perform(async()=>{
+          const result=await api<{item:Item}>(path+'/derive',{revision:item.revision,kind,confirm:true},'POST')
+          await onOpen(result.item.id)
+        })}}>{kind==='document'?'Crear informe conectado':'Crear presentación conectada'}</button>)}</div>}
         <a href={'/space-api'+path+'/export?format=portable'} download>Exportar fuente portable</a>
       </>}
       {deps&&<>
