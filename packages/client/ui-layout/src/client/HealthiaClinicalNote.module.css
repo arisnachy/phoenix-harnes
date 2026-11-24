@@ -60,3 +60,22 @@
 @media(max-width:920px){.vitals{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:460px){.vitals{grid-template-columns:1fr}.metrics{grid-template-columns:1fr}}
 
 .editorFields{display:block;border:0;padding:0;margin:0;min-width:0}
+
+/* Readable clinical workstation, with a bounded form and visible workflow. */
+.root{max-width:1000px;margin:0 auto;gap:12px}.top{padding:3px 0 12px;border-bottom:1px solid var(--dsw-alias-border-l2)}.top h3{font-size:24px;letter-spacing:-.04em}.noteKind{max-width:340px}
+.steps{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px;padding:5px;border:1px solid var(--dsw-alias-border-l2);border-radius:14px;margin:14px 0 18px;background:var(--dsw-alias-bg-layer-1)}
+.step,.stepActive{display:flex;align-items:center;justify-content:center;gap:7px;min-width:0;border:0;border-radius:10px;padding:10px 6px;line-height:1.25;text-align:left}
+.stepIndex{display:grid;place-items:center;width:21px;height:21px;flex:0 0 21px;border-radius:50%;background:var(--dsw-alias-interactive-bg-hover);font-size:10px;font-weight:700;color:var(--dsw-alias-label-secondary)}
+.stepActive .stepIndex{background:var(--dsw-specific-phoenix-accent);color:white}
+.sectionTitle{grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:5px 12px;margin:14px 0 20px}.sectionTitle h4{font-size:20px;letter-spacing:-.03em}.sectionTitle p,.sectionTitle small{grid-column:1;color:var(--dsw-alias-label-secondary);font-size:12px}.sectionTitle button{grid-column:2;grid-row:1/4;justify-self:end}
+.fields{gap:16px}.fieldLabel{gap:8px;font-weight:600}.fieldLabel input,.fieldLabel textarea{background:var(--dsw-alias-bg-layer-1);border-radius:11px;padding:11px 13px;font-weight:400}.fieldLabel textarea{min-height:80px}.vitals .field{border-radius:15px;padding:13px}.vitals .field input{border:0;background:transparent;padding:7px 0;min-height:40px}.assist{border-radius:15px;padding:14px 16px}.actions{border-top:1px solid var(--dsw-alias-border-l2);padding-top:12px;gap:8px}
+@media(max-width:850px){.steps{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:480px){.steps{grid-template-columns:repeat(2,minmax(0,1fr))}.sectionTitle{grid-template-columns:1fr}.sectionTitle button{grid-column:1;grid-row:auto;justify-self:start}}
+
+/* Breakpoints follow the editor width rather than the window, including when Kira is beside the clinical surface. */
+.root{container-type:inline-size;container-name:clinicalEditor}
+.step[data-documented=true] .stepIndex{outline:1px solid var(--dsw-specific-phoenix-accent);color:var(--dsw-specific-phoenix-accent)}
+.stepActive{background:var(--dsw-alias-interactive-bg-hover);box-shadow:inset 0 0 0 1px var(--dsw-specific-phoenix-accent)}
+.vitals .field input{font-size:clamp(17px,3cqi,26px);font-weight:650;line-height:1.2}
+.fieldLabel textarea{line-height:1.7}
+@container clinicalEditor (max-width:760px){.steps{grid-template-columns:repeat(3,minmax(0,1fr))}.vitals{grid-template-columns:repeat(2,minmax(0,1fr))}.sectionTitle{grid-template-columns:1fr}.sectionTitle button{grid-column:1;grid-row:auto;justify-self:start}}
+@container clinicalEditor (max-width:420px){.steps{grid-template-columns:repeat(2,minmax(0,1fr))}.fields{grid-template-columns:1fr}.vitals{grid-template-columns:repeat(2,minmax(0,1fr))}.step,.stepActive{justify-content:flex-start;overflow-wrap:anywhere}.vitals .field{padding:9px}.fieldLabel{font-size:12px}}

@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useState } from 'react'
+import { HealthiaClinicalNote, formatClinicalNoteParts } from '../src/client/HealthiaClinicalNote.tsx'
 import { parseClinicalIntake } from '../src/client/HealthiaEditorSupport.ts'
 import { HealthiaWorkspace, HEALTHIA_NAV, type HealthiaRole } from '../src/client/HealthiaWorkspace.tsx'
 
@@ -157,5 +158,52 @@ describe('Protected conversational admission',()=>{
     expect(parseClinicalIntake('nombre: Ana, nombre: María, fecha de nacimiento: 2020-02-30, sexo: masculino, sexo: femenino')).toEqual({})
     expect(parseClinicalIntake('fecha de nacimiento: 2999-01-01')).toEqual({})
     expect(parseClinicalIntake('fecha de nacimiento: 1984-03-12')).toEqual({dateOfBirth:'1984-03-12'})
+  })
+})
+
+describe('Compact clinical access',()=>{
+  it('does not put credentials across the consultation workspace until explicitly requested',async()=>{
+    vi.stubGlobal('fetch',vi.fn(async(input:string)=>{
+      const route=String(input).split('/health/api/')[1]
+      const reply=(value:unknown,status=200)=>new Response(JSON.stringify(value),{status,headers:{'content-type':'application/json'}})
+      if(route==='session')return reply({error:'locked'},401)
+      if(route==='status')return reply({initialized:true,enabled:true})
+      if(route==='branding')return reply({logoDataUrl:null})
+      throw Error('Protected resource requested before authorization')
+    }))
+    render(<ScreenHarness/>)
+    fireEvent.click(screen.getByRole('button',{name:/Nueva consulta/}))
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Desbloquear clínica'})).toBeTruthy())
+    expect(screen.queryByLabelText('Contraseña')).toBeNull()
+    expect(screen.queryByRole('textbox',{name:'Usuario profesional'})).toBeNull()
+    fireEvent.click(screen.getByRole('button',{name:'Desbloquear clínica'}))
+    expect(screen.getByLabelText('Contraseña')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Contraseña'),{target:{value:'synthetic-password'}})
+    fireEvent.click(screen.getByRole('button',{name:/^Cerrar$/}))
+    expect(screen.queryByLabelText('Contraseña')).toBeNull()
+    fireEvent.click(screen.getByRole('button',{name:'Desbloquear clínica'}))
+    expect((screen.getByLabelText('Contraseña') as HTMLInputElement).value).toBe('')
+  })
+})
+
+
+describe('Native clinical editor continuity',()=>{
+  it('preserves the current draft while moving between clinical sections',()=>{
+    render(<HealthiaClinicalNote/>)
+    const interview=screen.getByRole('button',{name:'Entrevista'})
+    expect(interview.getAttribute('data-documented')).toBe('false')
+    fireEvent.change(screen.getByLabelText('Motivo de consulta'),{target:{value:'Motivo sintético'}})
+    expect(interview.getAttribute('data-documented')).toBe('true')
+    fireEvent.click(screen.getByRole('button',{name:'Signos vitales'}))
+    fireEvent.change(screen.getByLabelText('Frecuencia cardíaca · lpm'),{target:{value:'76'}})
+    fireEvent.click(interview)
+    expect((screen.getByLabelText('Motivo de consulta') as HTMLInputElement).value).toBe('Motivo sintético')
+    fireEvent.click(screen.getByRole('button',{name:'Signos vitales'}))
+    expect((screen.getByLabelText('Frecuencia cardíaca · lpm') as HTMLInputElement).value).toBe('76')
+  })
+  it('includes CIE-11 verification evidence in the persisted assessment',()=>{
+    const parts=formatClinicalNoteParts('first',{icd11:'SYNTHETIC',icd11Evidence:'Synthetic test evidence'})
+    expect(parts.assessment).toContain('CIE-11 propuesto: SYNTHETIC')
+    expect(parts.assessment).toContain('Evidencia de consulta OMS (CIE-11): Synthetic test evidence')
   })
 })
