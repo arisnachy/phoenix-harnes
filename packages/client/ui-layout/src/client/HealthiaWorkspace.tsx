@@ -3,7 +3,7 @@
  * application shell. The protected local record remains Host-owned.
  * No patient record is read or written from chat, UI events or localStorage.
  */
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import css from './HealthiaWorkspace.module.css'
 import { HealthiaClinicOperations } from './HealthiaClinicOperations.tsx'
 import type { ClinicalEditorRequest, ClinicalEditorViewState } from './HealthiaEditorSupport.ts'
@@ -70,6 +70,7 @@ export function HealthiaWorkspace({
   const [showEditor, setShowEditor] = useState(false)
   const [minimized, setMinimized] = useState(false)
   const [entry, setEntry] = useState<{kind:'patient'|'encounter';sequence:number}|undefined>()
+  const entrySequence = useRef(0)
   const [clinical, setClinical] = useState<ClinicalRouteStatus>({
     status: 'unavailable', role: null, patientPortal: 'not-verified',
   })
@@ -81,7 +82,7 @@ export function HealthiaWorkspace({
   const capabilities = describeAdaptiveApp('healthia')?.capabilities ?? []
   useEffect(() => { setMinimized(false) }, [section, role, requestedStep])
   const start = (kind:'patient'|'encounter'):void => {
-    setEntry(previous=>({kind,sequence:(previous?.sequence??0)+1}))
+    setEntry({kind,sequence:++entrySequence.current})
     setMinimized(false)
     onSectionChange(kind==='patient'?'patients':'encounters')
   }
@@ -183,7 +184,7 @@ export function HealthiaWorkspace({
         )}
         {!isPatient && (active === 'encounters' || active === 'patients') &&
           <HealthiaClinicOperations area={active} selectedPatientId={selectedClinicalPatient}
-            onPatientChange={setSelectedClinicalPatient} onNavigate={onSectionChange} entry={entry} requestedStep={requestedStep} onEditorState={onEditorState} />}
+            onPatientChange={setSelectedClinicalPatient} onNavigate={onSectionChange} entry={entry} onEntryHandled={sequence=>setEntry(previous=>previous?.sequence===sequence?undefined:previous)} requestedStep={requestedStep} onEditorState={onEditorState} />}
         {!isPatient && (active === 'appointments' || active === 'documents' || active === 'management') &&
           <HealthiaOperationsBoard section={active} selectedPatientId={selectedClinicalPatient}
             onPatientChange={setSelectedClinicalPatient}/>}
