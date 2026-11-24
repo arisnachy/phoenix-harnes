@@ -85,7 +85,8 @@ export function restoreClinicalNote(encounter:ClinicalEncounter):{
 }
 
 export function HealthiaClinicOperations({ area, selectedPatientId, onPatientChange, onNavigate,
-  accessOnly=false, onSessionReady, requestedStep, onEditorState }: {
+  accessOnly=false, onSessionReady, requestedStep, onEditorState, entry }: {
+  entry?:{kind:'patient'|'encounter';sequence:number}|undefined
   area:Area
   /** Reuse exactly the professional login/setup flow without rendering patient records. */
   requestedStep?:ClinicalEditorRequest|undefined
@@ -132,6 +133,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
   const [notice,setNotice]=useState('')
   const [creatingPatient,setCreatingPatient]=useState(false)
   const [creatingEncounter,setCreatingEncounter]=useState(false)
+  const lastEntry=useRef<number|undefined>(undefined)
   const [interviewGuide,setInterviewGuide]=useState<ClinicalInterviewGuide|null>(null)
   const [answerKey,setAnswerKey]=useState('')
   const [answerText,setAnswerText]=useState('')
@@ -142,6 +144,14 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
   const userRole=session?.actor.role
   const canManagePatients=userRole==='admin'||userRole==='clinician'||userRole==='reception'
   const canManageEncounters=userRole==='clinician'||userRole==='psychologist'
+  useEffect(()=>{
+    if(accessOnly||mode!=='ready'||!entry||lastEntry.current===entry.sequence)return
+    if(entry.kind==='patient'&&area==='patients'&&canManagePatients){
+      lastEntry.current=entry.sequence;setCreatingPatient(true)
+    }else if(entry.kind==='encounter'&&area==='encounters'&&canManageEncounters&&!dirtyEncounter){
+      lastEntry.current=entry.sequence;setEncounterId('');setCreatingEncounter(true)
+    }
+  },[accessOnly,mode,entry,area,canManagePatients,canManageEncounters,dirtyEncounter])
   const selectedPatient=patients.find(p=>p.id===patientId)
   const normalizedSearch=patientSearch.trim().toLocaleLowerCase('es')
   const visiblePatients=patients.filter(p=>!normalizedSearch||
