@@ -451,7 +451,7 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
   useEffect(()=>{
     const before=(event:Event)=>{
       const detail=(event as CustomEvent<{id?:string}>).detail
-      if(editor?.item.id===detail?.id&&(editor.dirty||saving.current))event.preventDefault()
+      if(editor&&editor.item.id===detail?.id&&(editor.dirty||saving.current))event.preventDefault()
     }
     const edited=(event:Event)=>{
       const detail=(event as CustomEvent<{id?:string;revision?:number}>).detail
