@@ -279,6 +279,75 @@ async function migrateLegacyGames():Promise<number> {
     }
   })
 }
+
+type DependencyStatus={sources:Array<{id:string;revision:number;currentRevision:number|null;stale:boolean}>;stale:boolean;truncated:boolean}
+function ConnectedSpaceControls({item,dirty,onOpen}:{item:Item;dirty:boolean;onOpen:(id:string)=>Promise<void>}){
+  const [origin,setOrigin]=useState<{parentId:string;baseRevision:number}|null>(null)
+  const [deps,setDeps]=useState<DependencyStatus|null>(null)
+  const [available,setAvailable]=useState<Summary[]>([])
+  const [picked,setPicked]=useState<string[]>([])
+  const [title,setTitle]=useState('')
+  const [notice,setNotice]=useState('')
+  const [busy,setBusy]=useState(false)
+  const [confirm,setConfirm]=useState(false)
+  const path='/items/'+item.id
+  const refresh=async()=>{
+    const [f,d,l]=await Promise.all([
+      api<{origin:typeof origin}>(path+'/fork'),
+      api<DependencyStatus>(path+'/dependencies'),
+      api<{items:Summary[]}>('/items?space='+encodeURIComponent(item.space)),
+    ])
+    setOrigin(f.origin);setDeps(d)
+    setAvailable(l.items.filter(x=>x.id!==item.id&&!x.deleted&&x.space===item.space))
+    setPicked(d.sources.map(x=>x.id));setConfirm(false)
+  }
+  const perform=async(fn:()=>Promise<void>)=>{
+    if(busy||dirty)return
+    setBusy(true);setNotice('')
+    try{await fn()}catch(e){setNotice(e instanceof Error?e.message:String(e))}finally{setBusy(false)}
+  }
+  return <details className={css.history} onToggle={e=>{if(e.currentTarget.open)void perform(refresh)}}>
+    <summary>Creaciones conectadas · alternativas y dependencias</summary>
+    <div style={{display:'grid',gap:8,padding:8}}>
+      {dirty&&<p>Guarda los cambios antes de operar sobre versiones.</p>}
+      <button type="button" disabled={busy||dirty} onClick={()=>{void perform(refresh)}}>Actualizar relaciones</button>
+      {item.bytes===0&&<>
+        <label>Nombre de la alternativa <input value={title} onChange={e=>setTitle(e.currentTarget.value)} placeholder="Versión de prueba"/></label>
+        <button type="button" disabled={busy||dirty||!title.trim()} onClick={()=>{void perform(async()=>{
+          const result=await api<{item:Item}>(path+'/fork',{revision:item.revision,title},'POST')
+          await onOpen(result.item.id)
+        })}}>Crear alternativa aislada</button>
+        {origin&&<>
+          <p>Alternativa de una creación · base v{origin.baseRevision}</p>
+          <label><input type="checkbox" checked={confirm} onChange={e=>setConfirm(e.currentTarget.checked)}/> Adoptar este contenido en el original si su revisión no cambió</label>
+          <button type="button" disabled={busy||dirty||!confirm} onClick={()=>{void perform(async()=>{
+            const result=await api<{item:Item}>(path+'/merge',{revision:item.revision,parentRevision:origin.baseRevision,confirm:true},'POST')
+            await onOpen(result.item.id)
+          })}}>Fusionar con original</button>
+        </>}
+        <a href={'/space-api'+path+'/export?format=portable'} download>Exportar fuente portable</a>
+      </>}
+      {deps&&<>
+        <strong role="status">{deps.stale?'Fuentes desactualizadas o no verificables':'Revisiones de fuentes vigentes'}</strong>
+        <small>Las relaciones no copian datos. Selecciona únicamente fuentes del mismo espacio que realmente utilizaste.</small>
+        <div style={{maxHeight:160,overflow:'auto'}}>
+          {available.map(source=><label key={source.id} style={{display:'block'}}>
+            <input type="checkbox" checked={picked.includes(source.id)} onChange={e=>{const checked=e.currentTarget.checked;setPicked(old=>checked?[...old,source.id]:old.filter(id=>id!==source.id))}} disabled={busy||dirty||(!picked.includes(source.id)&&picked.length>=16)}/>
+            {source.title} · v{source.revision}
+          </label>)}
+          {deps.sources.filter(source=>!available.some(x=>x.id===source.id)).map(source=><p key={source.id}>Fuente no disponible · revisión {source.revision} <button type="button" onClick={()=>setPicked(old=>old.filter(id=>id!==source.id))}>Quitar relación</button></p>)}
+        </div>
+        <button type="button" disabled={busy||dirty||picked.some(id=>!available.some(x=>x.id===id))} onClick={()=>{void perform(async()=>{
+          const sources=picked.map(id=>({id,revision:available.find(x=>x.id===id)!.revision}))
+          const result=await api<DependencyStatus>(path+'/dependencies',{revision:item.revision,sources},'PUT')
+          setDeps(result);setNotice('Relaciones registradas con las revisiones seleccionadas; el contenido no fue regenerado.')
+        })}}>Confirmar fuentes utilizadas</button>
+      </>}
+      {notice&&<p role="status">{notice}</p>}
+    </div>
+  </details>
+}
+
 export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;renderSpecialized?:(input:SpaceSpecializedProps)=>ReactNode}) {
   const [items,setItems]=useState<Summary[]>([])
   const [query,setQuery]=useState('')
@@ -290,6 +359,9 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
   const [editor,setEditor]=useState<Editor|null>(null)
   const [slideIndex,setSlideIndex]=useState(0)
   const [showSource,setShowSource]=useState(false)
+  const [clipboardText,setClipboardText]=useState('')
+  const [syntheticSeed,setSyntheticSeed]=useState('42')
+  const [versionPreview,setVersionPreview]=useState<{title:string;content:string}|null>(null)
   const [history,setHistory]=useState<Array<{revision:number;title:string;changedAt:string}>>([])
   const [error,setError]=useState('')
   const [status,setStatus]=useState('')
@@ -323,7 +395,7 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
   const godotItem=editor!==null&&!binaryItem&&editor.item.mime==='application/vnd.phoenix.game+godot-web'
   const sceneItem=editor!==null&&!binaryItem&&editor.item.mime==='application/vnd.phoenix.scene3d+json'
   const markdownItem=editor!==null&&!binaryItem&&!htmlItem&&editor.item.kind==='document'
-  useEffect(()=>{setShowSource(false)},[selectedId])
+  useEffect(()=>{setShowSource(false);setVersionPreview(null)},[selectedId])
   const mutate=(change:Partial<Editor>):void=>{
     setEditor(e=>e?{...e,...change,dirty:true}:e)
     setStatus('Cambios pendientes')
@@ -412,10 +484,28 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
       setSlideIndex(0)
     }catch(e){setError(String(e))}finally{setBusy(false)}
   }
+  const createFromWorkflow=async(path:string,data:Record<string,unknown>):Promise<void>=>{
+    setBusy(true);setError('')
+    try{
+      const {item}=await api<{item:Item}>(path,data,'POST')
+      setClipboardText('');setRevisionCounter(n=>n+1)
+      setEditor({item,title:item.title,content:item.content,space:item.space,dirty:false})
+    }catch(e){setError(String(e))}finally{setBusy(false)}
+  }
+  const previewVersion=async(rev:number):Promise<void>=>{
+    if(!editor)return
+    try{const result=await api<{version:{title:string;content:string}}>('/items/'+editor.item.id+'/version?revision='+rev);setVersionPreview(result.version)}
+    catch(e){setError(String(e))}
+  }
   const upload=async(event:ChangeEvent<HTMLInputElement>):Promise<void>=>{
     const file=event.currentTarget.files?.[0]
     event.currentTarget.value=''
     if(!file)return
+    if(file.name.endsWith('.phoenix.json')){
+      if(file.size>1_000_000){setError('Paquete demasiado grande');return}
+      try{await createFromWorkflow('/portable-import',JSON.parse(await file.text()) as Record<string,unknown>)}catch(e){setError(String(e))}
+      return
+    }
     if(file.size>9_000_000){setError('Máximo de importación: 9 MB.');return}
     setBusy(true);setError('')
     try{
@@ -498,6 +588,14 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
           <button type="button" className={css.primary} onClick={()=>{void create()}} disabled={busy}>+ Crear</button>
           <label className={css.import}>Importar<input type="file" onChange={e=>{void upload(e)}}/></label>
         </div>
+        {!trash&&<details className={css.history}><summary>Importar tabla o crear datos de prueba</summary>
+          <div style={{display:'grid',gap:8,padding:8}}>
+            <label>Tabla copiada desde una hoja de cálculo<textarea aria-label="Tabla desde portapapeles" value={clipboardText} onChange={e=>setClipboardText(e.currentTarget.value)} maxLength={500000} rows={4}/></label>
+            <button type="button" disabled={busy||!clipboardText.trim()} onClick={()=>{void createFromWorkflow('/clipboard',{text:clipboardText})}}>Convertir en hoja de cálculo</button>
+            <label>Semilla reproducible <input type="number" min={0} max={4294967295} value={syntheticSeed} onChange={e=>setSyntheticSeed(e.currentTarget.value)}/></label>
+            <button type="button" disabled={busy||!syntheticSeed.trim()} onClick={()=>{void createFromWorkflow('/synthetic',{seed:Number(syntheticSeed),count:100})}}>Generar 100 registros ficticios de demanda hospitalaria</button>
+          </div>
+        </details>}
         <div className={css.tabs}>
           <button type="button" aria-pressed={kind==='all'} onClick={()=>setKind('all')}>Todo</button>
           {(['document','slides','sheet','image','game','app','code','file'] as SpaceKind[]).map(t=>
@@ -536,8 +634,10 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
           <label>Espacio<input aria-label="Espacio del elemento" value={editor.space} onChange={e=>mutate({space:e.currentTarget.value.toLowerCase().replace(/[^a-z0-9-]/gu,'-')})}/></label>
           <span role="status">{status||'Guardado automáticamente'}</span>
         </div>
+        {!editor.item.deleted&&<ConnectedSpaceControls key={editor.item.id+':'+editor.item.revision} item={editor.item} dirty={editor.dirty} onOpen={openItem}/>}
         {history.length>0&&<div className={css.history}><strong>Versiones recuperables</strong>
-          {history.map(h=><button type="button" key={h.revision} onClick={()=>{void restore(h.revision)}}>Restaurar v{h.revision} · {h.title}</button>)}</div>}
+          {history.map(h=><span key={h.revision}><button type="button" onClick={()=>{void previewVersion(h.revision)}}>Ver v{h.revision} · {h.title}</button><button type="button" disabled={editor.dirty} onClick={()=>{void restore(h.revision)}}>Restaurar v{h.revision}</button></span>)}</div>}
+        {versionPreview&&<section aria-label="Versión histórica" className={css.history}><strong>{versionPreview.title} · solo lectura</strong><button type="button" onClick={()=>setVersionPreview(null)}>Cerrar versión</button><pre style={{whiteSpace:'pre-wrap',maxHeight:300,overflow:'auto'}}>{versionPreview.content}</pre></section>}
         {!binaryItem&&editor.item.kind==='slides'&&<div className={css.deck}>
           <nav aria-label="Diapositivas" className={css.slideList}>
             {deck.slides.map((s,i)=><button type="button" key={i} aria-current={slideIndex===i?'true':undefined}
