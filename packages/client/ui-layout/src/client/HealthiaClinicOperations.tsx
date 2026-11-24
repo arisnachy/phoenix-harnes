@@ -132,6 +132,11 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
   const [notice,setNotice]=useState('')
   const [creatingPatient,setCreatingPatient]=useState(false)
   const [creatingEncounter,setCreatingEncounter]=useState(false)
+  const [accessSetup,setAccessSetup]=useState(false)
+  const [doctorUser,setDoctorUser]=useState('')
+  const [doctorPassword,setDoctorPassword]=useState('')
+  const [doctorAssigned,setDoctorAssigned]=useState(false)
+  useEffect(()=>{setAccessSetup(false);setDoctorPassword('');setDoctorAssigned(false);setComplaint('');setCreatingEncounter(false);setAnswerKey('');setAnswerText('')},[patientId])
   const [interviewGuide,setInterviewGuide]=useState<ClinicalInterviewGuide|null>(null)
   const [answerKey,setAnswerKey]=useState('')
   const [answerText,setAnswerText]=useState('')
@@ -298,6 +303,35 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
         ?'Se detectaron posibles coincidencias. Comprueba la identidad antes de registrar.'
         :'Sin coincidencias detectadas. Se comprobará nuevamente al guardar.')
     }catch(err){setError(err instanceof Error?err.message:'No se pudo verificar la identidad.')}
+    finally{setBusy(false)}
+  }
+  const createDoctor=async():Promise<void>=>{
+    if(!session||userRole!=='admin'||busy||doctorPassword.length<6||!doctorUser.trim())return
+    setBusy(true);setError('');setNotice('')
+    try{
+      await api.createClinicStaff(session,{username:doctorUser.trim(),password:doctorPassword,role:'clinician'})
+      setNotice('Cuenta médica creada. Ahora asigna este paciente al profesional.')
+    }catch(err){setError(err instanceof Error?err.message:'No se pudo crear la cuenta médica')}
+    finally{setDoctorPassword('');setBusy(false)}
+  }
+  const assignDoctor=async():Promise<void>=>{
+    if(!session||userRole!=='admin'||busy||!selectedPatient||!doctorUser.trim())return
+    setBusy(true);setError('');setNotice('')
+    try{
+      await api.setClinicAssignment(session,{patientId:selectedPatient.id,staffId:doctorUser.trim(),action:'grant',purpose:'Atención clínica solicitada por el administrador'})
+      setDoctorAssigned(true)
+      setNotice('Paciente asignado. Accede con la cuenta médica para iniciar la atención.')
+    }catch(err){setError(err instanceof Error?err.message:'No se pudo asignar el paciente')}
+    finally{setBusy(false)}
+  }
+  const switchToDoctor=async():Promise<void>=>{
+    if(!session||busy)return
+    setBusy(true);setError('');setNotice('')
+    try{
+      await api.logout(session)
+      setSession(null);setPatients([]);setEncounters([]);setPatientId('');setEncounterId('')
+      setUser(doctorUser.trim());setPassword('');setDoctorPassword('');setMode('login')
+    }catch(err){setError(err instanceof Error?err.message:'No se pudo cerrar la sesión')}
     finally{setBusy(false)}
   }
   const addEncounter=async(event:FormEvent<HTMLFormElement>):Promise<void>=>{
@@ -483,9 +517,11 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
         <span><strong>{selectedPatient.name}</strong><small>Nacimiento: {selectedPatient.dateOfBirth||'Sin fecha documentada'}</small></span>
       </div>
       <div className={css.toolbarActions}>
-        {area==='patients'&&canManageEncounters&&onNavigate&&
+        {area==='patients'&&(canManageEncounters||userRole==='admin')&&onNavigate&&
           <button className={css.primary} type="button" onClick={()=>onNavigate('encounters')}>Ir a consultas</button>}
-        <button type="button" onClick={()=>{setPatientId('');setEncounterId('')}}>Cambiar paciente</button>
+        {area==='encounters'&&canManageEncounters&&<button className={css.primary} type="button" disabled={busy||dirtyEncounter}
+          onClick={()=>{setCreatingEncounter(v=>!v);setEncounterId('')}}>{creatingEncounter?'Cancelar':'Nueva consulta'}</button>}
+        <button type="button" disabled={busy||dirtyEncounter} onClick={()=>{setPatientId('');setEncounterId('')}}>Cambiar paciente</button>
       </div>
     </div>}
     {area==='patients'&&<>
@@ -581,11 +617,34 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
         {!visiblePatients.length&&<p className={css.notice}>No hay pacientes que coincidan con esta búsqueda.</p>}
         {visiblePatients.length>50&&<p className={css.notice}>Mostrando 50 de {visiblePatients.length}. Refina la búsqueda.</p>}
       </div>}
-      {selectedPatient&&canManageEncounters&&<div className={css.actionBar}>
-        <button type="button" onClick={()=>{setCreatingEncounter(v=>!v);setEncounterId('')}}>
-          {creatingEncounter?'Cancelar':'Nueva consulta'}
-        </button>
-      </div>}
+      {selectedPatient&&!canManageEncounters&&<section className={css.clinicianAccess} aria-label="Acceso para atender pacientes">
+        <div><h3>Iniciar atención médica</h3>
+          <p>{userRole==='admin'?'Estás en la cuenta de administración. Para documentar una consulta, utiliza una cuenta médica autorizada.':'Tu cuenta no tiene permiso para documentar consultas. Accede con un profesional autorizado.'}</p>
+        </div>
+        <div className={css.toolbarActions}>
+          {userRole==='admin'&&<button className={css.primary} type="button" disabled={busy}
+            onClick={()=>setAccessSetup(v=>!v)}>{accessSetup?'Cerrar configuración':'Preparar acceso médico'}</button>}
+          <button type="button" disabled={busy} onClick={()=>{void switchToDoctor()}}>Cambiar de cuenta</button>
+        </div>
+        {userRole==='admin'&&accessSetup&&<div className={css.doctorSetup}>
+          <label>Usuario médico (nuevo o existente)
+            <input autoComplete="off" maxLength={80} value={doctorUser} disabled={busy}
+              onChange={e=>{setDoctorUser(e.currentTarget.value);setDoctorAssigned(false)}} placeholder="doctor1"/>
+          </label>
+          <details><summary>Crear una cuenta médica nueva</summary>
+            <label>Contraseña de la nueva cuenta médica
+              <input type="password" autoComplete="new-password" minLength={6} maxLength={256}
+                value={doctorPassword} disabled={busy} onChange={e=>setDoctorPassword(e.currentTarget.value)}/>
+            </label>
+            <button type="button" disabled={busy||!doctorUser.trim()||doctorPassword.length<6}
+              onClick={()=>{void createDoctor()}}>Crear cuenta médica</button>
+          </details>
+          <button className={css.primary} type="button" disabled={busy||!doctorUser.trim()||doctorAssigned}
+            onClick={()=>{void assignDoctor()}}>Asignar este paciente al profesional</button>
+          {doctorAssigned&&<p role="status">Asignación confirmada. Usa «Cambiar de cuenta» para acceder como médico.</p>}
+          <small>La cuenta administrativa no se convierte en una cuenta médica. El profesional debe autenticarse con su propia contraseña.</small>
+        </div>}
+      </section>}
       {selectedPatient&&creatingEncounter&&canManageEncounters&&<form className={css.form}
         onSubmit={event=>{void addEncounter(event)}} autoComplete="off">
         <h3>Iniciar consulta para {selectedPatient.name}</h3>
@@ -605,7 +664,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
           </option>)}
         </select>
       </label>}
-      {selectedPatient&&!creatingEncounter&&!patientEncounters.length&&
+      {selectedPatient&&canManageEncounters&&!creatingEncounter&&!patientEncounters.length&&
         <p className={css.emptyState}>Este paciente aún no tiene consultas accesibles. Utiliza «Nueva consulta» para iniciar la atención.</p>}
       {selectedEncounter&&currentNote&&<div className={css.encounter}>
         {canManageEncounters&&selectedEncounter.status!=='signed'&&<section className={css.interviewCard}
