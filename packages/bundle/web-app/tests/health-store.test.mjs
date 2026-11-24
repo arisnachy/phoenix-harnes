@@ -137,6 +137,17 @@ test('clinical revision and signing enforce concurrency and professional ownersh
   assert.equal(e.signedBy,'doctor1')
   assert.throws(()=>db.update(d,'encounters',e.id,e.version,{action:'document',history:'Edit'}),/firmada/)
   let order=db.create(d,'orders',{encounterId:e.id,modality:'laboratory',description:'Control de laboratorio'})
+  assert.equal(order.service,'laboratory')
+  assert.equal(order.priority,'routine')
+  const mri=db.create(d,'orders',{encounterId:e.id,modality:'imaging',service:'mri',priority:'urgent',
+    description:'Estudio de prueba',clinicalQuestion:'Pregunta clínica sintética',preparation:'Preparación documentada'})
+  assert.equal(mri.service,'mri')
+  assert.equal(mri.priority,'urgent')
+  assert.equal(mri.clinicalQuestion,'Pregunta clínica sintética')
+  assert.equal(mri.preparation,'Preparación documentada')
+  assert.throws(()=>db.create(d,'orders',{encounterId:e.id,modality:'laboratory',service:'mri',description:'Prueba'}),/incompatible/)
+  assert.throws(()=>db.create(d,'orders',{encounterId:e.id,modality:'imaging',service:'mri',priority:'invalid',description:'Prueba'}),/Prioridad/)
+
   const profile=db.list(d,'patients').find(x=>x.id===p.id)
   db.update(d,'patients',p.id,profile.version,{action:'allergy-review',status:'none-known',details:''})
   const med=db.create(d,'prescriptions',{encounterId:e.id,medication:'Medicamento',directions:'Plan revisado',safetyAcknowledged:true})
