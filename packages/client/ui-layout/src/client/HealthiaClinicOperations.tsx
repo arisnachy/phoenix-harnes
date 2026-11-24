@@ -140,6 +140,8 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
   const [interviewGuide,setInterviewGuide]=useState<ClinicalInterviewGuide|null>(null)
   const [answerKey,setAnswerKey]=useState('')
   const [answerText,setAnswerText]=useState('')
+  const [askDraftState,setAskDraftState]=useState<'loading'|'ready'|'saving'|'saved'|'error'>('loading')
+  const askDraftEpoch=useRef(0)
   const [signChecked,setSignChecked]=useState(false)
   const [dirtyEncounter,setDirtyEncounter]=useState(false)
   useEffect(()=>{setDirtyEncounter(false);setSignChecked(false);setAnswerKey('');setAnswerText('')},[encounterId,patientId])
@@ -352,6 +354,35 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
 
 
   useEffect(()=>{
+    const epoch=++askDraftEpoch.current
+    setAnswerKey('');setAnswerText('');setAskDraftState('loading')
+    if(!session||!selectedEncounter||selectedEncounter.status==='signed'||selectedEncounter.practitioner!==session.actor.username||!canManageEncounters)return
+    void api.loadInterviewDraft(session,selectedEncounter).then(draft=>{
+      if(epoch!==askDraftEpoch.current)return
+      if(draft){setAnswerKey(draft.key);setAnswerText(draft.text);setAskDraftState('saved')}
+      else setAskDraftState('ready')
+    }).catch(()=>{if(epoch===askDraftEpoch.current)setAskDraftState('error')})
+    return ()=>{askDraftEpoch.current++}
+  },[session,selectedEncounter?.id,selectedEncounter?.version,canManageEncounters])
+  const pauseInterview=async():Promise<void>=>{
+    if(!session||!selectedEncounter||!answerKey||busy||askDraftState==='saving')return
+    const epoch=askDraftEpoch.current
+    setAskDraftState('saving')
+    try{
+      await api.saveInterviewDraft(session,selectedEncounter,answerKey,answerText)
+      if(epoch===askDraftEpoch.current)setAskDraftState('saved')
+    }catch{if(epoch===askDraftEpoch.current)setAskDraftState('error')}
+  }
+  const discardInterview=async():Promise<void>=>{
+    if(!session||!selectedEncounter||busy||askDraftState==='saving')return
+    const epoch=askDraftEpoch.current
+    setAskDraftState('saving')
+    try{
+      await api.clearInterviewDraft(session,selectedEncounter)
+      if(epoch===askDraftEpoch.current){setAnswerKey('');setAnswerText('');setAskDraftState('ready')}
+    }catch{if(epoch===askDraftEpoch.current)setAskDraftState('error')}
+  }
+  useEffect(()=>{
     setInterviewGuide(null)
     if(!session||!selectedEncounter||selectedEncounter.status==='signed'||!canManageEncounters)return
     let active=true
@@ -377,10 +408,11 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
     finally{setBusy(false)}
   }
   const submitInterview=():void=>{
-    if(!session||!answerKey||!answerText.trim()||!selectedEncounter||busy)return
+    if(!session||!answerKey||!answerText.trim()||!selectedEncounter||busy||askDraftState==='saving')return
+    const epoch=askDraftEpoch.current
     void mutateEncounter(record=>api.answerInterview(session,record,answerKey,answerText),
       'Respuesta registrada en el interrogatorio protegido.').then(saved=>{
-        if(saved){setAnswerKey('');setAnswerText('')}
+        if(saved&&epoch===askDraftEpoch.current){setAnswerKey('');setAnswerText('');setAskDraftState('ready')}
       })
   }
   if(mode==='loading')return <div className={css.status} role="status">Comprobando la sesión clínica local…</div>
@@ -656,19 +688,22 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
             Ante signos de alarma, realiza valoración inmediata; la guía no determina un diagnóstico.</p>
           {(interviewGuide?.nextQuestions??[]).map(question=><button type="button" key={question.key}
             className={answerKey===question.key?css.interviewQuestionActive:css.interviewQuestion}
-            disabled={busy||!!answerText.trim()&&answerKey!==question.key}
-            onClick={()=>{if(answerKey!==question.key){setAnswerKey(question.key);setAnswerText('')}}}>
+            disabled={busy||askDraftState==='loading'||askDraftState==='saving'||!!answerText.trim()&&answerKey!==question.key}
+            onClick={()=>{if(answerKey!==question.key){setAnswerKey(question.key);setAnswerText('');setAskDraftState('ready')}}}>
             {question.question}
           </button>)}
           {answerKey&&<div className={css.interviewAnswer}>
             <label>Respuesta documentada por el profesional
-              <textarea maxLength={1600} rows={3} value={answerText} disabled={busy}
-                onChange={e=>setAnswerText(e.currentTarget.value)}/>
+              <textarea maxLength={1600} rows={3} value={answerText} disabled={busy||askDraftState==='saving'}
+                onChange={e=>{setAnswerText(e.currentTarget.value);setAskDraftState('ready')}}/>
             </label>
-            <button className={css.primary} type="button" disabled={busy||!answerText.trim()}
+            <button className={css.primary} type="button" disabled={busy||askDraftState==='saving'||!answerText.trim()}
               onClick={submitInterview}>Guardar respuesta en consulta</button>
-            <button type="button" disabled={busy} onClick={()=>{setAnswerKey('');setAnswerText('')}}>Descartar respuesta sin guardar</button>
+            <button type="button" disabled={busy||askDraftState==='saving'} onClick={()=>{void pauseInterview()}}>Guardar y continuar después</button>
+            <button type="button" disabled={busy||askDraftState==='saving'} onClick={()=>{void discardInterview()}}>Descartar respuesta sin guardar</button>
           </div>}
+          {askDraftState==='saved'&&<p role="status" className={css.notice}>Borrador cifrado confirmado. Puede recuperarse al reabrir esta consulta mientras no cambie su versión.</p>}
+          {askDraftState==='error'&&<p role="alert" className={css.notice}>No se confirmó el borrador. Conserva el texto en esta vista y reintenta el guardado.</p>}
           {!interviewGuide&&<p className={css.notice}>Guía aún no disponible. Puedes continuar documentando la historia manualmente.</p>}
           {interviewGuide&&interviewGuide.nextQuestions.length===0&&
             <p className={css.notice}>No quedan preguntas pendientes de esta guía; comprueba si necesitas ampliar la entrevista.</p>}
