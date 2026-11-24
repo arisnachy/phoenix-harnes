@@ -1137,8 +1137,26 @@ export class HealthClinicStore {
       if(reviewed.reviewedBy!==actor.username||!['none-known','documented'].includes(String(reviewed.status)))
         fail('El prescriptor debe verificar y documentar alergias antes de recetar')
       if(x.safetyAcknowledged!==true)fail('Debe confirmar revisión de alergias, interacciones y dosis')
+      // Legacy text prescriptions remain readable; new structured prescriptions
+      // retain clinician-attested provenance and never imply a drug-database check.
+      let regimen:RecordData|undefined
+      if(x.regimen!==undefined){
+        const r=obj(x.regimen)
+        if(Object.keys(r).some(key=>!['presentation','dose','route','frequency','duration','quantity','instructions','reference'].includes(key)))
+          fail('Campos de pauta no autorizados')
+        regimen={presentation:str(r.presentation,'Presentación',160),dose:str(r.dose,'Dosis',100),
+          route:str(r.route,'Vía',80),frequency:str(r.frequency,'Frecuencia',120),
+          duration:str(r.duration,'Duración',100),quantity:str(r.quantity,'Cantidad',100),
+          instructions:optionalNoteText(r.instructions,'Instrucciones',400),
+          reference:str(r.reference,'Fuente farmacológica revisada',240)}
+      }
+      const directions=regimen?[
+        'Presentación: '+regimen.presentation,'Dosis: '+regimen.dose,'Vía: '+regimen.route,
+        'Frecuencia: '+regimen.frequency,'Duración: '+regimen.duration,'Cantidad: '+regimen.quantity,
+        ...(regimen.instructions?['Indicaciones: '+regimen.instructions]:[]),
+      ].join('\n'):text(x.directions,'Indicaciones',1400)
       return this.insert(actor,kind,{ encounterId,patientId:enc.patientId,medication:text(x.medication,'Medicamento',240),
-        directions:text(x.directions,'Indicaciones',1400),signedBy:actor.username,status:'prescribed',
+        directions:text(directions,'Indicaciones',1400),...(regimen?{regimen}:{}),signedBy:actor.username,status:'prescribed',
         safetyReview:{ attestedBy:actor.username,at:new Date().toISOString(),allergyStatus:reviewed.status,
           allergyReviewAt:reviewed.reviewedAt,drugInteractionCatalogChecked:false } })
     }
