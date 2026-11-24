@@ -129,3 +129,6 @@ button.quickCard:focus-visible {outline:2px solid var(--dsw-specific-phoenix-acc
 .shell .tab,.shell .activeTab{flex:none;padding:8px 11px;border-radius:9px;font-size:11px;line-height:1.2;font-weight:550}
 .shell .activeTab{border-color:var(--dsw-specific-phoenix-accent);background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-specific-phoenix-accent);font-weight:700}
 .shell .titleRow{margin-bottom:0}
+
+/* Desktop uses the actual contextual sidebar; compact/mobile retains text navigation. */
+@media(min-width:1000px){.shell .tabs{display:none}}
