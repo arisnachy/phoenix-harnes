@@ -429,6 +429,29 @@ export class HealthiaClinicalApi {
       throw Error('Guía de entrevista no verificable')
     return guide as unknown as ClinicalInterviewGuide
   }
+  async loadInterviewDraft(session:ClinicalSession,current:ClinicalEncounter):Promise<{key:string;text:string}|null> {
+    if(!UUID.test(current.id))throw Error('Consulta inválida')
+    const response=object(await this.request('clinical-draft/'+current.id,'GET',session))
+    if(response.draft===null)return null
+    const values=object(object(response.draft).values)
+    if(values.encounterVersion!==String(current.version))return null
+    if(typeof values.answerKey!=='string'||!/^[a-z_]{1,40}$/u.test(values.answerKey)
+      ||typeof values.answerText!=='string'||values.answerText.length>1600)throw Error('Borrador de interrogatorio inválido')
+    return {key:values.answerKey,text:values.answerText}
+  }
+  async saveInterviewDraft(session:ClinicalSession,current:ClinicalEncounter,key:string,text:string):Promise<void> {
+    if(!UUID.test(current.id)||!(/^[a-z_]{1,40}$/u.test(key))||text.length>1600)
+      throw Error('Borrador de interrogatorio inválido')
+    const receipt=object(await this.request('clinical-draft/'+current.id,'PATCH',session,{
+      values:{encounterVersion:String(current.version),answerKey:key,answerText:text},expanded:[],
+    }))
+    if(typeof receipt.savedAt!=='string')throw Error('El borrador no quedó confirmado')
+  }
+  async clearInterviewDraft(session:ClinicalSession,current:ClinicalEncounter):Promise<void>{
+    if(!UUID.test(current.id))throw Error('Consulta inválida')
+    const receipt=object(await this.request('clinical-draft/'+current.id,'POST',session,{action:'clear'}))
+    if(receipt.cleared!==true)throw Error('No se pudo descartar el borrador protegido')
+  }
   async answerInterview(session:ClinicalSession,current:ClinicalEncounter,
     key:string,answer:string):Promise<ClinicalEncounter> {
     if(!/^[a-z_]{1,40}$/u.test(key)||!answer.trim()||answer.length>1600)
