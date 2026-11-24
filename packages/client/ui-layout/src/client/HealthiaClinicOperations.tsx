@@ -763,8 +763,8 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
             <p>Comprueba identidad, motivo, enfermedad actual, antecedentes, exploración, diagnóstico,
               códigos, plan, indicaciones y datos faltantes antes de marcar la versión como revisada.</p>
             {dirtyEncounter&&<p role="status">Guarda los cambios del editor antes de revisar la consulta.</p>}
-            <button className={css.primary} type="button" disabled={busy||dirtyEncounter} onClick={()=>{
-              if(session&&!dirtyEncounter)void mutateEncounter(record=>api.reviewEncounter(session,record),
+            <button className={css.primary} type="button" disabled={busy||dirtyEncounter||!!answerText.trim()||askDraftState==='saving'} onClick={()=>{
+              if(session&&!dirtyEncounter&&!answerText.trim())void mutateEncounter(record=>api.reviewEncounter(session,record),
                 'Versión de la consulta revisada. Requiere firma explícita.')
             }}>Marcar esta versión como revisada</button>
           </div>}
@@ -775,8 +775,8 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
             <label className={css.signCheck}><input type="checkbox" checked={signChecked}
               onChange={e=>setSignChecked(e.currentTarget.checked)}/>
               He revisado la historia, las decisiones y los datos de este paciente.</label>
-            <button className={css.primary} type="button" disabled={busy||!signChecked||dirtyEncounter} onClick={()=>{
-              if(session&&!dirtyEncounter)void mutateEncounter(record=>api.signEncounter(session,record),
+            <button className={css.primary} type="button" disabled={busy||!signChecked||dirtyEncounter||!!answerText.trim()||askDraftState==='saving'} onClick={()=>{
+              if(session&&!dirtyEncounter&&!answerText.trim())void mutateEncounter(record=>api.signEncounter(session,record),
                 'Consulta firmada por el servicio clínico protegido.')
             }}>Firmar consulta revisada</button>
           </div>}
