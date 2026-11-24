@@ -4,7 +4,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-host-webserver'
 import { parseSpaceClipboard, syntheticSpaceDataset } from './space-workflows.ts'
 import { PhoenixSpaceStore } from './space-store.ts'
-import { exportPptx, exportXlsx } from './space-office.ts'
+import { exportPptx, exportXlsx, exportStaticSpaceApp } from './space-office.ts'
 import { mkdirSync, writeFileSync, mkdtempSync } from 'node:fs'
 import { join, extname } from 'node:path'
 import openNative from 'open'
@@ -217,6 +217,9 @@ export function registerSpaceRoutes(ctx:Context):void {
             download(res,exportXlsx(item.content),
               'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',item.title+'.xlsx')
             return
+          }
+          if(format==='web-zip'&&item.bytes===0&&['app','game','code'].includes(item.kind)){
+            download(res,exportStaticSpaceApp(item.content),'application/zip',item.title+'.zip');return
           }
           if(format==='portable'&&item.bytes===0){
             // Export the portable source only. No local IDs, credentials, paths or connector tokens are added.
