@@ -111,3 +111,18 @@ describe('PHOENIX Space loopback-only API',()=>{
     expect(original.data.toString('utf8')).toBe('fake-png-byte-content')
   })
 })
+it('enforces distribution on export and inherited alternatives, including explicit declassification',async()=>{
+  const h=setup().handler!
+  const created=await request(h,'/space-api/items','POST',{kind:'document',space:'personal',title:'Private',mime:'text/plain',content:'synthetic'})
+  const id=(created.json as {item:{id:string}}).item.id
+  const path='/space-api/items/'+id
+  expect((await request(h,path+'/distribution','PUT',{revision:1,restricted:true,confirm:true})).status).toBe(200)
+  expect((await request(h,path+'/export?format=portable')).status).toBe(403)
+  const fork=await request(h,path+'/fork','POST',{revision:1,title:'Variant'})
+  const child=(fork.json as {item:{id:string}}).item.id
+  expect((await request(h,'/space-api/items/'+child+'/export?format=json')).status).toBe(403)
+  expect((await request(h,path+'/distribution','PUT',{revision:1,restricted:false,confirm:false})).status).toBe(400)
+  expect((await request(h,path+'/distribution','PUT',{revision:1,restricted:false,confirm:true})).status).toBe(200)
+  expect((await request(h,path+'/export?format=json')).status).toBe(200)
+  expect((await request(h,'/space-api/items/'+child+'/export?format=json')).status).toBe(403)
+})

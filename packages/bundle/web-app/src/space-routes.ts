@@ -4,7 +4,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-host-webserver'
 import { parseSpaceClipboard, syntheticSpaceDataset } from './space-workflows.ts'
 import { PhoenixSpaceStore } from './space-store.ts'
-import { exportPptx, exportXlsx } from './space-office.ts'
+import { exportPptx, exportXlsx, exportStaticSpaceApp } from './space-office.ts'
 import { mkdirSync, writeFileSync, mkdtempSync } from 'node:fs'
 import { join, extname } from 'node:path'
 import openNative from 'open'
@@ -134,12 +134,19 @@ export function registerSpaceRoutes(ctx:Context):void {
           reply(res,201,{item})
           return
         }
-        const match=/^\/space-api\/items\/([a-f0-9-]{36})(?:\/(file|export|history|restore|open-native|version|fork|merge|dependencies))?$/u.exec(path)
+        const match=/^\/space-api\/items\/([a-f0-9-]{36})(?:\/(file|export|history|restore|open-native|version|fork|merge|dependencies|derive|distribution))?$/u.exec(path)
         if(!match){reply(res,404,{error:'Ruta desconocida'});return}
         const id=match[1]!
         const operation=match[2]||''
         const item=catalog.get(id)
         if(!item){reply(res,404,{error:'Elemento no encontrado'});return}
+        if(operation==='distribution'&&method==='GET'){reply(res,200,catalog.distributionPolicy(id));return}
+        if(operation==='distribution'&&method==='PUT'){
+          const data=await body(req)
+          if(data.confirm!==true)throw Error('Confirmación inválida')
+          reply(res,200,catalog.setDistributionPolicy(id,revision(data.revision),data.restricted));return
+        }
+        if(['export','open-native','file'].includes(operation)&&catalog.distributionPolicy(id).restricted){reply(res,403,{error:'Distribución restringida por el propietario'});return}
         if(operation===''&&method==='GET'){reply(res,200,{item});return}
         if(operation===''&&method==='PUT'){
           const data=await body(req)
@@ -171,6 +178,11 @@ export function registerSpaceRoutes(ctx:Context):void {
           const data=await body(req)
           if(data.confirm!==true){reply(res,400,{error:'Se requiere confirmación explícita'});return}
           reply(res,200,{item:catalog.mergeFork(id,revision(data.revision),revision(data.parentRevision))});return
+        }
+        if(operation==='derive'&&method==='POST'){
+          const data=await body(req)
+          if(data.confirm!==true)throw Error('Confirmación inválida')
+          reply(res,201,{item:catalog.deriveSummary(id,revision(data.revision),data.kind)});return
         }
         if(operation==='dependencies'&&method==='GET'){
           reply(res,200,catalog.dependencies(id));return
@@ -212,6 +224,9 @@ export function registerSpaceRoutes(ctx:Context):void {
             download(res,exportXlsx(item.content),
               'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',item.title+'.xlsx')
             return
+          }
+          if(format==='web-zip'&&item.bytes===0&&['app','game','code'].includes(item.kind)){
+            download(res,exportStaticSpaceApp(item.content),'application/zip',item.title+'.zip');return
           }
           if(format==='portable'&&item.bytes===0){
             // Export the portable source only. No local IDs, credentials, paths or connector tokens are added.

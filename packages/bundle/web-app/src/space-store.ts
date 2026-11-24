@@ -8,6 +8,7 @@ import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync }
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
+import { summarizeSpaceSheet } from './space-workflows.ts'
 
 export type SpaceKind = 'document'|'slides'|'sheet'|'image'|'game'|'app'|'code'|'file'
 export interface SpaceItem {
@@ -63,7 +64,7 @@ export class PhoenixSpaceStore {
     const file=join(this.root,'library.sqlite')
     this.db=new sqlite.DatabaseSync(file,{timeout:5000})
     try{chmodSync(file,0o600)}catch{/*Windows uses ACLs*/}
-    this.db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;')
+    this.db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA wal_autocheckpoint=256;')
     this.db.exec(
       'CREATE TABLE IF NOT EXISTS space_items ('+
       'id TEXT PRIMARY KEY, kind TEXT NOT NULL, space TEXT NOT NULL, title TEXT NOT NULL, '+
@@ -77,7 +78,10 @@ export class PhoenixSpaceStore {
       'CREATE TABLE IF NOT EXISTS space_forks(child_id TEXT PRIMARY KEY,parent_id TEXT NOT NULL,base_revision INTEGER NOT NULL);'+
       'CREATE INDEX IF NOT EXISTS space_fork_parent ON space_forks(parent_id);'+
       'CREATE TABLE IF NOT EXISTS space_dependencies(target_id TEXT NOT NULL,source_id TEXT NOT NULL,source_revision INTEGER NOT NULL,PRIMARY KEY(target_id,source_id));'+
-      'CREATE INDEX IF NOT EXISTS space_dependency_source ON space_dependencies(source_id);'
+      'CREATE INDEX IF NOT EXISTS space_dependency_source ON space_dependencies(source_id);'+
+      'CREATE TABLE IF NOT EXISTS space_derivations(target_id TEXT PRIMARY KEY,source_id TEXT NOT NULL,generated_revision INTEGER NOT NULL);'+
+      'CREATE INDEX IF NOT EXISTS space_derivation_source ON space_derivations(source_id);'+
+      'CREATE TABLE IF NOT EXISTS space_restricted(item_id TEXT PRIMARY KEY);'
     )
   }
   close():void{this.db.close()}
@@ -136,9 +140,82 @@ export class PhoenixSpaceStore {
         .run(title,content,space,deleted?1:0,now,id,expected)
       if(written.changes!==1)throw new Error('CONFLICT')
       this.db.prepare('DELETE FROM space_history WHERE item_id=? AND revision NOT IN (SELECT revision FROM space_history WHERE item_id=? ORDER BY revision DESC LIMIT 30)').run(id,id)
+      // Retain newest revisions first under both count and byte budgets; never prune active content.
+      this.db.prepare('DELETE FROM space_history WHERE item_id=? AND revision IN (SELECT revision FROM (SELECT revision, SUM(length(CAST(content AS BLOB))) OVER (ORDER BY revision DESC) AS retained_bytes FROM space_history WHERE item_id=?) WHERE retained_bytes>8000000)').run(id,id)
+      if(current.kind==='sheet')this.refreshDerived(id)
       if(transaction)this.db.exec('COMMIT')
     }catch(error){if(transaction)this.db.exec('ROLLBACK');throw error}
     return this.get(id)!
+  }
+
+
+
+  /** Explicit distribution policy for this library; not an OS-wide DLP boundary. */
+  distributionPolicy(id:string):{restricted:boolean;own:boolean}{
+    if(!this.get(id))throw Error('Elemento no encontrado')
+    const own=!!this.db.prepare('SELECT item_id FROM space_restricted WHERE item_id=?').get(id)
+    const inherited=this.db.prepare('WITH RECURSIVE ancestry(id) AS (SELECT ? UNION SELECT d.source_id FROM space_dependencies d JOIN ancestry a ON d.target_id=a.id UNION SELECT f.parent_id FROM space_forks f JOIN ancestry a ON f.child_id=a.id) SELECT 1 FROM ancestry a JOIN space_restricted r ON r.item_id=a.id LIMIT 1').get(id)
+    return {own,restricted:own||!!inherited}
+  }
+  setDistributionPolicy(id:string,expected:number,restricted:unknown):{restricted:boolean;own:boolean}{
+    if(typeof restricted!=='boolean')throw Error('Política inválida')
+    this.db.exec('BEGIN IMMEDIATE')
+    try{
+      const item=this.get(id)
+      if(!item||item.deleted)throw Error('Elemento no encontrado')
+      if(item.revision!==expected)throw Error('CONFLICT')
+      if(restricted){
+        // Persist the restriction on already-linked descendants, even if links are later removed.
+        this.db.prepare('WITH RECURSIVE descendants(id) AS (SELECT ? UNION SELECT d.target_id FROM space_dependencies d JOIN descendants a ON d.source_id=a.id UNION SELECT f.child_id FROM space_forks f JOIN descendants a ON f.parent_id=a.id) INSERT OR IGNORE INTO space_restricted(item_id) SELECT id FROM descendants').run(id)
+      }else this.db.prepare('DELETE FROM space_restricted WHERE item_id=?').run(id)
+      const result=this.distributionPolicy(id)
+      this.db.exec('COMMIT')
+      return result
+    }catch(error){this.db.exec('ROLLBACK');throw error}
+  }
+  private inheritRestriction(source:string,target:string):void{
+    if(this.distributionPolicy(source).restricted)this.db.prepare('WITH RECURSIVE descendants(id) AS (SELECT ? UNION SELECT d.target_id FROM space_dependencies d JOIN descendants a ON d.source_id=a.id UNION SELECT f.child_id FROM space_forks f JOIN descendants a ON f.parent_id=a.id) INSERT OR IGNORE INTO space_restricted(item_id) SELECT id FROM descendants').run(target)
+  }
+
+  /** Establish an opt-in live transformation once. A manually changed result is never overwritten. */
+  deriveSummary(id:string,expected:number,kind:unknown):SpaceItem{
+    if(kind!=='document'&&kind!=='slides')throw Error('Tipo inválido')
+    this.db.exec('BEGIN IMMEDIATE')
+    try{
+      const source=this.get(id)
+      if(!source||source.deleted||source.kind!=='sheet'||source.bytes>0)throw Error('Hoja no encontrada')
+      if(source.revision!==expected)throw Error('CONFLICT')
+      const content=summarizeSpaceSheet(source.content,kind)
+      const existing=this.bySource('derived-summary-v1:'+id+':'+kind)
+      if(existing){
+        if(existing.deleted||existing.space!==source.space||existing.kind!==kind||!this.db.prepare('SELECT target_id FROM space_derivations WHERE target_id=? AND source_id=?').get(existing.id,id))throw Error('Resultado no disponible')
+        this.db.exec('COMMIT')
+        return existing
+      }
+      const result=this.create({kind,space:source.space,title:kind==='document'?'Resumen conectado':'Presentación conectada',
+        mime:kind==='document'?'text/markdown':'application/vnd.phoenix.slides+json',content,sourceKey:'derived-summary-v1:'+id+':'+kind})
+      this.db.prepare('INSERT INTO space_dependencies(target_id,source_id,source_revision) VALUES (?,?,?)').run(result.id,id,expected)
+      this.db.prepare('INSERT INTO space_derivations(target_id,source_id,generated_revision) VALUES (?,?,?)').run(result.id,id,result.revision)
+      this.inheritRestriction(id,result.id)
+      this.db.exec('COMMIT')
+      return result
+    }catch(error){this.db.exec('ROLLBACK');throw error}
+  }
+  /** Called within the source transaction. Invalid inputs leave the old output stale. */
+  private refreshDerived(sourceId:string):void{
+    const source=this.get(sourceId)
+    if(!source||source.deleted||source.kind!=='sheet')return
+    const links=this.db.prepare('SELECT target_id,generated_revision FROM space_derivations WHERE source_id=? LIMIT 2').all(sourceId) as Array<{target_id:string;generated_revision:number}>
+    for(const link of links){
+      const target=this.get(link.target_id)
+      if(!target||target.deleted||target.space!==source.space||target.revision!==link.generated_revision||
+        (target.kind!=='document'&&target.kind!=='slides'))continue
+      let content:string
+      try{content=summarizeSpaceSheet(source.content,target.kind)}catch{continue}
+      const updated=this.updateInternal(target.id,target.revision,{content},false)
+      this.db.prepare('UPDATE space_derivations SET generated_revision=? WHERE target_id=?').run(updated.revision,target.id)
+      this.db.prepare('UPDATE space_dependencies SET source_revision=? WHERE target_id=? AND source_id=?').run(source.revision,target.id,source.id)
+    }
   }
 
   /** Return a prior version without changing the active item. */
@@ -156,10 +233,11 @@ export class PhoenixSpaceStore {
       const base=this.get(id)
       if(!base||base.deleted||base.bytes>0)throw new Error('Elemento no encontrado o formato inválido')
       if(base.revision!==expected)throw new Error('CONFLICT')
-      const count=this.db.prepare('SELECT count(*) AS n FROM space_forks f JOIN space_items i ON i.id=f.child_id WHERE f.parent_id=? AND i.deleted=0').get(id) as {n:number}
+      const count=this.db.prepare('SELECT count(*) AS n FROM space_forks WHERE parent_id=?').get(id) as {n:number}
       if(count.n>=8)throw new Error('Límite de alternativas')
       const child=this.create({kind:base.kind,space:base.space,title,mime:base.mime,content:base.content})
       this.db.prepare('INSERT INTO space_forks(child_id,parent_id,base_revision) VALUES (?,?,?)').run(child.id,id,expected)
+      this.inheritRestriction(id,child.id)
       this.db.exec('COMMIT')
       return child
     }catch(error){this.db.exec('ROLLBACK');throw error}
@@ -178,6 +256,7 @@ export class PhoenixSpaceStore {
       if(!parent||parent.deleted||parent.space!==child.space||parent.kind!==child.kind||parent.bytes>0)throw new Error('Origen inválido')
       if(child.revision!==expectedChild||parent.revision!==expectedParent||origin.baseRevision!==expectedParent)throw new Error('CONFLICT')
       // Preserve the original title and identity; only the explicit alternate content is adopted.
+      if(this.distributionPolicy(child.id).restricted&&!this.distributionPolicy(parent.id).restricted)throw Error('Política de distribución incompatible')
       const updated=this.updateInternal(parent.id,expectedParent,{content:child.content},false)
       this.db.prepare('UPDATE space_forks SET base_revision=? WHERE child_id=?').run(updated.revision,id)
       this.db.exec('COMMIT')
@@ -192,6 +271,7 @@ export class PhoenixSpaceStore {
       const target=this.get(id)
       if(!target||target.deleted)throw new Error('Elemento no encontrado')
       if(target.revision!==expected)throw new Error('CONFLICT')
+      if(this.db.prepare('SELECT target_id FROM space_derivations WHERE target_id=?').get(id))throw Error('Relación automática: edición manual de dependencias no permitida')
       const seen=new Set<string>()
       for(const entry of raw){
         if(!entry||typeof entry!=='object'||typeof entry.id!=='string'||!Number.isSafeInteger(entry.revision))throw new Error('Dependencia inválida')
@@ -203,7 +283,7 @@ export class PhoenixSpaceStore {
         seen.add(source.id)
       }
       this.db.prepare('DELETE FROM space_dependencies WHERE target_id=?').run(id)
-      for(const entry of raw)this.db.prepare('INSERT INTO space_dependencies(target_id,source_id,source_revision) VALUES (?,?,?)').run(id,entry.id,entry.revision)
+      for(const entry of raw){this.db.prepare('INSERT INTO space_dependencies(target_id,source_id,source_revision) VALUES (?,?,?)').run(id,entry.id,entry.revision);this.inheritRestriction(entry.id,id)}
       this.db.exec('COMMIT')
     }catch(error){this.db.exec('ROLLBACK');throw error}
   }
