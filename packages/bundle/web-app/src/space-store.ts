@@ -64,7 +64,7 @@ export class PhoenixSpaceStore {
     const file=join(this.root,'library.sqlite')
     this.db=new sqlite.DatabaseSync(file,{timeout:5000})
     try{chmodSync(file,0o600)}catch{/*Windows uses ACLs*/}
-    this.db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;')
+    this.db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA wal_autocheckpoint=256;')
     this.db.exec(
       'CREATE TABLE IF NOT EXISTS space_items ('+
       'id TEXT PRIMARY KEY, kind TEXT NOT NULL, space TEXT NOT NULL, title TEXT NOT NULL, '+
@@ -139,6 +139,8 @@ export class PhoenixSpaceStore {
         .run(title,content,space,deleted?1:0,now,id,expected)
       if(written.changes!==1)throw new Error('CONFLICT')
       this.db.prepare('DELETE FROM space_history WHERE item_id=? AND revision NOT IN (SELECT revision FROM space_history WHERE item_id=? ORDER BY revision DESC LIMIT 30)').run(id,id)
+      // Retain newest revisions first under both count and byte budgets; never prune active content.
+      this.db.prepare('DELETE FROM space_history WHERE item_id=? AND revision IN (SELECT revision FROM (SELECT revision, SUM(length(CAST(content AS BLOB))) OVER (ORDER BY revision DESC) AS retained_bytes FROM space_history WHERE item_id=?) WHERE retained_bytes>8000000)').run(id,id)
       if(current.kind==='sheet')this.refreshDerived(id)
       if(transaction)this.db.exec('COMMIT')
     }catch(error){if(transaction)this.db.exec('ROLLBACK');throw error}
@@ -201,7 +203,7 @@ export class PhoenixSpaceStore {
       const base=this.get(id)
       if(!base||base.deleted||base.bytes>0)throw new Error('Elemento no encontrado o formato inválido')
       if(base.revision!==expected)throw new Error('CONFLICT')
-      const count=this.db.prepare('SELECT count(*) AS n FROM space_forks f JOIN space_items i ON i.id=f.child_id WHERE f.parent_id=? AND i.deleted=0').get(id) as {n:number}
+      const count=this.db.prepare('SELECT count(*) AS n FROM space_forks WHERE parent_id=?').get(id) as {n:number}
       if(count.n>=8)throw new Error('Límite de alternativas')
       const child=this.create({kind:base.kind,space:base.space,title,mime:base.mime,content:base.content})
       this.db.prepare('INSERT INTO space_forks(child_id,parent_id,base_revision) VALUES (?,?,?)').run(child.id,id,expected)
