@@ -169,7 +169,7 @@ export class HealthiaClinicalApi {
       response=await (this.requester ?? fetch)('/health/api/'+path, {
         method,headers,credentials:'same-origin',cache:'no-store',
         ...(body===undefined?{}:{body:JSON.stringify(body)}),
-        signal:AbortSignal.timeout((path.startsWith('clinical-field-ai/')||path.startsWith('clinical-context-ai/'))?65000:path==='setup'||path==='login'?30000:10000),
+        signal:AbortSignal.timeout((path.startsWith('clinical-field-ai/')||path.startsWith('clinical-context-ai/'))?65000:path==='setup'||path==='login'||path==='icd11-verify'?30000:10000),
       })
     } catch (cause) {
       const timedOut=cause instanceof Error && /timeout|aborted/i.test(cause.name+' '+cause.message)
