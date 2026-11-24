@@ -8,6 +8,7 @@
  * Never reads .env, auth/credentials, health records, telemetry or config.
  * Never returns script command bodies, API keys or file contents.
  */
+import { createHash } from 'node:crypto'
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, resolve, sep } from 'node:path'
@@ -73,6 +74,67 @@ async function collect(root, subdir, depth, paths) {
   }
 }
 
+
+/** Build a deterministic, declared-only dependency model, not a causal proof.
+ * Unresolved injections are retained instead of guessing which service owns them.
+ */
+function cognitiveGenome(packages, gateNames) {
+  const byName = new Map()
+  for (const item of packages) {
+    const entries = byName.get(item.id) ?? []
+    entries.push(item.source)
+    byName.set(item.id, entries)
+  }
+  const edges = []
+  const unresolved = []
+  const reverse = new Map(packages.map(item => [item.source, new Set()]))
+  for (const item of packages) {
+    for (const surface of ['client', 'server']) {
+      for (const dependency of new Set(item.dependencies[surface])) {
+        const targets = byName.get(dependency)
+        if (targets?.length !== 1) {
+          unresolved.push({ source: item.source, surface, dependency,
+            reason: targets ? 'ambiguous-package' : 'service-owner-unverified' })
+          continue
+        }
+        const target = targets[0]
+        edges.push({ source: item.source, target, surface })
+        reverse.get(target).add(item.source)
+      }
+    }
+  }
+  const impact = packages.map(item => {
+    const visited = new Set([item.source])
+    const queue = [item.source]
+    for (let i = 0; i < queue.length; i++) {
+      for (const dependent of reverse.get(queue[i]) ?? []) {
+        if (!visited.has(dependent)) {
+          visited.add(dependent)
+          queue.push(dependent)
+        }
+      }
+    }
+    return { source: item.source, potentialDependents: queue.slice(1).sort() }
+  })
+  // Hash only normalized, declared metadata; timestamps, machine identifiers,
+  // credentials and contents are deliberately excluded.
+  const canonical = packages.map(item => ({
+    id: item.id, source: item.source, surfaces: [...item.surfaces].sort(),
+    client: [...new Set(item.dependencies.client)].sort(),
+    server: [...new Set(item.dependencies.server)].sort(),
+  }))
+  const fingerprint = createHash('sha256')
+    .update(JSON.stringify({ canonical, gates: [...gateNames].sort() })).digest('hex')
+  return {
+    schema: 'phoenix.evolution.cognitive-genome.v1',
+    fingerprint, scope: 'declared-injections-only',
+    edges, unresolved, impact,
+    coverage: { packages: packages.length, resolved: edges.length, unresolved: unresolved.length },
+    truncatedPossible: packages.length >= MAX_PACKAGES,
+    causalProof: false, runtimeHealthChecked: false, mayApply: false,
+  }
+}
+
 /** Pure caller-visible metadata: no probe of live services or secrets. */
 export async function inspectAdaptiveSource(root, now = new Date()) {
   const sourceRoot = resolve(root)
@@ -97,6 +159,7 @@ export async function inspectAdaptiveSource(root, now = new Date()) {
     packageCount: result.length,
     packages: result,
     availableGateNames: gateNames,
+    cognitiveGenome: cognitiveGenome(result, gateNames),
     recoveryPolicy: 'isolated-branch -> synthetic-checks -> review -> verified-activation -> revert',
   }
 }
