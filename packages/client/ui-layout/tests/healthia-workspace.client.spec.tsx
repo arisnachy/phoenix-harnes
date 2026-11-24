@@ -159,3 +159,28 @@ describe('Protected conversational admission',()=>{
     expect(parseClinicalIntake('fecha de nacimiento: 1984-03-12')).toEqual({dateOfBirth:'1984-03-12'})
   })
 })
+
+describe('Compact clinical access',()=>{
+  it('does not put credentials across the consultation workspace until explicitly requested',async()=>{
+    vi.stubGlobal('fetch',vi.fn(async(input:string)=>{
+      const route=String(input).split('/health/api/')[1]
+      const reply=(value:unknown,status=200)=>new Response(JSON.stringify(value),{status,headers:{'content-type':'application/json'}})
+      if(route==='session')return reply({error:'locked'},401)
+      if(route==='status')return reply({initialized:true,enabled:true})
+      if(route==='branding')return reply({logoDataUrl:null})
+      throw Error('Protected resource requested before authorization')
+    }))
+    render(<ScreenHarness/>)
+    fireEvent.click(screen.getByRole('button',{name:/Nueva consulta/}))
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Desbloquear clínica'})).toBeTruthy())
+    expect(screen.queryByLabelText('Contraseña')).toBeNull()
+    expect(screen.queryByRole('textbox',{name:'Usuario profesional'})).toBeNull()
+    fireEvent.click(screen.getByRole('button',{name:'Desbloquear clínica'}))
+    expect(screen.getByLabelText('Contraseña')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Contraseña'),{target:{value:'synthetic-password'}})
+    fireEvent.click(screen.getByRole('button',{name:'Cerrar',exact:true}))
+    expect(screen.queryByLabelText('Contraseña')).toBeNull()
+    fireEvent.click(screen.getByRole('button',{name:'Desbloquear clínica'}))
+    expect((screen.getByLabelText('Contraseña') as HTMLInputElement).value).toBe('')
+  })
+})
