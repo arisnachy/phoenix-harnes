@@ -21,6 +21,7 @@ import {
   presentStopCall, presentUndefineCall,
 } from './present.ts'
 import { CORDIS_SYSTEM_PROMPT } from './prompt.ts'
+import { registerSelfToolLibrary } from './self-tool-library.ts'
 import { hostInspectProviders } from './providers.ts'
 
 export const name = 'tool-cordis'
@@ -90,6 +91,7 @@ function requireAgent(exec: ToolExecution): Agent {
 /** Register the Cordis tools and explicit `@pluginId` context injection. */
 export function apply(ctx: Context): void {
   ctx.systemPrompt.section({ name: 'tool:cordis', order: 115, text: CORDIS_SYSTEM_PROMPT })
+  registerSelfToolLibrary(ctx)
   ctx.effect(() => shareHostInspectProviders(ctx), 'tool-cordis: shared Host inspect providers')
 
   ctx.tools.register(defineTool({
