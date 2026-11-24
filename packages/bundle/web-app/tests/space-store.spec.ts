@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PhoenixSpaceStore, phoenixSpaceRoot, validateSpacePayload } from '../src/space-store.ts'
 import { parseSpaceClipboard, syntheticSpaceDataset } from '../src/space-workflows.ts'
-import { exportPptx, exportXlsx, zipOffice } from '../src/space-office.ts'
+import { exportPptx, exportXlsx, zipOffice, exportStaticSpaceApp } from '../src/space-office.ts'
 
 const roots:string[]=[]
 const stores:PhoenixSpaceStore[]=[]
@@ -180,4 +180,51 @@ describe('explicit clipboard and fictional fixtures',()=>{
     expect(fixture.rows.every(r=>r[5]==='FICTICIO'&&Number(r[4])===Math.max(0,Number(r[2])-Number(r[3])))).toBe(true)
     expect(()=>syntheticSpaceDataset(42,1001)).toThrow()
   })
+})
+
+describe('reactive derived library artifacts',()=>{
+  const data=(n:string)=>JSON.stringify({columns:['private label'],rows:[[n],['3'],['=SUM(A1:A2)']]})
+  it('regenerates connected reports and slides transactionally and idempotently',()=>{
+    const db=store()
+    const source=db.create({kind:'sheet',space:'personal',title:'Source',mime:'application/vnd.phoenix.sheet+json',content:data('1')})
+    const report=db.deriveSummary(source.id,1,'document'),slides=db.deriveSummary(source.id,1,'slides')
+    expect(report.content).toContain('media=2')
+    expect(report.content).not.toContain('private label')
+    expect(db.deriveSummary(source.id,1,'document').id).toBe(report.id)
+    db.update(source.id,1,{content:data('5')})
+    expect(db.get(report.id)?.content).toContain('media=4')
+    expect(db.get(slides.id)?.content).toContain('media=4')
+    expect(db.dependencies(report.id).stale).toBe(false)
+    expect(db.history(report.id)).toHaveLength(1)
+    expect(()=>db.setDependencies(report.id,2,[])).toThrow(/automática/)
+    db.update(report.id,2,{content:'Manual edit'})
+    db.update(source.id,2,{content:data('9')})
+    expect(db.get(report.id)?.content).toBe('Manual edit')
+    expect(db.dependencies(report.id).stale).toBe(true)
+    expect(db.get(slides.id)?.content).toContain('media=6')
+    db.update(source.id,3,{content:'invalid'})
+    expect(db.dependencies(slides.id).stale).toBe(true)
+  })
+})
+
+it('exports real web ZIP entries without installing dependencies and rejects unsafe paths',()=>{
+  const bundle={entry:'index.html',files:{'index.html':'<!doctype html><html><script src="main.js"></script></html>','main.js':'document.body.textContent="Hello"'}}
+  const files=parts(exportStaticSpaceApp(JSON.stringify(bundle)))
+  expect(files['app/index.html']).toBe(bundle.files['index.html'])
+  expect(files['app/main.js']).toBe(bundle.files['main.js'])
+  expect(parts(exportStaticSpaceApp('<html>Standalone</html>'))['app/index.html']).toContain('Standalone')
+  expect(()=>exportStaticSpaceApp(JSON.stringify({...bundle,files:{...bundle.files,'../escape.js':'x'}}))).toThrow()
+  expect(()=>exportStaticSpaceApp(JSON.stringify({...bundle,files:{...bundle.files,'CON.js':'x'}}))).toThrow()
+  expect(()=>exportStaticSpaceApp(JSON.stringify({...bundle,files:{...bundle.files,'secret.js':'phoenix-control://v1?token=secret'}}))).toThrow()
+})
+
+it('bounds large revision history without deleting active content or bypassing fork quota through trash',()=>{
+  const db=store(), item=db.create(payload('x'.repeat(700000)))
+  for(let i=1;i<=14;i++)db.update(item.id,i,{content:String(i).padEnd(700000,'x')})
+  expect(db.history(item.id).length).toBeLessThanOrEqual(11)
+  expect(db.get(item.id)?.revision).toBe(15)
+  expect(db.version(item.id,14)?.content.startsWith('13')).toBe(true)
+  const forks=Array.from({length:8},(_,i)=>db.fork(item.id,15,'Variant '+i))
+  db.update(forks[0]!.id,1,{deleted:true})
+  expect(()=>db.fork(item.id,15,'Overflow')).toThrow(/Límite/)
 })

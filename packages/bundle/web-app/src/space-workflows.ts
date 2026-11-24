@@ -36,3 +36,27 @@ export function syntheticSpaceDataset(seed:unknown,count:unknown):{columns:strin
   })
   return {columns:['registro','turno','demanda_simulada','capacidad_simulada','brecha_simulada','origen'],rows}
 }
+
+/** Deterministic, bounded aggregate-only report; does not interpret formulas. */
+export function summarizeSpaceSheet(content:string,kind:'document'|'slides'):string{
+  const x=JSON.parse(content) as {columns?:unknown;rows?:unknown}
+  if(!Array.isArray(x.columns)||x.columns.length<1||x.columns.length>40||!x.columns.every(c=>typeof c==='string')
+    ||!Array.isArray(x.rows)||x.rows.length>1000||!x.rows.every(row=>Array.isArray(row)&&row.length===(x.columns as unknown[]).length&&row.every(c=>typeof c==='string')))throw Error('Hoja inválida')
+  const columns=x.columns as string[],rows=x.rows as string[][]
+  const numberOf=(s:string):number|null=>{
+    const text=s.trim()
+    if(!/^[+-]?\d+(?:\.\d+)?$/u.test(text))return null
+    const v=Number(text)
+    return Number.isFinite(v)&&Math.abs(v)<=1e12?v:null
+  }
+  const stats=columns.map((_column,i)=>{
+    const values=rows.map(row=>numberOf(row[i]!)).filter((v):v is number=>v!==null)
+    // Omit names and cell values: only column indices and aggregates.
+    return {column:i+1,n:values.length,mean:values.length?values.reduce((sum,v)=>sum+v,0)/values.length:null}
+  })
+  const lines=stats.map(s=>'Columna '+s.column+': n='+s.n+', media='+ (s.mean===null?'no disponible':String(Math.round(s.mean*10000)/10000)))
+  const heading='Resumen reproducible · '+rows.length+' filas · '+columns.length+' columnas'
+  const caveat='Solo números literales finitos; las fórmulas y valores no numéricos no se evalúan. Sin inferencia clínica ni causal.'
+  return kind==='document'?'# '+heading+'\n\n'+lines.map(s=>'- '+s).join('\n')+'\n\n'+caveat
+    :JSON.stringify({slides:[{title:heading,body:caveat},...Array.from({length:Math.ceil(lines.length/6)},(_,i)=>({title:'Estadísticas · '+(i+1),body:lines.slice(i*6,i*6+6).join('\n')}))]})
+}
