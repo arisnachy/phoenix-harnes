@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useState } from 'react'
+import { parseClinicalIntake } from '../src/client/HealthiaEditorSupport.ts'
 import { HealthiaWorkspace, HEALTHIA_NAV, type HealthiaRole } from '../src/client/HealthiaWorkspace.tsx'
 
 afterEach(() => {cleanup();vi.unstubAllGlobals()})
@@ -27,6 +28,7 @@ describe('PHOENIX embedded Healthia', () => {
     expect(screen.queryByText('Intercambios')).toBeNull()
     expect(screen.queryByRole('link', { name: 'Servicio clínico protegido' })).toBeNull()
     expect(screen.queryByText('Información y acceso técnico')).toBeNull()
+    fireEvent.click(screen.getByText('Accesos manuales'))
     fireEvent.click(screen.getByRole('button', { name: 'Herramientas' }))
     fireEvent.click(screen.getByText('Información y acceso técnico'))
     expect(screen.getByRole('link', { name: 'Servicio clínico protegido' }).getAttribute('href')).toBe('/health')
@@ -73,6 +75,8 @@ describe('PHOENIX embedded Healthia', () => {
     }))
     render(<ScreenHarness/>)
     expect(screen.getByRole('heading',{name:'Tu jornada clínica, en un solo espacio'})).toBeTruthy()
+    expect(screen.getByText('Accesos manuales').closest('details')?.open).toBe(false)
+    fireEvent.click(screen.getByText('Accesos manuales'))
     const nav=screen.getByRole('navigation',{name:'Secciones del espacio clínico'})
     expect(within(nav).getByRole('button',{name:'Pacientes'})).toBeTruthy()
     expect(within(nav).getByRole('button',{name:'Consultas'})).toBeTruthy()
@@ -80,6 +84,8 @@ describe('PHOENIX embedded Healthia', () => {
     expect(screen.getByText('Así trabajará tu clínica')).toBeTruthy()
     expect(screen.queryByText('Pacientes autorizados')).toBeNull()
     expect(screen.queryByText('Reintentar conexión')).toBeNull()
+    expect(screen.queryByRole('heading',{name:'Inicio de sesión profesional'})).toBeNull()
+    fireEvent.click(screen.getByRole('button',{name:'Abrir acceso protegido'}))
     await waitFor(()=>expect(screen.getByRole('heading',{name:'Inicio de sesión profesional'})).toBeTruthy())
   })
 
@@ -109,6 +115,7 @@ describe('PHOENIX embedded Healthia', () => {
       throw Error('Unexpected clinical endpoint '+route)
     }))
     render(<ScreenHarness/>)
+    fireEvent.click(screen.getByRole('button',{name:'Abrir acceso protegido'}))
     await waitFor(()=>expect(screen.getByRole('button',{name:'Acceder'})).toBeTruthy())
     expect(requested).not.toContain('patients')
     fireEvent.change(screen.getByRole('textbox',{name:'Usuario profesional'}),{target:{value:'doctor1'}})
@@ -122,6 +129,7 @@ describe('PHOENIX embedded Healthia', () => {
 
   it('moves the legacy editable form structure into Tools, not the main menu', () => {
     render(<ScreenHarness />)
+    fireEvent.click(screen.getByText('Accesos manuales'))
     fireEvent.click(screen.getByRole('button', { name: 'Herramientas' }))
     expect(screen.queryByRole('textbox', { name: 'Etiqueta de nuevo campo' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Editar estructura de formularios' }))
@@ -131,5 +139,23 @@ describe('PHOENIX embedded Healthia', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Agregar campo' }))
     expect(screen.getByText('Campo demostrativo')).toBeTruthy()
     expect(screen.getByText(/borradores sin publicar/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button',{name:'Minimizar espacio clínico'}))
+    expect(screen.queryByRole('button',{name:'Agregar campo'})).toBeNull()
+    fireEvent.click(screen.getByRole('button',{name:'Restaurar espacio clínico'}))
+    expect(screen.getByText('Campo demostrativo')).toBeTruthy()
+    expect(screen.getByRole('button',{name:'Agregar campo'})).toBeTruthy()
+  })
+})
+
+describe('Protected conversational admission',()=>{
+  it('extracts explicit values without deriving a birth date from age',()=>{
+    expect(parseClinicalIntake('Crea paciente Ana Pérez, edad: 42 años, sexo: femenino, correo: ana@example.com, lugar de nacimiento: Santiago')).toEqual({
+      name:'Ana Pérez',age:'42',sexAtBirth:'female',email:'ana@example.com',birthplace:'Santiago',
+    })
+  })
+  it('rejects invalid dates, contradictory fields and future birth dates',()=>{
+    expect(parseClinicalIntake('nombre: Ana, nombre: María, fecha de nacimiento: 2020-02-30, sexo: masculino, sexo: femenino')).toEqual({})
+    expect(parseClinicalIntake('fecha de nacimiento: 2999-01-01')).toEqual({})
+    expect(parseClinicalIntake('fecha de nacimiento: 1984-03-12')).toEqual({dateOfBirth:'1984-03-12'})
   })
 })

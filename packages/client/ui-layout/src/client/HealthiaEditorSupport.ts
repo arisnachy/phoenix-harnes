@@ -10,7 +10,7 @@ export const CLINICAL_EDITOR_STEPS=[
 export type ClinicalEditorStep=typeof CLINICAL_EDITOR_STEPS[number]['id']
 export const VITAL_IDS=['sys','dia','hr','rr','temp','sat','weight','height'] as const
 type VitalId=typeof VITAL_IDS[number]
-export const DIAGNOSIS_IDS=['assessment','differential','diagnosisStatus','secondaryDiagnosis','codeSystem','icd10'] as const
+export const DIAGNOSIS_IDS=['assessment','differential','diagnosisStatus','secondaryDiagnosis','codeSystem','icd10','icd11','icd11Evidence'] as const
 export function clinicalEditorStep(value:unknown):value is ClinicalEditorStep {
   return CLINICAL_EDITOR_STEPS.some(x=>x.id===value)
 }
@@ -93,6 +93,10 @@ export type ClinicalEditorViewState={
   hasEncounter:boolean
   canEdit:boolean
   modelEnabled:boolean
+  activeFieldId?:string
+  documentedSections?:readonly ClinicalEditorStep[]
+  nextSection?:ClinicalEditorStep
+  busy?:boolean
 }
 
 /** A bounded action catalog, never clinical content or authority to sign. */
@@ -110,10 +114,50 @@ export function clinicalEditorAction(value:unknown):value is ClinicalEditorActio
 }
 export type ClinicalEditorRequest={step:ClinicalEditorStep;sequence:number;action?:ClinicalEditorAction;binding?:string}
 export function canApplyClinicalAction(view:ClinicalEditorViewState|null,binding:unknown):boolean {
-  return !!view?.hasEncounter&&view.canEdit&&typeof binding==='string'&&binding===view.binding
+  return !!view?.hasEncounter&&view.canEdit&&!view.busy&&typeof binding==='string'&&binding===view.binding
 }
 
 export function publicClinicalEditorState(view:ClinicalEditorViewState|null) {
   return view===null?null:{step:view.step,visibleFieldIds:view.visibleFieldIds,filledFields:view.filledFields,
-    dirty:view.dirty,hasEncounter:view.hasEncounter,canEdit:view.canEdit,modelEnabled:view.modelEnabled}
+    dirty:view.dirty,hasEncounter:view.hasEncounter,canEdit:view.canEdit,modelEnabled:view.modelEnabled,
+    ...(view.activeFieldId&&view.visibleFieldIds.includes(view.activeFieldId)?{activeFieldId:view.activeFieldId}:{}),
+    ...(view.documentedSections?{documentedSections:view.documentedSections.filter(clinicalEditorStep)}:{}),
+    ...(view.nextSection&&clinicalEditorStep(view.nextSection)?{nextSection:view.nextSection}:{}),...(view.busy?{busy:true}:{})}
+}
+
+/** Extract only explicitly supplied intake fields. Never manufacture a DOB from age. */
+export type ClinicalIntakePatch = {name?:string;dateOfBirth?:string;sexAtBirth?:'female'|'male'|'intersex'|'unknown';email?:string;phone?:string;birthplace?:string;age?:string}
+export function parseClinicalIntake(text:string):ClinicalIntakePatch {
+  const out:ClinicalIntakePatch={}
+  if(text.length>4000)return out
+  const seen=new Set<string>(),invalid=new Set<string>()
+  const add=<K extends keyof ClinicalIntakePatch>(key:K,value:ClinicalIntakePatch[K])=>{
+    if(invalid.has(key))return
+    if(seen.has(key)&&out[key]!==value){delete out[key];invalid.add(key);return}
+    seen.add(key);out[key]=value
+  }
+  const labels=/(?:^|[,;\n]\s*)\s*(nombre(?: completo)?|fecha de nacimiento|nacimiento|lugar de nacimiento|nacid[oa] en|edad|sexo(?: al nacer)?|correo(?: electr[oó]nico)?|email|tel[eé]fono)\s*:?\s*([^,;\n]+)/giu
+  for(const match of text.matchAll(labels)){
+    const label=match[1]!.toLocaleLowerCase('es'),v=match[2]!.trim()
+    if(!v)continue
+    if(label.startsWith('nombre')&&v.length<=160)add('name',v)
+    else if(label==='edad'&&/^\d{1,3}(?:\s*años)?$/iu.test(v)&&Number.parseInt(v,10)<=125)add('age',String(Number.parseInt(v,10)))
+    else if(label==='fecha de nacimiento'||label==='nacimiento'){
+      if(/^\d{4}-\d{2}-\d{2}$/u.test(v)){
+        const date=new Date(v+'T00:00:00Z')
+        if(Number.isFinite(date.getTime())&&date.toISOString().slice(0,10)===v&&date.getTime()<=Date.now())add('dateOfBirth',v)
+      }
+    }else if(label.startsWith('sexo')){
+      const sexes:Record<string,NonNullable<ClinicalIntakePatch['sexAtBirth']>>={femenino:'female',masculino:'male',intersexual:'intersex',desconocido:'unknown'}
+      const sex=sexes[v.toLocaleLowerCase('es')]
+      if(sex)add('sexAtBirth',sex)
+    }else if((label.startsWith('correo')||label==='email')&&v.length<=254&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(v))add('email',v)
+    else if(label.startsWith('tel')&&/^[+\d ()-]{7,35}$/u.test(v))add('phone',v)
+    else if((label==='lugar de nacimiento'||label.startsWith('nacid'))&&v.length<=250)add('birthplace',v)
+  }
+  if(!out.name&&!invalid.has('name')){
+    const first=/^\s*(?:crea(?:r)?|registra(?:r)?)\s+(?:(?:un|una|al?|la)\s+)?paciente\s+(?:llamad[oa]\s+)?([^,;\n]+)/iu.exec(text)?.[1]?.trim()
+    if(first&&first.length<=160&&!/\d|@/u.test(first)&&!/^(?:nombre|edad|sexo)\b/iu.test(first))out.name=first
+  }
+  return out
 }

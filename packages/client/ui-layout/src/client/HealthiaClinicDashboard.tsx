@@ -39,7 +39,8 @@ function ClinicalIcon({kind}:{kind:Page}) {
   </svg>
 }
 
-export function HealthiaClinicDashboard({onNavigate,onPatientChange,accessStatus,onSessionReady}:{
+export function HealthiaClinicDashboard({onNavigate,onPatientChange,accessStatus,onSessionReady,onStart}:{
+  onStart?:(kind:'patient'|'encounter')=>void
   onNavigate:(section:string)=>void
   onPatientChange:(patientId:string)=>void
   accessStatus:'authenticated'|'locked'|'unavailable'
@@ -51,6 +52,7 @@ export function HealthiaClinicDashboard({onNavigate,onPatientChange,accessStatus
   const [search,setSearch]=useState('')
   const [error,setError]=useState('')
   const [loading,setLoading]=useState(false)
+  const [showAccess,setShowAccess]=useState(false)
 
   useEffect(()=>{
     if(accessStatus!=='authenticated'){
@@ -78,10 +80,15 @@ export function HealthiaClinicDashboard({onNavigate,onPatientChange,accessStatus
 
   const isUnlocked=accessStatus==='authenticated'
   const canDirectory=session!==null&&['admin','clinician','psychologist','nurse','reception'].includes(session.actor.role)
-  const today=clinicDay(new Date().toISOString())
+  const now=new Date()
+  const today=clinicDay(now.toISOString())
+  const localDate=now.toLocaleDateString('es-DO',{weekday:'long',day:'numeric',month:'long',year:'numeric',timeZone:'America/Santo_Domingo'})
+  const hour=Number(new Intl.DateTimeFormat('en-GB',{hour:'2-digit',hourCycle:'h23',timeZone:'America/Santo_Domingo'}).format(now))
+  const greeting=hour<12?'Buenos días':hour<19?'Buenas tardes':'Buenas noches'
   const todayVisits=visits.filter(item=>typeof item.startsAt==='string'
     &&Number.isFinite(Date.parse(item.startsAt))
     &&clinicDay(item.startsAt)===today&&item.status!=='cancelled')
+    .sort((a,b)=>Date.parse(String(a.startsAt))-Date.parse(String(b.startsAt)))
   const pending=todayVisits.filter(item=>item.status==='scheduled')
   const term=search.trim().toLocaleLowerCase('es')
   const matches=term?patients.filter(p=>[p.name,p.documentNumber,p.phone,p.email].some(v=>
@@ -91,16 +98,16 @@ export function HealthiaClinicDashboard({onNavigate,onPatientChange,accessStatus
   return <section className={css.root} aria-label="Inicio de Healthia">
     <header className={css.hero}>
       <div className={css.heroCopy}>
-        <span className={css.eyebrow}>CENTRO DE TRABAJO CLÍNICO</span>
+        <span className={css.eyebrow}>{localDate}</span>
+        <span className={css.greeting}>{greeting}, doctor.</span>
         <h3>Tu jornada clínica, en un solo espacio</h3>
-        <p>Gestiona pacientes, consultas, citas y documentos sin abandonar PHOENIX.
-          El expediente permanece en el servicio clínico protegido.</p>
+        <p>Tu jornada, tus pacientes y tu agenda. Usa el chat de PHOENIX para orientar el trabajo o abre una acción clínica directamente.</p>
       </div>
       <div className={css.heroActions}>
         <button type="button" className={css.primary}
-          onClick={()=>onNavigate('encounters')}>+ Nueva consulta</button>
+          onClick={()=>onStart?onStart('encounter'):onNavigate('encounters')}>+ Nueva consulta</button>
         <button type="button" className={css.secondary}
-          onClick={()=>onNavigate('patients')}>Registrar paciente</button>
+          onClick={()=>onStart?onStart('patient'):onNavigate('patients')}>Registrar paciente</button>
       </div>
     </header>
     <nav className={css.destinations} aria-label="Accesos clínicos rápidos">
@@ -138,7 +145,8 @@ export function HealthiaClinicDashboard({onNavigate,onPatientChange,accessStatus
             ?'Utiliza la cuenta de tu institución. Al acceder aparecerán los pacientes y citas reales.'
             :'El servicio local no respondió. Puedes explorar el entorno y comprobar la conexión aquí.'}
         </p>
-        <HealthiaClinicOperations area="patients" accessOnly onSessionReady={onSessionReady}/>
+        <button type="button" className={css.secondary} aria-expanded={showAccess} onClick={()=>setShowAccess(value=>!value)}>{showAccess?'Ocultar acceso protegido':'Abrir acceso protegido'}</button>
+        {showAccess&&<HealthiaClinicOperations area="patients" accessOnly onSessionReady={onSessionReady}/>}
       </aside>
     </div>}
 
@@ -176,7 +184,7 @@ export function HealthiaClinicDashboard({onNavigate,onPatientChange,accessStatus
           <div className={css.people}>
             {matches.map(patient=><button className={css.person} key={patient.id} type="button"
               onClick={()=>openPatient(patient.id)}>
-              <span className={css.avatar} aria-hidden="true">{patient.name.slice(0,1).toLocaleUpperCase('es')}</span>
+              <span className={css.avatar} aria-hidden="true">{patient.name.trim().split(/\s+/u).slice(0,2).map(word=>word[0]??'').join('').toLocaleUpperCase('es')}</span>
               <span><strong>{patient.name}</strong><small>Ver expediente longitudinal</small></span>
               <span aria-hidden="true">›</span>
             </button>)}

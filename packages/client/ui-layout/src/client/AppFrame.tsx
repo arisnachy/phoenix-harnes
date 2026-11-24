@@ -272,7 +272,7 @@ export function AppFrame({
           if(action){
             const active=adaptiveApp==='healthia'&&healthiaRole==='doctor'&&healthiaSection==='encounters'
             const needsModel=action==='clinical-context-review'||action==='clinical-refine-chief'||action==='clinical-refine-hea'
-            binding=active&&clinicalEditorView?.hasEncounter&&clinicalEditorView.canEdit&&(!needsModel||clinicalEditorView.modelEnabled)?clinicalEditorView.binding:undefined
+            binding=active&&clinicalEditorView?.hasEncounter&&clinicalEditorView.canEdit&&!clinicalEditorView.busy&&(!needsModel||clinicalEditorView.modelEnabled)?clinicalEditorView.binding:undefined
             ok=gate.valid&&binding!==undefined&&(request.phase==='preflight'||canApplyClinicalAction(clinicalEditorView,request.binding))
             reason=ok?'Acción sobre el borrador activo; no firma ni envía datos al chat.':'No hay consulta editable o el contexto cambió. Comprueba de nuevo.'
           }

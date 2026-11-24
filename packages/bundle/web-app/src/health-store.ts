@@ -871,6 +871,13 @@ export class HealthClinicStore {
   }
   /** A clinician's work-in-progress stays encrypted and outside the general chat. */
   private draftKey(actor:Actor,scope:string):string {
+    if(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(scope)){
+      if(!['clinician','psychologist'].includes(actor.role))fail('Acceso al borrador de consulta no autorizado')
+      const encounter=this.find(actor,'encounters',scope).data
+      if(encounter.practitioner!==actor.username||encounter.status==='signed')
+        fail('Acceso al borrador de consulta no autorizado')
+      return createHash('sha256').update(actor.org+'\0'+actor.username+'\0ask:'+scope).digest('hex')
+    }
     if(!/^(workspace|patients|encounters|appointments|orders|prescriptions|inventory|invoices|followups|assignments|staff|backups|audit)$/u.test(scope))
       fail('Sección de borrador no permitida')
     return createHash('sha256').update(actor.org+'\0'+actor.username+'\0'+scope).digest('hex')
@@ -885,6 +892,15 @@ export class HealthClinicStore {
   }
   saveClinicalDraft(actor:Actor,scope: string,input:unknown):{savedAt:string} {
     const id=this.draftKey(actor,scope),body=obj(input),incoming=obj(body.values)
+    if(/^[0-9a-f-]{36}$/u.test(scope)){
+      const encounter=this.find(actor,'encounters',scope)
+      if(incoming.encounterVersion!==String(encounter.row.version))
+        fail('Conflicto de edición: recarga la consulta')
+      if(Object.keys(incoming).some(key=>!['encounterVersion','answerKey','answerText'].includes(key))
+        ||typeof incoming.answerKey!=='string'||typeof incoming.answerText!=='string'
+        ||incoming.answerText.length>1600||!this.interviewGuide(actor,scope).nextQuestions.some(q=>q.key===incoming.answerKey))
+        fail('Borrador de interrogatorio inválido')
+    }
     if(Object.keys(incoming).length>100||JSON.stringify(body).length>60_000)
       fail('Borrador clínico demasiado grande')
     const values:Record<string,string|boolean>={}
@@ -1103,7 +1119,15 @@ export class HealthClinicStore {
       if(enc.status!=='signed'||enc.practitioner!==actor.username)fail('Debe firmar una consulta propia antes de emitir la orden')
       if(kind==='orders'){
         const modality=str(x.modality,'Tipo',20);if(!['laboratory','imaging'].includes(modality))fail('Tipo de orden no permitido')
-        return this.insert(actor,kind,{ encounterId,patientId:enc.patientId,modality,description:text(x.description,'Estudio',600),
+        const service=x.service===undefined?(modality==='laboratory'?'laboratory':'imaging'):str(x.service,'Servicio',32)
+        const services=modality==='laboratory'?['laboratory']:['imaging','xray','ultrasound','ct','mri','mammography','nuclear']
+        if(!services.includes(service))fail('Servicio incompatible con modalidad')
+        const priority=x.priority===undefined?'routine':str(x.priority,'Prioridad',20)
+        if(!['routine','urgent','stat'].includes(priority))fail('Prioridad de orden inválida')
+        return this.insert(actor,kind,{ encounterId,patientId:enc.patientId,modality,service,priority,
+          description:text(x.description,'Estudio',600),
+          clinicalQuestion:x.clinicalQuestion===undefined?'':text(x.clinicalQuestion,'Pregunta clínica',400),
+          preparation:x.preparation===undefined?'':text(x.preparation,'Preparación',400),
           status:'ordered',result:'',reviewedBy:null })
       }
       const patient=this.find(actor,'patients',str(enc.patientId,'Paciente',80)).data
@@ -1113,8 +1137,26 @@ export class HealthClinicStore {
       if(reviewed.reviewedBy!==actor.username||!['none-known','documented'].includes(String(reviewed.status)))
         fail('El prescriptor debe verificar y documentar alergias antes de recetar')
       if(x.safetyAcknowledged!==true)fail('Debe confirmar revisión de alergias, interacciones y dosis')
+      // Legacy text prescriptions remain readable; new structured prescriptions
+      // retain clinician-attested provenance and never imply a drug-database check.
+      let regimen:RecordData|undefined
+      if(x.regimen!==undefined){
+        const r=obj(x.regimen)
+        if(Object.keys(r).some(key=>!['presentation','dose','route','frequency','duration','quantity','instructions','reference'].includes(key)))
+          fail('Campos de pauta no autorizados')
+        regimen={presentation:str(r.presentation,'Presentación',160),dose:str(r.dose,'Dosis',100),
+          route:str(r.route,'Vía',80),frequency:str(r.frequency,'Frecuencia',120),
+          duration:str(r.duration,'Duración',100),quantity:str(r.quantity,'Cantidad',100),
+          instructions:optionalNoteText(r.instructions,'Instrucciones',400),
+          reference:str(r.reference,'Fuente farmacológica revisada',240)}
+      }
+      const directions=regimen?[
+        'Presentación: '+regimen.presentation,'Dosis: '+regimen.dose,'Vía: '+regimen.route,
+        'Frecuencia: '+regimen.frequency,'Duración: '+regimen.duration,'Cantidad: '+regimen.quantity,
+        ...(regimen.instructions?['Indicaciones: '+regimen.instructions]:[]),
+      ].join('\n'):text(x.directions,'Indicaciones',1400)
       return this.insert(actor,kind,{ encounterId,patientId:enc.patientId,medication:text(x.medication,'Medicamento',240),
-        directions:text(x.directions,'Indicaciones',1400),signedBy:actor.username,status:'prescribed',
+        directions:text(directions,'Indicaciones',1400),...(regimen?{regimen}:{}),signedBy:actor.username,status:'prescribed',
         safetyReview:{ attestedBy:actor.username,at:new Date().toISOString(),allergyStatus:reviewed.status,
           allergyReviewAt:reviewed.reviewedAt,drugInteractionCatalogChecked:false } })
     }

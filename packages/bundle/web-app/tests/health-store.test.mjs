@@ -137,10 +137,29 @@ test('clinical revision and signing enforce concurrency and professional ownersh
   assert.equal(e.signedBy,'doctor1')
   assert.throws(()=>db.update(d,'encounters',e.id,e.version,{action:'document',history:'Edit'}),/firmada/)
   let order=db.create(d,'orders',{encounterId:e.id,modality:'laboratory',description:'Control de laboratorio'})
+  assert.equal(order.service,'laboratory')
+  assert.equal(order.priority,'routine')
+  const mri=db.create(d,'orders',{encounterId:e.id,modality:'imaging',service:'mri',priority:'urgent',
+    description:'Estudio de prueba',clinicalQuestion:'Pregunta clínica sintética',preparation:'Preparación documentada'})
+  assert.equal(mri.service,'mri')
+  assert.equal(mri.priority,'urgent')
+  assert.equal(mri.clinicalQuestion,'Pregunta clínica sintética')
+  assert.equal(mri.preparation,'Preparación documentada')
+  assert.throws(()=>db.create(d,'orders',{encounterId:e.id,modality:'laboratory',service:'mri',description:'Prueba'}),/incompatible/)
+  assert.throws(()=>db.create(d,'orders',{encounterId:e.id,modality:'imaging',service:'mri',priority:'invalid',description:'Prueba'}),/Prioridad/)
+
   const profile=db.list(d,'patients').find(x=>x.id===p.id)
   db.update(d,'patients',p.id,profile.version,{action:'allergy-review',status:'none-known',details:''})
   const med=db.create(d,'prescriptions',{encounterId:e.id,medication:'Medicamento',directions:'Plan revisado',safetyAcknowledged:true})
   assert.equal(med.signedBy,'doctor1')
+  const regimen={presentation:'Presentación de prueba',dose:'Dosis documentada',route:'Vía revisada',frequency:'Intervalo revisado',duration:'Duración revisada',quantity:'Cantidad revisada',instructions:'Indicaciones sintéticas',reference:'Monografía revisada por el profesional'}
+  const structured=db.create(d,'prescriptions',{encounterId:e.id,medication:'Producto sintético',directions:'Texto no confiable',regimen,safetyAcknowledged:true})
+  assert.deepEqual(structured.regimen,regimen)
+  assert.match(structured.directions,/Dosis: Dosis documentada/)
+  assert(!structured.directions.includes('Texto no confiable'))
+  assert.equal(structured.safetyReview.drugInteractionCatalogChecked,false)
+  assert.throws(()=>db.create(d,'prescriptions',{encounterId:e.id,medication:'Producto sintético',regimen:{...regimen,reference:''},safetyAcknowledged:true}),/Fuente farmacológica/)
+
   db.createStaff(admin.actor,{username:'labuser',password:'another-secure-password-2026',role:'lab'})
   const lab=db.login('labuser','another-secure-password-2026').actor
   order=db.update(lab,'orders',order.id,order.version,{action:'result',result:'Informe validado'})
@@ -820,4 +839,76 @@ test('clinical editor model access checks owner, draft status and exact version'
   assert.doesNotThrow(()=>db.assertClinicalEditorModel(doctor,e.id,e.version))
   e=db.update(doctor,'encounters',e.id,e.version,{action:'review'})
   assert.throws(()=>db.assertClinicalEditorModel(doctor,e.id,e.version))
+})
+
+test('ASK drafts are encrypted, scoped to an owned encounter and version checked across restart',t=>{
+  const {db,admin,root}=fixture(t)
+  db.createStaff(admin.actor,{username:'ask_doctor',password:PASSWORD,role:'clinician'})
+  db.createStaff(admin.actor,{username:'ask_other',password:PASSWORD,role:'clinician'})
+  const doctor=db.login('ask_doctor',PASSWORD).actor
+  const other=db.login('ask_other',PASSWORD).actor
+  const patient=db.create(admin.actor,'patients',{name:'Paciente ASK sintético',dateOfBirth:'1980-01-02'})
+  db.assignPatient(admin.actor,patient.id,'ask_doctor','Atención clínica')
+  db.assignPatient(admin.actor,patient.id,'ask_other','Segunda valoración')
+  const e=db.create(doctor,'encounters',{patientId:patient.id,specialty:'Medicina familiar',complaint:'dolor abdominal',mode:'mixed'})
+  const key=db.interviewGuide(doctor,e.id).nextQuestions[0].key
+  const secret='Pregunta pendiente sintética 928734'
+  const payload={values:{encounterVersion:String(e.version),answerKey:key,answerText:secret},expanded:[]}
+  assert.equal(db.getClinicalDraft(doctor,e.id),null)
+  assert.throws(()=>db.saveClinicalDraft(other,e.id,payload))
+  assert.throws(()=>db.saveClinicalDraft(doctor,e.id,{...payload,values:{...payload.values,encounterVersion:'0'}}),/Conflicto/)
+  assert.throws(()=>db.saveClinicalDraft(doctor,e.id,{...payload,values:{...payload.values,answerKey:'unknown_question'}}),/inválido/)
+  assert.equal(typeof db.saveClinicalDraft(doctor,e.id,payload).savedAt,'string')
+  assert.equal(db.getClinicalDraft(doctor,e.id).values.answerText,secret)
+  assert.throws(()=>db.getClinicalDraft(other,e.id))
+  assert.throws(()=>db.clearClinicalDraft(other,e.id))
+  const path=join(root,'clinic.sqlite')
+  assert(!readFileSync(path).includes(Buffer.from(secret)))
+  db.close()
+  const reopened=new HealthClinicStore(path)
+  t.after(()=>{try{reopened.close()}catch{}})
+  reopened.login('clinicaladmin',PASSWORD)
+  const restored=reopened.login('ask_doctor',PASSWORD).actor
+  assert.deepEqual(reopened.getClinicalDraft(restored,e.id).values,payload.values)
+  const updated=reopened.update(restored,'encounters',e.id,e.version,{action:'answer',field:key,answer:secret})
+  assert.throws(()=>reopened.saveClinicalDraft(restored,e.id,payload),/Conflicto/)
+  assert.notEqual(updated.version,e.version)
+  reopened.clearClinicalDraft(restored,e.id)
+  assert.equal(reopened.getClinicalDraft(restored,e.id),null)
+})
+
+test('WHO ICD-11 verification uses only the exact code and rejects mismatched evidence',async()=>{
+  const {verifyIcd11Code}=await import('../src/health-icd11.ts')
+  const calls=[]
+  const fake=async(url,options)=>{
+    calls.push({url,options})
+    return new Response(JSON.stringify(calls.length===1?{access_token:'synthetic-token'}:{
+      code:'1A00',stemCode:'1A00',stemId:'http://id.who.int/icd/release/11/2026-01/mms/257068234',
+    }),{status:200})
+  }
+  const credentials={clientId:'synthetic-id',clientSecret:'synthetic-secret'}
+  const result=await verifyIcd11Code('1A00',credentials,fake)
+  assert.equal(result.code,'1A00')
+  assert.equal(result.release,'2026-01')
+  assert.equal(calls[1].url,'https://id.who.int/icd/release/11/2026-01/mms/codeinfo/1A00')
+  assert.equal(calls[1].options.redirect,'error')
+  assert(!JSON.stringify(result).includes('synthetic-token'))
+  await assert.rejects(()=>verifyIcd11Code('name, 42 years',credentials,fake),/inválido/)
+  await assert.rejects(()=>verifyIcd11Code('1A00',{},fake),/no configuradas/)
+  const mismatch=async(url)=>new Response(JSON.stringify(url.includes('connect/token')?{access_token:'synthetic-token'}:{
+    code:'ZZZZ',stemCode:'ZZZZ',stemId:'http://id.who.int/icd/release/11/2026-01/mms/257068234'
+  }),{status:200})
+  await assert.rejects(()=>verifyIcd11Code('1A00',credentials,mismatch),/no verificable/)
+})
+
+test('interview addresses multiple symptom domains without inferring clinical findings',async()=>{
+  const {localInterviewPlan}=await import('../src/health-interview.ts')
+  const guide=localInterviewPlan('Dolor abdominal y cefalea','Medicina familiar','mixed',[])
+  assert.equal(guide.pathway,'abdominal')
+  assert(guide.nextQuestions.some(q=>q.key==='abdominal_alarm'))
+  assert(guide.nextQuestions.some(q=>q.key==='headache_alarm'))
+  assert.equal(guide.nextQuestions.length,4)
+  const next=localInterviewPlan('Dolor abdominal y cefalea','Medicina familiar','mixed',guide.nextQuestions.map(q=>q.key))
+  assert(next.nextQuestions.some(q=>q.key==='pattern'||q.key==='neurological'))
+  assert(next.nextQuestions.every(q=>!guide.nextQuestions.some(old=>old.key===q.key)))
 })

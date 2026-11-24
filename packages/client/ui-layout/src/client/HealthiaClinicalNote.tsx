@@ -77,6 +77,8 @@ export const CLINICAL_NOTE_SECTIONS: readonly ClinicalNoteSection[] = [
     { id: 'secondaryDiagnosis', label: 'Diagnósticos adicionales y su evidencia', kind: 'textarea' },
     { id: 'codeSystem', label: 'Terminología o variante de codificación utilizada' },
     { id: 'icd10', label: 'CIE-10 sugerido (requiere verificación)' },
+    { id: 'icd11', label: 'CIE-11 propuesto' },
+    { id: 'icd11Evidence', label: 'Evidencia de consulta OMS (CIE-11)' },
     { id: 'plan', label: 'Tratamiento e indicaciones', kind: 'textarea', maxLength: 3500 },
     { id: 'tests', label: 'Analíticas consideradas (las órdenes se emiten por separado)', kind: 'textarea' },
     { id: 'imaging', label: 'Imágenes diagnósticas consideradas (no emitidas)', kind: 'textarea' },
@@ -168,8 +170,9 @@ export function formatClinicalNoteParts(kind:ClinicalNoteKind,values:Readonly<Cl
 /** Clinical values remain local to this React tree unless the authenticated
  * Host-owned persistence callback is explicitly supplied and clicked. */
 export function HealthiaClinicalNote({
-  onReturn, initialValues = {}, initialKind = 'first', onSave, patient, encounterVersion, requestedStep, loadModels, refineField, onDirtyChange, onEditorState,
+  onReturn, initialValues = {}, initialKind = 'first', onSave, patient, encounterVersion, requestedStep, loadModels, refineField, onDirtyChange, onEditorState, verifyIcd11,
 }: {
+  verifyIcd11?: (code:string)=>Promise<{code:string;release:string;source:string;verifiedAt:string}>
   onReturn?: () => void
   onDirtyChange?: ((dirty:boolean)=>void) | undefined
   onEditorState?: ((state:ClinicalEditorViewState|null)=>void) | undefined
@@ -185,8 +188,14 @@ export function HealthiaClinicalNote({
   const [kind, setKind] = useState<ClinicalNoteKind>(initialKind)
   const [values, setValues] = useState<ClinicalNoteValues>(() => ({ ...initialValues }))
   const [saving, setSaving] = useState(false)
+  const [icdBusy,setIcdBusy]=useState(false)
+  const [icdStatus,setIcdStatus]=useState('')
+  const icdEpoch=useRef(0)
+  useEffect(()=>{icdEpoch.current++;setIcdBusy(false);setIcdStatus('');return()=>{icdEpoch.current++}},[encounterVersion])
   const baseline=useRef(formatClinicalNote(initialKind,initialValues))
   const [section, setSection] = useState<ClinicalEditorStep>('interview')
+  const [activeFieldId,setActiveFieldId]=useState('')
+  const editorRoot=useRef<HTMLElement>(null)
   const [preview, setPreview] = useState(false)
   const [message, setMessage] = useState('')
   const note = useMemo(() => formatClinicalNote(kind, values), [kind, values])
@@ -205,10 +214,7 @@ export function HealthiaClinicalNote({
   if(!contextNonce.current)contextNonce.current=globalThis.crypto?.randomUUID?.()??Math.random().toString(36).slice(2)
   const binding=contextNonce.current+':'+String(encounterVersion??'none')
   const handledAction=useRef<number|undefined>(undefined)
-  useEffect(()=>{
-    onEditorState?.({step:section,binding,visibleFieldIds:visibleIds?visibleIds.split(','):[],
-      filledFields,dirty,hasEncounter,canEdit,modelEnabled})
-  },[onEditorState,section,binding,visibleIds,filledFields,dirty,hasEncounter,canEdit,modelEnabled])
+
   useEffect(()=>()=>{onEditorState?.(null)},[onEditorState])
 
   const [quick,setQuick]=useState('')
@@ -219,6 +225,29 @@ export function HealthiaClinicalNote({
   const currentSource=(field:string):string=>field==='context-review'?formatClinicalNote(kind,values):values[field]??''
   const [consent,setConsent]=useState(false)
   const [aiBusy,setAiBusy]=useState(false)
+  // Structural awareness only: "documented" means text entered, never clinically complete.
+  const documentedSections=CLINICAL_EDITOR_STEPS.filter(item=>{
+    const source=CLINICAL_NOTE_SECTIONS.find(s=>s.id===(item.id==='vitals'?'exam':item.id==='diagnosis'?'plan':item.id))
+    if(!source)return false
+    const relevant=fieldsForKind(source,kind).filter(f=>item.id==='vitals'?VITAL_IDS.some(id=>id===f.id):
+      item.id==='exam'?!VITAL_IDS.some(id=>id===f.id):item.id==='diagnosis'?DIAGNOSIS_IDS.some(id=>id===f.id):
+      item.id==='plan'?!DIAGNOSIS_IDS.some(id=>id===f.id):true)
+    return relevant.some(f=>!!values[f.id]?.trim())
+  }).map(item=>item.id).join(',')
+  const nextSection=CLINICAL_EDITOR_STEPS.find(item=>!documentedSections.split(',').includes(item.id))?.id
+  useEffect(()=>{
+    onEditorState?.({step:section,binding,visibleFieldIds:visibleIds?visibleIds.split(','):[],
+      filledFields,dirty,hasEncounter,canEdit,modelEnabled,busy:saving||aiBusy||icdBusy,
+      ...(activeFieldId&&visibleIds.split(',').includes(activeFieldId)?{activeFieldId}:{}),
+      documentedSections:CLINICAL_EDITOR_STEPS.filter(item=>documentedSections.split(',').includes(item.id)).map(item=>item.id),
+      ...(nextSection?{nextSection}:{})})
+  },[onEditorState,section,binding,visibleIds,filledFields,dirty,hasEncounter,canEdit,modelEnabled,saving,aiBusy,icdBusy,activeFieldId,documentedSections,nextSection])
+  useEffect(()=>{
+    if(!requestedStep)return
+    // Reveal only the existing inline editor; never create a second form or move the composer.
+    const node=editorRoot.current
+    if(node&&typeof node.scrollIntoView==='function')node.scrollIntoView({block:'nearest',behavior:'auto'})
+  },[requestedStep?.sequence])
   const [proposal,setProposal]=useState<{field:string;original:string;version:number|undefined;result:ClinicalEditorProposal}|null>(null)
   const generation=useRef(0)
   const live=useRef({values,encounterVersion,note})
@@ -275,10 +304,12 @@ export function HealthiaClinicalNote({
   },[requestedStep,binding,canEdit,saving])
   const edit = (id: string, value: string): void => {
     if(proposal?.field==='context-review')setProposal(null)
-    setValues(previous => ({ ...previous, [id]: value }))
+    if(id==='icd11'){icdEpoch.current++;setIcdBusy(false);setIcdStatus('')}
+    setValues(previous => ({ ...previous, [id]: value, ...(id==='icd11'?{icd11Evidence:''}:{}) }))
     setMessage('')
   }
   const reset = (): void => {
+    icdEpoch.current++;setIcdBusy(false);setIcdStatus('')
     generation.current++;setAiBusy(false);setProposal(null);setAiField('');setVitalDraft(null);setQuick('')
     setValues({...initialValues});setKind(initialKind)
     baseline.current=formatClinicalNote(initialKind,initialValues)
@@ -288,7 +319,7 @@ export function HealthiaClinicalNote({
     setMessage('Cambios de esta vista descartados. Los registros previamente guardados no se han modificado.')
   }
   const save = async (): Promise<void> => {
-    if (!onSave || !hasContent || saving || hasInvalidVitals) return
+    if (!onSave || !hasContent || saving || hasInvalidVitals || icdBusy) return
     setSaving(true)
     setMessage('')
     try {
@@ -318,7 +349,7 @@ export function HealthiaClinicalNote({
     setPreview(true)
   }
   return (
-    <section className={css.root} aria-label="Historia clínica estructurada">
+    <section ref={editorRoot} className={css.root} aria-label="Historia clínica estructurada">
       <div className={css.top}>
         <div>
           <span className={css.eyebrow}>CONSULTA · BORRADOR LOCAL TEMPORAL</span>
@@ -344,7 +375,7 @@ export function HealthiaClinicalNote({
             </button>
           ))}
         </div>
-        <div className={css.sectionTitle}><h4>{step.label}</h4><p>{step.hint}</p></div>
+        <div className={css.sectionTitle}><h4>{step.label}</h4><p>{step.hint}</p><small>{filledFields} de {shown.length} campos con datos · {documentedSections?documentedSections.split(',').length:0} de {CLINICAL_EDITOR_STEPS.length} secciones con información</small>{nextSection&&nextSection!==section&&<button type="button" className={css.secondary} onClick={()=>{setSection(nextSection);setPreview(false)}}>Ir a siguiente sección sin datos</button>}</div>
         {section==='background'&&patient&&<div className={css.assist}><strong>Expediente longitudinal</strong><p>Última revisión: {patient.medicalHistoryReview?.reviewedAt??'No documentada'}. No se reemplazan datos escritos ni se importan mediciones anteriores.</p><button type="button" className={css.secondary} onClick={importBackground}>Recuperar antecedentes previos</button></div>}
         {section==='vitals'&&<div className={css.assist}>
           <label className={css.wideField}>Entrada rápida de mediciones
@@ -363,17 +394,32 @@ export function HealthiaClinicalNote({
               <label className={css.fieldLabel}><span>{field.label}{field.unit ? ` · ${field.unit}` : ''}</span>
               {field.kind === 'textarea' ? (
                 <textarea rows={field.id==='hea'?7:3} placeholder={field.id==='hea'?'Inicio, evolución, características, síntomas asociados y contexto clínico…':'No documentado'} maxLength={field.maxLength ?? 1800} value={values[field.id] ?? ''}
-                  onChange={event => edit(field.id, event.currentTarget.value)} />
+                  onFocus={()=>setActiveFieldId(field.id)} onChange={event => edit(field.id, event.currentTarget.value)} />
               ) : (
                 <input type={field.kind === 'date' ? 'date' : field.kind === 'number' ? 'number' : 'text'}
                   maxLength={field.kind === 'number' || field.kind === 'date' ? undefined : (field.maxLength ?? 400)}
-                  step={field.kind === 'number' ? 'any' : undefined}
-                  placeholder={field.id==='chief'?'Motivo principal en palabras del paciente':'No documentado'} value={values[field.id] ?? ''} onChange={event => edit(field.id, event.currentTarget.value)} />
+                  readOnly={field.id==='icd11Evidence'} step={field.kind === 'number' ? 'any' : undefined}
+                  placeholder={field.id==='chief'?'Motivo principal en palabras del paciente':'No documentado'} value={values[field.id] ?? ''} onFocus={()=>setActiveFieldId(field.id)} onChange={event => edit(field.id, event.currentTarget.value)} />
               )}</label>
               {refineField&&eligible(field.id)&&<button className={css.aiAction} type="button" disabled={!values[field.id]?.trim()||aiBusy} onClick={()=>{void openAi(field.id)}}>✦ Mejorar con IA</button>}
             </div>
           ))}
         </div>
+        {section==='diagnosis'&&verifyIcd11&&<div className={css.assist}>
+          <strong>Verificación oficial CIE-11 · OMS</strong>
+          <p>Se transmite únicamente el código simple, sin datos del paciente. Confirmar el código no confirma el diagnóstico clínico.</p>
+          <button type="button" className={css.secondary} disabled={icdBusy||!values.icd11?.trim()} onClick={()=>{
+            const code=values.icd11!.trim().toUpperCase(),epoch=++icdEpoch.current
+            setIcdBusy(true);setIcdStatus('')
+            void verifyIcd11(code).then(result=>{
+              if(epoch!==icdEpoch.current)return
+              setValues(old=>old.icd11?.trim().toUpperCase()===code?{...old,icd11:result.code,icd11Evidence:'OMS MMS '+result.release+' · '+result.verifiedAt+' · '+result.source}:old)
+              setIcdStatus('Código encontrado en la clasificación oficial.')
+            }).catch(()=>{if(epoch===icdEpoch.current)setIcdStatus('No verificado. Comprueba la conexión, las credenciales OMS y el código.')})
+              .finally(()=>{if(epoch===icdEpoch.current)setIcdBusy(false)})
+          }}>{icdBusy?'Consultando OMS…':'Verificar código CIE-11'}</button>
+          {icdStatus&&<p role="status">{icdStatus}</p>}
+        </div>}
         {section==='diagnosis'&&refineField&&<div className={css.assist}><strong>Valoración contextual de Kira</strong><p>Revisa el borrador actual, antecedentes y registros recientes autorizados. Propone diferenciales, preguntas y estudios para evaluación profesional, no diagnósticos definitivos ni recetas.</p><button type="button" className={css.secondary} disabled={!hasContent||aiBusy} onClick={()=>{void openAi('context-review')}}>Analizar contexto de la consulta</button></div>}
         {section==='vitals'&&<div className={css.metrics}><div><small>IMC calculado</small><strong>{clinicalBmi(values)??'—'} kg/m²</strong></div><div><small>PAM estimada</small><strong>{estimatedMap(values)??'—'} mmHg</strong></div></div>}
         {hasInvalidVitals&&<p role="alert" className={css.status}>Verifica las mediciones y unidades antes de guardar. Los límites son de entrada, no rangos clínicos normales.</p>}
@@ -389,7 +435,7 @@ export function HealthiaClinicalNote({
           <button type="button" className={css.secondary} disabled={section==='interview'} onClick={()=>{setSection(CLINICAL_EDITOR_STEPS[CLINICAL_EDITOR_STEPS.findIndex(s=>s.id===section)-1]!.id);setPreview(false)}}>Anterior</button>
           <button type="button" className={css.secondary} disabled={section==='plan'} onClick={()=>{setSection(CLINICAL_EDITOR_STEPS[CLINICAL_EDITOR_STEPS.findIndex(s=>s.id===section)+1]!.id);setPreview(false)}}>Siguiente</button>
           <button type="submit" className={css.primary} disabled={!hasContent}>Vista previa de nota</button>
-          {onSave && <button type="button" className={css.primary} disabled={!hasContent || saving || hasInvalidVitals || aiBusy}
+          {onSave && <button type="button" className={css.primary} disabled={!hasContent || saving || hasInvalidVitals || aiBusy || icdBusy}
             onClick={() => { void save() }}>{saving ? 'Guardando…' : 'Guardar borrador clínico'}</button>}
           <button type="button" className={css.secondary} onClick={reset} disabled={!hasContent || saving}>Descartar cambios</button>
         </div>
