@@ -343,6 +343,8 @@ function SheetMimic({sheet,space,onApply}:{sheet:Sheet;space:string;onApply:(she
 type DependencyStatus={sources:Array<{id:string;revision:number;currentRevision:number|null;stale:boolean}>;stale:boolean;truncated:boolean}
 function ConnectedSpaceControls({item,dirty,onOpen}:{item:Item;dirty:boolean;onOpen:(id:string)=>Promise<void>}){
   const [origin,setOrigin]=useState<{parentId:string;baseRevision:number}|null>(null)
+  const [policy,setPolicy]=useState<{restricted:boolean;own:boolean}|null>(null)
+  const [policyConfirm,setPolicyConfirm]=useState(false)
   const [deps,setDeps]=useState<DependencyStatus|null>(null)
   const [available,setAvailable]=useState<Summary[]>([])
   const [picked,setPicked]=useState<string[]>([])
@@ -352,12 +354,13 @@ function ConnectedSpaceControls({item,dirty,onOpen}:{item:Item;dirty:boolean;onO
   const [confirm,setConfirm]=useState(false)
   const path='/items/'+item.id
   const refresh=async()=>{
-    const [f,d,l]=await Promise.all([
+    const [f,d,l,p]=await Promise.all([
       api<{origin:typeof origin}>(path+'/fork'),
       api<DependencyStatus>(path+'/dependencies'),
       api<{items:Summary[]}>('/items?space='+encodeURIComponent(item.space)),
+      api<{restricted:boolean;own:boolean}>(path+'/distribution'),
     ])
-    setOrigin(f.origin);setDeps(d)
+    setOrigin(f.origin);setDeps(d);setPolicy(p);setPolicyConfirm(false)
     setAvailable(l.items.filter(x=>x.id!==item.id&&!x.deleted&&x.space===item.space))
     setPicked(d.sources.map(x=>x.id));setConfirm(false)
   }
@@ -371,6 +374,13 @@ function ConnectedSpaceControls({item,dirty,onOpen}:{item:Item;dirty:boolean;onO
     <div style={{display:'grid',gap:8,padding:8}}>
       {dirty&&<p>Guarda los cambios antes de operar sobre versiones.</p>}
       <button type="button" disabled={busy||dirty} onClick={()=>{void perform(refresh)}}>Actualizar relaciones</button>
+      {policy&&<section aria-label="Política de distribución"><strong>{policy.restricted?'Distribución restringida':'Distribución sin restricción de Biblioteca'}</strong>
+        <p>Bloquea descargas, apertura externa y consulta desde Biblioteca. Los descendientes conservan la restricción. No controla el acceso directo al sistema de archivos ni sustituye el almacén clínico.</p>
+        <label><input type="checkbox" checked={policyConfirm} onChange={e=>setPolicyConfirm(e.currentTarget.checked)}/> Confirmo el cambio de distribución de esta creación.</label>
+        <button type="button" disabled={busy||dirty||!policyConfirm||(policy.restricted&&!policy.own)} onClick={()=>{void perform(async()=>{
+          setPolicy(await api<{restricted:boolean;own:boolean}>(path+'/distribution',{revision:item.revision,restricted:!policy.own,confirm:true},'PUT'));setPolicyConfirm(false)
+        })}}>{policy.own?'Retirar restricción propia':'Restringir distribución'}</button>
+      </section>}
       {item.bytes===0&&<>
         <label>Nombre de la alternativa <input value={title} onChange={e=>setTitle(e.currentTarget.value)} placeholder="Versión de prueba"/></label>
         <button type="button" disabled={busy||dirty||!title.trim()} onClick={()=>{void perform(async()=>{
@@ -389,8 +399,8 @@ function ConnectedSpaceControls({item,dirty,onOpen}:{item:Item;dirty:boolean;onO
           const result=await api<{item:Item}>(path+'/derive',{revision:item.revision,kind,confirm:true},'POST')
           await onOpen(result.item.id)
         })}}>{kind==='document'?'Crear informe conectado':'Crear presentación conectada'}</button>)}</div>}
-        {!dirty&&['app','game','code'].includes(item.kind)&&<a href={'/space-api'+path+'/export?format=web-zip'} download>Descargar paquete web ZIP (HTML)</a>}
-        <a href={'/space-api'+path+'/export?format=portable'} download>Exportar fuente portable</a>
+        {!dirty&&!policy?.restricted&&['app','game','code'].includes(item.kind)&&<a href={'/space-api'+path+'/export?format=web-zip'} download>Descargar paquete web ZIP (HTML)</a>}
+        {!policy?.restricted&&<a href={'/space-api'+path+'/export?format=portable'} download>Exportar fuente portable</a>}
       </>}
       {deps&&<>
         <strong role="status">{deps.stale?'Fuentes desactualizadas o no verificables':'Revisiones de fuentes vigentes'}</strong>
@@ -688,11 +698,12 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
           {(htmlItem||markdownItem||sceneItem||godotItem)&&<button type="button" aria-pressed={showSource} onClick={()=>setShowSource(v=>!v)}>
             {showSource?'Vista visual':markdownItem?'Editar documento':'Ver código'}</button>}
           <button type="button" disabled={!editor.dirty||busy} onClick={()=>{void persist(editor)}}>Guardar</button>
-          <button type="button" onClick={()=>{
+          <button type="button" onClick={()=>{void api<{restricted:boolean}>('/items/'+editor.item.id+'/distribution').then(policy=>{
+            if(policy.restricted){setError('Consulta bloqueada por la política de distribución de esta creación');return}
             window.dispatchEvent(new CustomEvent('phoenix:space-consult-file',{detail:{
               id:editor.item.id,title:editor.title,mime:editor.item.mime,kind:editor.item.kind,revision:editor.item.revision
             }}))
-          }}>Consultar a Kira</button>
+          }).catch(e=>setError(String(e)))}}>Consultar a Kira</button>
           <button type="button" onClick={()=>{void loadHistory()}}>Versiones</button>
           <button type="button" onClick={()=>{void changeDeletion(!editor.item.deleted)}}>{editor.item.deleted?'Restaurar':'Papelera'}</button>
         </div>
