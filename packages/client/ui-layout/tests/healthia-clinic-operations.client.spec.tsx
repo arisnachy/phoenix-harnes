@@ -92,7 +92,38 @@ describe('Native clinic inside PHOENIX (protected Host ownership)',()=>{
     view.unmount()
     render(<HealthiaClinicOperations area="encounters" selectedPatientId={patient.id}/>)
     await waitFor(()=>expect(screen.getByLabelText('Paciente activo')).toBeTruthy())
-    expect((screen.getByRole('combobox',{name:'Paciente del expediente'}) as HTMLSelectElement).value).toBe(patient.id)
+    expect(screen.getByLabelText('Paciente activo').textContent).toContain(patient.name)
+    expect(screen.getByRole('button',{name:'Nueva consulta'})).toBeTruthy()
+  })
+
+  it('offers administrator a protected clinical-account path instead of an impossible new consultation',async()=>{
+    const requests:Array<{path:string;method:string;body:Record<string,unknown>}>= []
+    vi.stubGlobal('fetch',vi.fn(async(input:string,init?:RequestInit)=>{
+      const path=String(input).split('/health/api/')[1]!
+      const method=init?.method??'GET'
+      const body=init?.body?JSON.parse(String(init.body)) as Record<string,unknown>:{}
+      requests.push({path,method,body})
+      if(path==='session')return answer({actor:{...actor,role:'admin'},csrf:'a'.repeat(48)})
+      if(path==='patients')return answer({items:[patient]})
+      if(path==='encounters')return answer({items:[]})
+      if(path==='branding')return answer({logoDataUrl:null})
+      if(path==='assignments'&&method==='POST')return answer({ok:true})
+      if(path==='logout'&&method==='POST')return answer({ok:true})
+      throw Error('Unexpected request '+path)
+    }))
+    render(<HealthiaClinicOperations area="encounters" selectedPatientId={patient.id}/>)
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Preparar acceso médico'})).toBeTruthy())
+    expect(screen.queryByRole('button',{name:'Nueva consulta'})).toBeNull()
+    expect(screen.queryByText(/Utiliza «Nueva consulta»/)).toBeNull()
+    fireEvent.click(screen.getByRole('button',{name:'Preparar acceso médico'}))
+    fireEvent.change(screen.getByRole('textbox',{name:'Usuario médico (nuevo o existente)'}),{target:{value:'doctor-prueba'}})
+    fireEvent.click(screen.getByRole('button',{name:'Asignar este paciente al profesional'}))
+    await waitFor(()=>expect(screen.getByText(/Asignación confirmada/)).toBeTruthy())
+    expect(requests.find(r=>r.path==='assignments'&&r.method==='POST')?.body).toMatchObject({patientId:patient.id,staffId:'doctor-prueba',action:'grant'})
+    fireEvent.click(screen.getByRole('button',{name:'Cambiar de cuenta'}))
+    await waitFor(()=>expect(screen.getByRole('heading',{name:'Inicio de sesión profesional'})).toBeTruthy())
+    expect((screen.getByRole('textbox',{name:'Usuario profesional'}) as HTMLInputElement).value).toBe('doctor-prueba')
+    expect(requests.some(r=>r.path==='encounters'&&r.method==='POST')).toBe(false)
   })
 
   it('creates the local administrator with a six-character password and Healthia fallback',async()=>{
