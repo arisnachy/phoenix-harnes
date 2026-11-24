@@ -132,7 +132,6 @@ function inlineBundledImages(entry: string, html: string, files: AssetMap, inclu
     const uri = assetUri(normalized, raw)
     if (uri !== undefined) resources.set(normalized, uri)
   }
-  if (resources.size === 0) return html
   const resolve = (reference: string): string | undefined => {
     if (/^(?:[a-z][a-z\d+.-]*:|\/\/|#)/iu.test(reference)) return undefined
     let decoded: string
@@ -282,6 +281,7 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
   const binaryItem=editor!==null&&editor.item.bytes>0
   const htmlItem=editor!==null&&!binaryItem&&isSpaceHtml(editor.item,editor.content)
   const htmlSource=editor?.content
+  const markdownItem=editor!==null&&!binaryItem&&!htmlItem&&editor.item.kind==='document'
   useEffect(()=>{setShowSource(false)},[selectedId])
   const mutate=(change:Partial<Editor>):void=>{
     setEditor(e=>e?{...e,...change,dirty:true}:e)
@@ -479,8 +479,8 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
         <div className={css.editHeader}>
           <button type="button" onClick={backToLibrary}>← Biblioteca</button>
           <span>{LABEL[editor.item.kind]} · versión {editor.item.revision}</span>
-          {htmlItem&&<button type="button" aria-pressed={showSource} onClick={()=>setShowSource(v=>!v)}>
-            {showSource?'Vista visual':'Ver código'}</button>}
+          {(htmlItem||markdownItem)&&<button type="button" aria-pressed={showSource} onClick={()=>setShowSource(v=>!v)}>
+            {showSource?'Vista visual':markdownItem?'Editar documento':'Ver código'}</button>}
           <button type="button" disabled={!editor.dirty||busy} onClick={()=>{void persist(editor)}}>Guardar</button>
           <button type="button" onClick={()=>{void loadHistory()}}>Versiones</button>
           <button type="button" onClick={()=>{void changeDeletion(!editor.item.deleted)}}>{editor.item.deleted?'Restaurar':'Papelera'}</button>
@@ -553,7 +553,16 @@ export function PhoenixSpace({onClose}:{onClose:()=>void}) {
         {htmlItem&&htmlSource!==undefined&&showSource&&
           <div className={css.textEditor}><textarea aria-label="Código fuente HTML" spellCheck={false}
             value={htmlSource} onChange={e=>mutate({content:e.currentTarget.value})}/></div>}
-        {!binaryItem&&!htmlItem&&editor.item.kind!=='slides'&&editor.item.kind!=='sheet'&&editor.item.kind!=='file'&&editor.item.kind!=='image'&&
+        {markdownItem&&!showSource&&<article aria-label="Vista visual del documento" style={{background:'var(--dsw-alias-bg-layer-1,#fff)',border:'1px solid #8883',borderRadius:12,padding:'clamp(18px,4vw,48px)',lineHeight:1.65,overflowWrap:'anywhere'}}>
+          {editor.content.split(/\r?\n/u).map((line,i)=>{
+            const heading=/^(#{1,6})\s+(.*)$/u.exec(line)
+            if(heading){const level=heading[1]?.length||1;return <div key={i} role="heading" aria-level={level} style={{fontSize:Math.max(15,30-level*3),fontWeight:700,margin:'12px 0 6px'}}>{heading[2]}</div>}
+            const img=/^!\[([^\]]*)\]\((data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=]+)\)$/iu.exec(line.trim())
+            if(img)return <img key={i} src={img[2]} alt={img[1]} style={{maxWidth:'100%'}}/>
+            return line.trim()?<div key={i} style={{whiteSpace:'pre-wrap'}}>{line.replace(/^[-*]\s+/u,'• ')}</div>:<div key={i} style={{height:10}}/>
+          })}
+        </article>}
+        {!binaryItem&&!htmlItem&&(!markdownItem||showSource)&&editor.item.kind!=='slides'&&editor.item.kind!=='sheet'&&editor.item.kind!=='file'&&editor.item.kind!=='image'&&
           <div className={css.textEditor}><textarea aria-label="Contenido editable" spellCheck={editor.item.kind==='document'}
             value={editor.content} onChange={e=>mutate({content:e.currentTarget.value})}/></div>}
       </>}
