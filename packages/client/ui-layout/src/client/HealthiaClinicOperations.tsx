@@ -527,7 +527,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
           <button type="button" disabled={!intakeText.trim()||busy} onClick={()=>setIntakeProposal(parseClinicalIntake(intakeText))}>Organizar datos</button>
           {intakeProposal&&<div role="status" className={css.intakeProposal}>
             {Object.entries(intakeProposal).length===0?<p>No se reconocieron campos explícitos. Usa nombre, fecha de nacimiento, sexo, correo o teléfono.</p>:<>
-              <dl>{Object.entries(intakeProposal).map(([key,value])=><div key={key}><dt>{{name:'Nombre',dateOfBirth:'Fecha de nacimiento',sexAtBirth:'Sexo',email:'Correo',phone:'Teléfono',age:'Edad referida',birthplace:'Lugar de nacimiento'}[key]??key}</dt><dd>{value}</dd></div>)}</dl>
+              <dl>{Object.entries(intakeProposal).map(([key,value])=><div key={key}><dt>{({name:'Nombre',dateOfBirth:'Fecha de nacimiento',sexAtBirth:'Sexo',email:'Correo',phone:'Teléfono',age:'Edad referida',birthplace:'Lugar de nacimiento'} as Record<string,string>)[key]??key}</dt><dd>{value}</dd></div>)}</dl>
               <button type="button" disabled={busy} onClick={()=>{
                 if(intakeProposal.name&&!name.trim())setName(intakeProposal.name)
                 if(intakeProposal.dateOfBirth&&!birthDate)setBirthDate(intakeProposal.dateOfBirth)
