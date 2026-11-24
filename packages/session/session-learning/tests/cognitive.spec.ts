@@ -189,4 +189,22 @@ describe('CognitiveMemoryLedger', () => {
     expect(recalled.map(hit => hit.record.id)).toEqual([database.id])
   })
 
+  it('does not inflate storage when reinforced events replay concurrently or after restart', async () => {
+    const value = await ledger()
+    const initial = await Promise.all(Array.from({length: 12}, () => value.remember(input())))
+    expect(new Set(initial.map(record => record.id)).size).toBe(1)
+    const repeated = input({ sessionId: 'session-2', eventSeq: 4, occurredAt: 400 })
+    await Promise.all(Array.from({length: 12}, () => value.remember(repeated)))
+    expect(value.allRecords()[0]?.frequency).toBe(2)
+    const before = await readFile(value.path, 'utf8')
+    expect(before.trim().split('\n')).toHaveLength(2)
+    const restored = new CognitiveMemoryLedger(value.path)
+    await restored.load()
+    await restored.remember(repeated)
+    expect(restored.allRecords()[0]?.frequency).toBe(2)
+    expect(await readFile(value.path, 'utf8')).toBe(before)
+    await restored.forget(initial[0]!.id)
+    expect((await restored.remember(repeated)).status).toBe('forgotten')
+  })
+
 })
