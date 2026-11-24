@@ -98,3 +98,10 @@
 .root[data-readable=true] :focus-visible{outline:3px solid currentColor!important;outline-offset:3px}
 .root[data-readable=true] .exitActions{flex-wrap:wrap;padding-right:0}
 @media(prefers-reduced-motion:reduce){.root *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+.root[data-space-with-chat='true']{grid-template-columns:minmax(0,1fr)}
+.root[data-space-with-chat='true']>.rail{display:none}
+.root[data-space-with-chat='true'] .main{padding:0 14px 18px}
+.root[data-space-with-chat='true'] .exitActions{padding-right:0}
+.root[data-space-with-chat='true'] .deck{grid-template-columns:minmax(80px,22%) minmax(0,1fr)}
+.root[data-space-with-chat='true'] .topbarTitle strong{font-size:17px}
