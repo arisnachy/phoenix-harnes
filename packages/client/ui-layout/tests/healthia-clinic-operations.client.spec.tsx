@@ -107,6 +107,7 @@ describe('Native clinic inside PHOENIX (protected Host ownership)',()=>{
       if(path==='patients')return answer({items:[patient]})
       if(path==='encounters')return answer({items:[]})
       if(path==='branding')return answer({logoDataUrl:null})
+      if(path==='staff'&&method==='GET')return answer({items:[actor]})
       if(path==='assignments'&&method==='POST')return answer({ok:true})
       if(path==='logout'&&method==='POST')return answer({ok:true})
       throw Error('Unexpected request '+path)
