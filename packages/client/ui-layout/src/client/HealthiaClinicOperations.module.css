@@ -121,3 +121,10 @@
 .accessPanel .form input{width:100%;min-height:39px}
 .accessPanel .form button.primary{width:100%;justify-self:stretch;min-height:39px;margin-top:2px}
 .accessPanel .error{font-size:11px}
+
+/* Compact entry to the professional workflow, without role escalation. */
+.clinicianAccess{display:grid;gap:12px;padding:18px;border:1px solid var(--dsw-alias-border-l2);border-radius:14px;background:var(--dsw-alias-bg-layer-1)}
+.clinicianAccess h3{font-size:16px;margin:0 0 5px}.clinicianAccess p{font-size:13px;line-height:1.5;margin:0;color:var(--dsw-alias-label-secondary)}
+.doctorSetup{display:grid;gap:12px;max-width:520px;padding-top:10px;border-top:1px solid var(--dsw-alias-border-l2)}.doctorSetup label{display:grid;gap:6px;font-size:12px}.doctorSetup input{padding:10px 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:9px;background:transparent;color:inherit;font:inherit}.doctorSetup details{display:grid;gap:10px}.doctorSetup details summary{cursor:pointer;font-size:12px}.doctorSetup details label{margin:12px 0}.doctorSetup button{justify-self:start}.doctorSetup small{color:var(--dsw-alias-label-secondary);font-size:11px;line-height:1.5}
+
+.interviewSummary{display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;list-style:none}.interviewSummary::-webkit-details-marker{display:none}.interviewSummary::before{content:'›';font-size:18px;color:var(--dsw-specific-phoenix-accent)}.interviewCard[open]>.interviewSummary::before{content:'⌄'}.interviewSummary strong{flex:1;font-size:13px}.interviewSummary small{font-size:11px;color:var(--dsw-alias-label-secondary)}
