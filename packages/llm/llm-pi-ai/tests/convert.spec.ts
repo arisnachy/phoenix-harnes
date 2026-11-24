@@ -365,7 +365,7 @@ describe('toPiContext', () => {
     expect((context.messages[0] as AssistantMessage).content).toEqual([{ type: 'text', text: 'visible' }])
   })
 
-  it('recombines durable content with pi-ai replay metadata across target providers and models', () => {
+  it('retains visible outcomes and tool calls across target providers without private replay metadata', () => {
     const state = toPiReplayState(assistant({
       api: 'openai-responses',
       provider: 'openai',
@@ -398,18 +398,16 @@ describe('toPiContext', () => {
 
     expect(context.messages[0]).toMatchObject({
       role: 'assistant',
-      api: 'openai-responses',
+      api: 'dsh-foreign',
       provider: 'openai',
       model: 'gpt-5',
-      responseModel: 'gpt-5-2026-01-01',
-      responseId: 'resp_123',
       stopReason: 'toolUse',
       content: [
-        { type: 'thinking', thinking: 'private reasoning', thinkingSignature: 'think-sig', redacted: true },
-        { type: 'text', text: 'calling', textSignature: 'text-sig' },
-        { type: 'toolCall', id: 'c1', name: 'f', arguments: { a: 1 }, thoughtSignature: 'tool-sig' },
+        { type: 'text', text: 'calling' },
+        { type: 'toolCall', id: 'c1', name: 'f', arguments: { a: 1 } },
       ],
     })
+    expect(JSON.stringify(context)).not.toMatch(/private reasoning|think-sig|text-sig|tool-sig|resp_123/)
   })
 
   it('replays all native block kinds when optional metadata is absent', () => {

@@ -17,7 +17,7 @@ import type {
 } from '@phoenix-ai/dsh-attachment'
 import { projectFileContent } from '@phoenix-ai/dsh-attachment'
 import type { Context as PiContext, ImageContent, Message as PiMessage, TextContent, Tool as PiTool } from '@earendil-works/pi-ai'
-import { toPiAssistant } from './replay.ts'
+import { toPiAssistantForTarget } from './replay.ts'
 import {
   DEFAULT_MAX_INLINE_FILE_BYTES,
   DEFAULT_REQUEST_IMAGE_MAX_BYTES,
@@ -715,7 +715,8 @@ function textOnlyContext(options: GenerateOptions, onReplayDegrade?: (reason: st
       continue
     }
     if (message.role === 'assistant') {
-      const assistant = toPiAssistant(message, onReplayDegrade)
+      const assistant = toPiAssistantForTarget(message, options.provider, options.model, onReplayDegrade)
+      if (assistant === undefined) continue
       for (const block of assistant.content) if (block.type === 'toolCall') toolNames.set(CallId(block.id), block.name)
       messages.push(assistant)
       continue
@@ -745,7 +746,7 @@ function textOnlyContext(options: GenerateOptions, onReplayDegrade?: (reason: st
  * result names are recovered from preceding assistant tool calls.
  * @param options - the harness request; `options.system` maps to pi-ai's single `systemPrompt` slot.
  * @param attachments - absent; selects the synchronous conversion.
- * @param onReplayDegrade - forwarded to {@link toPiAssistant} for each assistant message.
+ * @param onReplayDegrade - forwarded to {@link toPiAssistantForTarget} for each assistant message.
  * @returns the pi-ai context; `tools` is omitted when the request declares none.
  */
 export function toPiContext(
@@ -761,7 +762,7 @@ export function toPiContext(
  * an image-heavy session keeps clearing gateway request-size caps.
  * @param options - the harness request; `options.system` maps to pi-ai's single `systemPrompt` slot.
  * @param attachments - durable byte resolver for image references.
- * @param onReplayDegrade - forwarded to {@link toPiAssistant} for each assistant message.
+ * @param onReplayDegrade - forwarded to {@link toPiAssistantForTarget} for each assistant message.
  * @param maxRequestImageBytes - request-level bound on base64-encoded image payload; omission leaves every image in place.
  * @param requestImagePolicy - route pixel and raw encoded-byte budgets.
  * @param maxInlineFileBytes - request-level bound for decoded text file attachments.
@@ -850,7 +851,8 @@ async function toPiContextWithImages(
       continue
     }
     if (message.role === 'assistant') {
-      const assistant = toPiAssistant(message, onReplayDegrade)
+      const assistant = toPiAssistantForTarget(message, options.provider, options.model, onReplayDegrade)
+      if (assistant === undefined) continue
       for (const block of assistant.content) {
         if (block.type === 'toolCall') toolNames.set(CallId(block.id), block.name)
       }

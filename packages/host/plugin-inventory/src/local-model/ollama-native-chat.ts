@@ -111,6 +111,7 @@ export function toNativeOllamaChat(
   model: LocalModelCatalogEntry,
   allowContinuation = false,
   thinking: LocalThinking = false,
+  resources?: { keepAlive: string; threads?: number },
 ): NativeBridgeRequest {
   if (raw === undefined || model.backend !== 'ollama') {
     throw new NativeOllamaChatError('Modelo local incompatible.', 400, 'invalid_model')
@@ -179,6 +180,7 @@ export function toNativeOllamaChat(
   const options: Record<string, unknown> = {
     num_ctx: adaptiveContext,
     num_predict: outputTokens,
+    ...(resources?.threads === undefined ? {} : { num_thread: resources.threads }),
   }
   if (typeof request['temperature'] === 'number' && Number.isFinite(request['temperature'])) {
     options['temperature'] = request['temperature']
@@ -198,7 +200,7 @@ export function toNativeOllamaChat(
       stream,
       ...(thinking === null ? {} : { think: thinking }),
       options,
-      keep_alive: '30m',
+      keep_alive: resources?.keepAlive ?? '30m',
     },
   }
 }
@@ -460,4 +462,14 @@ export async function relayNativeOllamaChat(
     usage: { prompt_tokens: totalInput, completion_tokens: totalOutput, total_tokens: totalInput + totalOutput },
   })
   downstream.end('data: [DONE]\n\n')
+}
+
+/** Shorten residency only for on-demand requests, and leave a CPU reserve.
+ * Ollama owns GPU allocation and unloading; never kill another process. */
+export function localResourcePolicy(mode: 'off' | 'on-demand' | 'always-on', freeBytes: number, totalBytes: number, cores: number) {
+  const pressure = freeBytes < Math.max(1_073_741_824, totalBytes * 0.12)
+  return {
+    keepAlive: mode === 'on-demand' ? (pressure ? '0s' : '2m') : '30m',
+    ...(pressure ? { threads: Math.max(1, Math.floor(cores / 2)) } : {}),
+  }
 }

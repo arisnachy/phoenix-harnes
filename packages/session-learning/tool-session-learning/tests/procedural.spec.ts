@@ -308,3 +308,20 @@ describe('filterProceduralSearchHits', () => {
     expect(filterProceduralSearchHits([hit('candidate'), hit('active'), hit('quarantined')] as never)).toHaveLength(1)
   })
 })
+
+it('deduplicates unverified procedures and cannot overwrite validated skills or another project', async () => {
+  const store = new MemoryStore(), engine = new ProceduralLearningEngine(store)
+  const common = {title:'Verify deployment',scope:'release',trigger:'release verification',
+    steps:['run tests'],evidence:'Observed result',...provenance(1000)}
+  await engine.recordExperience({...common,verified:false})
+  await engine.recordExperience({...common,occurredAt:1100,verified:false})
+  expect(store.rows).toHaveLength(1)
+  await engine.recordExperience({...common,occurredAt:1200,verified:true})
+  const active = await engine.recordExperience({...common,occurredAt:1300,steps:['unverified alternate'],verified:false})
+  expect(active.status).toBe('active')
+  expect(active.steps).toEqual(['run tests'])
+  expect(store.rows).toHaveLength(2)
+  await engine.recordExperience({...common,projectId:'other',occurredAt:1400,verified:false})
+  expect(engine.recommend({projectId:'phoenix'})).toHaveLength(1)
+  expect(engine.recommend({projectId:'other'})).toHaveLength(0)
+})

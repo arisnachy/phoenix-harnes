@@ -8,8 +8,8 @@
  */
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, statSync } from 'node:fs'
-import { basename, dirname, resolve } from 'node:path'
+import { existsSync, statSync, realpathSync, statfsSync } from 'node:fs'
+import { basename, dirname, resolve, relative, isAbsolute, sep } from 'node:path'
 import process from 'node:process'
 
 function command(bin, args, cwd, allowFailure = false) {
@@ -17,6 +17,8 @@ function command(bin, args, cwd, allowFailure = false) {
     cwd,
     encoding: 'utf8',
     windowsHide: true,
+    timeout: 120_000,
+    maxBuffer: 2 * 1024 * 1024,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   const status = result.status ?? 1
@@ -41,20 +43,58 @@ function evolutionPath(root) {
   return resolve(dirname(root), `${basename(root)}-evolution`)
 }
 
-function existingWorktree(path) {
-  if (!existsSync(path)) return false
-  if (!statSync(path).isDirectory()) throw new Error(`PHOENIX evolution path exists but is not a directory: ${path}`)
+function pathKey(path) {
+  const value = realpathSync(path)
+  return process.platform === 'win32' ? value.toLowerCase() : value
+}
+
+function inside(parent, child) {
+  const rel = relative(parent, child)
+  return rel === '' || (!isAbsolute(rel) && rel !== '..' && !rel.startsWith('..' + sep))
+}
+
+function commonDirectory(path) {
+  return pathKey(resolve(path, command('git', ['rev-parse', '--git-common-dir'], path).stdout))
+}
+
+function existingWorktree(root, path) {
+  if (!existsSync(path) || !statSync(path).isDirectory()) return false
   const result = command('git', ['rev-parse', '--show-toplevel'], path, true)
-  return result.ok && resolve(result.stdout) === resolve(path)
+  if (!result.ok || pathKey(result.stdout) !== pathKey(path)) return false
+  if (commonDirectory(root) !== commonDirectory(path)) return false
+  const listed = command('git', ['worktree', 'list', '--porcelain', '-z'], root).stdout
+  return listed.split('\0').some(entry => entry.startsWith('worktree ')
+    && existsSync(entry.slice(9)) && pathKey(entry.slice(9)) === pathKey(path))
+}
+
+function refreshCleanTwin(root, target) {
+  // Never reset, clean, delete, or replace candidate work. Reuse dirty, ahead,
+  // divergent or branch-owned twins as-is; only advance a clean detached ancestor.
+  if (command('git', ['branch', '--show-current'], target).stdout !== '') return
+  if (command('git', ['status', '--porcelain', '--untracked-files=all'], target).stdout !== '') return
+  const live = command('git', ['rev-parse', 'HEAD'], root).stdout
+  const twin = command('git', ['rev-parse', 'HEAD'], target).stdout
+  if (live === twin) return
+  if (!command('git', ['merge-base', '--is-ancestor', twin, live], target, true).ok) return
+  command('git', ['merge', '--ff-only', live], target)
 }
 
 function ensure(root, target) {
-  if (resolve(root) === resolve(target)) throw new Error('PHOENIX evolution root must be outside the live runtime')
+  const canonicalRoot = pathKey(root)
+  const canonicalTarget = existsSync(target) ? pathKey(target) : resolve(pathKey(dirname(target)), basename(target))
+  if (inside(canonicalRoot, canonicalTarget) || inside(canonicalTarget, canonicalRoot)) {
+    throw new Error('PHOENIX evolution root must be outside the live runtime')
+  }
   if (existsSync(target)) {
-    if (!existingWorktree(target)) {
-      throw new Error(`PHOENIX evolution path already exists but is not a Git worktree: ${target}`)
+    if (!existingWorktree(root, target)) {
+      throw new Error('PHOENIX evolution path already exists but is not a Git worktree of the live repository: ' + target)
     }
+    refreshCleanTwin(root, target)
     return
+  }
+  const disk = statfsSync(dirname(target))
+  if (disk.bavail * disk.bsize < 512 * 1024 * 1024) {
+    throw new Error('PHOENIX evolution deferred: insufficient free storage for a new worktree')
   }
   command('git', ['worktree', 'add', '--detach', target, 'HEAD'], root)
 }
