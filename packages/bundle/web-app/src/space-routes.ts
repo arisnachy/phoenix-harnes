@@ -134,12 +134,19 @@ export function registerSpaceRoutes(ctx:Context):void {
           reply(res,201,{item})
           return
         }
-        const match=/^\/space-api\/items\/([a-f0-9-]{36})(?:\/(file|export|history|restore|open-native|version|fork|merge|dependencies|derive))?$/u.exec(path)
+        const match=/^\/space-api\/items\/([a-f0-9-]{36})(?:\/(file|export|history|restore|open-native|version|fork|merge|dependencies|derive|distribution))?$/u.exec(path)
         if(!match){reply(res,404,{error:'Ruta desconocida'});return}
         const id=match[1]!
         const operation=match[2]||''
         const item=catalog.get(id)
         if(!item){reply(res,404,{error:'Elemento no encontrado'});return}
+        if(operation==='distribution'&&method==='GET'){reply(res,200,catalog.distributionPolicy(id));return}
+        if(operation==='distribution'&&method==='PUT'){
+          const data=await body(req)
+          if(data.confirm!==true)throw Error('Confirmación inválida')
+          reply(res,200,catalog.setDistributionPolicy(id,revision(data.revision),data.restricted));return
+        }
+        if(['export','open-native','file'].includes(operation)&&catalog.distributionPolicy(id).restricted){reply(res,403,{error:'Distribución restringida por el propietario'});return}
         if(operation===''&&method==='GET'){reply(res,200,{item});return}
         if(operation===''&&method==='PUT'){
           const data=await body(req)
