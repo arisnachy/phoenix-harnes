@@ -145,6 +145,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
   const askDraftEpoch=useRef(0)
   const [signChecked,setSignChecked]=useState(false)
   const [dirtyEncounter,setDirtyEncounter]=useState(false)
+  const [noteReload,setNoteReload]=useState(0)
   useEffect(()=>{setDirtyEncounter(false);setSignChecked(false);setAnswerKey('');setAnswerText('')},[encounterId,patientId])
   const readyRef=useRef(false)
   const userRole=session?.actor.role
@@ -714,9 +715,9 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
                 <p key={key}>{key.replaceAll('_',' ')}: {value}</p>)}
             </div>}
           {!selectedEncounter.history.trim()&&Object.keys(selectedEncounter.interviewAnswers??{}).length>0&&
-            <button type="button" disabled={busy} onClick={()=>{
-              if(session)void mutateEncounter(record=>api.draftEncounterFromInterview(session,record),
-                'Borrador construido a partir de las respuestas registradas; requiere revisión profesional.')
+            <button type="button" disabled={busy||dirtyEncounter||!!answerText.trim()||askDraftState==='saving'} onClick={()=>{
+              if(session&&!dirtyEncounter&&!answerText.trim())void mutateEncounter(record=>api.draftEncounterFromInterview(session,record),
+                'Borrador construido a partir de las respuestas registradas; requiere revisión profesional.').then(saved=>{if(saved)setNoteReload(value=>value+1)})
             }}>Preparar borrador desde el interrogatorio</button>}
         </section>}
 
@@ -727,7 +728,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
           <pre>{selectedEncounter.history}</pre>
           <p className={css.notice}>Firmada por {selectedEncounter.signedBy??'profesional autorizado'} ·
             {selectedEncounter.signedAt??'fecha protegida'}. No admite sobrescritura; correcciones mediante adenda.</p>
-        </div> : <HealthiaClinicalNote key={selectedEncounter.id} initialKind={currentNote.kind}
+        </div> : <HealthiaClinicalNote key={selectedEncounter.id+':'+noteReload} initialKind={currentNote.kind}
           initialValues={currentNote.values} patient={selectedPatient} encounterVersion={selectedEncounter.version}
           requestedStep={requestedStep} onEditorState={onEditorState} onDirtyChange={setDirtyEncounter} {...(session?.actor.role==='clinician'&&session.actor.username===selectedEncounter.practitioner?{verifyIcd11:(code:string)=>api.verifyIcd11(session,code)}:{})} {...(canManageEncounters&&session?.actor.username===selectedEncounter.practitioner?{onSave:saveNote}:{})}
           {...(session?.actor.role==='clinician'&&session.actor.username===selectedEncounter.practitioner&&selectedEncounter.status==='draft'?{
