@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { describe,it,expect,beforeEach } from 'vitest'
-import { NATIVE_MENU_KEY, readNativeMenu, nativeMenuOperation, parseNativeMenuCommand } from '../src/client/NativeSelfMenu.ts'
+import { NATIVE_MENU_KEY, NATIVE_CHECKPOINT_KEY, readNativeMenu, nativeMenuOperation, parseNativeMenuCommand, recoverNativeMenu } from '../src/client/NativeSelfMenu.ts'
 const cmd=(menuAction:string,extra:Record<string,unknown>={})=>({appId:'general',operation:'native-menu',menuAction,...extra})
-beforeEach(()=>localStorage.removeItem(NATIVE_MENU_KEY))
+beforeEach(()=>{localStorage.removeItem(NATIVE_MENU_KEY);localStorage.removeItem(NATIVE_CHECKPOINT_KEY)})
 describe('native self navigation',()=>{
   it('inspects actual default entries without writing',()=>{
     expect(nativeMenuOperation(localStorage,cmd('inspect')).state.entries.map(e=>e.id)).toEqual(['home','tasks','connectors','team','library'])
@@ -28,5 +28,31 @@ describe('native self navigation',()=>{
     localStorage.setItem(NATIVE_MENU_KEY,'{invalid')
     expect(readNativeMenu(localStorage).entries).toHaveLength(5)
     expect(()=>nativeMenuOperation(localStorage,cmd('inspect'))).toThrow()
+  })
+})
+
+describe('automatic native self recovery',()=>{
+  it('recovers a validated checkpoint without accepting malformed storage or stale commands',()=>{
+    nativeMenuOperation(localStorage,cmd('add',{sectionId:'shortcut-clinic',target:'healthia',label:'Clínica',expectedRevision:0}),true)
+    localStorage.setItem(NATIVE_MENU_KEY,'{corrupt')
+    const recovery=recoverNativeMenu(localStorage,100)
+    expect(recovery.status).toBe('restored')
+    expect(recovery.state.revision).toBe(100)
+    expect(recovery.state.entries.at(-1)?.id).toBe('shortcut-clinic')
+    expect(readNativeMenu(localStorage)).toEqual(recovery.state)
+    expect(()=>nativeMenuOperation(localStorage,cmd('rename',{sectionId:'home',label:'Inicio',expectedRevision:1}),true)).toThrow('STALE')
+    expect(recoverNativeMenu(localStorage,101).status).toBe('healthy')
+  })
+  it('falls back to protected defaults if every copy is corrupt',()=>{
+    localStorage.setItem(NATIVE_MENU_KEY,'{broken')
+    localStorage.setItem(NATIVE_CHECKPOINT_KEY,'{"entries":[]}')
+    const result=recoverNativeMenu(localStorage,500)
+    expect(result.status).toBe('defaulted')
+    expect(result.state.entries).toHaveLength(5)
+    expect(readNativeMenu(localStorage).revision).toBe(500)
+  })
+  it('does not claim repair when storage cannot persist',()=>{
+    const store={getItem:()=>'{bad',setItem:()=>{throw Error('denied')}}
+    expect(recoverNativeMenu(store,100).status).toBe('unavailable')
   })
 })
