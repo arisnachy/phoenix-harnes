@@ -900,3 +900,15 @@ test('WHO ICD-11 verification uses only the exact code and rejects mismatched ev
   }),{status:200})
   await assert.rejects(()=>verifyIcd11Code('1A00',credentials,mismatch),/no verificable/)
 })
+
+test('interview addresses multiple symptom domains without inferring clinical findings',async()=>{
+  const {localInterviewPlan}=await import('../src/health-interview.ts')
+  const guide=localInterviewPlan('Dolor abdominal y cefalea','Medicina familiar','mixed',[])
+  assert.equal(guide.pathway,'abdominal')
+  assert(guide.nextQuestions.some(q=>q.key==='abdominal_alarm'))
+  assert(guide.nextQuestions.some(q=>q.key==='headache_alarm'))
+  assert.equal(guide.nextQuestions.length,4)
+  const next=localInterviewPlan('Dolor abdominal y cefalea','Medicina familiar','mixed',guide.nextQuestions.map(q=>q.key))
+  assert(next.nextQuestions.some(q=>q.key==='pattern'||q.key==='neurological'))
+  assert(next.nextQuestions.every(q=>!guide.nextQuestions.some(old=>old.key===q.key)))
+})
