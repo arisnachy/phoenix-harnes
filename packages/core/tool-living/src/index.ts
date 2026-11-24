@@ -287,7 +287,12 @@ export function apply(ctx: Context): void {
     name: 'context:evolution-recovery', order: 123, interpolateVariables: false,
     text: assembly => {
       const scope = assembly as { agent?: { session: object }; incomingUserText?: string }
-      if (!scope.agent || inferEvolutionIntent(scope.incomingUserText ?? '') !== 'debugging') return ''
+      if (!scope.agent) return ''
+      const intent = inferEvolutionIntent(scope.incomingUserText ?? '')
+      if (intent === 'planning') return 'For dependency or architecture work, inspect the current dependency graph and reuse the existing isolated evolution worktree before proposing changes.'
+      if (intent === 'switching') return 'Keep the current session and verified work when changing the selected model; do not change providers without the applicable selection or authorization.'
+      if (intent === 'learning') return 'Reuse the existing procedural memory system; retain only evidence-backed reusable procedures and do not duplicate candidate records.'
+      if (intent !== 'debugging') return ''
       const snapshot = idleEvolution.read(scope.agent.session)
       if (!snapshot?.recommendations.length) return ''
       return 'Recent observed operational patterns: ' + snapshot.recommendations.join(', ') + '. Diagnose using current evidence, not presumed causes. Do not repeat a disproven route.'
