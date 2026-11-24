@@ -74,7 +74,7 @@ describe('PHOENIX embedded Healthia', () => {
     }))
     render(<ScreenHarness/>)
     expect(screen.getByRole('heading',{name:'Tu jornada clínica, en un solo espacio'})).toBeTruthy()
-    expect(screen.queryByRole('navigation',{name:'Secciones del espacio clínico'})).toBeNull()
+    expect(screen.getByText('Accesos manuales').closest('details')?.open).toBe(false)
     fireEvent.click(screen.getByText('Accesos manuales'))
     const nav=screen.getByRole('navigation',{name:'Secciones del espacio clínico'})
     expect(within(nav).getByRole('button',{name:'Pacientes'})).toBeTruthy()
