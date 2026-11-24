@@ -94,7 +94,7 @@ export type ClinicalEditorViewState={
   canEdit:boolean
   modelEnabled:boolean
   activeFieldId?:string
-  completedSections?:readonly ClinicalEditorStep[]
+  documentedSections?:readonly ClinicalEditorStep[]
   nextSection?:ClinicalEditorStep
   busy?:boolean
 }
@@ -121,8 +121,8 @@ export function publicClinicalEditorState(view:ClinicalEditorViewState|null) {
   return view===null?null:{step:view.step,visibleFieldIds:view.visibleFieldIds,filledFields:view.filledFields,
     dirty:view.dirty,hasEncounter:view.hasEncounter,canEdit:view.canEdit,modelEnabled:view.modelEnabled,
     ...(view.activeFieldId&&view.visibleFieldIds.includes(view.activeFieldId)?{activeFieldId:view.activeFieldId}:{}),
-    ...(view.completedSections?{completedSections:view.completedSections.filter(clinicalEditorStep)}:{}),
-    ...(view.nextSection&&clinicalEditorStep(view.nextSection)?{nextSection:view.nextSection}:{}),busy:view.busy===true}
+    ...(view.documentedSections?{documentedSections:view.documentedSections.filter(clinicalEditorStep)}:{}),
+    ...(view.nextSection&&clinicalEditorStep(view.nextSection)?{nextSection:view.nextSection}:{}),...(view.busy?{busy:true}:{})}
 }
 
 /** Extract only explicitly supplied intake fields. Never manufacture a DOB from age. */
