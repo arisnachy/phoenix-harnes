@@ -8,7 +8,7 @@ import { AdaptiveAppProposal, parseAdaptiveAppProposal, type AdaptiveAppProposal
 import { AdaptiveFormProposal, parseAdaptiveFormProposal, type AdaptiveFormProposalSpec } from './AdaptiveFormProposal.tsx'
 import { AdaptiveWorkspaceProposal, parseAdaptiveWorkspaceProposal, type AdaptiveWorkspaceProposalSpec } from './AdaptiveWorkspaceProposal.tsx'
 import { AdaptiveFieldResultProposal, parseAdaptiveFieldResult, type AdaptiveFieldResultSpec } from './AdaptiveFieldResultProposal.tsx'
-import { SpreadsheetSurface, parseSpreadsheet, type SpreadsheetSpec } from './SpreadsheetSurface.tsx'
+import { SpreadsheetSurface, recoverSpreadsheet, type SpreadsheetSpec } from './SpreadsheetSurface.tsx'
 import { GeoMap, parseGeoMapSpec, type GeoMapSpec } from './GeoMap.tsx'
 import { SceneMap, parseSceneMapSpec, type SceneMapSpec } from './SceneMap.tsx'
 import { DiagramSurface, parseDiagramSpec, type DiagramSpec } from './DiagramSurface.tsx'
@@ -792,7 +792,7 @@ export function parseGenerativeUiBlock(value: unknown): GenerativeUiBlock | null
     case 'adaptive_form': return parseAdaptiveFormProposal(value)
     case 'adaptive_control': return parseAdaptiveWorkspaceProposal(value)
     case 'adaptive_field_result': return parseAdaptiveFieldResult(value)
-    case 'spreadsheet': return parseSpreadsheet(value)
+    case 'spreadsheet': return recoverSpreadsheet(value)
     case 'geo_map': return parseGeoMapSpec(value)
     case 'scene_map': return parseSceneMapSpec(value)
     case 'diagram': return parseDiagramSpec(value)
@@ -1189,7 +1189,7 @@ export function GenerativeUi({ block, onAction, conversationId }: { block: Gener
     case 'adaptive_form': return <AdaptiveFormProposal spec={block} />
     case 'adaptive_control': return <AdaptiveWorkspaceProposal spec={block} />
     case 'adaptive_field_result': return <AdaptiveFieldResultProposal spec={block} />
-    case 'spreadsheet': return <SpreadsheetSurface key={block.props.id} spec={block} />
+    case 'spreadsheet': return <SpreadsheetSurface key={(conversationId??'local')+':'+block.props.id} spec={block} conversationId={conversationId} />
     case 'geo_map': return <GeoMap key={(conversationId ?? block.props.conversationId ?? 'ephemeral') + ':' + block.props.id} spec={block} onAction={onAction} {...(conversationId === undefined ? {} : { conversationId })} />
     case 'scene_map': return <SceneMap key={(conversationId ?? 'ephemeral') + ':' + block.props.id} spec={block} onAction={onAction} />
     case 'diagram': return <DiagramSurface key={(conversationId ?? 'ephemeral') + ':' + block.props.id} spec={block} onAction={onAction} />

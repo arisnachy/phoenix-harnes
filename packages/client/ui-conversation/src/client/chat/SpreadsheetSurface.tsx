@@ -36,11 +36,28 @@ export function parseSpreadsheet(value: unknown): SpreadsheetSpec | null {
   return value as unknown as SpreadsheetSpec
 }
 
-const columnLetter = (index: number): string => String.fromCharCode(65 + index)
+/** Recover only data-shaped model output. Unknown executable props remain rejected. */
+export function recoverSpreadsheet(value:unknown):SpreadsheetSpec|null{
+  const strict=parseSpreadsheet(value)
+  if(strict)return strict
+  if(!isRecord(value)||!keys(value,['component','version','props'])||value.component!=='spreadsheet'||value.version!==1||!isRecord(value.props))return null
+  const p=value.props
+  if(!keys(p,['id','title','columns','rows'])||typeof p.title!=='string'||!p.title.trim()||p.title.length>120||!Array.isArray(p.columns)||p.columns.length<1||p.columns.length>16||!Array.isArray(p.rows)||p.rows.length>200)return null
+  const width=p.columns.length
+  if(!p.columns.every(c=>typeof c==='string'&&c.trim()&&c.length<=60))return null
+  if(!p.rows.every(r=>Array.isArray(r)&&r.length<=width&&r.length>0&&r.every(c=>c===null||typeof c==='string'||typeof c==='boolean'||(typeof c==='number'&&Number.isFinite(c)))))return null
+  const rows=p.rows.map(r=>Array.from({length:width},(_,i)=>r[i]===null||r[i]===undefined?'':String(r[i])))
+  let hash=2166136261
+  for(const c of JSON.stringify([p.title,p.columns,rows]))hash=Math.imul(hash^c.charCodeAt(0),16777619)
+  const id=typeof p.id==='string'&&/^[a-z][a-z0-9_-]{1,63}$/u.test(p.id)?p.id:'sheet_'+(hash>>>0).toString(36)
+  return parseSpreadsheet({component:'spreadsheet',version:1,props:{id,title:p.title,columns:p.columns,rows}})
+}
+const columnLetter = (index: number): string => index<26?String.fromCharCode(65+index):'A'+String.fromCharCode(65+index-26)
 const reference = (token: string): [number, number] | null => {
-  const match = /^([A-P])([1-9]\d*)$/i.exec(token)
+  const match = /^([A-Z]|A[A-N])([1-9]\d*)$/i.exec(token)
   if (!match) return null
-  return [Number(match[2]) - 2, match[1]!.toUpperCase().charCodeAt(0) - 65]
+  const col=match[1]!.toUpperCase()
+  return [Number(match[2]) - 2, col.length===1?col.charCodeAt(0)-65:26+col.charCodeAt(1)-65]
 }
 const numberOrZero = (raw: string): number => {
   if (raw.trim() === '') return 0
@@ -208,14 +225,16 @@ export function exportSheetCsv(columns: readonly string[], rows: readonly (reado
 }
 
 /** Editable grid with local recalculation, CSV import/export, undo and local draft recovery. */
-export function SpreadsheetSurface({ spec }: { readonly spec: SpreadsheetSpec }): ReactNode {
+export function SpreadsheetSurface({ spec, conversationId }: { readonly spec: SpreadsheetSpec; readonly conversationId?: string | undefined }): ReactNode {
   const [rows, setRows] = useState<string[][]>(() => spec.props.rows.map(row => [...row]))
   const [ready, setReady] = useState(false)
   const [active, setActive] = useState('')
   const [undo, setUndo] = useState<string[][][]>([])
   const [error, setError] = useState('')
   const [libraryStatus, setLibraryStatus] = useState('')
-  const key = 'phoenix:sheet:' + spec.props.id
+  const scope=conversationId?conversationId.replace(/[^a-z0-9_-]/giu,'').slice(0,80)+':':''
+  const key = 'phoenix:sheet:' + scope + spec.props.id
+  const [savedRevision,setSavedRevision]=useState<{id:string;revision:number}|null>(null)
   useEffect(() => {
     try {
       const saved: unknown = JSON.parse(localStorage.getItem(key) ?? 'null')
@@ -260,11 +279,22 @@ export function SpreadsheetSurface({ spec }: { readonly spec: SpreadsheetSpec })
           kind: 'sheet', space: 'personal', title: spec.props.title,
           mime: 'application/vnd.phoenix.sheet+json',
           content: JSON.stringify({columns: spec.props.columns, rows}),
-          sourceKey: 'spreadsheet:' + spec.props.id,
+          sourceKey: 'spreadsheet:' + scope + spec.props.id,
         }),
       })
       if (!response.ok) throw new Error('No se pudo guardar en PHOENIX Space')
-      setLibraryStatus('Guardado en Espacio. Si ya existía, se conserva la versión editada allí.')
+      const {item}=await response.json() as {item:{id:string;revision:number;content:string}}
+      const content=JSON.stringify({columns:spec.props.columns,rows})
+      if(item.content===content){setSavedRevision({id:item.id,revision:item.revision});setLibraryStatus('Guardado en Espacio · revisión '+item.revision);return}
+      if(!savedRevision||savedRevision.id!==item.id||savedRevision.revision!==item.revision){
+        setSavedRevision(null)
+        setLibraryStatus('Existe otra versión en Espacio. Revisa el archivo allí antes de sobrescribirlo.');return
+      }
+      const updated=await fetch('/space-api/items/'+item.id,{method:'PUT',headers:{'content-type':'application/json','x-phoenix-space':'1'},body:JSON.stringify({revision:savedRevision.revision,content})})
+      if(!updated.ok)throw Error('No se pudo actualizar: revisión modificada')
+      const next=await updated.json() as {item:{id:string;revision:number}}
+      setSavedRevision(next.item)
+      setLibraryStatus('Actualizado en Espacio · revisión '+next.item.revision)
     } catch {
       setLibraryStatus('Espacio no disponible; la copia local del navegador sigue intacta.')
     }
