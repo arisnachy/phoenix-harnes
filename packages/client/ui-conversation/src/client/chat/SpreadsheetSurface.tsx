@@ -1,5 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { UniverFrame } from './UniverFrame.tsx'
+import { createNativeWorkbook,patchNativeWorkbook,projectNativeWorkbook,validNativeWorkbook,type NativeWorkbook } from './native-workbook.ts'
 import { activateSheetContext,disconnectSheetContext,consumeSheetGrant,type ActiveSheetSnapshot } from './active-sheet-context.ts'
 import type { CanvasAction } from './GenerativeCanvas.tsx'
 import { PhoenixUiIcon } from '@phoenix-ai/dsh-client-ui-primitives'
@@ -252,7 +254,7 @@ export function parseSpreadsheetPatch(value:unknown):SpreadsheetPatchSpec|null{
   return {...value,props:{...p,edits}} as unknown as SpreadsheetPatchSpec
 }
 type SheetFormat={bold?:boolean;italic?:boolean;number?:'general'|'currency'|'percent'}
-type SheetDraft={columns:string[];rows:string[][];revision:number;previous?:string[][];previousColumns?:string[];previousFormats?:Record<string,SheetFormat>;formats?:Record<string,SheetFormat>}
+type SheetDraft={columns:string[];rows:string[][];revision:number;native?:NativeWorkbook;previousNative?:NativeWorkbook;previous?:string[][];previousColumns?:string[];previousFormats?:Record<string,SheetFormat>;formats?:Record<string,SheetFormat>}
 function validFormats(value:unknown):value is Record<string,SheetFormat>{
   if(!isRecord(value)||Object.keys(value).length>3200)return false
   return Object.entries(value).every(([address,format])=>/^[A-P](?:[2-9]|[1-9]\d|1\d{2}|20[01])$/u.test(address)
@@ -272,7 +274,7 @@ export function readSheetDraft(store:Pick<Storage,'getItem'>,key:string):SheetDr
   if(raw===null)return null
   if(raw.length>4000000)throw Error('SHEET_DRAFT_INVALID')
   const v:unknown=JSON.parse(raw)
-  if(!isRecord(v)||!Array.isArray(v.columns)||v.columns.length<1||v.columns.length>16||!v.columns.every(c=>typeof c==='string'&&c.trim()&&c.length<=60)||!validRows(v.rows,v.columns.length)||!Number.isSafeInteger(v.revision)||Number(v.revision)<0||(v.previousColumns!==undefined&&!validColumns(v.previousColumns))||(v.previous!==undefined&&!validRows(v.previous,Array.isArray(v.previousColumns)?v.previousColumns.length:v.columns.length))||(v.previousFormats!==undefined&&!validFormats(v.previousFormats))||(v.formats!==undefined&&!validFormats(v.formats)))throw Error('SHEET_DRAFT_INVALID')
+  if(!isRecord(v)||!Array.isArray(v.columns)||v.columns.length<1||v.columns.length>16||!v.columns.every(c=>typeof c==='string'&&c.trim()&&c.length<=60)||!validRows(v.rows,v.columns.length)||!Number.isSafeInteger(v.revision)||Number(v.revision)<0||(v.previousColumns!==undefined&&!validColumns(v.previousColumns))||(v.previous!==undefined&&!validRows(v.previous,Array.isArray(v.previousColumns)?v.previousColumns.length:v.columns.length))||(v.previousFormats!==undefined&&!validFormats(v.previousFormats))||(v.formats!==undefined&&!validFormats(v.formats))||(v.native!==undefined&&!validNativeWorkbook(v.native))||(v.previousNative!==undefined&&!validNativeWorkbook(v.previousNative)))throw Error('SHEET_DRAFT_INVALID')
   return v as unknown as SheetDraft
 }
 function writeSheetDraft(store:Pick<Storage,'getItem'|'setItem'>,key:string,draft:SheetDraft,expectedRaw:string|null):void{
@@ -288,6 +290,7 @@ export function applySpreadsheetPatch(store:Pick<Storage,'getItem'|'setItem'>,ke
   if(!current)throw Error('SHEET_NOT_FOUND')
   if(spec.props.expectedRevision!==undefined&&current.revision!==spec.props.expectedRevision)throw Error('SHEET_STALE_REVISION')
   const layout=parsed.props.layout
+  if(current.native&&!projectNativeWorkbook(current.native))throw Error('NATIVE_RANGE_UNSUPPORTED')
   const columns=layout?[...layout.columns]:current.columns
   const rows=layout?layout.rows.map(r=>[...r]):current.rows.map(r=>[...r])
   for(const edit of parsed.props.edits){
@@ -302,10 +305,10 @@ export function applySpreadsheetPatch(store:Pick<Storage,'getItem'|'setItem'>,ke
     const cell=rows[r]![c]!
     if(!cell.startsWith('='))continue
     const before=evaluateSheetCell(current.rows,r,c),after=evaluateSheetCell(rows,r,c)
-    if(typeof after==='string'&&(layout||after!==before))throw Error('SHEET_FORMULA_ERROR_'+columnLetter(c)+String(r+2))
-    if(after!==before&&recalculated.length<100)recalculated.push({cell:columnLetter(c)+String(r+2),value:String(after)})
+    if(!current.native&&typeof after==='string'&&(layout||after!==before))throw Error('SHEET_FORMULA_ERROR_'+columnLetter(c)+String(r+2))
+    if(!current.native&&after!==before&&recalculated.length<100)recalculated.push({cell:columnLetter(c)+String(r+2),value:String(after)})
   }
-  const draft:SheetDraft={columns,rows,revision:current.revision+1,previous:current.rows,previousColumns:current.columns,...(current.formats?{previousFormats:current.formats,...(!layout?{formats:current.formats}:{})}:{})}
+  const draft:SheetDraft={columns,rows,revision:current.revision+1,previous:current.rows,previousColumns:current.columns,...(current.native?{native:patchNativeWorkbook(current.native,columns,rows,!!layout),previousNative:current.native}:{}),...(current.formats?{previousFormats:current.formats,...(!layout?{formats:current.formats}:{})}:{})}
   writeSheetDraft(store,key,draft,raw)
   return {draft,changed:parsed.props.edits.map(e=>({cell:e.cell,value:e.after})),recalculated}
 }
@@ -370,6 +373,15 @@ export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:
   const [libraryStatus,setLibraryStatus]=useState('')
   const [version,setVersion]=useState(0)
   const [ready,setReady]=useState(false)
+  const [officeAvailable,setOfficeAvailable]=useState(false)
+  const [officeFailed,setOfficeFailed]=useState(false)
+  const [help,setHelp]=useState(false)
+  const nativeSelection=useRef('A2')
+  useEffect(()=>{
+    let alive=true
+    if(typeof fetch==='function')void fetch('/office-engine/ready.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then((v:unknown)=>{if(alive&&isRecord(v)&&v.engine==='univer'&&v.protocol===1)setOfficeAvailable(true)}).catch(()=>undefined)
+    return()=>{alive=false}
+  },[])
   const [legacyAvailable,setLegacyAvailable]=useState(false)
   const latest=useRef<SheetDraft|null>(null)
   const key=draftKey(spec.props.id,conversationId)
@@ -380,7 +392,9 @@ export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:
     try{
       const current=readSheetDraft(localStorage,key)
       if(!current)return null
-      return {id:spec.props.id,title:spec.props.title,revision:current.revision,selection:columnLetter(selectedRef.current[1])+String(selectedRef.current[0]+2),columns:current.columns,rows:current.rows}
+      const projection=current.native?projectNativeWorkbook(current.native):current
+      if(!projection)return null
+      return {id:spec.props.id,title:spec.props.title,revision:current.revision,selection:current.native?nativeSelection.current:columnLetter(selectedRef.current[1])+String(selectedRef.current[0]+2),columns:projection.columns,rows:projection.rows}
     }catch{return null}
   }
   const [contextAttached,setContextAttached]=useState(false)
@@ -414,7 +428,7 @@ export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:
       }
     }
     const onVerified=(event:Event)=>{
-      if((event as CustomEvent<string>).detail===key&&!pinned)closeStudio(false)
+      if((event as CustomEvent<string>).detail===key&&!pinned&&!officeAvailable&&!latest.current?.native)closeStudio(false)
     }
     const onSubmit=(event:Event)=>{
       const detail=(event as CustomEvent<{session:string;id:string}>).detail
@@ -428,7 +442,7 @@ export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:
       window.removeEventListener('phoenix:studio-owner',onOwner)
       window.removeEventListener('phoenix:studio-verified',onVerified)
     }
-  },[host,studioOwner,key,pinned,contextAttached,conversationId])
+  },[host,studioOwner,key,pinned,contextAttached,conversationId,officeAvailable])
   useEffect(()=>()=>{if(conversationId)disconnectSheetContext(conversationId,studioOwner)},[conversationId,studioOwner])
   useEffect(()=>{
     if(ready&&conversationId&&autoOpen&&!dismissed&&!host)openStudio()
@@ -469,7 +483,7 @@ export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:
   const change=(next:string[][],remember=true):void=>{
     try{
       const raw=localStorage.getItem(key),current=readSheetDraft(localStorage,key)
-      if(!current||!latest.current||current.revision!==latest.current.revision||!validRows(next,current.columns.length))throw Error('SHEET_CONFLICT')
+      if(!current||current.native||!latest.current||current.revision!==latest.current.revision||!validRows(next,current.columns.length))throw Error('SHEET_CONFLICT')
       const draft:SheetDraft={columns:current.columns,rows:next,revision:current.revision+1,previous:current.rows,previousColumns:current.columns,...(current.formats?{formats:current.formats,previousFormats:current.formats}:{})}
       writeSheetDraft(localStorage,key,draft,raw)
       if(remember)setUndo(old=>[...old.slice(-19),current.rows])
@@ -481,7 +495,7 @@ export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:
     try{
       const raw=localStorage.getItem(key),current=readSheetDraft(localStorage,key)
       if(!current?.previous||current.revision!==latest.current?.revision)return
-      const draft:SheetDraft={columns:current.previousColumns??current.columns,rows:current.previous,revision:current.revision+1,previous:current.rows,previousColumns:current.columns,...(current.previousFormats?{formats:current.previousFormats}:{}),...(current.formats?{previousFormats:current.formats}:{})}
+      const draft:SheetDraft={columns:current.previousColumns??current.columns,rows:current.previous,revision:current.revision+1,previous:current.rows,previousColumns:current.columns,...(current.previousNative?{native:current.previousNative}:{}),...(current.native?{previousNative:current.native}:{}),...(current.previousFormats?{formats:current.previousFormats}:{}),...(current.formats?{previousFormats:current.formats}:{})}
       writeSheetDraft(localStorage,key,draft,raw)
       setUndo(old=>old.slice(0,-1))
       window.dispatchEvent(new CustomEvent(SHEET_EVENT,{detail:key}))
@@ -526,6 +540,7 @@ export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:
     savingRef.current=true
     setLibraryStatus('Guardando en Espacio…')
     try{
+      if(current.native)throw Error('NATIVE_EXPORT_REQUIRES_NATIVE_CONVERTER')
       const content=JSON.stringify({columns:current.columns,rows:current.rows})
       const headers={'content-type':'application/json','x-phoenix-space':'1'}
       const response=await fetch('/space-api/items',{method:'POST',headers,body:JSON.stringify({kind:'sheet',space:'personal',title:spec.props.title,mime:'application/vnd.phoenix.sheet+json',content,sourceKey:'spreadsheet:'+conversationId+':'+spec.props.id})})
@@ -605,6 +620,32 @@ export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:
   }
   const visibleRows=host&&!query&&rows.length<15?[...rows,...Array.from({length:15-rows.length},()=> (latest.current?.columns??spec.props.columns).map(()=>''))]:rows
   const gridRows=visibleRows.map((row,r)=>({row,r})).filter(({row})=>!query||row.some(cell=>cell.toLocaleLowerCase('es').includes(query.toLocaleLowerCase('es'))))
+  const saveNative=(native:NativeWorkbook,expected:number):number|null=>{
+    try{
+      const raw=localStorage.getItem(key),current=readSheetDraft(localStorage,key)
+      if(!current||current.revision!==expected||!validNativeWorkbook(native))throw Error('NATIVE_CONFLICT')
+      const projection=projectNativeWorkbook(native)
+      const draft:SheetDraft={columns:projection?.columns??current.columns,rows:projection?.rows??current.rows,revision:current.revision+1,native,previous:current.rows,previousColumns:current.columns,...(current.native?{previousNative:current.native}:{}),...(current.formats?{previousFormats:current.formats}:{})}
+      writeSheetDraft(localStorage,key,draft,raw)
+      latest.current=draft
+      window.dispatchEvent(new CustomEvent(SHEET_EVENT,{detail:key}))
+      return draft.revision
+    }catch{setError('No se guardó el último cambio del motor. Descarga la recuperación antes de cerrar.');return null}
+  }
+  const downloadNative=()=>{
+    const current=latest.current
+    if(!current?.native)return
+    const url=URL.createObjectURL(new Blob([JSON.stringify(current.native)],{type:'application/json'}))
+    const a=document.createElement('a');a.href=url;a.download=spec.props.id+'.univer.json';a.click();URL.revokeObjectURL(url)
+  }
+  const nativeMode=ready&&officeAvailable&&!officeFailed&&(!!host||!!latest.current?.native)&&(!latest.current?.formats||!!latest.current?.native)
+  const nativeState=useMemo(()=>latest.current?.native??createNativeWorkbook(spec.props.id,spec.props.title,latest.current?.columns??spec.props.columns,rows),[version,rows,spec.props.id,spec.props.title])
+  const nativeEditor=<section className={css.nativeOffice} data-live-studio={host?'sheet':undefined} data-generative-ui="spreadsheet" data-sheet-draft-key={key}>
+    <div className={css.nativeOfficeTop}><strong>{spec.props.title}</strong><span>Univer · v{version}</span><details><summary>Archivo</summary><button type="button" onClick={downloadNative} disabled={!latest.current?.native}>Guardar copia del libro</button><button type="button" onClick={undoRevision} disabled={!latest.current?.previous}>Restaurar revisión anterior</button><button type="button" onClick={detach}>Desvincular de Kira</button></details><label><input type="checkbox" checked={pinned} onChange={e=>setPinned(e.currentTarget.checked)}/> Fijar</label>{host&&<button type="button" onClick={()=>closeStudio()} aria-label="Cerrar editor de hoja">×</button>}</div>
+    <UniverFrame native={nativeState} revision={version} onSave={saveNative} onSelection={(r,c)=>{if(c>=0&&c<16&&r>=0&&r<=200)nativeSelection.current=columnLetter(c)+String(r+1)}} onFailure={message=>{setError(message);setOfficeFailed(true)}}/>
+    {error&&<p role="alert" className={css.error}>{error}</p>}
+    {latest.current?.native&&!projectNativeWorkbook(latest.current.native)&&<p role="status" className={css.error}>Libro conservado. El rango actual supera el puente de edición de Kira.</p>}
+  </section>
   const editor=<section className={host?css.studioSheet:css.surface+' '+css.studioSheet} data-live-studio={host?"sheet":undefined} data-generative-ui="spreadsheet" data-sheet-draft-key={key}>
     <header className={css.heading}><PhoenixUiIcon name="table" />
       <div><h3>{spec.props.title}</h3><p>Hoja editable · fórmulas en tiempo real · v{version}</p></div>{host&&<button type="button" className={css.studioClose} onClick={()=>closeStudio()} aria-label="Cerrar editor de hoja">×</button>}</header>
@@ -614,8 +655,8 @@ export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:
         {(['Archivo','Inicio','Insertar','Fórmulas','Datos','Vista'] as const).map(tab=><button key={tab} type="button" aria-current={ribbon===tab?'page':undefined} onClick={()=>setRibbon(tab)}>{tab}</button>)}
       </div>
       <div className={css.excelRibbon} role="toolbar" aria-label={ribbon}>
-        {ribbon==='Archivo'&&<><button onClick={()=>{void saveToLibrary()}}>Guardar</button><button onClick={()=>{void saveToLibrary(true)}}>Exportar XLSX</button><button onClick={download}>Descargar CSV</button></>}
-        {ribbon==='Inicio'&&<><button onClick={undoRevision} disabled={!latest.current?.previous} aria-label="Deshacer modificación">↶ Deshacer</button><button aria-pressed={!!selectedFormat?.bold} onClick={()=>setFormat('bold',!selectedFormat?.bold)}><strong>N</strong> Negrita</button><button aria-pressed={!!selectedFormat?.italic} onClick={()=>setFormat('italic',!selectedFormat?.italic)}><em>C</em> Cursiva</button><button onClick={()=>setFormat('number','currency')}>RD$ Moneda</button><button onClick={()=>setFormat('number','percent')}>% Porcentaje</button><button onClick={()=>setFormat('number','general')}>General</button></>}
+        {ribbon==='Archivo'&&<><button onClick={()=>{void saveToLibrary()}}>Guardar</button><button onClick={()=>{void saveToLibrary(true)}}>Exportar XLSX</button><button onClick={download}>Descargar CSV</button><label className={css.fileButton}>Importar CSV<input type="file" accept=".csv,text/csv" onChange={importCsv}/></label>{legacyAvailable&&<button onClick={importLegacy}>Recuperar copia</button>}{onAction&&<button onClick={share}>Vincular con Kira</button>}</>}
+        {ribbon==='Inicio'&&<><button onClick={undoRevision} disabled={!latest.current?.previous} aria-label="Deshacer">↶ Deshacer</button><button aria-pressed={!!selectedFormat?.bold} onClick={()=>setFormat('bold',!selectedFormat?.bold)}><strong>N</strong> Negrita</button><button aria-pressed={!!selectedFormat?.italic} onClick={()=>setFormat('italic',!selectedFormat?.italic)}><em>C</em> Cursiva</button><button onClick={()=>setFormat('number','currency')}>RD$ Moneda</button><button onClick={()=>setFormat('number','percent')}>% Porcentaje</button><button onClick={()=>setFormat('number','general')}>General</button></>}
         {ribbon==='Insertar'&&<><button onClick={addRow}>＋ Nueva fila</button><button onClick={()=>insertFormula('SUM')}>Σ Autosuma</button></>}
         {ribbon==='Fórmulas'&&(['SUM','AVERAGE','MIN','MAX'] as const).map(name=><button key={name} onClick={()=>insertFormula(name)}>{name}</button>)}
         {ribbon==='Datos'&&<><input aria-label="Buscar en hoja" placeholder="Buscar valores…" value={query} onChange={event=>setQuery(event.currentTarget.value)}/><button onClick={()=>sortBySelected()}>Ordenar A–Z</button><button onClick={()=>sortBySelected(true)}>Ordenar Z–A</button></>}
@@ -650,24 +691,9 @@ export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:
       <span>{zoom}%</span>
     </div>
     {error && <p role="alert" className={css.error}>{error}</p>}
-    <div className={css.actions}>
-      <button type="button" disabled={!ready||rows.length >= 200} onClick={() =>
-        change([...rows.map(row => [...row]), (latest.current?.columns??spec.props.columns).map(() => '')])}>
-        <PhoenixUiIcon name="plus" size={15} /> Fila
-      </button>
-      <button type="button" disabled={!ready||(!latest.current?.previous&&undo.length===0)} onClick={undoRevision}><PhoenixUiIcon name="reset" size={15} /> Deshacer</button>
-      <label className={css.fileButton}><PhoenixUiIcon name="file" size={15}/> Importar CSV
-        <input type="file" accept=".csv,text/csv" onChange={importCsv} /></label>
-      <button type="button" onClick={download}><PhoenixUiIcon name="download" size={15} /> CSV</button>
-      <button type="button" disabled={!ready} onClick={() => { void saveToLibrary() }}>Guardar en Espacio</button>
-      {onAction&&<button type="button" disabled={!ready} onClick={share}>Editar con Kira</button>}
-      {legacyAvailable&&<button type="button" disabled={!ready} onClick={importLegacy}>Recuperar copia anterior</button>}
-    </div>
-    {contextAttached&&<p className={css.disclaimer}>Hoja activa: al enviar un mensaje a Kira se adjuntan sus valores y revisión actuales (hasta 24.000 caracteres). <button type="button" onClick={detach}>Desvincular del chat</button></p>}
-    {libraryStatus && <p role="status" className={css.disclaimer}>{libraryStatus}</p>}
-    <p className={css.disclaimer}>Fórmulas permitidas: referencias A2:P201, + − × ÷, SUM, AVERAGE, MIN, MAX, COUNT, PRODUCT, ABS, ROUND, SQRT, POWER, INT, MOD.
-      Los cambios se guardan solo en este navegador. CSV no conserva las fórmulas como Excel;
-      Exportar XLSX conserva las fórmulas admitidas; este editor no importa libros XLSX ni admite todas las funciones de Excel.</p>
+    <div className={css.compactSheetStatus}>{libraryStatus&&<span role="status">{libraryStatus}</span>}{contextAttached&&<button type="button" onClick={detach}>Desvincular de Kira</button>}<button type="button" onClick={()=>setHelp(v=>!v)} aria-label="Ayuda del editor">?</button></div>
+    {help&&<p className={css.disclaimer}>Editor básico de recuperación: fórmulas aritméticas, SUM, AVERAGE, MIN, MAX, COUNT, PRODUCT, ABS, ROUND, SQRT, POWER, INT y MOD. El archivo permanece en este navegador; XLSX requiere exportar desde Archivo.</p>}
   </section>
-  return <><div ref={anchorRef}>{host?<div className={css.sheetAnchorStatus} role="status"><PhoenixUiIcon name="table" size={15}/><span>Hoja actual visible en PHOENIX Studio · v{version}</span></div>:editor}</div>{host&&createPortal(editor,host)}</>
+  const displayed=nativeMode?nativeEditor:latest.current?.native?<section className={css.surface} data-live-studio={host?'sheet':undefined}><strong>{spec.props.title}</strong><p>Libro Univer guardado. El motor no está disponible; no se abrirá con un editor incompatible.</p><button type="button" onClick={downloadNative}>Descargar libro de recuperación</button><button type="button" onClick={()=>setOfficeFailed(false)}>Reintentar motor</button></section>:editor
+  return <><div ref={anchorRef}>{host?<div className={css.sheetAnchorStatus} role="status"><PhoenixUiIcon name="table" size={15}/><span>Hoja actual visible en PHOENIX Studio · v{version}</span></div>:displayed}</div>{host&&createPortal(displayed,host)}</>
 }

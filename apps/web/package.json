@@ -20,7 +20,7 @@
     "!dist/**/*.map"
   ],
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && node ../../scripts/build-office-engine.mjs",
     "dev": "vite",
     "watch": "vite build --watch --no-emptyOutDir"
   },
