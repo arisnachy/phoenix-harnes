@@ -213,12 +213,12 @@ export function exportSheetCsv(columns: readonly string[], rows: readonly (reado
 export interface SpreadsheetPatchSpec {
   readonly component:'spreadsheet_patch'
   readonly version:1
-  readonly props:{readonly id:string;readonly edits:readonly {readonly cell:string;readonly before:string;readonly after:string}[]}
+  readonly props:{readonly id:string;readonly expectedRevision?:number;readonly edits:readonly {readonly cell:string;readonly before:string;readonly after:string}[]}
 }
 export function parseSpreadsheetPatch(value:unknown):SpreadsheetPatchSpec|null{
   if(!isRecord(value)||!keys(value,['component','version','props'])||value.component!=='spreadsheet_patch'||value.version!==1||!isRecord(value.props))return null
   const p=value.props
-  if(!keys(p,['id','edits'])||typeof p.id!=='string'||!/^[a-z][a-z0-9_-]{1,63}$/.test(p.id)||!Array.isArray(p.edits)||p.edits.length<1||p.edits.length>100)return null
+  if(!keys(p,['id','edits','expectedRevision'])||typeof p.id!=='string'||!/^[a-z][a-z0-9_-]{1,63}$/.test(p.id)||!Array.isArray(p.edits)||p.edits.length<1||p.edits.length>100||(p.expectedRevision!==undefined&&(!Number.isSafeInteger(p.expectedRevision)||Number(p.expectedRevision)<0)))return null
   const seen=new Set<string>()
   for(const e of p.edits){
     if(!isRecord(e)||!keys(e,['cell','before','after'])||typeof e.cell!=='string'||!/^([A-P])(?:[2-9]|[1-9][0-9]|1[0-9]{2}|20[01])$/.test(e.cell)||seen.has(e.cell)||typeof e.before!=='string'||typeof e.after!=='string'||e.before.length>300||e.after.length>300)return null
@@ -259,6 +259,7 @@ export function applySpreadsheetPatch(store:Pick<Storage,'getItem'|'setItem'>,ke
   if(!parseSpreadsheetPatch(spec))throw Error('SHEET_PATCH_INVALID')
   const raw=store.getItem(key),current=readSheetDraft(store,key)
   if(!current)throw Error('SHEET_NOT_FOUND')
+  if(spec.props.expectedRevision!==undefined&&current.revision!==spec.props.expectedRevision)throw Error('SHEET_STALE_REVISION')
   const rows=current.rows.map(r=>[...r])
   for(const edit of spec.props.edits){
     const pos=reference(edit.cell)!
@@ -287,7 +288,12 @@ export function SpreadsheetPatch({spec,conversationId}:{spec:SpreadsheetPatchSpe
   const apply=()=>{
     try{
       if(!conversationId)throw Error('SHEET_CONVERSATION_REQUIRED')
+      const proofKey='phoenix:sheet:patch:v1:'+encodeURIComponent(key)+':'+JSON.stringify(spec.props)
+      if(localStorage.getItem(proofKey)==='applied'){
+        setDone(true);setReceipt('Esta modificación ya se ejecutó antes. Verifica los valores de la versión actual.');return
+      }
       const result=applySpreadsheetPatch(localStorage,key,spec)
+      try{localStorage.setItem(proofKey,'applied')}catch{/* original edit remains durable */}
       window.dispatchEvent(new CustomEvent(SHEET_EVENT,{detail:key}))
       setDone(true)
       setReceipt('Aplicado y verificado en la misma hoja · v'+result.draft.revision+'. '+[...result.changed,...result.recalculated].map(c=>c.cell+' = '+c.value).join(' · '))
@@ -563,6 +569,11 @@ export function SpreadsheetSurface({spec,conversationId,onAction}:{readonly spec
           })}</tr>)}</tbody>
       </table>
     </div>
+    {host&&<div className={css.excelStatusBar}>
+      <span className={css.excelSheetTab}>▤ {spec.props.title.slice(0,24)}</span>
+      <span>{rows.length+1} filas · {(latest.current?.columns??spec.props.columns).length} columnas</span>
+      <span>{zoom}%</span>
+    </div>}
     {error && <p role="alert" className={css.error}>{error}</p>}
     <div className={css.actions}>
       <button type="button" disabled={!ready||rows.length >= 200} onClick={() =>
