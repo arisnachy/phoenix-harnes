@@ -139,3 +139,8 @@ button.quickCard:focus-visible {outline:2px solid var(--dsw-specific-phoenix-acc
 .shell{min-height:0;gap:9px}
 .shell>.titleRow{border-bottom:0;padding-bottom:3px}
 .shell>.titleRow h2{font-size:16px}
+
+/* One explicit, protected access dialog, outside the consultation flow. */
+.accessDialog{box-sizing:border-box;width:min(440px,calc(100% - 32px));max-height:calc(100% - 32px);overflow:auto;border:1px solid var(--dsw-alias-border-l2);border-radius:22px;padding:22px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);box-shadow:0 24px 80px #0003}
+.accessDialog::backdrop{background:#10182066;backdrop-filter:blur(3px)}
+.dialogHeader{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;font-size:15px}
