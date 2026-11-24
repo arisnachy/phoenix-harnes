@@ -152,6 +152,14 @@ test('clinical revision and signing enforce concurrency and professional ownersh
   db.update(d,'patients',p.id,profile.version,{action:'allergy-review',status:'none-known',details:''})
   const med=db.create(d,'prescriptions',{encounterId:e.id,medication:'Medicamento',directions:'Plan revisado',safetyAcknowledged:true})
   assert.equal(med.signedBy,'doctor1')
+  const regimen={presentation:'Presentación de prueba',dose:'Dosis documentada',route:'Vía revisada',frequency:'Intervalo revisado',duration:'Duración revisada',quantity:'Cantidad revisada',instructions:'Indicaciones sintéticas',reference:'Monografía revisada por el profesional'}
+  const structured=db.create(d,'prescriptions',{encounterId:e.id,medication:'Producto sintético',directions:'Texto no confiable',regimen,safetyAcknowledged:true})
+  assert.deepEqual(structured.regimen,regimen)
+  assert.match(structured.directions,/Dosis: Dosis documentada/)
+  assert(!structured.directions.includes('Texto no confiable'))
+  assert.equal(structured.safetyReview.drugInteractionCatalogChecked,false)
+  assert.throws(()=>db.create(d,'prescriptions',{encounterId:e.id,medication:'Producto sintético',regimen:{...regimen,reference:''},safetyAcknowledged:true}),/Fuente farmacológica/)
+
   db.createStaff(admin.actor,{username:'labuser',password:'another-secure-password-2026',role:'lab'})
   const lab=db.login('labuser','another-secure-password-2026').actor
   order=db.update(lab,'orders',order.id,order.version,{action:'result',result:'Informe validado'})
