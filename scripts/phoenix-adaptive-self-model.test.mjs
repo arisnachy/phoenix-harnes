@@ -51,3 +51,39 @@ test('does not traverse symlink directories, hidden files or node_modules', asyn
   assert.equal(model.packageCount, 1)
   assert.deepEqual(model.packages.map(v => v.id), ['@phoenix-ai/demo'])
 }))
+
+test('cognitive genome is deterministic and tracks transitive dependents without authorizing changes', async () => fixture(async root => {
+  const add = async (folder, name, inject) => {
+    await mkdir(join(root, 'packages', 'client', folder), { recursive: true })
+    await writeFile(join(root, 'packages', 'client', folder, 'package.json'),
+      JSON.stringify({ name, dsh: { client: { inject } } }))
+  }
+  await add('runtime', '@phoenix-ai/dsh-runtime', ['@phoenix-ai/leaf'])
+  await add('leaf', '@phoenix-ai/leaf', ['@phoenix-ai/demo', 'unresolved-service'])
+  const first = await inspectAdaptiveSource(root, new Date('2026-11-21T12:00:00Z'))
+  const next = await inspectAdaptiveSource(root, new Date('2026-11-22T12:00:00Z'))
+  const genome = first.cognitiveGenome
+  assert.match(genome.fingerprint, /^[a-f0-9]{64}$/u)
+  assert.equal(genome.fingerprint, next.cognitiveGenome.fingerprint)
+  assert.equal(genome.edges.length, 3)
+  assert.equal(genome.unresolved.length, 1)
+  assert.equal(genome.causalProof, false)
+  assert.equal(genome.mayApply, false)
+  assert.deepEqual(genome.impact.find(v => v.source.endsWith('/runtime')).potentialDependents,
+    ['packages/client/demo', 'packages/client/leaf'])
+  assert.ok(!JSON.stringify(genome).includes('SENSITIVE_SENTINEL'))
+  await add('leaf', '@phoenix-ai/leaf', [])
+  const changed = await inspectAdaptiveSource(root)
+  assert.notEqual(changed.cognitiveGenome.fingerprint, genome.fingerprint)
+}))
+
+test('duplicate declarations are unresolved rather than assigned arbitrarily', async () => fixture(async root => {
+  for (const folder of ['one', 'two']) {
+    await mkdir(join(root, 'packages', 'client', folder), { recursive: true })
+    await writeFile(join(root, 'packages', 'client', folder, 'package.json'),
+      JSON.stringify({ name: '@phoenix-ai/dsh-runtime' }))
+  }
+  const { cognitiveGenome } = await inspectAdaptiveSource(root)
+  assert.equal(cognitiveGenome.edges.length, 0)
+  assert.equal(cognitiveGenome.unresolved[0].reason, 'ambiguous-package')
+}))

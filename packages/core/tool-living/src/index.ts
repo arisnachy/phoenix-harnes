@@ -1,6 +1,7 @@
 /** Model-facing controls and standing policy for Universal Living Creations. @module @phoenix-ai/dsh-tool-living */
 
 import { randomBytes } from 'node:crypto'
+import { runEvolution, summarizeEvolutionEvents } from './evolution.ts'
 import { inspectSystemEnvironment, searchLocalApps } from './system-proprioception.ts'
 import { confirmAdaptiveExternalAction, type AdaptiveApprovalService } from './approved-action.ts'
 import type { Context } from '@phoenix-ai/cordis'
@@ -276,6 +277,27 @@ function assertTargetReached(snapshot: LivingCreationSnapshot): void {
 
 /** Register the universal living-creation policy and model controls. */
 export function apply(ctx: Context): void {
+  ctx.systemPrompt.section({name:'phoenix:evolution-evidence',order:117,text:'PHOENIX can use phoenix_evolution_analyze to consolidate bounded operational observations (dreaming), compare paired fixtures (causal/lab/skill), simulate dependency removal (twin), summarize measured outcomes (metrics), assess current host RAM (homeostasis), suggest tools from explicit goals (intent), and prepare reference-only model handoffs (handoff). Use only opaque non-sensitive identifiers, never patient data, credentials, conversation transcripts or private reasoning. Caller-supplied evidence is unverified; results never authorize promotion, provider switching, resource reservation, or execution. Do not invent observations. No extra persistence or background activity; rely on the existing authorized session and review workflows.'})
+  ctx.tools.register(defineTool({
+    name: 'phoenix_evolution_analyze',
+    description: 'Bounded read-only operational analysis. input_json is a JSON object (max 32 KiB, 128 entries per array). dreaming/metrics: use {} for actual recent calling-session events, or observations [{id,kind(timeout|resource|tool|verification|routing),strategy,fixture,ok,ms}]. causal/lab/skill: same plus baseline,candidate. twin: nodes,edges [{dependent,dependency}],remove. handoff: missionRef,sourceModel,targetModel,pending,completed,evidenceRefs. intent: goal(debugging|planning|switching|learning). homeostasis: requestedBytes. IDs use lowercase letters, digits, dot, dash or underscore, max 64. Never pass personal data, secrets or raw transcripts. No automatic actions, storage, verified causal proof or model switching.',
+    parameters: {
+      operation: { type: 'string', required: true, enum: ['dreaming','metrics','causal','lab','skill','twin','handoff','intent','homeostasis'] },
+      input_json: { type: 'string', required: true },
+    },
+    output: {schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    execute(args, exec){
+      if ((args.operation === 'dreaming' || args.operation === 'metrics') && args.input_json.trim() === '{}') {
+        const events = exec.agent?.session.events
+        if (events === undefined) throw new Error('EVOLUTION_CALLING_SESSION_REQUIRED')
+        return Promise.resolve(JSON.stringify(summarizeEvolutionEvents(events)))
+      }
+      return Promise.resolve(JSON.stringify(runEvolution(args.operation,args.input_json)))
+    },
+    presentCall:()=>({card:'generic',title:'PHOENIX · Evolution',kind:'read' as const}),
+  }))
+
   ctx.systemPrompt.section({ name: 'tool:living', order: 115, text: LIVING_CREATION_POLICY })
   ctx.systemPrompt.section({name:'phoenix:self-navigation',order:116,text:'PHOENIX can inspect and adapt its native General navigation through a user-reviewed generative-ui block: {"component":"adaptive_control","version":1,"props":{"appId":"general","operation":"native-menu","menuAction":"inspect"}}. The live browser receipt lists menu IDs, labels, registered destinations and revision. Ask the user to share that receipt if not visible to you. For open use menuAction open and sectionId; rename uses sectionId,label,expectedRevision; move uses sectionId,direction up/down,expectedRevision; add uses a new sectionId beginning shortcut-, label, target (home/tasks/connectors/team/library/healthia), expectedRevision; remove only shortcuts; restore uses expectedRevision. Never guess revisions. The browser requires preflight and user apply. This is local navigation only, not permission for configuration secrets, clinical actions, arbitrary code or core edits. For active Host tools use system_runtime_inspect and for machine state system_environment_inspect. Do not claim execution without the browser receipt.'})
   ctx.tools.register(defineTool({

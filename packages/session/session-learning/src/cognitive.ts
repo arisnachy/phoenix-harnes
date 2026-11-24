@@ -8,7 +8,7 @@
  * @module @phoenix-ai/dsh-session-learning/cognitive
  */
 
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { appendFile, mkdir, readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import type { MemoryId, MemoryKind } from './ledger.ts'
@@ -160,7 +160,7 @@ function isAutomaticallyRecallable(record: CognitiveMemoryRecord, referenceTime:
 
 type CognitiveLedgerRow =
   | { readonly op: 'event'; readonly record: CognitiveMemoryRecord }
-  | { readonly op: 'reinforce'; readonly id: MemoryId; readonly frequency: number; readonly lastObservedAt: number }
+  | { readonly op: 'reinforce'; readonly id: MemoryId; readonly frequency: number; readonly lastObservedAt: number; readonly sourceKey?: string }
   | { readonly op: 'supersede'; readonly id: MemoryId; readonly supersededBy: MemoryId; readonly validUntil: number }
   | { readonly op: 'forget'; readonly id: MemoryId; readonly forgottenAt: number }
 
@@ -204,6 +204,13 @@ export class CognitiveMemoryLedger {
   private readonly records = new Map<MemoryId, CognitiveMemoryRecord>()
   private readonly sourceIndex = new Map<string, MemoryId>()
   private writeChain: Promise<void> = Promise.resolve()
+  private operationChain: Promise<void> = Promise.resolve()
+
+  private serialize<T>(operation: () => Promise<T>): Promise<T> {
+    const pending = this.operationChain.then(operation)
+    this.operationChain = pending.then(() => undefined, () => undefined)
+    return pending
+  }
 
   /** @param path - JSONL path owned by this ledger. */
   constructor(path: string) {
@@ -213,6 +220,10 @@ export class CognitiveMemoryLedger {
 
   /** Load canonical event rows and lifecycle rows without compacting them. */
   async load(): Promise<void> {
+    return this.serialize(() => this.loadInternal())
+  }
+
+  private async loadInternal(): Promise<void> {
     await this.writeChain
     this.records.clear()
     this.sourceIndex.clear()
@@ -242,6 +253,10 @@ export class CognitiveMemoryLedger {
    * @returns The active or explicitly forgotten record for that source.
    */
   async remember(input: CognitiveMemoryInput): Promise<CognitiveMemoryRecord> {
+    return this.serialize(() => this.rememberInternal(input))
+  }
+
+  private async rememberInternal(input: CognitiveMemoryInput): Promise<CognitiveMemoryRecord> {
     validateInput(input)
     const sourceKey = sourceKeyOf(input)
     const existingId = this.sourceIndex.get(sourceKey)
@@ -259,7 +274,8 @@ export class CognitiveMemoryLedger {
         op: 'reinforce',
         id: previous.id,
         frequency: previous.frequency + 1,
-        lastObservedAt: input.occurredAt,
+        lastObservedAt: Math.max(previous.lastObservedAt, input.occurredAt),
+        sourceKey,
       }
       await this.appendRows([reinforced])
       this.applyRow(reinforced)
@@ -408,6 +424,10 @@ export class CognitiveMemoryLedger {
    * @returns a promise that settles after the tombstone is durable.
    */
   async forget(id: MemoryId): Promise<void> {
+    return this.serialize(() => this.forgetInternal(id))
+  }
+
+  private async forgetInternal(id: MemoryId): Promise<void> {
     const record = this.records.get(id)
     if (record === undefined || record.status === 'forgotten') return
     const row: CognitiveLedgerRow = { op: 'forget', id, forgottenAt: Date.now() }
@@ -451,6 +471,7 @@ export class CognitiveMemoryLedger {
     const existing = this.records.get(row.id)
     if (existing === undefined) return
     if (row.op === 'reinforce') {
+      if (row.sourceKey !== undefined) this.sourceIndex.set(row.sourceKey, row.id)
       this.records.set(row.id, { ...existing, frequency: row.frequency, lastObservedAt: row.lastObservedAt })
     } else if (row.op === 'supersede') {
       this.records.set(row.id, { ...existing, status: 'superseded', validUntil: row.validUntil, supersededBy: row.supersededBy })
@@ -507,7 +528,7 @@ function sameValue(record: CognitiveMemoryRecord, input: CognitiveMemoryInput): 
 
 function sourceKeyOf(input: CognitiveMemoryInput | CognitiveMemoryRecord): string {
   const sourceEventType = 'provenance' in input ? input.provenance.sourceEventType : input.sourceEventType
-  return [input.sessionId, String(input.eventSeq), sourceEventType, input.kind, input.subject ?? ''].join(':')
+  return createHash('sha256').update(JSON.stringify([input.sessionId, input.eventSeq, sourceEventType, input.kind, input.subject ?? ''])).digest('hex')
 }
 
 function hasEntity(record: CognitiveMemoryRecord, query: string): boolean {
@@ -575,6 +596,7 @@ function validateRow(value: unknown, line: number): CognitiveLedgerRow {
     id?: unknown
     frequency?: unknown
     lastObservedAt?: unknown
+    sourceKey?: unknown
     supersededBy?: unknown
     validUntil?: unknown
     forgottenAt?: unknown
@@ -605,7 +627,9 @@ function validateRow(value: unknown, line: number): CognitiveLedgerRow {
     return { op: 'event', record: { ...record, id: record.id, status: 'active' } }
   }
   if (row.op === 'reinforce' && typeof row.id === 'string' && typeof row.frequency === 'number' && Number.isSafeInteger(row.frequency) && row.frequency >= 1 && typeof row.lastObservedAt === 'number' && Number.isFinite(row.lastObservedAt)) {
-    return { op: 'reinforce', id: row.id as MemoryId, frequency: row.frequency, lastObservedAt: row.lastObservedAt }
+    if (row.sourceKey !== undefined && (typeof row.sourceKey !== 'string' || !/^[a-f0-9]{64}$/u.test(row.sourceKey))) throw new TypeError(`cognitive memory row ${line} has invalid source key`)
+    return { op: 'reinforce', id: row.id as MemoryId, frequency: row.frequency, lastObservedAt: row.lastObservedAt,
+      ...row.sourceKey === undefined ? {} : { sourceKey: row.sourceKey } }
   }
   if (row.op === 'supersede' && typeof row.id === 'string' && typeof row.supersededBy === 'string' && typeof row.validUntil === 'number' && Number.isFinite(row.validUntil)) {
     return { op: 'supersede', id: row.id as MemoryId, supersededBy: row.supersededBy as MemoryId, validUntil: row.validUntil }
