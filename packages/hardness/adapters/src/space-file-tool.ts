@@ -61,7 +61,10 @@ export function createSpaceFileTool(resolvePort:()=>number|undefined):ToolDefini
         item=(await api('/items/'+args.id)).item
         if(!item||item.deleted)throw Error('Archivo no disponible')
       }
-      if(args.action==='read')return {result:(item!.bytes?{...item,content:undefined,binary:true,note:'Binary content is not extracted by this action.'}:item) as never}
+      if(args.action==='read'){
+        if(item!.bytes){const {content:_content,...meta}=item!;return {result:{...meta,binary:true,note:'Binary content is not extracted by this action.'}}}
+        return {result:item!}
+      }
       if(args.action==='update'){
         if(item!.bytes)throw new ToolArgsError(['Imported original binary is read-only. Derive a new native document instead.'])
         if(args.revision!==item!.revision)throw Error('CONFLICT: read latest revision first')

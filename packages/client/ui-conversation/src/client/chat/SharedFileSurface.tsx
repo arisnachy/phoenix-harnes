@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { evaluateSheetCell, exportSheetCsv } from './SpreadsheetSurface.tsx'
 import css from './InteractiveUi.module.css'
 
@@ -25,7 +25,17 @@ function parseDeck(source:string):Deck|undefined{
     if(Array.isArray(d.slides)&&d.slides.length>0&&d.slides.length<=100&&d.slides.every(s=>s&&typeof s.title==='string'&&typeof s.body==='string'))return d
   }catch{/* Keep invalid source editable */}
 }
+type BinaryInput={id:string;title:string;mime:string}
+let sharedBinaryViewer:((input:BinaryInput)=>ReactNode)|undefined
+export function configureSharedBinaryViewer(render:(input:BinaryInput)=>ReactNode):()=>void{
+  sharedBinaryViewer=render
+  return ()=>{if(sharedBinaryViewer===render)sharedBinaryViewer=undefined}
+}
 function BinaryView({item}:{item:Item}){
+  const shared=sharedBinaryViewer?.({id:item.id,title:item.title,mime:item.mime})
+  return shared?<>{shared}<a href={'/space-api/items/'+item.id+'/file'} download={item.title}>Descargar original</a></>:<BasicBinaryView item={item}/>
+}
+function BasicBinaryView({item}:{item:Item}){
   const [file,setFile]=useState<{url:string;mime:string}|null>(null)
   const [error,setError]=useState('')
   useEffect(()=>{
@@ -144,6 +154,7 @@ export function SharedFileSurface({itemId}:{itemId:string}){
       {!item.bytes&&<button type="button" disabled={!dirty||saving||!!remote} onClick={()=>{void save()}}>Guardar</button>}
       <button type="button" onClick={openSpace}>Abrir en Espacio</button>
       <button type="button" onClick={()=>{void navigator.clipboard?.writeText('Archivo PHOENIX '+item.id+' · revisión '+item.revision)}}>Copiar referencia para Kira</button>
+      <button type="button" disabled={dirty} onClick={()=>window.dispatchEvent(new CustomEvent('phoenix:shared-file-consult',{detail:{id:item.id,revision:item.revision,title:item.title}}))}>Consultar a Kira</button>
     </div>
     <p className={css.disclaimer}>Kira puede leer y modificar este mismo archivo por su ID. Para generar otro documento a partir de él, pide una nueva versión derivada.</p>
   </section>
