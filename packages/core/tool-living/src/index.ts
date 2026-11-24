@@ -1,7 +1,7 @@
 /** Model-facing controls and standing policy for Universal Living Creations. @module @phoenix-ai/dsh-tool-living */
 
 import { randomBytes } from 'node:crypto'
-import { runEvolution, summarizeEvolutionEvents } from './evolution.ts'
+import { IdleEvolutionCache, inferEvolutionIntent, runEvolution, summarizeEvolutionEvents } from './evolution.ts'
 import { inspectSystemEnvironment, searchLocalApps } from './system-proprioception.ts'
 import { confirmAdaptiveExternalAction, type AdaptiveApprovalService } from './approved-action.ts'
 import type { Context } from '@phoenix-ai/cordis'
@@ -277,7 +277,23 @@ function assertTargetReached(snapshot: LivingCreationSnapshot): void {
 
 /** Register the universal living-creation policy and model controls. */
 export function apply(ctx: Context): void {
-  ctx.systemPrompt.section({name:'phoenix:evolution-evidence',order:117,text:'PHOENIX can use phoenix_evolution_analyze to consolidate bounded operational observations (dreaming), compare paired fixtures (causal/lab/skill), simulate dependency removal (twin), summarize measured outcomes (metrics), assess current host RAM (homeostasis), suggest tools from explicit goals (intent), and prepare reference-only model handoffs (handoff). Use only opaque non-sensitive identifiers, never patient data, credentials, conversation transcripts or private reasoning. Caller-supplied evidence is unverified; results never authorize promotion, provider switching, resource reservation, or execution. Do not invent observations. No extra persistence or background activity; rely on the existing authorized session and review workflows.'})
+  const idleEvolution = new IdleEvolutionCache()
+  ctx.on('agent/status', ({agent, status}) => {
+    if (status === 'idle' && agent.session.header.origin !== 'subagent') {
+      idleEvolution.observe(agent.session, agent.session.seq, agent.session.events)
+    }
+  })
+  ctx.systemPrompt.context({
+    name: 'context:evolution-recovery', order: 123, interpolateVariables: false,
+    text: assembly => {
+      const scope = assembly as { agent?: { session: object }; incomingUserText?: string }
+      if (!scope.agent || inferEvolutionIntent(scope.incomingUserText ?? '') !== 'debugging') return ''
+      const snapshot = idleEvolution.read(scope.agent.session)
+      if (!snapshot?.recommendations.length) return ''
+      return 'Recent observed operational patterns: ' + snapshot.recommendations.join(', ') + '. Diagnose using current evidence, not presumed causes. Do not repeat a disproven route.'
+    },
+  })
+  ctx.systemPrompt.section({name:'phoenix:evolution-evidence',order:117,text:'PHOENIX can use phoenix_evolution_analyze to consolidate bounded operational observations (dreaming), compare paired fixtures (causal/lab/skill), simulate dependency removal (twin), summarize measured outcomes (metrics), assess current host RAM (homeostasis), suggest tools from explicit goals (intent), and prepare reference-only model handoffs (handoff). Use only opaque non-sensitive identifiers, never patient data, credentials, conversation transcripts or private reasoning. Caller-supplied evidence is unverified; results never authorize promotion, provider switching, resource reservation, or execution. Do not invent observations. Idle transitions automatically consolidate recent operational counters in memory, without timers or additional persistence. Rely on existing authorized session and review workflows.'})
   ctx.tools.register(defineTool({
     name: 'phoenix_evolution_analyze',
     description: 'Bounded read-only operational analysis. input_json is a JSON object (max 32 KiB, 128 entries per array). dreaming/metrics: use {} for actual recent calling-session events, or observations [{id,kind(timeout|resource|tool|verification|routing),strategy,fixture,ok,ms}]. causal/lab/skill: same plus baseline,candidate. twin: nodes,edges [{dependent,dependency}],remove. handoff: missionRef,sourceModel,targetModel,pending,completed,evidenceRefs. intent: goal(debugging|planning|switching|learning). homeostasis: requestedBytes. IDs use lowercase letters, digits, dot, dash or underscore, max 64. Never pass personal data, secrets or raw transcripts. No automatic actions, storage, verified causal proof or model switching.',
@@ -291,7 +307,9 @@ export function apply(ctx: Context): void {
       if ((args.operation === 'dreaming' || args.operation === 'metrics') && args.input_json.trim() === '{}') {
         const events = exec.agent?.session.events
         if (events === undefined) throw new Error('EVOLUTION_CALLING_SESSION_REQUIRED')
-        return Promise.resolve(JSON.stringify(summarizeEvolutionEvents(events)))
+        const result = summarizeEvolutionEvents(events)
+        const idle = exec.agent ? idleEvolution.read(exec.agent.session) : undefined
+        return Promise.resolve(JSON.stringify({...result, idleConsolidationAvailable: idle !== undefined, ...(idle === undefined ? {} : { lastIdleRecommendations: idle.recommendations })}))
       }
       return Promise.resolve(JSON.stringify(runEvolution(args.operation,args.input_json)))
     },
