@@ -318,6 +318,9 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
     if(!session||userRole!=='admin'||busy||!selectedPatient||!doctorUser.trim())return
     setBusy(true);setError('');setNotice('')
     try{
+      const staff=await api.clinicStaff(session)
+      if(!staff.some(member=>member.username===doctorUser.trim()&&member.role==='clinician'&&member.org===session.actor.org))
+        throw Error('Selecciona una cuenta médica existente o crea una antes de asignar el paciente.')
       await api.setClinicAssignment(session,{patientId:selectedPatient.id,staffId:doctorUser.trim(),action:'grant',purpose:'Atención clínica solicitada por el administrador'})
       setDoctorAssigned(true)
       setNotice('Paciente asignado. Accede con la cuenta médica para iniciar la atención.')
@@ -641,7 +644,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
           </details>
           <button className={css.primary} type="button" disabled={busy||!doctorUser.trim()||doctorAssigned}
             onClick={()=>{void assignDoctor()}}>Asignar este paciente al profesional</button>
-          {doctorAssigned&&<p role="status">Asignación confirmada. Usa «Cambiar de cuenta» para acceder como médico.</p>}
+          {doctorAssigned&&<p>Asignación confirmada. Usa «Cambiar de cuenta» para acceder como médico.</p>}
           <small>La cuenta administrativa no se convierte en una cuenta médica. El profesional debe autenticarse con su propia contraseña.</small>
         </div>}
       </section>}
