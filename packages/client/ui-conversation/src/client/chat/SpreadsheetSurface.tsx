@@ -359,7 +359,7 @@ export function SpreadsheetSurface({spec,conversationId,onAction}:{readonly spec
   }
   useEffect(()=>{
     const onOwner=(event:Event)=>{
-      if((event as CustomEvent<string>).detail!==studioOwner&&host){
+      if((event as CustomEvent<string>).detail!==studioOwner){
         setHost(null);setDismissed(true)
       }
     }
