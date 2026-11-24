@@ -352,7 +352,7 @@ export function HealthiaClinicalNote({
     <section ref={editorRoot} className={css.root} aria-label="Historia clínica estructurada">
       <div className={css.top}>
         <div>
-          <span className={css.eyebrow}>CONSULTA · BORRADOR LOCAL TEMPORAL</span>
+          <span className={css.eyebrow}>REGISTRO ASISTENCIAL</span>
           <h3>Historia clínica</h3>
           <p>{onSave
             ? 'Guardado explícito en el expediente cifrado, sujeto a sesión profesional y versión. Nunca firma automáticamente.'
@@ -368,10 +368,10 @@ export function HealthiaClinicalNote({
           </select>
         </label>
         <div className={css.steps} role="group" aria-label="Secciones de historia clínica">
-          {CLINICAL_EDITOR_STEPS.map(item => (
+          {CLINICAL_EDITOR_STEPS.map((item,index) => (
             <button key={item.id} type="button" className={item.id === section ? css.stepActive : css.step}
               aria-pressed={item.id === section} onClick={() => { setSection(item.id); setPreview(false) }}>
-              {item.label}
+              <span className={css.stepIndex} aria-hidden="true">{index+1}</span><span>{item.label}</span>
             </button>
           ))}
         </div>
@@ -393,7 +393,7 @@ export function HealthiaClinicalNote({
             <div key={field.id} className={field.kind === 'textarea'||field.id==='chief' ? css.wideField : css.field}>
               <label className={css.fieldLabel}><span>{field.label}{field.unit ? ` · ${field.unit}` : ''}</span>
               {field.kind === 'textarea' ? (
-                <textarea rows={field.id==='hea'?7:3} placeholder={field.id==='hea'?'Inicio, evolución, características, síntomas asociados y contexto clínico…':'No documentado'} maxLength={field.maxLength ?? 1800} value={values[field.id] ?? ''}
+                <textarea rows={field.id==='hea'?5:3} placeholder={field.id==='hea'?'Inicio, evolución, características, síntomas asociados y contexto clínico…':'No documentado'} maxLength={field.maxLength ?? 1800} value={values[field.id] ?? ''}
                   onFocus={()=>setActiveFieldId(field.id)} onChange={event => edit(field.id, event.currentTarget.value)} />
               ) : (
                 <input type={field.kind === 'date' ? 'date' : field.kind === 'number' ? 'number' : 'text'}
