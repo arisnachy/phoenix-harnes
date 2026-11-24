@@ -93,7 +93,12 @@ export function evaluateSheetCell(
       if (typeof result === 'string') throw new Error(result)
       return result
     }
-    const arg = (): number[] => {
+    const numericReference=(r:number,c:number):boolean=>{
+      if(r<0||r>=rows.length||c<0||c>=(rows[r]?.length??0))throw Error('#REF!')
+      const raw=rows[r]?.[c]??''
+      return raw.startsWith('=')||(raw.trim()!==''&&Number.isFinite(Number(raw)))
+    }
+    const arg = (aggregate=false): number[] => {
       const first = peek()
       const second = tokens[i + 1]
       const third = tokens[i + 2]
@@ -106,8 +111,12 @@ export function evaluateSheetCell(
         const values: number[] = []
         for (let r = Math.min(from[0], to[0]); r <= Math.max(from[0], to[0]); r++)
           for (let c = Math.min(from[1], to[1]); c <= Math.max(from[1], to[1]); c++)
-            values.push(cell(columnLetter(c) + String(r + 2)))
+            if(!aggregate||numericReference(r,c))values.push(cell(columnLetter(c) + String(r + 2)))
         return values
+      }
+      if(aggregate&&first&&(second===','||second===')')){
+        const pos=reference(first)
+        if(pos){i++;return numericReference(pos[0],pos[1])?[cell(first)]:[]}
       }
       return [expression()]
     }
@@ -129,17 +138,27 @@ export function evaluateSheetCell(
         i++
         return cell(value)
       }
-      if (/^(SUM|AVERAGE|MIN|MAX)$/i.test(value)) {
+      if (/^(SUM|AVERAGE|MIN|MAX|COUNT|PRODUCT|ABS|ROUND|SQRT|POWER|INT|MOD)$/i.test(value)) {
         i++
         required('(')
-        const values = [...arg()]
-        while (take(',')) values.push(...arg())
+        const fn=value.toUpperCase()
+        const aggregate=['SUM','AVERAGE','MIN','MAX','COUNT','PRODUCT'].includes(fn)
+        const values = peek()===')'?[]:[...arg(aggregate)]
+        while (take(',')) values.push(...arg(aggregate))
         required(')')
-        if (values.length === 0) throw new Error('#ERR!')
-        const fn = value.toUpperCase()
-        if (fn === 'SUM') return values.reduce((a, b) => a + b, 0)
-        if (fn === 'AVERAGE') return values.reduce((a, b) => a + b, 0) / values.length
-        return fn === 'MIN' ? Math.min(...values) : Math.max(...values)
+        if (fn === 'SUM') return values.reduce((a,b)=>a+b,0)
+        if (fn === 'COUNT') return values.length
+        if (fn === 'PRODUCT') return values.length?values.reduce((a,b)=>a*b,1):0
+        if (fn === 'AVERAGE') {if(!values.length)throw Error('#DIV/0!');return values.reduce((a,b)=>a+b,0)/values.length}
+        if(fn==='MIN'||fn==='MAX')return !values.length?0:fn==='MIN'?Math.min(...values):Math.max(...values)
+        if(values.length!==(['ROUND','POWER','MOD'].includes(fn)?2:1))throw Error('#ERR!')
+        const a=values[0]!,b=values[1]!
+        if(fn==='ABS')return Math.abs(a)
+        if(fn==='INT')return Math.floor(a)
+        if(fn==='SQRT'){if(a<0)throw Error('#NUM!');return Math.sqrt(a)}
+        if(fn==='POWER')return Math.pow(a,b)
+        if(fn==='MOD'){if(b===0)throw Error('#DIV/0!');return a-b*Math.floor(a/b)}
+        if(fn==='ROUND'){if(!Number.isInteger(b)||Math.abs(b)>12)throw Error('#NUM!');const scale=Math.pow(10,b);return Math.sign(a)*Math.round(Math.abs(a)*scale)/scale}
       }
       throw new Error('#ERR!')
     }
@@ -320,7 +339,7 @@ export function SpreadsheetPatch({spec,conversationId,allowAuto=false}:{spec:Spr
 }
 
 /** Editable grid with local recalculation, CSV import/export, undo and local draft recovery. */
-export function SpreadsheetSurface({spec,conversationId,onAction}:{readonly spec:SpreadsheetSpec;readonly conversationId?:string|undefined;readonly onAction?:CanvasAction|undefined}):ReactNode{
+export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:{readonly spec:SpreadsheetSpec;readonly conversationId?:string|undefined;readonly onAction?:CanvasAction|undefined;readonly autoOpen?:boolean}):ReactNode{
   const [rows,setRows]=useState<string[][]>(()=>spec.props.rows.map(row=>[...row]))
   const [active,setActive]=useState('')
   const [selected,setSelected]=useState<[number,number]>([0,0])
@@ -355,6 +374,7 @@ export function SpreadsheetSurface({spec,conversationId,onAction}:{readonly spec
   }
   const [contextAttached,setContextAttached]=useState(false)
   const detach=()=>{if(conversationId)disconnectSheetContext(conversationId,studioOwner);setContextAttached(false)}
+  const attach=()=>{if(conversationId){activateSheetContext(conversationId,studioOwner,snapshot);setContextAttached(true)}}
   const closeStudio=(explicit=true)=>{
     if(host?.dataset.studioOwner===studioOwner){
       delete host.dataset.studioOwner
@@ -371,7 +391,7 @@ export function SpreadsheetSurface({spec,conversationId,onAction}:{readonly spec
     if(target.dataset.studioOwner&&target.dataset.studioPinned==='true'&&target.dataset.studioOwner!==studioOwner)return
     if(target.querySelector(':scope > [data-phoenix-space]'))return
     target.dataset.studioOwner=studioOwner
-    if(conversationId){activateSheetContext(conversationId,studioOwner,snapshot);setContextAttached(true)}
+    attach()
     window.dispatchEvent(new CustomEvent('phoenix:studio-owner',{detail:studioOwner}))
     setHost(target)
     setDismissed(false)
@@ -400,8 +420,8 @@ export function SpreadsheetSurface({spec,conversationId,onAction}:{readonly spec
   },[host,studioOwner,key,pinned,contextAttached,conversationId])
   useEffect(()=>()=>{if(conversationId)disconnectSheetContext(conversationId,studioOwner)},[conversationId,studioOwner])
   useEffect(()=>{
-    if(ready&&conversationId&&!dismissed&&!host)openStudio()
-  },[ready,conversationId,dismissed,host])
+    if(ready&&conversationId&&autoOpen&&!dismissed&&!host)openStudio()
+  },[ready,conversationId,autoOpen,dismissed,host])
   useEffect(()=>()=>{
     if(host?.dataset.studioOwner===studioOwner){
       delete host.dataset.studioOwner
@@ -556,10 +576,10 @@ export function SpreadsheetSurface({spec,conversationId,onAction}:{readonly spec
     return fmt.number==='currency'?new Intl.NumberFormat('es-DO',{style:'currency',currency:'DOP'}).format(n):new Intl.NumberFormat('es-DO',{style:'percent',maximumFractionDigits:2}).format(n)
   }
   const gridRows=rows.map((row,r)=>({row,r})).filter(({row})=>!query||row.some(cell=>cell.toLocaleLowerCase('es').includes(query.toLocaleLowerCase('es'))))
-  const editor=<section className={host?css.studioSheet:css.surface} data-live-studio={host?"sheet":undefined} data-generative-ui="spreadsheet" data-sheet-draft-key={key}>
+  const editor=<section className={host?css.studioSheet:css.surface+' '+css.studioSheet} data-live-studio={host?"sheet":undefined} data-generative-ui="spreadsheet" data-sheet-draft-key={key}>
     <header className={css.heading}><PhoenixUiIcon name="table" />
       <div><h3>{spec.props.title}</h3><p>Hoja editable · fórmulas en tiempo real · v{version}</p></div>{host&&<button type="button" className={css.studioClose} onClick={()=>closeStudio()} aria-label="Cerrar editor de hoja">×</button>}</header>
-    {host&&<>
+    <>
       <div className={css.excelTitle}><span className={css.excelLogo}>▦</span><strong>PHOENIX Sheets</strong><span className={css.excelBookTitle}>{spec.props.title}</span><span className={css.excelSaved}>Guardado local · v{version}</span></div>
       <nav className={css.excelTabs} aria-label="Cinta de opciones de la hoja">
         {(['Archivo','Inicio','Insertar','Fórmulas','Datos','Vista'] as const).map(tab=><button key={tab} type="button" aria-current={ribbon===tab?'page':undefined} onClick={()=>setRibbon(tab)}>{tab}</button>)}
@@ -573,21 +593,21 @@ export function SpreadsheetSurface({spec,conversationId,onAction}:{readonly spec
         {ribbon==='Vista'&&<><button onClick={()=>setZoom(z=>Math.max(75,z-25))}>− Zoom</button><span>{zoom}%</span><button onClick={()=>setZoom(z=>Math.min(150,z+25))}>＋ Zoom</button><label><input type="checkbox" checked={gridLines} onChange={e=>setGridLines(e.currentTarget.checked)}/> Cuadrícula</label></>}
         <label className={css.excelPin}><input type="checkbox" checked={pinned} onChange={e=>setPinned(e.currentTarget.checked)}/> Fijar editor</label>
       </div>
-    </>}
-    {host&&<div className={css.formulaBar}><span>{columnLetter(selected[1])+String(selected[0]+2)}</span><strong>fx</strong><input aria-label="Barra de fórmulas" disabled={!ready||!rows[selected[0]]} value={rows[selected[0]]?.[selected[1]]??""} onChange={e=>update(selected[0],selected[1],e.currentTarget.value)}/></div>}
+    </>
+    <div className={css.formulaBar}><span>{columnLetter(selected[1])+String(selected[0]+2)}</span><strong>fx</strong><input aria-label="Barra de fórmulas" disabled={!ready||!rows[selected[0]]} value={rows[selected[0]]?.[selected[1]]??""} onChange={e=>update(selected[0],selected[1],e.currentTarget.value)}/></div>
     <div className={css.sheetScroll} role="region" aria-label={spec.props.title} tabIndex={0} data-grid-lines={gridLines?"on":"off"}>
-      <table className={css.sheet} style={host?{fontSize:zoom/100*12+"px"}:undefined}>
-        <thead><tr><th scope="col" className={css.excelCorner}>{host?"": "#"}</th>{(latest.current?.columns??spec.props.columns).map((label,c)=><th key={c} scope="col" title={label}>{host?columnLetter(c):columnLetter(c)+" · "+label}</th>)}</tr></thead>
-        <tbody>{host&&<tr className={css.excelHeaderRow}><th scope="row">1</th>{(latest.current?.columns??spec.props.columns).map((label,c)=><td key={c} title={"Encabezado "+label}>{label}</td>)}</tr>}{gridRows.map(({row,r}) => <tr key={r}><th scope="row">{r + 2}</th>
+      <table className={css.sheet} style={{fontSize:zoom/100*12+"px"}}>
+        <thead><tr><th scope="col" className={css.excelCorner}>{""}</th>{(latest.current?.columns??spec.props.columns).map((label,c)=><th key={c} scope="col" title={label}>{columnLetter(c)}</th>)}</tr></thead>
+        <tbody>{<tr className={css.excelHeaderRow}><th scope="row">1</th>{(latest.current?.columns??spec.props.columns).map((label,c)=><td key={c} title={"Encabezado "+label}>{label}</td>)}</tr>}{gridRows.map(({row,r}) => <tr key={r}><th scope="row">{r + 2}</th>
           {row.map((cell, c) => {
             const address = r + ':' + c
             const fmt=latest.current?.formats?.[columnLetter(c)+String(r+2)]
-            return <td key={c} data-selected={host&&selected[0]===r&&selected[1]===c?'true':undefined}>
+            return <td key={c} data-selected={selected[0]===r&&selected[1]===c?'true':undefined}>
               <input disabled={!ready} aria-label={columnLetter(c) + String(r + 2)}
                 style={{fontWeight:fmt?.bold?'bold':undefined,fontStyle:fmt?.italic?'italic':undefined}}
                 value={displayValue(cell,r,c)}
                 title={cell.startsWith('=') ? cell : undefined}
-                onFocus={() => {setActive(address);setSelected([r,c])}} onBlur={() => setActive('')}
+                onFocus={() => {setActive(address);setSelected([r,c]);if(!contextAttached&&ready)attach()}} onBlur={() => setActive('')}
                 onPaste={event=>paste(event,r,c)}
                 onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();document.querySelector<HTMLInputElement>('[data-sheet-draft-key="'+key+'"] input[aria-label="'+columnLetter(c)+String(r+3)+'"]')?.focus()}}}
                 onChange={event => update(r, c, event.currentTarget.value)} />
@@ -595,11 +615,11 @@ export function SpreadsheetSurface({spec,conversationId,onAction}:{readonly spec
           })}</tr>)}</tbody>
       </table>
     </div>
-    {host&&<div className={css.excelStatusBar}>
+    <div className={css.excelStatusBar}>
       <span className={css.excelSheetTab}>▤ {spec.props.title.slice(0,24)}</span>
       <span>{rows.length+1} filas · {(latest.current?.columns??spec.props.columns).length} columnas</span>
       <span>{zoom}%</span>
-    </div>}
+    </div>
     {error && <p role="alert" className={css.error}>{error}</p>}
     <div className={css.actions}>
       <button type="button" disabled={!ready||rows.length >= 200} onClick={() =>
@@ -616,13 +636,12 @@ export function SpreadsheetSurface({spec,conversationId,onAction}:{readonly spec
         <input type="file" accept=".csv,text/csv" onChange={importCsv} /></label>
       <button type="button" onClick={download}><PhoenixUiIcon name="download" size={15} /> CSV</button>
       <button type="button" disabled={!ready} onClick={() => { void saveToLibrary() }}>Guardar en Espacio</button>
-      {!host&&dismissed&&<button type="button" disabled={!ready||!conversationId} onClick={openStudio}>Volver a editar</button>}
       {onAction&&<button type="button" disabled={!ready} onClick={share}>Editar con Kira</button>}
       {legacyAvailable&&<button type="button" disabled={!ready} onClick={importLegacy}>Recuperar copia anterior</button>}
     </div>
     {contextAttached&&<p className={css.disclaimer}>Hoja activa: al enviar un mensaje a Kira se adjuntan sus valores y revisión actuales (hasta 24.000 caracteres). <button type="button" onClick={detach}>Desvincular del chat</button></p>}
     {libraryStatus && <p role="status" className={css.disclaimer}>{libraryStatus}</p>}
-    <p className={css.disclaimer}>Fórmulas permitidas: referencias A2:P201, + − × ÷, SUM, AVERAGE, MIN, MAX.
+    <p className={css.disclaimer}>Fórmulas permitidas: referencias A2:P201, + − × ÷, SUM, AVERAGE, MIN, MAX, COUNT, PRODUCT, ABS, ROUND, SQRT, POWER, INT, MOD.
       Los cambios se guardan solo en este navegador. CSV no conserva las fórmulas como Excel;
       Exportar XLSX conserva las fórmulas admitidas; este editor no importa libros XLSX ni admite todas las funciones de Excel.</p>
   </section>

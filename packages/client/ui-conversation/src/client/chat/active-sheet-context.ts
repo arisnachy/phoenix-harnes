@@ -11,6 +11,12 @@ type Active={owner:string;read:()=>ActiveSheetSnapshot|null}
 type Grant={token:string;owner:string;id:string;revision:number;expires:number}
 const active=new Map<string,Active>()
 const grants=new Map<string,Grant>()
+const recentSubmissions=new Map<string,number>()
+/** Old messages must not open Studio simply because their component mounts. */
+export function isRecentSheetSubmission(session:string,time:number):boolean{
+  const sent=recentSubmissions.get(session)
+  return sent!==undefined&&Number.isFinite(time)&&time>=sent-1000&&Date.now()-sent<=600000
+}
 /** Register one active sheet in its own session. */
 export function activateSheetContext(session:string,owner:string,read:Active['read']):void{
   if(active.get(session)?.owner!==owner)grants.delete(session)
@@ -25,6 +31,7 @@ export function disconnectSheetContext(session:string,owner:string):void{
 export function prepareSheetPrompt(session:string,text:string):{text:string;token:string}|undefined{
   grants.delete(session)
   if(!text.trim())return undefined
+  recentSubmissions.set(session,Date.now())
   const entry=active.get(session),snapshot=entry?.read()
   if(!entry||!snapshot||typeof globalThis.crypto?.randomUUID!=='function')return undefined
   if(JSON.stringify(snapshot).length>24000)return undefined

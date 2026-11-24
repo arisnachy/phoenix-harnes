@@ -1176,7 +1176,7 @@ function SportsTicketResearchNarrative({value,index}:{value:SportsTicketNarrativ
   </section>
 }
 
-export function GenerativeUi({ block, onAction, conversationId, allowArtifactAuto=false }: { block: GenerativeUiBlock; onAction?: CanvasAction | undefined; conversationId?: string; allowArtifactAuto?:boolean }): ReactNode {
+export function GenerativeUi({ block, onAction, conversationId, allowArtifactAuto=false, allowArtifactOpen=false }: { block: GenerativeUiBlock; onAction?: CanvasAction | undefined; conversationId?: string; allowArtifactAuto?:boolean; allowArtifactOpen?:boolean }): ReactNode {
   switch (block.component) {
     case 'ui_canvas': return <GenerativeCanvas spec={block} onAction={onAction} />
     case 'visual_intelligence': return <VisualIntelligence key={block.props.id} spec={block}
@@ -1192,7 +1192,7 @@ export function GenerativeUi({ block, onAction, conversationId, allowArtifactAut
     case 'adaptive_form': return <AdaptiveFormProposal spec={block} />
     case 'adaptive_control': return <AdaptiveWorkspaceProposal spec={block} />
     case 'adaptive_field_result': return <AdaptiveFieldResultProposal spec={block} />
-    case 'spreadsheet': return <SpreadsheetSurface key={(conversationId??'local-preview')+':'+block.props.id} spec={block} conversationId={conversationId} onAction={onAction}/>
+    case 'spreadsheet': return <SpreadsheetSurface key={(conversationId??'local-preview')+':'+block.props.id} spec={block} conversationId={conversationId} onAction={onAction} autoOpen={allowArtifactOpen}/>
     case 'spreadsheet_patch': return <SpreadsheetPatch spec={block} conversationId={conversationId} allowAuto={allowArtifactAuto}/>
     case 'space_patch': return <SpaceArtifactPatch spec={block}/>
     case 'geo_map': return <GeoMap key={(conversationId ?? block.props.conversationId ?? 'ephemeral') + ':' + block.props.id} spec={block} onAction={onAction} {...(conversationId === undefined ? {} : { conversationId })} />

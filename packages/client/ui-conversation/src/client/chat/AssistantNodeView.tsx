@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo } from 'react'
 import type { ChatNodeViewProps, TurnTailOwnerProps } from '../contract/slots.ts'
 import { AssistantMarkdown } from './AssistantMarkdown.tsx'
 import { splitGenerativeUiText } from './GenerativeUi.tsx'
+import { isRecentSheetSubmission } from './active-sheet-context.ts'
 import { assistantText } from './turn-assistant.ts'
 import { cancelVoiceAssistantSentenceStream, streamVoiceAssistantResponse } from '../voice.ts'
 
@@ -71,6 +72,7 @@ export const AssistantNodeView = memo(function AssistantNodeView({
       onUiAction={onUiAction}
       conversationId={String(sessionId)}
       allowArtifactAuto={owner!==undefined&&data.status==='settled'}
+      allowArtifactOpen={data.status!=='interrupted'&&(turn?.status==='open'||isRecentSheetSubmission(String(sessionId),data.time))}
       t={t}
     />
   )

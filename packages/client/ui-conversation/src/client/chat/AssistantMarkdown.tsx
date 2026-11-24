@@ -32,11 +32,12 @@ export interface AssistantMarkdownProps {
   conversationId?: string | undefined
   /** True only for a completed authoritative assistant turn. */
   allowArtifactAuto?: boolean | undefined
+  allowArtifactOpen?: boolean | undefined
 }
 
 /** User-facing assistant prose/media; technical reasoning is owned by ToolActivityFlow. */
 export const AssistantMarkdown = memo(function AssistantMarkdown({
-  blocks, streaming, interrupted, renderMessageImages, mentions, t, onUiAction, conversationId, allowArtifactAuto,
+  blocks, streaming, interrupted, renderMessageImages, mentions, t, onUiAction, conversationId, allowArtifactAuto, allowArtifactOpen,
 }: AssistantMarkdownProps) {
   // Stable per locale revision (t identity changes on switch): a fresh object
   // per render would rebuild MarkdownText's component table every chunk.
@@ -77,7 +78,7 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
           if (!segment) continue
           if (segment.kind === 'ui') {
             rendered.push(<GenerativeUi key={first+':ui:'+index} block={segment.block}
-              onAction={onUiAction} allowArtifactAuto={allowArtifactAuto===true&&!streaming&&!interrupted} {...(conversationId === undefined ? {} : { conversationId })} />)
+              onAction={onUiAction} allowArtifactAuto={allowArtifactAuto===true&&!streaming&&!interrupted} allowArtifactOpen={allowArtifactOpen===true&&!interrupted} {...(conversationId === undefined ? {} : { conversationId })} />)
             continue
           }
           // Native schema-validated UI takes priority. Only remaining
