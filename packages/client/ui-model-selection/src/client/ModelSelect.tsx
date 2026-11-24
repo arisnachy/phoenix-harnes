@@ -463,7 +463,7 @@ export function ModelSelect(
       >
         {(isCurrentLocal || (state.current !== null && isPhoenixAutoRouting(
           state.current.model, currentChoice?.model.name ?? state.current.model,
-        ))) && <PhoenixLogo size={18} className={css.triggerPhoenixLogo} />}
+        ))) && <PhoenixLogo size={18} {...(css.triggerPhoenixLogo !== undefined ? { className: css.triggerPhoenixLogo } : {})} />}
         <span className={css.triggerLabel}>{modelLabel}</span>
         {visibleEffort !== undefined && <span className={css.triggerEffort}>{visibleEffort}</span>}
         {codexSpeedAvailable && activeSpeed === 'fast' && <span className={css.triggerEffort}>{speedLabel}</span>}
