@@ -23,7 +23,7 @@ import {
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { SidebarRootComponentProps } from './contract/slots.ts'
 import { TaskCenter } from './TaskCenter.tsx'
-import { NATIVE_MENU_KEY, readNativeMenu, nativeMenuOperation, type NativeTarget } from './NativeSelfMenu.ts'
+import { NATIVE_MENU_KEY, readNativeMenu, recoverNativeMenu, nativeMenuOperation, type NativeTarget, type NativeRecovery } from './NativeSelfMenu.ts'
 import css from './SidebarRoot.module.css'
 // Keep runtime navigation local to the sidebar plugin (client bundle purity).
 const HEALTHIA_NAV = {
@@ -57,6 +57,23 @@ export function SidebarRoot({
   const wide = !collapsed
   const [tasksOpen, setTasksOpen] = useState(false)
   const [nativeMenu,setNativeMenu]=useState(()=>readNativeMenu(window.localStorage))
+  const [nativeRecovery,setNativeRecovery]=useState<NativeRecovery['status']>('healthy')
+  // React to boot, another window's changes and return to foreground.
+  // No model call or polling is needed for this deterministic repair.
+  useEffect(()=>{
+    const recover=():void=>{
+      try{
+        const result=recoverNativeMenu(window.localStorage)
+        setNativeMenu(result.state)
+        if(result.status!=='healthy')setNativeRecovery(result.status)
+      }catch{setNativeRecovery('unavailable')}
+    }
+    const onStorage=(event:StorageEvent):void=>{if(event.key===NATIVE_MENU_KEY||event.key===null)recover()}
+    recover()
+    window.addEventListener('storage',onStorage)
+    window.addEventListener('focus',recover)
+    return ()=>{window.removeEventListener('storage',onStorage);window.removeEventListener('focus',recover)}
+  },[])
   const [adaptive, setAdaptive] = useState<{
     app: string; role: 'doctor' | 'patient'; section: string
     title?: string; palette?: 'pearl'|'ocean'|'sage'|'iris'|'amber'
@@ -144,10 +161,8 @@ export function SidebarRoot({
       }catch(error){reason=error instanceof Error&&/^[A-Z_]+$/u.test(error.message)?error.message:'NATIVE_MENU_STORAGE_FAILED'}
       window.dispatchEvent(new CustomEvent('phoenix:adaptive-control-result',{detail:{requestId:r.requestId,phase:r.phase,ok,reason}}))
     }
-    const onStorage=(event:StorageEvent):void=>{if(event.key===NATIVE_MENU_KEY||event.key===null)setNativeMenu(readNativeMenu(window.localStorage))}
     window.addEventListener('phoenix:adaptive-control-request',onControl)
-    window.addEventListener('storage',onStorage)
-    return ()=>{window.removeEventListener('phoenix:adaptive-control-request',onControl);window.removeEventListener('storage',onStorage)}
+    return ()=>{window.removeEventListener('phoenix:adaptive-control-request',onControl)}
   })
   // Rail-in only crossfades a live collapse: a refresh straight into the
   // collapsed state renders the rail statically (no delay-hidden icons).
@@ -318,6 +333,10 @@ export function SidebarRoot({
             {wide&&<span>{title}</span>}
           </button>
         })}
+        {wide&&nativeRecovery!=='healthy'&&<div className={css.iconEditor} role="status">
+          <small>{nativeRecovery==='restored'?'PHOENIX restauró el último menú válido.':nativeRecovery==='defaulted'?'PHOENIX recuperó la navegación básica. No se encontró una revisión válida.':'PHOENIX no pudo reparar el almacenamiento; mantiene una vista segura.'}</small>
+          <button type="button" className={css.iconCustomize} onClick={()=>setNativeRecovery('healthy')}>Cerrar aviso</button>
+        </div>}
       </nav>
       )}
 
