@@ -267,7 +267,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
       if(logoDraft!==null){setLogo(logoDraft);setLogoDraft(null)}
       if(!accessOnly)await refreshLists(s)
       readyRef.current=true
-      if(accessOnly)onSessionReady?.()
+      onSessionReady?.()
     } catch(err) {
       setPassword('')
       setError(err instanceof Error?err.message:'No se pudo autenticar la clínica')
@@ -441,7 +441,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
     </div>
   </section>
   if(mode==='login'||mode==='setup')return <section className={accessOnly&&!deferredAccess?css.accessPanel:css.accessCard} aria-label="Acceso clínico protegido">
-    {(!accessOnly||deferredAccess)&&<div className={css.accessHeading}><span className={css.lockEyebrow}>ACCESO SEGURO</span><button type="button" className={css.accessSecondary} onClick={()=>{setPassword('');setError('');setAccessExpanded(false)}}>Cerrar</button></div>}
+    {(!accessOnly||deferredAccess)&&<div className={css.accessHeading}><span className={css.lockEyebrow}>ACCESO SEGURO</span><button type="button" className={css.accessSecondary} disabled={busy} onClick={()=>{setPassword('');setError('');setAccessExpanded(false)}}>Cerrar</button></div>}
     <h3>{mode==='setup'?'Inicializar clínica local':'Inicio de sesión profesional'}</h3>
     <p>{mode==='setup'
       ? 'La clínica es local y cifrada. Crea el administrador con una contraseña de 6 caracteres o más; recomendamos 12 o más. Guárdala fuera de PHOENIX: también protege el cifrado del expediente.'
@@ -505,7 +505,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
               setBusy(true);setError('')
               void api.logout(session).then(()=>{
                 setSession(null);setPatients([]);setEncounters([])
-                setPatientId('');setEncounterId('');setAccessExpanded(false);setMode('login')
+                setPatientId('');setEncounterId('');setAccessExpanded(false);setMode('login');onSessionReady?.()
               }).catch(()=>{
                 setError('No se pudo cerrar la sesión en el Host. Reintenta antes de abandonar el equipo.')
               }).finally(()=>setBusy(false))
