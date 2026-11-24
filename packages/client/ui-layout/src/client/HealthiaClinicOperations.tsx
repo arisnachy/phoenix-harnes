@@ -10,7 +10,7 @@ import type { ClinicalSession, ClinicalPatient, ClinicalEncounter, ClinicalIntak
 import { HealthiaPatientDossier } from './HealthiaPatientDossier.tsx'
 import { HealthiaClinicalNote, formatClinicalNoteParts, NOTE_KINDS } from './HealthiaClinicalNote.tsx'
 import type { ClinicalNoteValues, ClinicalNoteKind } from './HealthiaClinicalNote.tsx'
-import type { ClinicalEditorRequest, ClinicalEditorViewState } from './HealthiaEditorSupport.ts'
+import { parseClinicalIntake, type ClinicalIntakePatch, type ClinicalEditorRequest, type ClinicalEditorViewState } from './HealthiaEditorSupport.ts'
 import { printProtectedClinicalDocument } from './HealthiaClinicalPrint.ts'
 import css from './HealthiaClinicOperations.module.css'
 
@@ -114,6 +114,8 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
   const [logoError,setLogoError]=useState('')
   const [connectionRetry,setConnectionRetry]=useState(0)
   const [name,setName]=useState('')
+  const [intakeText,setIntakeText]=useState('')
+  const [intakeProposal,setIntakeProposal]=useState<ClinicalIntakePatch|null>(null)
   const [birthDate,setBirthDate]=useState('')
   const [sexAtBirth,setSexAtBirth]=useState<''|'female'|'male'|'intersex'|'unknown'>('')
   const [email,setEmail]=useState('')
@@ -140,7 +142,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
   const [answerText,setAnswerText]=useState('')
   const [signChecked,setSignChecked]=useState(false)
   const [dirtyEncounter,setDirtyEncounter]=useState(false)
-  useEffect(()=>{setDirtyEncounter(false);setSignChecked(false)},[encounterId,patientId])
+  useEffect(()=>{setDirtyEncounter(false);setSignChecked(false);setAnswerKey('');setAnswerText('')},[encounterId,patientId])
   const readyRef=useRef(false)
   const userRole=session?.actor.role
   const canManagePatients=userRole==='admin'||userRole==='clinician'||userRole==='reception'
@@ -286,7 +288,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
       setPatients(prev=>[record,...prev])
       setPatientId(record.id)
       setEncounterId('')
-      setName('');setBirthDate('');setEmail('');setPhone('');setSexAtBirth('')
+      setName('');setBirthDate('');setEmail('');setPhone('');setSexAtBirth('');setIntakeText('');setIntakeProposal(null)
       setDocumentNumber('');setAdmissionNotes('');setCustomFields({})
       setIdentityMatches(null);setConfirmDistinct(false);setDistinctReason('')
       setCreatingPatient(false)
@@ -360,8 +362,8 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
   },[session,selectedEncounter?.id,selectedEncounter?.version,canManageEncounters])
   const mutateEncounter=async(
     operation:(current:ClinicalEncounter)=>Promise<ClinicalEncounter>,message:string
-  ):Promise<void>=>{
-    if(!selectedEncounter||busy)return
+  ):Promise<boolean>=>{
+    if(!selectedEncounter||busy)return false
     setBusy(true);setError('');setNotice('')
     try{
       const updated=await operation(selectedEncounter)
@@ -370,14 +372,16 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
       setEncounters(items=>items.map(item=>item.id===updated.id?updated:item))
       setNotice(message)
       setSignChecked(false)
-    }catch(err){setError(err instanceof Error?err.message:'La operación no quedó confirmada')}
+      return true
+    }catch(err){setError(err instanceof Error?err.message:'La operación no quedó confirmada');return false}
     finally{setBusy(false)}
   }
   const submitInterview=():void=>{
-    if(!session||!answerKey||!answerText.trim()||!selectedEncounter)return
+    if(!session||!answerKey||!answerText.trim()||!selectedEncounter||busy)return
     void mutateEncounter(record=>api.answerInterview(session,record,answerKey,answerText),
-      'Respuesta registrada en el interrogatorio protegido.')
-    setAnswerKey('');setAnswerText('')
+      'Respuesta registrada en el interrogatorio protegido.').then(saved=>{
+        if(saved){setAnswerKey('');setAnswerText('')}
+      })
   }
   if(mode==='loading')return <div className={css.status} role="status">Comprobando la sesión clínica local…</div>
   if(mode==='unavailable')return <div className={css.panel} role="status">
@@ -513,7 +517,31 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
         {visiblePatients.length>50&&<p className={css.notice}>Mostrando 50 de {visiblePatients.length}. Precisa la búsqueda.</p>}
       </div>}
       {creatingPatient&&canManagePatients&&<form className={css.form} onSubmit={event=>{void addPatient(event)}} autoComplete="off">
-        <h3>Registro de paciente · admisión protegida</h3>
+        <h3>Nuevo paciente</h3>
+        <div className={css.intakeAssistant} aria-label="Admisión conversacional protegida">
+          <strong>Cuéntame los datos del paciente</strong>
+          <p>Escribe en una sola entrada. Los datos reconocidos se proponen antes de llenar los campos vacíos; no se envían al chat general.</p>
+          <textarea aria-label="Datos de admisión en lenguaje natural" maxLength={4000} rows={3} value={intakeText}
+            placeholder="Crea paciente Ana Pérez, edad: 42 años, sexo: femenino, fecha de nacimiento: 1984-03-12, correo: ana@example.com"
+            onChange={e=>{setIntakeText(e.currentTarget.value);setIntakeProposal(null)}}/>
+          <button type="button" disabled={!intakeText.trim()||busy} onClick={()=>setIntakeProposal(parseClinicalIntake(intakeText))}>Organizar datos</button>
+          {intakeProposal&&<div role="status" className={css.intakeProposal}>
+            {Object.entries(intakeProposal).length===0?<p>No se reconocieron campos explícitos. Usa nombre, fecha de nacimiento, sexo, correo o teléfono.</p>:<>
+              <dl>{Object.entries(intakeProposal).map(([key,value])=><div key={key}><dt>{{name:'Nombre',dateOfBirth:'Fecha de nacimiento',sexAtBirth:'Sexo',email:'Correo',phone:'Teléfono',age:'Edad referida',birthplace:'Lugar de nacimiento'}[key]??key}</dt><dd>{value}</dd></div>)}</dl>
+              <button type="button" disabled={busy} onClick={()=>{
+                if(intakeProposal.name&&!name.trim())setName(intakeProposal.name)
+                if(intakeProposal.dateOfBirth&&!birthDate)setBirthDate(intakeProposal.dateOfBirth)
+                if(intakeProposal.sexAtBirth&&!sexAtBirth)setSexAtBirth(intakeProposal.sexAtBirth)
+                if(intakeProposal.email&&!email.trim())setEmail(intakeProposal.email)
+                if(intakeProposal.phone&&!phone.trim())setPhone(intakeProposal.phone)
+                const supplemental=[intakeProposal.age?'Edad referida: '+intakeProposal.age+' años':'',intakeProposal.birthplace?'Lugar de nacimiento referido: '+intakeProposal.birthplace:''].filter(Boolean).join('\n')
+                if(supplemental&&!admissionNotes.trim())setAdmissionNotes(supplemental)
+                setIdentityMatches(null);setConfirmDistinct(false);setDistinctReason('');setIntakeProposal(null)
+              }}>Completar campos vacíos</button>
+            </>}
+            {!birthDate&&!intakeProposal.dateOfBirth&&<p>ASK · ¿Cuál es la fecha de nacimiento? La edad referida no sustituye una fecha verificada.</p>}
+          </div>}
+        </div>
         <p>Identidad, contacto y datos de admisión. El expediente interno se asigna al guardar; documento y teléfono no son su identificador principal.</p>
         <div className={css.admissionGrid}>
           <label>Nombre completo<input required maxLength={160} value={name} onChange={e=>{setName(e.target.value);setIdentityMatches(null)}}/></label>
@@ -628,17 +656,20 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
             Ante signos de alarma, realiza valoración inmediata; la guía no determina un diagnóstico.</p>
           {(interviewGuide?.nextQuestions??[]).map(question=><button type="button" key={question.key}
             className={answerKey===question.key?css.interviewQuestionActive:css.interviewQuestion}
-            onClick={()=>{setAnswerKey(question.key);setAnswerText('')}}>
+            disabled={busy||!!answerText.trim()&&answerKey!==question.key}
+            onClick={()=>{if(answerKey!==question.key){setAnswerKey(question.key);setAnswerText('')}}}>
             {question.question}
           </button>)}
           {answerKey&&<div className={css.interviewAnswer}>
             <label>Respuesta documentada por el profesional
-              <textarea maxLength={1600} rows={3} value={answerText}
+              <textarea maxLength={1600} rows={3} value={answerText} disabled={busy}
                 onChange={e=>setAnswerText(e.currentTarget.value)}/>
             </label>
             <button className={css.primary} type="button" disabled={busy||!answerText.trim()}
               onClick={submitInterview}>Guardar respuesta en consulta</button>
+            <button type="button" disabled={busy} onClick={()=>{setAnswerKey('');setAnswerText('')}}>Descartar respuesta sin guardar</button>
           </div>}
+          {!interviewGuide&&<p className={css.notice}>Guía aún no disponible. Puedes continuar documentando la historia manualmente.</p>}
           {interviewGuide&&interviewGuide.nextQuestions.length===0&&
             <p className={css.notice}>No quedan preguntas pendientes de esta guía; comprueba si necesitas ampliar la entrevista.</p>}
           {Object.entries(selectedEncounter.interviewAnswers??{}).length>0&&
