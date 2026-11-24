@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { runEvolution } from '../packages/core/tool-living/src/evolution.ts'
+import { runEvolution, summarizeEvolutionEvents } from '../packages/core/tool-living/src/evolution.ts'
 
 const run = (operation, input) => runEvolution(operation, JSON.stringify(input))
 const rows = Array.from({length: 5}, (_, i) => [
@@ -54,4 +54,23 @@ test('rejects oversize, contradictory, malformed and unknown inputs', () => {
   assert.throws(()=>run('handoff',{missionRef:'m',sourceModel:'a',targetModel:'b',pending:['t'],completed:['t'],evidenceRefs:[]}),/CONFLICTING/)
   assert.throws(()=>run('nope',{}),/UNKNOWN/)
   assert.throws(()=>runEvolution('metrics',' '.repeat(32769)),/LIMIT/)
+})
+
+test('live session projection bounds the scan and returns counters, never event content', () => {
+  const events = [
+    ...Array.from({length: 130}, () => ({type:'turn/end',data:{reason:{kind:'completed'}}})),
+    {type:'llm/retry-started',data:{secret:'DO_NOT_COPY'}},
+    {type:'llm/retry-started',data:{}},
+    {type:'tool/result',data:{message:{content:[{type:'tool-result',isError:true,text:'DO_NOT_COPY'}]}}},
+    {type:'turn/end',data:{reason:{kind:'error'}}},
+  ]
+  const result = summarizeEvolutionEvents(events)
+  assert.equal(result.sampledEvents,128)
+  assert.equal(result.truncated,true)
+  assert.equal(result.completedTurns,124)
+  assert.equal(result.failedTurns,1)
+  assert.equal(result.toolErrors,1)
+  assert.deepEqual(result.recommendations,['investigate-retry-pattern'])
+  assert.equal(result.qualityVerified,false)
+  assert.ok(!JSON.stringify(result).includes('DO_NOT_COPY'))
 })
