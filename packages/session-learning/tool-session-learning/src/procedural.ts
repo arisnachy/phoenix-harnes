@@ -257,6 +257,10 @@ export class ProceduralLearningEngine {
     const normalized = normalizeProcedure(input)
     const key = procedureKey(normalized.title, normalized.scope, normalized.trigger)
     const previous = this.findByKey(key, normalized.projectId)
+    // A blocked or ordinary attempt cannot replace validated or quarantined knowledge.
+    // Identical unverified candidates are diagnostic duplicates; do not append another record.
+    if (!input.verified && previous !== undefined && (previous.status !== 'candidate'
+      || JSON.stringify(previous.steps) === JSON.stringify(normalized.steps))) return previous
     const confirmations = (previous?.confirmations ?? 0) + (input.verified ? 2 : 1)
     const confidence = input.verified
       ? Math.max(0.85, Math.min(0.98, (previous?.confidence ?? 0.5) + 0.25))
@@ -311,13 +315,13 @@ export class ProceduralLearningEngine {
       includeHistory: false,
     })) {
       const state = decodeProceduralState(row)
-      if (state !== undefined) latest.set(state.key, state)
+      if (state !== undefined) latest.set(JSON.stringify([state.projectId ?? null, state.key]), state)
     }
     return [...latest.values()]
   }
 
   private findByKey(key: string, projectId?: string): ProceduralLearningState | undefined {
-    return this.states(projectId === undefined ? {} : { projectId }).find(state => state.key === key)
+    return this.states(projectId === undefined ? {} : { projectId }).find(state => state.key === key && state.projectId === projectId)
   }
 
   private async persist(
@@ -561,7 +565,7 @@ export function installProceduralLearning(
     const data = event.data as unknown
     const eventSeq = typeof event.seq === 'number' ? event.seq : 0
     const occurredAt = typeof event.time === 'number' ? event.time : Date.now()
-    const projectId = ctx.learningMemory.currentProjectId()
+    const projectId = ctx.learningMemory.projectIdForSession(ownerSessionId)
 
     const run = async (): Promise<void> => {
       if (eventType === 'tool/call' && isRecord(data)
