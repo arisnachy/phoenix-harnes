@@ -1,20 +1,70 @@
-<p align="center">
-  <img src="apps/web/public/phoenix-emblem.png" alt="PHOENIX — Universal AI Harness" width="300">
-</p>
+<p align="center"><img src="apps/web/public/phoenix-emblem.png" alt="PHOENIX" width="180"></p>
 
-# PHOENIX
+# PHOENIX AI Harness
 
-English | [中文](README.zh.md)
+English | [Español](README.es.md) | [中文](README.zh.md)
 
-**PHOENIX is a universal, provider-agnostic AI agent harness for local-first and bring-your-own-provider workflows.**
+**An open-source AI workspace. One agent experience, many models.**
 
-It is being built around intelligent model selection, durable continuity, repository intelligence, tools, multi-agent execution, recovery, evaluation, and bounded self-improvement. Capabilities land incrementally and are not presented as complete until their repository gates are green.
+PHOENIX is a general-purpose, local-first AI agent workspace created and led by **Dr. Arisnachy Gómez Díaz** in the Dominican Republic. Kira brings conversation, tools, models, specialist agents and working artifacts into a single environment. Choose the AI engine that fits the task rather than rebuilding your workflow around a provider.
+
+**Your models. Your workspace. Your AI.**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-amber.svg)](LICENSE) [![GitHub stars](https://img.shields.io/github/stars/arisnachy/phoenix-harnes?style=flat)](https://github.com/arisnachy/phoenix-harnes/stargazers) [![GitHub release](https://img.shields.io/github/v/release/arisnachy/phoenix-harnes)](https://github.com/arisnachy/phoenix-harnes/releases) [![GitHub downloads](https://img.shields.io/github/downloads/arisnachy/phoenix-harnes/total)](https://github.com/arisnachy/phoenix-harnes/releases)
+
+[Get started](#run) · [Windows releases](https://github.com/arisnachy/phoenix-harnes/releases) · [Community](https://github.com/arisnachy/phoenix-harnes/discussions) · [Report an issue](https://github.com/arisnachy/phoenix-harnes/issues)
+
+## What you can do
+
+| Capability | What PHOENIX provides |
+| --- | --- |
+| Kira & Living Team | A persistent agent identity, specialist collaboration, visible activity, replies and handoffs within supported sessions. |
+| Model freedom | Supported cloud providers, API credentials, official ChatGPT/Codex account connection when available, Ollama and managed local inference. |
+| Adaptive workspace | A conversational interface with contextual surfaces, MiniBrowser, forms and artifact previews; layout and synchronization are evolving. |
+| Documents & data | Work with files, spreadsheets, structured data, reports and generated artifacts; format and editing support varies by surface. |
+| Research & analysis | Domain-aware source discovery, cited research workflows, data analysis and report preparation; verify sources and live data. |
+| Software development | Repository inspection, code editing, terminal and tool execution, tests and supported Git workflows under configured permissions. |
+| Memory & continuity | Durable session history, context and recovery mechanisms; availability depends on the installed runtime. |
+| Healthia | Clinical workspace under staged development: patient records, consultation forms and clinical documentation; clinician review required. |
+| Sports intelligence | Research and source-verification workflows for sports data; coverage and live availability vary. |
+| Evolution & adaptive intelligence | Evaluation, recovery, specialist selection and bounded improvement experiments; no claim of autonomous self-training or guaranteed performance. |
+
+## How PHOENIX works
+
+```mermaid
+flowchart TD
+    U["User"] --> K["Kira · coordinator"]
+    K --> M["Models"]
+    K --> S["Specialists"]
+    K --> T["Tools & permissions"]
+    K <--> W["Adaptive workspace"]
+    K <--> H["Session history"]
+    M --> L["Local models"]
+    M --> C["Cloud providers"]
+    T --> R["Research"]
+    T --> D["Code & automation"]
+    T --> F["Documents & data"]
+    T --> P["Clinical & sports modules"]
+    W --> A["Artifacts & results"]
+    classDef core fill:#3c2a19,color:#fff,stroke:#f0a649,stroke-width:2px
+    class K core
+```
+
+## From a request to a deliverable
+
+```mermaid
+flowchart LR
+    A["Request"] --> B["Plan & select"] --> C["Execute"] --> D{"Verify"} --> E["Deliver"]
+    D --> F["Recover or refine"] --> B
+```
 
 ## Development status
 
-PHOENIX is under active development. Its product identity is PHOENIX across the repository presentation, Web UI, PWA metadata, browser title, and visual system.
+PHOENIX is actively developed. The diagrams describe the product architecture, not a screenshot or a certification. The features above include available components and ongoing integrations; individual workflows depend on the build, provider, hardware, permissions and tests. Healthia is not presented as a certified medical device, and sports analysis does not guarantee outcomes. See the repository documentation and release notes for current limitations.
 
-Some internal package and CLI identifiers are intentionally retained for compatibility with the upstream runtime while PHOENIX evolves through isolated, testable downstream layers. Those implementation details do not define the product identity.
+### Explore the technical documentation
+
+[Kira Teams](packages/client/ui-kira-teams/README.md) · [Contextual UI](docs/product/PHOENIX_UNIVERSAL_CONTEXTUAL_UI.md) · [Universal Intelligence](docs/phoenix-universal-intelligence-3.0.md) · [Healthia](docs/healthia-chat-first-intake-architecture.md) · [Research Studio](docs/phoenix-research-studio-2.1.md) · [Sports](docs/sports/SPORTS_SOURCE_VERIFICATION.md) · [Evolution](docs/evolution/PHOENIX_EVOLUTION_V16.md)
 
 ## Run
 
@@ -96,14 +146,6 @@ Windows installation, IDE packaging, native sandbox boundaries, and continuity s
 
 For agents, follow [AGENTS.md](AGENTS.md).
 
-## Upstream foundation and attribution
+## License and third-party attribution
 
-PHOENIX is a downstream evolution built on [DeepSeek Harness](https://github.com/arisnachy/phoenix-harnes), the MIT-licensed open-source agent harness developed by [DeepSeek AI](https://deepseek.com). Its plugin architecture is powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper).
-
-PHOENIX does not claim authorship of upstream code. Upstream attribution and license notices are preserved while PHOENIX-specific work remains clearly separated as downstream evolution.
-
-## License
-
-[MIT](LICENSE)
-
-Third-party dependencies and their licenses are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+PHOENIX is the product identity. Existing copyright notices, including those for inherited and vendored code, remain in [LICENSE](LICENSE), [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [vendor/README.md](vendor/README.md). No authorship of third-party code is claimed.
