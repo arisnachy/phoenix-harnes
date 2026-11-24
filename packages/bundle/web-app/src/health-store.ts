@@ -1119,7 +1119,15 @@ export class HealthClinicStore {
       if(enc.status!=='signed'||enc.practitioner!==actor.username)fail('Debe firmar una consulta propia antes de emitir la orden')
       if(kind==='orders'){
         const modality=str(x.modality,'Tipo',20);if(!['laboratory','imaging'].includes(modality))fail('Tipo de orden no permitido')
-        return this.insert(actor,kind,{ encounterId,patientId:enc.patientId,modality,description:text(x.description,'Estudio',600),
+        const service=x.service===undefined?(modality==='laboratory'?'laboratory':'imaging'):str(x.service,'Servicio',32)
+        const services=modality==='laboratory'?['laboratory']:['imaging','xray','ultrasound','ct','mri','mammography','nuclear']
+        if(!services.includes(service))fail('Servicio incompatible con modalidad')
+        const priority=x.priority===undefined?'routine':str(x.priority,'Prioridad',20)
+        if(!['routine','urgent','stat'].includes(priority))fail('Prioridad de orden inválida')
+        return this.insert(actor,kind,{ encounterId,patientId:enc.patientId,modality,service,priority,
+          description:text(x.description,'Estudio',600),
+          clinicalQuestion:x.clinicalQuestion===undefined?'':text(x.clinicalQuestion,'Pregunta clínica',400),
+          preparation:x.preparation===undefined?'':text(x.preparation,'Preparación',400),
           status:'ordered',result:'',reviewedBy:null })
       }
       const patient=this.find(actor,'patients',str(enc.patientId,'Paciente',80)).data
