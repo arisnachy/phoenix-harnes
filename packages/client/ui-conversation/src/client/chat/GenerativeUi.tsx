@@ -856,6 +856,8 @@ export function splitGenerativeUiText(
     if (parsed === null) {
       if (/"component"\s*:\s*"(?:sports_game_card|sports_schedule_card|sports_ticket_card|sports_ticket_bundle_card)"/.test(body ?? ''))
         segments.push({ kind: 'notice', text: 'La tarjeta deportiva no pudo validarse. Kira debe consultar de nuevo el evento y entregar los datos verificados.' })
+      else if (/"component"\s*:\s*"(?:spreadsheet|spreadsheet_patch)"/.test(body ?? ''))
+        segments.push({kind:'notice',text:'La hoja NO se modificó: la operación recibida no cumple el formato del editor. Kira debe emitir spreadsheet_patch con la revisión actual, filas completas y valores válidos.'})
       else if (/"component"\s*:\s*"(?:visual_intelligence|ui_canvas|scale_form|smart_form|smart_form_library|adaptive_app|adaptive_form|adaptive_control|adaptive_field_result|spreadsheet|spreadsheet_patch|space_patch|geo_map|scene_map|diagram|status_pill|agent_line|smart_card|metric_card|event_card|comparison|timeline|sports_espn_dashboard|sports_game_card|sports_schedule_card|sports_ticket_card|sports_ticket_bundle_card|sports_odds_card)"/.test(body ?? ''))
         segments.push({ kind: 'notice', text: 'Esta interfaz no pudo mostrarse. Pide a Kira que la actualice.' })
       else appendMarkdown(segments, raw)

@@ -128,3 +128,7 @@
 .excelStatusBar{display:flex;align-items:center;gap:14px;padding:6px 8px;background:#fafbf9;color:#667168;font-size:11px;border:1px solid #d7ded8;border-top:0}
 .excelSheetTab{padding:5px 12px;border-bottom:3px solid #217346;color:#17633c;font-weight:700;background:#fff}
 .excelStatusBar span:last-child{margin-left:auto}
+
+.studioSheet .excelTabs{display:flex!important;flex:0 0 auto;visibility:visible;min-height:34px;align-items:center;position:relative;z-index:1}
+.studioSheet .excelTitle,.studioSheet .excelRibbon,.studioSheet .formulaBar,.studioSheet .excelStatusBar{flex-shrink:0}
+.studioSheet .sheetScroll{min-height:180px}
