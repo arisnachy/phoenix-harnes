@@ -157,3 +157,37 @@ export function calibrationReport(records:readonly {predicted:number;observed:bo
   const ece=n?bins.reduce((acc,b)=>acc+Math.abs(b.forecastPercent-b.observedPercent)/100*b.count/n,0):null
   return {count:n,brier:n?brier/n:null,expectedCalibrationError:ece,bins,verification:'user_reported_unverified'}
 }
+
+/** Reproducible independent two-group permutation analysis.
+ * The supplied measurements are unverified. Causality requires a valid study design.
+ * Fixed two-sided statistic, seeded Monte Carlo, bounded compute and no storage. */
+export function analyzeExperiment(input:unknown) {
+  if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Experimento inválido')
+  const x=input as Record<string,unknown>
+  if(typeof x.seed!=='number'||!Number.isSafeInteger(x.seed)||x.seed<0||x.seed>0xffffffff)throw new Error('Semilla inválida')
+  const read=(value:unknown):number[]=>{
+    if(!Array.isArray(value)||value.length<5||value.length>250||value.some(v=>typeof v!=='number'||!Number.isFinite(v)||Math.abs(v)>1e12))throw new Error('Cada grupo requiere 5–250 mediciones finitas')
+    return value as number[]
+  }
+  const control=read(x.control), intervention=read(x.intervention)
+  const mean=(a:number[])=>a.reduce((s,n)=>s+n,0)/a.length
+  const a=mean(control),b=mean(intervention),delta=b-a
+  const values=[...control,...intervention]
+  let state=x.seed>>>0
+  const draw=()=>{state=(Math.imul(1664525,state)+1013904223)>>>0;return state/4294967296}
+  const permutations=1999
+  let extreme=0
+  for(let i=0;i<permutations;i++){
+    const shuffled=[...values]
+    for(let j=shuffled.length-1;j>0;j--){
+      const k=Math.floor(draw()*(j+1))
+      const temp=shuffled[j]!;shuffled[j]=shuffled[k]!;shuffled[k]=temp
+    }
+    const statistic=mean(shuffled.slice(control.length))-mean(shuffled.slice(0,control.length))
+    if(Math.abs(statistic)>=Math.abs(delta)-1e-12)extreme++
+  }
+  return {method:'seeded-two-sided-permutation-of-mean-difference',seed:x.seed,permutations,
+    control:{n:control.length,mean:a},intervention:{n:intervention.length,mean:b},meanDifference:delta,
+    pValue:(extreme+1)/(permutations+1),assumptions:['independent observations','exchangeability under null','prespecified endpoint'],
+    evidenceStatus:'user_supplied_unverified',causalProof:false,clinicalRecommendation:false}
+}
