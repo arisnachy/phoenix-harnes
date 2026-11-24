@@ -3,6 +3,9 @@
  * occupancy. Subagent occupancy coordinates stacking for its existing in-flow
  * card; Cordis occupancy additionally borrows and restores shell geometry.
  */
+import { createElement, type ReactNode } from 'react'
+import { UniversalFileViewer } from './UniversalFileEngine.tsx'
+import { spaceHtmlSource, spacePreviewDocument } from './PhoenixSpace.tsx'
 import type { BoundActions } from '@phoenix-ai/dsh-client-ui-slots'
 import type { createLayoutStore, WorkspaceOccupant, WorkspaceSide } from './stores.ts'
 
@@ -18,6 +21,8 @@ export interface WorkspaceOccupancy {
 
 /** Cross-plugin layout face (`ctx.layout`). */
 export interface ILayout {
+  /** Render the same imported-file engine used by the local library. */
+  renderSpaceFile?(input:{id:string;title:string;mime:string}):ReactNode
   /** Toggle the sidebar panel. */
   toggleSidebar(): void
   /** Contextual focus borrows the navigation rail, subject to manual overrides. */
@@ -42,6 +47,12 @@ export interface ILayout {
 
 /** Cross-plugin panel-action face (ctx.layout). */
 export class LayoutController implements ILayout {
+  renderSpaceFile(input:{id:string;title:string;mime:string}):ReactNode {
+    return createElement(UniversalFileViewer,{...input,renderHtml:(html:string)=>createElement('iframe',{
+      title:input.title,sandbox:'allow-scripts',referrerPolicy:'no-referrer',
+      srcDoc:spacePreviewDocument(spaceHtmlSource(html)),style:{width:'100%',height:'60vh',border:0},
+    })})
+  }
   #panels: PanelActions | undefined
   #occupancy: WorkspaceOccupancy = Object.freeze({ subagent: false, cordis: false })
   #cordisSide: WorkspaceSide | null = null
