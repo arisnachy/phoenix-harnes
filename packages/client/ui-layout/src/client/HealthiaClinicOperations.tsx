@@ -488,7 +488,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
     </header>
     {!readyRef.current&&<p role="status" className={css.notice}>Cargando registros autorizados…</p>}
     {(error||notice)&&<p role={error?'alert':'status'} className={error?css.error:css.notice}>{error||notice}</p>}
-    <div className={css.directoryHeader}>
+    {!selectedPatient&&<div className={css.directoryHeader}>
       <div>
         <strong>{area==='patients'?'Directorio de pacientes':'Atención de consultas'}</strong>
         <small>{patients.length} expedientes autorizados · {area==='patients'?'Selecciona uno para ver su ficha':'Selecciona un paciente para continuar'}</small>
@@ -501,9 +501,9 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
         onClick={()=>setCreatingPatient(value=>!value)}>
         {creatingPatient?'Cancelar registro':'Registrar paciente'}
       </button>}
-    </div>
-    {area==='encounters'&&<label className={css.selectPatient}>Paciente del expediente
-      <select value={patientId} aria-label="Paciente del expediente"
+    </div>}
+    {area==='encounters'&&!selectedPatient&&<label className={css.selectPatient}>Paciente del expediente
+      <select value={patientId} aria-label="Paciente del expediente" disabled={busy||dirtyEncounter}
         onChange={e=>{setPatientId(e.currentTarget.value);setEncounterId('');setError('');setNotice('')}}>
         <option value="">Seleccionar paciente</option>
         {visiblePatients.map(item=><option key={item.id} value={item.id}>{item.name} · {item.dateOfBirth}</option>)}
@@ -655,7 +655,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
           type="submit">Abrir consulta</button>
       </form>}
       {selectedPatient&&patientEncounters.length>0&&<label className={css.selectPatient}>Consulta del paciente
-        <select value={encounterId} aria-label="Consulta del paciente" onChange={e=>{
+        <select value={encounterId} aria-label="Consulta del paciente" disabled={busy||dirtyEncounter} onChange={e=>{
           setEncounterId(e.currentTarget.value);setError('');setNotice('')
         }}>
           <option value="">Seleccionar consulta</option>
@@ -667,11 +667,9 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
       {selectedPatient&&canManageEncounters&&!creatingEncounter&&!patientEncounters.length&&
         <p className={css.emptyState}>Este paciente aún no tiene consultas accesibles. Utiliza «Nueva consulta» para iniciar la atención.</p>}
       {selectedEncounter&&currentNote&&<div className={css.encounter}>
-        {canManageEncounters&&selectedEncounter.status!=='signed'&&<section className={css.interviewCard}
-          aria-label="Ask clínico protegido">
-          <div className={css.interviewHeader}><strong>Ask · interrogatorio clínico</strong>
-            <small>Preguntas del servicio local; ninguna respuesta se envía al chat de Kira.</small>
-          </div>
+        {canManageEncounters&&selectedEncounter.status!=='signed'&&<details className={css.interviewCard} aria-label="Ask clínico protegido">
+          <summary className={css.interviewSummary}><strong>Ask · Interrogatorio clínico</strong><small>{interviewGuide?.nextQuestions.length??0} preguntas disponibles</small></summary>
+          <p className={css.notice}>Preguntas del servicio local; ninguna respuesta se envía al chat de Kira.</p>
           <p className={css.notice}>Registra únicamente lo que refiere el paciente o lo verificado.
             Ante signos de alarma, realiza valoración inmediata; la guía no determina un diagnóstico.</p>
           {(interviewGuide?.nextQuestions??[]).map(question=><button type="button" key={question.key}
@@ -699,7 +697,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
               if(session)void mutateEncounter(record=>api.draftEncounterFromInterview(session,record),
                 'Borrador construido a partir de las respuestas registradas; requiere revisión profesional.')
             }}>Preparar borrador desde el interrogatorio</button>}
-        </section>}
+        </details>}
 
         <p className={css.notice}>Consulta · versión {selectedEncounter.version} · {selectedEncounter.status}
           {selectedEncounter.status==='signed'?' · Solo lectura': ' · Borrador pendiente de revisión y firma'}</p>
