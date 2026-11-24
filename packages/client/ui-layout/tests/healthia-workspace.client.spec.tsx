@@ -178,7 +178,7 @@ describe('Compact clinical access',()=>{
     fireEvent.click(screen.getByRole('button',{name:'Desbloquear clínica'}))
     expect(screen.getByLabelText('Contraseña')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Contraseña'),{target:{value:'synthetic-password'}})
-    fireEvent.click(screen.getByRole('button',{name:'Cerrar',exact:true}))
+    fireEvent.click(screen.getByRole('button',{name:/^Cerrar$/}))
     expect(screen.queryByLabelText('Contraseña')).toBeNull()
     fireEvent.click(screen.getByRole('button',{name:'Desbloquear clínica'}))
     expect((screen.getByLabelText('Contraseña') as HTMLInputElement).value).toBe('')
