@@ -856,3 +856,27 @@ test('ASK drafts are encrypted, scoped to an owned encounter and version checked
   reopened.clearClinicalDraft(restored,e.id)
   assert.equal(reopened.getClinicalDraft(restored,e.id),null)
 })
+
+test('WHO ICD-11 verification uses only the exact code and rejects mismatched evidence',async()=>{
+  const {verifyIcd11Code}=await import('../src/health-icd11.ts')
+  const calls=[]
+  const fake=async(url,options)=>{
+    calls.push({url,options})
+    return new Response(JSON.stringify(calls.length===1?{access_token:'synthetic-token'}:{
+      code:'1A00',stemCode:'1A00',stemId:'http://id.who.int/icd/release/11/2026-01/mms/257068234',
+    }),{status:200})
+  }
+  const credentials={clientId:'synthetic-id',clientSecret:'synthetic-secret'}
+  const result=await verifyIcd11Code('1A00',credentials,fake)
+  assert.equal(result.code,'1A00')
+  assert.equal(result.release,'2026-01')
+  assert.equal(calls[1].url,'https://id.who.int/icd/release/11/2026-01/mms/codeinfo/1A00')
+  assert.equal(calls[1].options.redirect,'error')
+  assert(!JSON.stringify(result).includes('synthetic-token'))
+  await assert.rejects(()=>verifyIcd11Code('name, 42 years',credentials,fake),/inválido/)
+  await assert.rejects(()=>verifyIcd11Code('1A00',{},fake),/no configuradas/)
+  const mismatch=async(url)=>new Response(JSON.stringify(url.includes('connect/token')?{access_token:'synthetic-token'}:{
+    code:'ZZZZ',stemCode:'ZZZZ',stemId:'http://id.who.int/icd/release/11/2026-01/mms/257068234'
+  }),{status:200})
+  await assert.rejects(()=>verifyIcd11Code('1A00',credentials,mismatch),/no verificable/)
+})
