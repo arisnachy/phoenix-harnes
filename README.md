@@ -4,11 +4,23 @@
 
 # PHOENIX
 
-English | [中文](README.zh.md)
+English | [Español](README.es.md) | [中文](README.zh.md)
 
 **PHOENIX is a universal, provider-agnostic AI agent harness for local-first and bring-your-own-provider workflows.**
 
 It is being built around intelligent model selection, durable continuity, repository intelligence, tools, multi-agent execution, recovery, evaluation, and bounded self-improvement. Capabilities land incrementally and are not presented as complete until their repository gates are green.
+
+**Your models. Your workspace. Your AI.**
+
+[Get started](#run) · [Windows releases](https://github.com/arisnachy/phoenix-harnes/releases) · [Community](https://github.com/arisnachy/phoenix-harnes/discussions) · [Report a bug](https://github.com/arisnachy/phoenix-harnes/issues) · [Share PHOENIX](docs/community/launch-kit.md)
+
+## Why PHOENIX?
+
+- Choose supported cloud providers or run supported models locally without tying your workspace to a single model vendor.
+- Work with Kira through a common conversation and tool pipeline, with approvals and continuity across supported routes.
+- Explore an extensible open-source agent workspace, with transparent development and contributions welcome.
+
+PHOENIX is an independent downstream project led by Arisnachy Gómez Díaz in the Dominican Republic. See the upstream attribution below. Experimental capabilities are not production guarantees. If PHOENIX is useful to you, consider starring the repository and sharing your experience.
 
 ## Development status
 
