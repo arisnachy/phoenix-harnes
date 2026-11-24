@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import type { SpaceSpecializedProps } from './index.ts'
 
-export type FileMode='html'|'image'|'pdf'|'audio'|'video'|'table'|'text'|'archive'|'office'|'unsupported'
+export type FileMode='html'|'image'|'pdf'|'audio'|'video'|'table'|'text'|'archive'|'office'|'model'|'unsupported'
 export type FileFormat={mode:FileMode;mime:string;label:string}
 const format=(mode:FileMode,mime:string,label:string):FileFormat=>({mode,mime,label})
 const decoder=new TextDecoder()
@@ -11,6 +12,13 @@ export function detectFile(bytes:Uint8Array,title:string,mime:string):FileFormat
   const head=decoder.decode(bytes.subarray(0,4096)).replace(/^\uFEFF/u,'').trimStart()
   if(begins(bytes,[77,90])||begins(bytes,[127,69,76,70])||begins(bytes,[0xcf,0xfa,0xed,0xfe]))
     return format('unsupported','application/octet-stream','Ejecutable — no se ejecuta automáticamente')
+  if(ascii(bytes,0,4)==='glTF')return format('model','model/gltf-binary','Modelo GLB')
+  if(ascii(bytes,0,4)==='GDPC')return format('unsupported','application/octet-stream','Godot PCK — requiere proyecto o exportación web')
+  if(ascii(bytes,0,7)==='BLENDER')return format('unsupported','application/x-blender','Blender — abrir con editor nativo')
+  if(begins(bytes,[0x37,0x7a,0xbc,0xaf,0x27,0x1c]))return format('unsupported','application/x-7z-compressed','7-Zip')
+  if(ascii(bytes,0,4)==='Rar!')return format('unsupported','application/vnd.rar','RAR')
+  if(begins(bytes,[0x1f,0x8b]))return format('unsupported','application/gzip','GZIP / NIfTI comprimido')
+  if(ascii(bytes,257,262)==='ustar')return format('unsupported','application/x-tar','TAR')
   if(ascii(bytes,0,5)==='%PDF-')return format('pdf','application/pdf','PDF')
   if(begins(bytes,[137,80,78,71,13,10,26,10]))return format('image','image/png','PNG')
   if(begins(bytes,[255,216,255]))return format('image','image/jpeg','JPEG')
@@ -27,6 +35,10 @@ export function detectFile(bytes:Uint8Array,title:string,mime:string):FileFormat
   if(ascii(bytes,128,132)==='DICM')return format('unsupported','application/dicom','DICOM — requiere visor clínico')
   if(ascii(bytes,0,16)==='SQLite format 3\0')return format('unsupported','application/vnd.sqlite3','SQLite — requiere adaptador de datos')
   if(begins(bytes,[208,207,17,224,161,177,26,225]))return format('unsupported','application/octet-stream','Office binario — requiere conversión')
+  if(ext==='gltf'&&head.startsWith('{')){
+    try{const doc=JSON.parse(decoder.decode(bytes)) as {asset?:{version?:unknown}};if(doc.asset?.version==='2.0')return format('model','model/gltf+json','Modelo glTF')}catch{/* invalid JSON */}
+  }
+  if(ext==='nii'||ext==='dcm')return format('unsupported',ext==='dcm'?'application/dicom':'application/octet-stream','Imagen médica — requiere visor especializado')
   if(bytes.length===0)return format('text','text/plain','Archivo vacío')
   // Only interpret actual UTF-8 text; never trust an active MIME supplied by a file.
   const sample=bytes.subarray(0,Math.min(bytes.length,4096))
@@ -154,6 +166,14 @@ export async function inspectPackage(bytes:Uint8Array):Promise<PackageView>{
     parts.push({title:'Contenido',rows:tags(doc,'p').slice(0,1500).map(p=>[p.textContent||''])})
     return {label:'OpenDocument · contenido estructurado',parts,entries}
   }
+  if(byName.has('META-INF/container.xml')&&entries.some(e=>/\.opf$/iu.test(e.name))){
+    for(const e of entries.filter(e=>/\.xhtml$/iu.test(e.name)).slice(0,40)){
+      try{const doc=await read(e.name);parts.push({title:e.name,rows:tags(doc,'p').slice(0,500).map(p=>[p.textContent||''])})}catch{/* Keep readable chapters */}
+    }
+    return {label:'EPUB · lectura de contenido',parts,entries}
+  }
+  if(entries.some(e=>/(?:^|\/)project\.godot$/u.test(e.name)))return {label:'Proyecto Godot · requiere exportación web o editor nativo',parts,entries}
+  if(entries.some(e=>/\.wasm(?:\.br|\.gz)?$/iu.test(e.name)))return {label:'Juego WebAssembly · requiere servidor de recursos (Godot / Unity / WebGL)',parts,entries}
   const entry=entries.filter(e=>/(?:^|\/)index\.html?$/iu.test(e.name))
     .sort((a,b)=>a.name.length-b.name.length)[0]
   if(entry&&entry.size<=1_500_000){
@@ -163,7 +183,7 @@ export async function inspectPackage(bytes:Uint8Array):Promise<PackageView>{
     for(const e of entries.slice(0,1000)){
       if(e.name===entry.name||e.name.startsWith('/')||e.name.includes('\\')||e.name.split('/').includes('..'))continue
       try{
-        if(/\.css$/iu.test(e.name)&&e.size<=Math.min(budget,500000)){
+        if(/\.(?:css|js)$/iu.test(e.name)&&e.size<=Math.min(budget,500000)){
           budget-=e.size;files[e.name]=decoder.decode(await zipEntry(bytes,e))
         }else{const uri=await imageUri(e);if(uri)files[e.name]=uri}
       }catch{/* Missing companion resources are not fetched from the host */}
@@ -189,8 +209,8 @@ function Grid({rows}:{rows:string[][]}){
     <tbody>{rows.map((r,i)=><tr key={i}>{r.map((v,j)=><td key={j} style={{border:'1px solid #8885',padding:8,whiteSpace:'pre-wrap'}}>{v}</td>)}</tr>)}</tbody>
   </table></div>
 }
-type Loaded={format:FileFormat;url:string;text:string;pack?:PackageView;note?:string}
-export function UniversalFileViewer({id,title,mime,renderHtml}:{id:string;title:string;mime:string;renderHtml:(html:string)=>ReactNode}){
+type Loaded={format:FileFormat;url:string;text:string;pack?:PackageView;note?:string;model?:string|Uint8Array}
+export function UniversalFileViewer({id,title,mime,renderHtml,renderSpecialized}:{id:string;title:string;mime:string;renderHtml:(html:string)=>ReactNode;renderSpecialized?:(input:SpaceSpecializedProps)=>ReactNode}){
   const [loaded,setLoaded]=useState<Loaded|null>(null)
   const [error,setError]=useState('')
   const [tab,setTab]=useState<'visual'|'info'|'source'>('visual')
@@ -208,7 +228,7 @@ export function UniversalFileViewer({id,title,mime,renderHtml}:{id:string;title:
       if(['image','pdf','audio','video'].includes(detected.mode))url=URL.createObjectURL(new Blob([bytes],{type:detected.mime}))
       let pack:PackageView|undefined,note:string|undefined
       if(detected.mode==='archive')try{pack=await inspectPackage(bytes)}catch(e){note=e instanceof Error?e.message:'No se pudo leer el paquete'}
-      if(!abort.signal.aborted)setLoaded({format:detected,url,text,...pack?{pack}:{},...note?{note}:{}})
+      if(!abort.signal.aborted)setLoaded({format:detected,url,text,...pack?{pack}:{},...note?{note}:{},...detected.mode==='model'?{model:detected.mime==='model/gltf+json'?decoder.decode(bytes):bytes}:{}})
     }).catch(e=>{if(!abort.signal.aborted)setError(e instanceof Error?e.message:'No se pudo abrir el archivo')})
     return ()=>{abort.abort();if(url)URL.revokeObjectURL(url)}
   },[id,title,mime])
@@ -224,6 +244,7 @@ export function UniversalFileViewer({id,title,mime,renderHtml}:{id:string;title:
     </div>
     {tab==='info'?<dl><dt>Nombre</dt><dd>{title}</dd><dt>Tipo declarado</dt><dd>{mime}</dd><dt>Tipo detectado</dt><dd>{f.mime}</dd><dt>Motor</dt><dd>{f.mode}</dd></dl>:tab==='source'?<pre style={{whiteSpace:'pre-wrap',overflow:'auto',maxHeight:'65vh'}}>{loaded.text.slice(0,500000)}</pre>:<>
       {f.mode==='html'&&renderHtml(loaded.text)}
+      {f.mode==='model'&&loaded.model!==undefined&&(renderSpecialized?.({format:'gltf',data:loaded.model,title})??<p>Motor 3D no disponible.</p>)}
       {f.mode==='image'&&<img alt={title} src={loaded.url} style={{maxWidth:'100%',maxHeight:'70vh',objectFit:'contain',margin:'auto'}}/>}
       {f.mode==='pdf'&&<object aria-label={title} data={loaded.url} type="application/pdf" style={{width:'100%',height:'70vh'}}><p>El navegador no ofrece visor PDF. Descarga el original.</p></object>}
       {f.mode==='audio'&&<audio controls preload="metadata" src={loaded.url}/>}

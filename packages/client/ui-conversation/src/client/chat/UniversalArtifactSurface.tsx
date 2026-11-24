@@ -91,7 +91,8 @@ export function UniversalArtifactSurface({ artifact, renderMessageImages, loadIm
   // automatically. A generic document/image may contain health records or
   // credentials, so it requires intentional import instead of auto-mirroring.
   useEffect(() => {
-    const kind = artifact.mime === 'application/vnd.phoenix.game+html' ? 'game'
+    const kind = ['application/vnd.phoenix.game+html','application/vnd.phoenix.game+godot-web'].includes(artifact.mime) ? 'game'
+      : artifact.mime === 'application/vnd.phoenix.scene3d+json' ? 'app'
       : artifact.mime === 'application/vnd.phoenix.comic+html' ? 'document'
       : artifact.mime === 'application/vnd.phoenix.canvas+html' ? 'app'
       : null

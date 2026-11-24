@@ -30,6 +30,10 @@ import { InputBar } from './skeleton/InputBar.tsx'
 import { EnterBehaviorRow } from './settings/EnterBehaviorRow.tsx'
 import type { EnterBehaviorRowInjected } from './settings/EnterBehaviorRow.tsx'
 import { ChatView } from './chat/ChatView.tsx'
+import { Scene3DView } from './chat/Scene3DView.tsx'
+import { importSceneGLTF } from './chat/scene3d-formats.ts'
+import type { SpaceSpecializedProps } from '@phoenix-ai/dsh-client-ui-layout/client'
+import { createElement } from 'react'
 import { StatsLine } from './chat/StatsLine.tsx'
 import { ApprovalPanel } from './skeleton/ApprovalPanel.tsx'
 import { todoDockEntry } from './skeleton/TodoPanel.tsx'
@@ -148,6 +152,15 @@ function selectApproval({ interactions }: ComposerChainProps): ApprovalWait | nu
   return interactions.find((i): i is ApprovalWait => i.kind === 'approval') ?? null
 }
 
+function SpaceSpecializedRenderer({format,data}:SpaceSpecializedProps) {
+  try {
+    const spec=format==='gltf'?importSceneGLTF(data):typeof data==='string'?JSON.parse(data):undefined
+    return createElement(Scene3DView,{spec,expanded:true})
+  } catch {
+    return createElement('p',{role:'alert'},'No se pudo interpretar este modelo 3D. Conserva el original y utiliza un editor compatible.')
+  }
+}
+
 /** Mounts the conversation plugin.
  * @param ctx - Client root context.
  */
@@ -172,6 +185,7 @@ export function apply(ctx: Context): void {
   }, 'ui-conversation: host voice remote')
   ctx.on('connection/reset', () => { void refreshVoiceAssistantRemote() })
 
+  ctx.effect(() => slots.register({name:'space.specialized'}, SpaceSpecializedRenderer), 'space: specialized 3D renderer')
   registerConversationNodes(ctx)
   registerChatNodeRenderers(ctx)
 
