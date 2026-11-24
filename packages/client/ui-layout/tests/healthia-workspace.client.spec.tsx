@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useState } from 'react'
+import { parseClinicalIntake } from '../src/client/HealthiaEditorSupport.ts'
 import { HealthiaWorkspace, HEALTHIA_NAV, type HealthiaRole } from '../src/client/HealthiaWorkspace.tsx'
 
 afterEach(() => {cleanup();vi.unstubAllGlobals()})
@@ -143,5 +144,18 @@ describe('PHOENIX embedded Healthia', () => {
     fireEvent.click(screen.getByRole('button',{name:'Restaurar espacio clínico'}))
     expect(screen.getByText('Campo demostrativo')).toBeTruthy()
     expect(screen.getByRole('button',{name:'Agregar campo'})).toBeTruthy()
+  })
+})
+
+describe('Protected conversational admission',()=>{
+  it('extracts explicit values without deriving a birth date from age',()=>{
+    expect(parseClinicalIntake('Crea paciente Ana Pérez, edad: 42 años, sexo: femenino, correo: ana@example.com, lugar de nacimiento: Santiago')).toEqual({
+      name:'Ana Pérez',age:'42',sexAtBirth:'female',email:'ana@example.com',birthplace:'Santiago',
+    })
+  })
+  it('rejects invalid dates, contradictory fields and future birth dates',()=>{
+    expect(parseClinicalIntake('nombre: Ana, nombre: María, fecha de nacimiento: 2020-02-30, sexo: masculino, sexo: femenino')).toEqual({})
+    expect(parseClinicalIntake('fecha de nacimiento: 2999-01-01')).toEqual({})
+    expect(parseClinicalIntake('fecha de nacimiento: 1984-03-12')).toEqual({dateOfBirth:'1984-03-12'})
   })
 })
