@@ -54,6 +54,7 @@ export function restoreClinicalNote(encounter:ClinicalEncounter):{
     'Diagnósticos adicionales y su evidencia':'secondaryDiagnosis',
     'Terminología o variante de codificación utilizada':'codeSystem',
     'CIE-10 sugerido (requiere verificación)':'icd10',
+    'CIE-11 propuesto':'icd11','Evidencia de consulta OMS (CIE-11)':'icd11Evidence',
     'Analíticas consideradas (las órdenes se emiten por separado)':'tests',
     'Imágenes diagnósticas consideradas (no emitidas)':'imaging',
     'Derivaciones e interconsultas consideradas':'referrals',
@@ -728,7 +729,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
             {selectedEncounter.signedAt??'fecha protegida'}. No admite sobrescritura; correcciones mediante adenda.</p>
         </div> : <HealthiaClinicalNote key={selectedEncounter.id} initialKind={currentNote.kind}
           initialValues={currentNote.values} patient={selectedPatient} encounterVersion={selectedEncounter.version}
-          requestedStep={requestedStep} onEditorState={onEditorState} onDirtyChange={setDirtyEncounter} {...(canManageEncounters&&session?.actor.username===selectedEncounter.practitioner?{onSave:saveNote}:{})}
+          requestedStep={requestedStep} onEditorState={onEditorState} onDirtyChange={setDirtyEncounter} {...(session?.actor.role==='clinician'&&session.actor.username===selectedEncounter.practitioner?{verifyIcd11:(code:string)=>api.verifyIcd11(session,code)}:{})} {...(canManageEncounters&&session?.actor.username===selectedEncounter.practitioner?{onSave:saveNote}:{})}
           {...(session?.actor.role==='clinician'&&session.actor.username===selectedEncounter.practitioner&&selectedEncounter.status==='draft'?{
             loadModels:()=>api.editorModels(session),
             refineField:(field:string,text:string,model:import('./HealthiaClinicalApi.ts').ClinicalEditorModel,confirmed:boolean)=>api.refineEditorField(session,selectedEncounter,field,text,model,confirmed),
