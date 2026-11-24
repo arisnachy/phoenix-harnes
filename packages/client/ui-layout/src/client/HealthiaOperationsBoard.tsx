@@ -93,6 +93,14 @@ export function HealthiaOperationsBoard({section,selectedPatientId,onPatientChan
   const selectedEncounter=signedEncounters.find(e=>e.id===form.encounterId)
   const currentPatient=patients.find(p=>p.id===(selectedEncounter?.patientId??patientId))
   const calcDose=clinicianDoseCalculation(form.weightKg,form.mgPerKg,form.maxDoseMg)
+  const rxFields=['presentation','dose','route','frequency','duration','quantity','reference'] as const
+  const rxReady=rxFields.every(id=>!!form[id]?.trim())&&!!form.medication?.trim()
+  const rxInstructions=form.instructions?.trim()??''
+  const rxPreview=[
+    ['Presentación',form.presentation],['Dosis',form.dose],['Vía',form.route],
+    ['Frecuencia',form.frequency],['Duración',form.duration],['Cantidad',form.quantity],
+    ['Indicaciones',rxInstructions],
+  ].filter(([,value])=>!!value?.trim()).map(([label,value])=>label+': '+value).join('\n')
   const orderService=ORDER_SERVICES.find(s=>s.id===form.service)??ORDER_SERVICES[0]!
   const [serviceFilter,setServiceFilter]=useState('all')
   const shownRecords=active==='orders'&&serviceFilter!=='all'?records.filter(item=>(item.service??item.modality)===serviceFilter):records
@@ -180,9 +188,9 @@ export function HealthiaOperationsBoard({section,selectedPatientId,onPatientChan
           ...(form.clinicalQuestion?.trim()?{clinicalQuestion:form.clinicalQuestion}:{}),
           ...(form.preparation?.trim()?{preparation:form.preparation}:{})}
         if(active==='prescriptions'){
-          if(!safety)throw Error('Debe completar la revisión farmacológica antes de recetar.')
+          if(!safety||!rxReady)throw Error('Completa la pauta y la revisión farmacológica antes de recetar.')
           payload={encounterId:form.encounterId,medication:form.medication,
-            directions:form.directions,safetyAcknowledged:true}
+            directions:rxPreview,regimen:{...Object.fromEntries(rxFields.map(key=>[key,form[key]])),instructions:rxInstructions},safetyAcknowledged:true}
         }
         if(active==='invoices'){
           const decimal=Number((form.amount??'').replace(',','.'))
@@ -262,8 +270,20 @@ export function HealthiaOperationsBoard({section,selectedPatientId,onPatientChan
           {field('preparation','Preparación o instrucciones específicas','text',false)}
         </>}
         {active==='prescriptions'&&<>
-          {field('medication','Principio activo, presentación y concentración')}
-          {textarea('directions','Dosis, vía, frecuencia, duración, cantidad y observaciones')}
+          {field('medication','Principio activo')}
+          {field('presentation','Presentación y concentración')}
+          {field('dose','Dosis por administración')}
+          {field('route','Vía de administración')}
+          {field('frequency','Frecuencia e intervalo')}
+          {field('duration','Duración del tratamiento')}
+          {field('quantity','Cantidad total a dispensar')}
+          {field('instructions','Indicaciones adicionales','text',false)}
+          {field('reference','Fuente farmacológica revisada (nombre, edición o referencia)')}
+          <div className={css.safety} role="status"><strong>Vista previa de receta</strong>
+            <p>{currentPatient?.name??'Seleccione una consulta firmada'}</p>
+            <strong>{form.medication||'Medicamento por documentar'}</strong>
+            <p style={{whiteSpace:'pre-wrap'}}>{rxPreview||'Completa la pauta para ver la receta.'}</p>
+          </div>
         </>}
         {active==='invoices'&&<>
           {field('concept','Servicio o concepto facturable')}
@@ -316,7 +336,7 @@ export function HealthiaOperationsBoard({section,selectedPatientId,onPatientChan
       </>}
       {active==='orders'&&<p className={css.message}>Solo se pueden emitir órdenes desde consultas firmadas por el profesional prescriptor.</p>}
       {active==='invoices'&&<p className={css.message}>Registro de cuenta interna. No genera NCF, e-CF ni comprobantes fiscales automáticos.</p>}
-      <button className={css.primary} disabled={busy||(active==='prescriptions'&&!safety)
+      <button className={css.primary} disabled={busy||(active==='prescriptions'&&(!safety||!rxReady))
         ||((active==='orders'||active==='prescriptions')&&!selectedEncounter)} type="submit">
         {busy?'Guardando…':active==='team'?'Confirmar en la clínica':'Guardar registro protegido'}
       </button>
@@ -351,7 +371,7 @@ export function HealthiaOperationsBoard({section,selectedPatientId,onPatientChan
           <button type="button" onClick={()=>{
             try{
               printProtectedClinicalDocument({
-                title:active==='orders'?'Solicitud · '+serviceLabel(item.service??item.modality):TITLE[active],
+                title:active==='orders'?'Solicitud · '+serviceLabel(item.service??item.modality):active==='prescriptions'?'Receta médica':TITLE[active],
                 institution:session.actor.org,
                 patientName:patients.find(p=>p.id===item.patientId)?.name??'Paciente autorizado',
                 patientId:typeof item.patientId==='string'?item.patientId:'No aplica',
@@ -362,6 +382,7 @@ export function HealthiaOperationsBoard({section,selectedPatientId,onPatientChan
                   {heading:'Descripción',body:label(item)},
                   ...(active==='orders'?[{heading:'Prioridad',body:priorityLabel(item.priority)},{heading:'Pregunta clínica',body:typeof item.clinicalQuestion==='string'?item.clinicalQuestion:''},{heading:'Preparación',body:typeof item.preparation==='string'?item.preparation:''}]:[]),
                   {heading:'Indicaciones',body:typeof item.directions==='string'?item.directions:''},
+                  ...(active==='prescriptions'&&item.regimen&&typeof item.regimen==='object'&&'reference' in item.regimen&&typeof item.regimen.reference==='string'?[{heading:'Fuente revisada por el profesional',body:item.regimen.reference}]:[]),
                   {heading:'Resultado',body:typeof item.result==='string'?item.result:''},
                   ...(active==='invoices'?[{heading:'Cuenta administrativa (NO fiscal)',
                     body:'Total: '+euro(item.amountCents)+'\nAbonado: '+euro(item.paidCents)}]:[]),
