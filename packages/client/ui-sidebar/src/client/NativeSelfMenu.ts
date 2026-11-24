@@ -1,5 +1,6 @@
 /** Native navigation self-model. Only first-party destinations; no scripts, URLs or privileges. */
 export const NATIVE_MENU_KEY = 'phoenix.self.navigation.v1'
+export const NATIVE_CHECKPOINT_KEY = 'phoenix.self.navigation.checkpoint.v1'
 export const NATIVE_TARGETS = ['home','tasks','connectors','team','library','healthia'] as const
 export type NativeTarget = typeof NATIVE_TARGETS[number]
 export type NativeEntry = { readonly id:string; readonly target:NativeTarget; readonly label?:string }
@@ -36,6 +37,49 @@ function read(store:Store):Ledger {
 }
 export function readNativeMenu(store:Store):NativeRevision {
   try{return read(store).current}catch{return defaults()}
+}
+/** Only validated navigation metadata may become a checkpoint. Never copy corrupt raw data. */
+function checkpoint(store:Store,state:NativeRevision):void {
+  try {store.setItem(NATIVE_CHECKPOINT_KEY,JSON.stringify(state))}catch{/* main state remains authoritative */}
+}
+function candidate(raw:string|null):NativeRevision|undefined{
+  if(!raw||raw.length>20000)return undefined
+  try{const value:unknown=JSON.parse(raw);return validRevision(value)?value:undefined}catch{return undefined}
+}
+export type NativeRecovery = {state:NativeRevision;status:'healthy'|'restored'|'defaulted'|'unavailable'}
+/** Bounded, local, automatic recovery; never changes permissions, app records or routes. */
+export function recoverNativeMenu(store:Store,now=Date.now()):NativeRecovery {
+  try{
+    const raw=store.getItem(NATIVE_MENU_KEY)
+    if(raw===null)return {state:defaults(),status:'healthy'}
+    try{
+      const state=read(store).current
+      checkpoint(store,state)
+      return {state,status:'healthy'}
+    }catch{/* Only the native ledger is damaged. */}
+    let valid:NativeRevision[]=[]
+    if(raw.length<=20000){
+      try{
+        const parsed:unknown=JSON.parse(raw)
+        if(record(parsed)){
+          if(validRevision(parsed.current))valid.push(parsed.current)
+          if(validRevision(parsed.previous))valid.push(parsed.previous)
+        }
+      }catch{/* no trustworthy embedded checkpoint */}
+    }
+    const backup=candidate(store.getItem(NATIVE_CHECKPOINT_KEY))
+    if(backup)valid.push(backup)
+    const newest=valid.sort((a,b)=>b.revision-a.revision)[0]
+    // A fresh revision invalidates commands approved against the damaged ledger.
+    const base=newest??defaults()
+    const nextRevision=Math.max(base.revision+1,Number.isSafeInteger(now)&&now>=0?now:0)
+    if(!revision(nextRevision))return {state:base,status:'unavailable'}
+    const state:NativeRevision={revision:nextRevision,entries:base.entries}
+    store.setItem(NATIVE_MENU_KEY,JSON.stringify({current:state}))
+    if(JSON.stringify(read(store).current)!==JSON.stringify(state))throw Error('NATIVE_RECOVERY_VERIFY_FAILED')
+    checkpoint(store,state)
+    return {state,status:newest?'restored':'defaulted'}
+  }catch{return {state:readNativeMenu(store),status:'unavailable'}}
 }
 export function parseNativeMenuCommand(value:unknown):NativeCommand|null {
   if(!record(value)||value.appId!=='general'||value.operation!=='native-menu'||!NATIVE_ACTIONS.includes(value.menuAction as NativeAction))return null
@@ -84,9 +128,11 @@ export function nativeMenuOperation(store:Store,raw:unknown,apply=false):{state:
   const next={revision:current.revision+1,entries}
   if(!validRevision(next))throw Error('INVALID_NATIVE_MENU_RESULT')
   if(apply){
+    checkpoint(store,current)
     store.setItem(NATIVE_MENU_KEY,JSON.stringify({current:next,previous:current}))
     const observed=read(store).current
     if(JSON.stringify(observed)!==JSON.stringify(next))throw Error('NATIVE_MENU_VERIFY_FAILED')
+    checkpoint(store,observed)
   }
   return {state:apply?next:current,reason:apply?'NATIVE_MENU_SAVED':'NATIVE_MENU_PREFLIGHT'}
 }
