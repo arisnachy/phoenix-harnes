@@ -167,3 +167,34 @@ export function exportXlsx(content:string):Buffer {
     {name:'xl/worksheets/sheet1.xml',data:XML+'<worksheet xmlns="'+S+'"><sheetData>'+body+'</sheetData></worksheet>'},
   ])
 }
+
+/** Package self-contained browser source in memory. No dependency download,
+ * no execution during export and no claim that arbitrary external imports work. */
+export function exportStaticSpaceApp(content:string):Buffer{
+  if(Buffer.byteLength(content,'utf8')>750000)throw Error('Aplicación demasiado grande')
+  let files:Record<string,unknown>,entry:string
+  if(/^\s*(?:<!doctype\s+html|<html\b)/iu.test(content)){files={'index.html':content};entry='index.html'}
+  else{
+    const bundle=JSON.parse(content) as {entry?:unknown;files?:unknown;html?:unknown}
+    if(typeof bundle.html==='string'&&bundle.files===undefined){files={'index.html':bundle.html};entry='index.html'}
+    else{
+      if(typeof bundle.entry!=='string'||!bundle.files||typeof bundle.files!=='object'||Array.isArray(bundle.files))throw Error('Paquete HTML inválido')
+      entry=bundle.entry;files=bundle.files as Record<string,unknown>
+    }
+  }
+  const entries=Object.entries(files)
+  if(entries.length<1||entries.length>64||!Object.hasOwn(files,entry)||!/\.html?$/iu.test(entry))throw Error('Paquete HTML inválido')
+  let total=0
+  const allowed=/^(?:[a-zA-Z0-9_-][a-zA-Z0-9_.-]*\/)*[a-zA-Z0-9_-][a-zA-Z0-9_.-]*\.(?:html?|css|m?js|json|txt|svg|md)$/iu
+  const names=new Set<string>()
+  const out=entries.map(([name,data])=>{
+    if(!allowed.test(name)||name.length>180||names.has(name.toLowerCase())||typeof data!=='string')throw Error('Ruta o archivo de aplicación inválido')
+    if(name.split('/').some(segment=>/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/iu.test(segment)||segment.endsWith('.')))throw Error('Ruta de aplicación inválida')
+    names.add(name.toLowerCase());total+=Buffer.byteLength(data,'utf8')
+    if(total>750000)throw Error('Aplicación demasiado grande')
+    if(/phoenix-control:\/\/|-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk-(?:proj-)?[a-zA-Z0-9_-]{20,}/u.test(data))throw Error('Posible credencial en el código: revisa antes de exportar')
+    return {name:'app/'+name,data}
+  })
+  out.push({name:'LEEME.txt',data:'PHOENIX · fuente web portable\nExtrae el ZIP. Abre app/'+entry+' en tu navegador o servidor estático local.\nNo se incluye el motor PHOENIX ni sus credenciales. Las dependencias externas y el funcionamiento no han sido verificados. Revisa el código antes de ejecutarlo.\n'})
+  return zipOffice(out)
+}
