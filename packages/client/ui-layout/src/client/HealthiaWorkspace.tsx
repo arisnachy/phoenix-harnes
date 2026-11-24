@@ -76,9 +76,10 @@ export function HealthiaWorkspace({
   })
   const [clinicalRefresh, setClinicalRefresh] = useState(0)
   const [accessOpen,setAccessOpen]=useState(false)
+  const [accessEpoch,setAccessEpoch]=useState(0)
   const accessDialog=useRef<HTMLDialogElement>(null)
   const requestAccess=()=>setAccessOpen(true)
-  const accessReady=()=>{setAccessOpen(false);setClinicalRefresh(value=>value+1)}
+  const accessReady=()=>{setAccessOpen(false);setAccessEpoch(value=>value+1);setClinicalRefresh(value=>value+1)}
   useEffect(()=>{
     if(!accessOpen)return
     const dialog=accessDialog.current
@@ -201,7 +202,7 @@ export function HealthiaWorkspace({
             </div>
         )}
         {!isPatient && (active === 'encounters' || active === 'patients') &&
-          <HealthiaClinicOperations area={active} selectedPatientId={selectedClinicalPatient}
+          <HealthiaClinicOperations key={accessEpoch} area={active} selectedPatientId={selectedClinicalPatient}
             onPatientChange={setSelectedClinicalPatient} onNavigate={onSectionChange} onRequestAccess={requestAccess} onSessionReady={()=>setClinicalRefresh(value=>value+1)} entry={entry} onEntryHandled={sequence=>setEntry(previous=>previous?.sequence===sequence?undefined:previous)} requestedStep={requestedStep} onEditorState={onEditorState} />}
         {!isPatient && (active === 'appointments' || active === 'documents' || active === 'management') &&
           (clinical.status==='authenticated'
