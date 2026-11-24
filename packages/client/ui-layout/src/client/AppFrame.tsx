@@ -192,6 +192,20 @@ export function AppFrame({
   const [viewport, setViewport] = useState(() => window.innerWidth)
   const [adaptiveApp, setAdaptiveApp] = useState<string>('general')
   const [spaceOpen, setSpaceOpen] = useState(false)
+  const [spaceHost,setSpaceHost]=useState<HTMLElement|null>(null)
+  useLayoutEffect(()=>{
+    if(!spaceOpen){setSpaceHost(null);return}
+    const root=frameRef.current
+    if(!root)return
+    const locate=()=>{
+      const target=root.querySelector<HTMLElement>('[data-live-studio-host]')
+      if(target&&!target.querySelector('[data-live-studio]'))setSpaceHost(target)
+    }
+    locate()
+    const observer=new MutationObserver(locate)
+    observer.observe(root,{childList:true,subtree:true})
+    return()=>observer.disconnect()
+  },[spaceOpen,currentSession])
   const [customApps, setCustomApps] = useState<readonly AdaptiveAppBlueprint[]>(readAdaptiveApps)
   // The sidebar's document library and the session/workspace library are
   // different destinations. Never subscribe both to the legacy event:
@@ -657,7 +671,7 @@ export function AppFrame({
       </div>
       <>
         <CenterColumn adaptiveActive={adaptiveActive}>
-          {spaceOpen && <PhoenixSpace onClose={() => setSpaceOpen(false)} renderSpecialized={input => renderSlot('space.specialized', input)} />}
+          {spaceOpen && (spaceHost?createPortal(<PhoenixSpace onClose={() => setSpaceOpen(false)} renderSpecialized={input => renderSlot('space.specialized', input)} />,spaceHost):<PhoenixSpace onClose={() => setSpaceOpen(false)} renderSpecialized={input => renderSlot('space.specialized', input)} />)}
           {search && (
             <div className={css.adaptiveSearch} aria-label="Búsqueda en aplicaciones">
               <div className={css.adaptiveSearchHeader}>

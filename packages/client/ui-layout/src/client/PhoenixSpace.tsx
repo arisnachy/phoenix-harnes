@@ -434,6 +434,7 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
   const [createKind,setCreateKind]=useState<SpaceKind>('document')
   const [editor,setEditor]=useState<Editor|null>(null)
   const [withChat,setWithChat]=useState(false)
+  const [studioPinned,setStudioPinned]=useState(false)
   const [slideIndex,setSlideIndex]=useState(0)
   const [showSource,setShowSource]=useState(false)
   const [clipboardText,setClipboardText]=useState('')
@@ -447,6 +448,8 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
   const [revisionCounter,setRevisionCounter]=useState(0)
   const saving=useRef(false)
   const migrated=useRef(false)
+  const editorNow=useRef(editor)
+  editorNow.current=editor
   const selectedId=editor?.item.id
   useEffect(()=>{
     const before=(event:Event)=>{
@@ -463,12 +466,14 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
           if(!current||current.item.id!==item.id||current.dirty||saving.current||item.revision<=current.item.revision)return current
           return {item,title:item.title,content:item.content,space:item.space,dirty:false}
         })
+        const current=editorNow.current
+        if(withChat&&!studioPinned&&current?.item.id===item.id&&!current.dirty&&!saving.current&&item.revision>current.item.revision)onClose()
       }).catch(()=>setError('No se pudo refrescar el archivo.'))
     }
     window.addEventListener('phoenix:space-before-agent-edit',before)
     window.addEventListener('phoenix:space-agent-edited',edited)
     return()=>{window.removeEventListener('phoenix:space-before-agent-edit',before);window.removeEventListener('phoenix:space-agent-edited',edited)}
-  },[editor])
+  },[editor,withChat,studioPinned,onClose])
   useEffect(()=>{
     let cancelled=false
     const timer=window.setTimeout(()=>{
@@ -730,6 +735,7 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
             setWithChat(true)
           }).catch(e=>setError(String(e)))}}>Consultar a Kira</button>
           <button type="button" aria-pressed={withChat} onClick={()=>setWithChat(v=>!v)}>{withChat?'Ampliar archivo':'Mostrar chat al lado'}</button>
+          {withChat&&<label><input type="checkbox" checked={studioPinned} onChange={e=>setStudioPinned(e.currentTarget.checked)}/> Mantener abierto</label>}
           <button type="button" onClick={()=>{void loadHistory()}}>Versiones</button>
           <button type="button" onClick={()=>{void changeDeletion(!editor.item.deleted)}}>{editor.item.deleted?'Restaurar':'Papelera'}</button>
         </div>

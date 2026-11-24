@@ -83,3 +83,16 @@
 @media (prefers-reduced-motion:reduce){.answerChoice{transition:none}}
 
 .functionalQuestion{margin-top:13px;border-style:dashed}
+
+.studioSheet{box-sizing:border-box;display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;overflow:auto;padding:12px;background:var(--dsw-alias-bg-base,#faf9f7);color:inherit;font-size:13px}
+.studioSheet .heading{align-items:center;margin-bottom:8px}
+.studioClose{margin-left:auto;border:0;background:transparent;color:inherit;font-size:24px;cursor:pointer}
+.sheetRibbon,.formulaBar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:7px 0;border-bottom:1px solid var(--dsw-alias-border-l1,#ddd)}
+.sheetRibbon button{font:inherit;color:inherit;background:transparent;border:1px solid var(--dsw-alias-border-l2,#ddd);padding:6px 8px;border-radius:6px;cursor:pointer}
+.sheetRibbon label{font-size:11px}
+.formulaBar span{min-width:42px;padding:5px;border:1px solid var(--dsw-alias-border-l2,#ddd);text-align:center}
+.formulaBar strong{color:#217346;font-style:italic}
+.formulaBar input{flex:1;min-width:80px;padding:6px;border:1px solid var(--dsw-alias-border-l2,#ddd);color:inherit;background:transparent;font:inherit}
+.studioSheet .sheetScroll{flex:1 1 auto;max-height:none;min-height:120px;border-radius:0;margin-top:6px}
+.studioSheet .sheet thead th{color:#fff;background:#217346}
+.studioSheet .sheet td input{width:120px}
