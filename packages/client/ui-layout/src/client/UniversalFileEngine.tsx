@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { SpaceSpecializedProps } from './index.ts'
+import { DicomBasicViewer, readTarNames, specializedFormat } from './SpecializedFileFormats.tsx'
 
-export type FileMode='html'|'image'|'pdf'|'audio'|'video'|'table'|'text'|'archive'|'office'|'model'|'unsupported'
+export type FileMode='html'|'image'|'pdf'|'audio'|'video'|'table'|'text'|'archive'|'office'|'model'|'dicom'|'tar'|'unsupported'
 export type FileFormat={mode:FileMode;mime:string;label:string}
 const format=(mode:FileMode,mime:string,label:string):FileFormat=>({mode,mime,label})
 const decoder=new TextDecoder()
@@ -18,7 +19,7 @@ export function detectFile(bytes:Uint8Array,title:string,mime:string):FileFormat
   if(begins(bytes,[0x37,0x7a,0xbc,0xaf,0x27,0x1c]))return format('unsupported','application/x-7z-compressed','7-Zip')
   if(ascii(bytes,0,4)==='Rar!')return format('unsupported','application/vnd.rar','RAR')
   if(begins(bytes,[0x1f,0x8b]))return format('unsupported','application/gzip','GZIP / NIfTI comprimido')
-  if(ascii(bytes,257,262)==='ustar')return format('unsupported','application/x-tar','TAR')
+  if(ascii(bytes,257,262)==='ustar')return format('tar','application/x-tar','TAR')
   if(ascii(bytes,0,5)==='%PDF-')return format('pdf','application/pdf','PDF')
   if(begins(bytes,[137,80,78,71,13,10,26,10]))return format('image','image/png','PNG')
   if(begins(bytes,[255,216,255]))return format('image','image/jpeg','JPEG')
@@ -32,7 +33,7 @@ export function detectFile(bytes:Uint8Array,title:string,mime:string):FileFormat
   if(ascii(bytes,4,8)==='ftyp')return format(ext==='m4a'?'audio':'video',ext==='m4a'?'audio/mp4':'video/mp4','MP4 / MOV')
   if(begins(bytes,[26,69,223,163]))return format('video','video/webm','WebM / Matroska')
   if(begins(bytes,[80,75,3,4])||begins(bytes,[80,75,5,6]))return format('archive','application/zip','Paquete ZIP')
-  if(ascii(bytes,128,132)==='DICM')return format('unsupported','application/dicom','DICOM — requiere visor clínico')
+  if(ascii(bytes,128,132)==='DICM')return format('dicom','application/dicom','DICOM · vista básica')
   if(ascii(bytes,0,16)==='SQLite format 3\0')return format('unsupported','application/vnd.sqlite3','SQLite — requiere adaptador de datos')
   if(begins(bytes,[208,207,17,224,161,177,26,225]))return format('unsupported','application/octet-stream','Office binario — requiere conversión')
   if(ext==='gltf'&&head.startsWith('{')){
@@ -209,7 +210,7 @@ function Grid({rows}:{rows:string[][]}){
     <tbody>{rows.map((r,i)=><tr key={i}>{r.map((v,j)=><td key={j} style={{border:'1px solid #8885',padding:8,whiteSpace:'pre-wrap'}}>{v}</td>)}</tr>)}</tbody>
   </table></div>
 }
-type Loaded={format:FileFormat;url:string;text:string;pack?:PackageView;note?:string;model?:string|Uint8Array}
+type Loaded={format:FileFormat;url:string;text:string;pack?:PackageView;note?:string;model?:string|Uint8Array;raw?:Uint8Array;tar?:{name:string;size:number}[]}
 export function UniversalFileViewer({id,title,mime,renderHtml,renderSpecialized}:{id:string;title:string;mime:string;renderHtml:(html:string)=>ReactNode;renderSpecialized?:(input:SpaceSpecializedProps)=>ReactNode}){
   const [loaded,setLoaded]=useState<Loaded|null>(null)
   const [error,setError]=useState('')
@@ -228,13 +229,15 @@ export function UniversalFileViewer({id,title,mime,renderHtml,renderSpecialized}
       if(['image','pdf','audio','video'].includes(detected.mode))url=URL.createObjectURL(new Blob([bytes],{type:detected.mime}))
       let pack:PackageView|undefined,note:string|undefined
       if(detected.mode==='archive')try{pack=await inspectPackage(bytes)}catch(e){note=e instanceof Error?e.message:'No se pudo leer el paquete'}
-      if(!abort.signal.aborted)setLoaded({format:detected,url,text,...pack?{pack}:{},...note?{note}:{},...detected.mode==='model'?{model:detected.mime==='model/gltf+json'?decoder.decode(bytes):bytes}:{}})
+      let tar:{name:string;size:number}[]|undefined
+      if(detected.mode==='tar')try{tar=readTarNames(bytes)}catch(e){note=e instanceof Error?e.message:'TAR inválido'}
+      if(!abort.signal.aborted)setLoaded({format:detected,url,text,...pack?{pack}:{},...note?{note}:{},...detected.mode==='model'?{model:detected.mime==='model/gltf+json'?decoder.decode(bytes):bytes}:{},...detected.mode==='dicom'?{raw:bytes}:{},...tar?{tar}:{}})
     }).catch(e=>{if(!abort.signal.aborted)setError(e instanceof Error?e.message:'No se pudo abrir el archivo')})
     return ()=>{abort.abort();if(url)URL.revokeObjectURL(url)}
   },[id,title,mime])
   if(error)return <p role="alert">{error}. Descarga el original para abrirlo en una aplicación compatible.</p>
   if(!loaded)return <p role="status">Identificando el archivo y preparando el visor…</p>
-  const f=loaded.format,pack=loaded.pack
+  const f=loaded.format,pack=loaded.pack,adapter=specializedFormat(title)
   return <section aria-label="Visor universal de archivos" style={{display:'grid',gap:12,minWidth:0}}>
     <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
       <strong>{pack?.label||f.label}</strong>
@@ -242,7 +245,7 @@ export function UniversalFileViewer({id,title,mime,renderHtml,renderSpecialized}
       {(f.mode==='html'||f.mode==='table')&&<button type="button" aria-pressed={tab==='source'} onClick={()=>setTab('source')}>Ver contenido original</button>}
       <button type="button" aria-pressed={tab==='info'} onClick={()=>setTab('info')}>Información</button>
     </div>
-    {tab==='info'?<dl><dt>Nombre</dt><dd>{title}</dd><dt>Tipo declarado</dt><dd>{mime}</dd><dt>Tipo detectado</dt><dd>{f.mime}</dd><dt>Motor</dt><dd>{f.mode}</dd></dl>:tab==='source'?<pre style={{whiteSpace:'pre-wrap',overflow:'auto',maxHeight:'65vh'}}>{loaded.text.slice(0,500000)}</pre>:<>
+    {tab==='info'?<dl><dt>Nombre</dt><dd>{title}</dd><dt>Tipo declarado</dt><dd>{mime}</dd><dt>Tipo detectado</dt><dd>{f.mime}</dd><dt>Motor</dt><dd>{f.mode}</dd>{adapter&&<><dt>Adaptador compatible</dt><dd>{adapter.adapter}</dd></>}</dl>:tab==='source'?<pre style={{whiteSpace:'pre-wrap',overflow:'auto',maxHeight:'65vh'}}>{loaded.text.slice(0,500000)}</pre>:<>
       {f.mode==='html'&&renderHtml(loaded.text)}
       {f.mode==='model'&&loaded.model!==undefined&&(renderSpecialized?.({format:'gltf',data:loaded.model,title})??<p>Motor 3D no disponible.</p>)}
       {f.mode==='image'&&<img alt={title} src={loaded.url} style={{maxWidth:'100%',maxHeight:'70vh',objectFit:'contain',margin:'auto'}}/>}
@@ -262,6 +265,9 @@ export function UniversalFileViewer({id,title,mime,renderHtml,renderSpecialized}
         {pack&&<details open={pack.parts.length===0&&!pack.html}><summary>Archivos internos ({pack.entries.length})</summary><ul>
           {pack.entries.slice(0,500).map((e,i)=><li key={i}>{e.name} · {e.size} bytes</li>)}</ul></details>}
       </>}
+      {f.mode==='dicom'&&loaded.raw&&<DicomBasicViewer bytes={loaded.raw}/>}
+      {f.mode==='tar'&&<>{loaded.note&&<p role="alert">{loaded.note}</p>}{loaded.tar&&<ul>{loaded.tar.slice(0,500).map((e,i)=><li key={i}>{e.name} · {e.size} bytes</li>)}</ul>}</>}
+      {adapter&&<small>Motor recomendado: {adapter.adapter}. La disponibilidad de aplicaciones externas depende del equipo.</small>}
       {f.mode==='unsupported'&&<p>Este formato requiere un adaptador especializado o una aplicación externa. El original se conserva y no se ejecuta automáticamente.</p>}
     </>}
   </section>

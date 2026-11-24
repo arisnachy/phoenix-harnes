@@ -4,6 +4,9 @@ import type { Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-host-webserver'
 import { PhoenixSpaceStore } from './space-store.ts'
 import { exportPptx, exportXlsx } from './space-office.ts'
+import { mkdirSync, writeFileSync, mkdtempSync } from 'node:fs'
+import { join, extname } from 'node:path'
+import openNative from 'open'
 
 const HEADERS:Record<string,string>={
   'content-type':'application/json; charset=utf-8','cache-control':'no-store, max-age=0',
@@ -51,6 +54,16 @@ function download(res:ServerResponse,bytes:Buffer,mime:string,name:string):void 
     'content-security-policy':"default-src 'none'; sandbox",
     'content-disposition':"attachment; filename*=UTF-8''"+safe})
   res.end(bytes)
+}
+const NATIVE_DOCUMENT_EXTENSIONS=new Set(['.pdf','.docx','.xlsx','.pptx','.odt','.ods','.odp','.rtf','.txt','.csv','.epub','.png','.jpg','.jpeg','.webp','.gif','.tif','.tiff','.heic','.mp4','.mov','.webm','.mp3','.wav','.flac','.ogg','.glb','.gltf','.obj','.stl','.fbx','.blend','.dcm','.dicom','.nii','.nrrd','.sqlite','.sqlite3','.db','.parquet','.sav','.dta','.dwg','.dxf','.step','.stp','.kml','.kmz','.geojson','.shp','.psd','.xcf','.zip','.rar','.7z','.tar','.gz'])
+export function nativeDocumentExtension(title:string,bytes:Buffer):string|undefined {
+  const ext=extname(title).toLowerCase()
+  if(!NATIVE_DOCUMENT_EXTENSIONS.has(ext)||bytes.length<1)return undefined
+  // Block executable signatures even if renamed as a document.
+  if(bytes.subarray(0,2).toString('ascii')==='MZ'||bytes.subarray(0,4).equals(Buffer.from([0x7f,0x45,0x4c,0x46]))
+    ||['feedface','cefaedfe','feedfacf','cffaedfe','cafebabe','bebafeca'].includes(bytes.subarray(0,4).toString('hex'))
+    ||bytes.subarray(0,2).toString('ascii')==='#!')return undefined
+  return ext
 }
 function statusFor(error:unknown):number {
   const message=error instanceof Error?error.message:''
@@ -104,7 +117,7 @@ export function registerSpaceRoutes(ctx:Context):void {
           reply(res,201,{item})
           return
         }
-        const match=/^\/space-api\/items\/([a-f0-9-]{36})(?:\/(file|export|history|restore))?$/u.exec(path)
+        const match=/^\/space-api\/items\/([a-f0-9-]{36})(?:\/(file|export|history|restore|open-native))?$/u.exec(path)
         if(!match){reply(res,404,{error:'Ruta desconocida'});return}
         const id=match[1]!
         const operation=match[2]||''
@@ -122,6 +135,21 @@ export function registerSpaceRoutes(ctx:Context):void {
         if(operation==='restore'&&method==='POST'){
           const data=await body(req)
           reply(res,200,{item:catalog.restore(id,revision(data.restoreRevision),revision(data.revision))})
+          return
+        }
+        if(operation==='open-native'&&method==='POST'){
+          const data=await body(req)
+          if(data.confirm!==true){reply(res,400,{error:'Se requiere confirmación explícita'});return}
+          const bytes=catalog.importedBytes(id)
+          const ext=bytes?nativeDocumentExtension(item.title,bytes):undefined
+          if(!bytes||!ext){reply(res,400,{error:'Formato no autorizado para apertura nativa. Descarga el original.'});return}
+          const root=join(catalog.root,'native-open')
+          mkdirSync(root,{recursive:true,mode:0o700})
+          const directory=mkdtempSync(join(root,'file-'))
+          const target=join(directory,'document'+ext)
+          writeFileSync(target,bytes,{flag:'wx',mode:0o600})
+          await openNative(target,{wait:false})
+          reply(res,200,{opened:true})
           return
         }
         if(operation==='file'&&method==='GET'){

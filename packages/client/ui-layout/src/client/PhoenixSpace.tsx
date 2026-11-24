@@ -523,6 +523,11 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
           {(htmlItem||markdownItem||sceneItem||godotItem)&&<button type="button" aria-pressed={showSource} onClick={()=>setShowSource(v=>!v)}>
             {showSource?'Vista visual':markdownItem?'Editar documento':'Ver código'}</button>}
           <button type="button" disabled={!editor.dirty||busy} onClick={()=>{void persist(editor)}}>Guardar</button>
+          <button type="button" onClick={()=>{
+            window.dispatchEvent(new CustomEvent('phoenix:space-consult-file',{detail:{
+              id:editor.item.id,title:editor.title,mime:editor.item.mime,kind:editor.item.kind,revision:editor.item.revision
+            }}))
+          }}>Consultar a Kira</button>
           <button type="button" onClick={()=>{void loadHistory()}}>Versiones</button>
           <button type="button" onClick={()=>{void changeDeletion(!editor.item.deleted)}}>{editor.item.deleted?'Restaurar':'Papelera'}</button>
         </div>
@@ -585,6 +590,13 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
           }}>Exportar Excel (.xlsx)</a>
         </div>}
         {binaryItem&&<>
+          <div className={css.leadingActions}>
+            <button type="button" onClick={()=>{
+              if(!window.confirm('Abrir una copia con la aplicación asociada del sistema. Solo continúa si confías en el archivo. ¿Abrir?'))return
+              void api<{opened:boolean}>('/items/'+editor.item.id+'/open-native',{confirm:true},'POST')
+                .then(()=>setStatus('Solicitud de apertura nativa enviada')).catch(e=>setError(String(e)))
+            }}>Abrir con aplicación del equipo</button>
+          </div>
           <UniversalFileViewer key={editor.item.id} id={editor.item.id} title={editor.title} mime={editor.item.mime}
             renderHtml={html=><SpaceHtmlViewer html={spaceHtmlSource(html)} title={editor.title} game={editor.item.kind==='game'}/>} {...renderSpecialized?{renderSpecialized}:{}}/>
           <a className={css.export} href={'/space-api/items/'+editor.item.id+'/file'} download={editor.title}>Descargar archivo original</a>
