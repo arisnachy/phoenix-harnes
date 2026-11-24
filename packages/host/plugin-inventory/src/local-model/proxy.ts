@@ -1,8 +1,9 @@
+import { availableParallelism, freemem, totalmem } from 'node:os'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { LocalModelRuntimeManager } from './manager.js'
 import { getLocalModel } from './catalog.js'
 import type { LocalModelCatalogEntry, LocalThinking } from './types.js'
-import { NativeOllamaChatError, relayNativeOllamaChat, toNativeOllamaChat } from './ollama-native-chat.js'
+import { NativeOllamaChatError, localResourcePolicy, relayNativeOllamaChat, toNativeOllamaChat } from './ollama-native-chat.js'
 
 /** Stable loopback port exposed to the normal Phoenix LLM provider. */
 export const PHOENIX_LOCAL_PROXY_PORT = 17_842
@@ -205,7 +206,8 @@ async function forward(
     // reasoning tokens with an empty visible answer on some Ollama versions.
     const nativeChat = request.method === 'POST' && suffix.split('?')[0] === '/chat/completions'
       && selected.backend === 'ollama'
-      ? toNativeOllamaChat(body, selected, request.headers['x-phoenix-local-auto-continue'] === '1', thinking)
+      ? toNativeOllamaChat(body, selected, request.headers['x-phoenix-local-auto-continue'] === '1', thinking,
+        localResourcePolicy(startedRuntime.mode, freemem(), totalmem(), availableParallelism()))
       : undefined
     const forwardedBody = nativeChat === undefined
       ? request.method === 'POST' ? rewriteOllamaOpenAiBody(suffix, body, selected, thinking) : body

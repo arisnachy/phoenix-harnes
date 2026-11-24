@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { getLocalModel } from '../src/local-model/catalog.js'
 import { rewriteOllamaOpenAiBody } from '../src/local-model/proxy.js'
-import { toNativeOllamaChat } from '../src/local-model/ollama-native-chat.js'
+import { localResourcePolicy, toNativeOllamaChat } from '../src/local-model/ollama-native-chat.js'
 
 const qwen = getLocalModel('qwen3.5-2b-ollama-q4-k-m')
 const native = getLocalModel('gemma-4-e2b-it-q4-0')
@@ -103,4 +103,15 @@ describe('Phoenix Local Ollama proxy', () => {
     })
     expect(() => toNativeOllamaChat(payload, small, false, false)).toThrow(/tokens/)
   })
+})
+
+it('bounds local residency and CPU threads under pressure without changing always-on residency', () => {
+  expect(localResourcePolicy('on-demand', 500_000_000, 16_000_000_000, 8)).toEqual({keepAlive:'0s',threads:4})
+  expect(localResourcePolicy('on-demand', 8_000_000_000, 16_000_000_000, 8)).toEqual({keepAlive:'2m'})
+  expect(localResourcePolicy('always-on', 500_000_000, 16_000_000_000, 1)).toEqual({keepAlive:'30m',threads:1})
+  if (!qwen) throw new Error('missing model fixture')
+  const req = encode({model:'phoenix-local',messages:[{role:'user',content:'hola'}]})
+  const native = toNativeOllamaChat(req,qwen,false,false,{keepAlive:'0s',threads:2})
+  expect(native.payload.keep_alive).toBe('0s')
+  expect(native.payload.options).toMatchObject({num_thread:2})
 })

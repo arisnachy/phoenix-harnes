@@ -247,3 +247,22 @@ export function toPiAssistant(message: Message, onDegrade?: (reason: string) => 
     return foreignAssistant(message)
   }
 }
+
+
+/** Preserve visible outcomes and tool calls on a provider/model handoff;
+ * provider-native replay signatures and private reasoning stay on the original route.
+ * @param message - Original durable assistant message, never mutated.
+ * @param provider - Target provider route.
+ * @param model - Target model identifier.
+ * @param onDegrade - Optional diagnostic for malformed same-route replay.
+ * @returns Provider-compatible assistant history, or undefined for reasoning-only foreign messages.
+ */
+export function toPiAssistantForTarget(message: Message, provider: string, model: string,
+  onDegrade?: (reason: string) => void): AssistantMessage | undefined {
+  const source = message.source
+  if (source.kind !== 'model' || (source.provider === provider && source.model === model)) {
+    return toPiAssistant(message, onDegrade)
+  }
+  const projected = foreignAssistant({ ...message, content: message.content.filter(block => block.type !== 'reasoning') })
+  return projected.content.length === 0 ? undefined : projected
+}
