@@ -67,6 +67,7 @@ test('local AI refinement is opt-in, loopback-only, and cannot sign clinical rec
   let calls=0
   const mock=async(url,init)=>{
     calls++
+    if(url.endsWith('/api/show'))return new Response(JSON.stringify({details:{format:'gguf'},model_info:{'general.architecture':'gemma'}}),{status:200})
     assert.equal(url,'http://127.0.0.1:11434/api/generate')
     assert.equal(init.method,'POST')
     assert.equal(init.redirect,'error')
@@ -82,7 +83,7 @@ test('local AI refinement is opt-in, loopback-only, and cannot sign clinical rec
   await assert.rejects(refineProtectedHistoryLocal(source,{enabled:true,model:'https://remote.example.com',fetcher:mock}),/MODEL_NOT_CONFIGURED/)
   assert.equal(calls,0)
   const proposal=await refineProtectedHistoryLocal(source,{enabled:true,model:'gemma4:e2b',fetcher:mock})
-  assert.equal(calls,1)
+  assert.equal(calls,2)
   assert.equal(proposal.source,'ollama-local-unverified')
   assert.equal(proposal.reviewed,false)
   assert.equal(proposal.canAutoSign,false)
@@ -91,7 +92,7 @@ test('local AI refinement is opt-in, loopback-only, and cannot sign clinical rec
 })
 test('locally generated numeric hallucinations are flagged for clinician verification',async()=>{
   const source=composeProtectedClinicalNote({complaint:'Control 138/84',answers:{},history:'',exam:'',assessment:'',plan:''})
-  const fake=async()=>new Response(JSON.stringify({response:JSON.stringify({history:'Control 138/84. Dosis 100 mg.'})}),{status:200})
+  const fake=async(url)=>url.endsWith('/api/show')?new Response(JSON.stringify({details:{format:'gguf'},model_info:{'general.architecture':'llama'}}),{status:200}):new Response(JSON.stringify({response:JSON.stringify({history:'Control 138/84. Dosis 100 mg.'})}),{status:200})
   const result=await refineProtectedHistoryLocal(source,{enabled:true,model:'local-model:1',fetcher:fake})
   assert(result.numericWarnings.includes('100'))
   assert.equal(result.canAutoSign,false)
@@ -119,4 +120,15 @@ test('Healthia discovers already-installed text models, never a cloud or embeddi
   assert.equal(empty.available,false)
   const absent=await discoverProtectedLocalAiModel(async()=>{throw Error('not running')})
   assert.equal(absent.reason,'no-service')
+})
+
+test('a remote Ollama alias never receives protected clinical text',async()=>{
+  const source=composeProtectedClinicalNote({complaint:'Synthetic test',answers:{},history:'',exam:'',assessment:'',plan:''})
+  let generated=0
+  const fake=async(url)=>{
+    if(url.endsWith('/api/generate'))generated++
+    return new Response(JSON.stringify({remote_host:'https://remote.example.invalid',remote_model:'hidden-remote',details:{format:'gguf'},model_info:{'general.architecture':'llama'}}),{status:200})
+  }
+  await assert.rejects(refineProtectedHistoryLocal(source,{enabled:true,model:'local-alias:1',fetcher:fake}),/REMOTE_MODEL/)
+  assert.equal(generated,0)
 })
