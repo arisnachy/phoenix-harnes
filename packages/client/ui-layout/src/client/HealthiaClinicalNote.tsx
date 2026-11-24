@@ -162,7 +162,7 @@ export function formatClinicalNoteParts(kind:ClinicalNoteKind,values:Readonly<Cl
   }
   const history=[title+' · BORRADOR SIN FIRMAR',section('interview'),section('background')].filter(Boolean).join('\n\n')
   const exam=section('exam')
-  const assessment=section('plan',['assessment','differential','icd10','diagnosisStatus','secondaryDiagnosis','codeSystem'])
+  const assessment=section('plan',['assessment','differential','icd10','icd11','icd11Evidence','diagnosisStatus','secondaryDiagnosis','codeSystem'])
   const plan=section('plan',['plan','tests','followup','healthEducation','referrals','imaging','returnPrecautions'])
   return {history,exam,assessment,plan}
 }
