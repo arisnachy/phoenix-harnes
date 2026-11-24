@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { SharedFileSurface } from './SharedFileSurface.tsx'
 import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
 import type { HardnessArtifactValue } from '../artifact.ts'
 import type { RenderMessageImages } from '../contract/slots.ts'
@@ -779,6 +780,11 @@ function RecordPreview({ record, mime, expanded, title, renderMessageImages }: {
 }
 
 export function HardnessArtifactBody({ mime, data, expanded, title, executable = true, renderMessageImages }: ArtifactBodyProps) {
+  if(mime==='application/vnd.phoenix.space-file+json'){
+    const record=typeof data==='string'?parseJsonArtifact(data):data
+    const id=isRecord(record)?record.itemId:undefined
+    return typeof id==='string'&&/^[a-f0-9-]{36}$/u.test(id)?<SharedFileSurface key={id} itemId={id}/>:<p role="alert">Referencia de archivo inválida.</p>
+  }
   if (mime === 'application/vnd.phoenix.game+godot-web') return <GodotWebGamePreview payload={data} title={title} />
   if (mime === 'application/vnd.phoenix.comic+html') return typeof data === 'string'
     ? <ComicStudioPreview html={data} title={title} />

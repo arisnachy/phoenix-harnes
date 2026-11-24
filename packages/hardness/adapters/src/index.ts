@@ -60,6 +60,7 @@ import { createLearnedSkillTool } from './learned-skill.ts'
 import { installConnectorEventBridge } from './connector-event-bridge.ts'
 import { createHardnessTool } from './hardness-tool.ts'
 import { createPhoenixVisualizerTool } from './visualize-tool.ts'
+import { createSpaceFileTool } from './space-file-tool.ts'
 import { createPhoenixSceneMapTool } from './scene-map-tool.ts'
 import { createPhoenixGeoMapTool } from './geo-map-tool.ts'
 import { createPhoenixDiagramTool } from './diagram-tool.ts'
@@ -555,6 +556,11 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       disposers.push(ctx.tools.register(createCognitiveWorkflowTool()))
       disposers.push(ctx.tools.register(createEvolutionStatusTool()))
       disposers.push(ctx.tools.register(createPhoenixVisualizerTool()))
+      disposers.push(ctx.tools.register(createSpaceFileTool(()=>{
+        const web=(ctx.get as unknown as (name:string)=>unknown)('webServer') as {host?:string;port?:number}|undefined
+        return web?.host==='127.0.0.1'?web.port:undefined
+      })))
+      disposers.push(systemPrompt.section({name:'phoenix:shared-file-workbench',order:176,text:'For editable spreadsheets, presentations, documents, HTML and code requested in chat, use phoenix_file create/open instead of emitting fragile generative-ui JSON. Use phoenix_file read before modifying the exact item ID and revision; never claim success without returned revision. For a user request to derive a new artifact, use derive with the source ID and revision. Read or list only user-authorized files. Imported binary files are preserved and can be previewed, but never claim native editing or conversion that did not occur. A tool artifact confirms publication, not that the screen was verified.'}))
       disposers.push(ctx.tools.register(createPhoenixSceneMapTool()))
       disposers.push(ctx.tools.register(createPhoenixGeoMapTool()))
       disposers.push(ctx.tools.register(createPhoenixDiagramTool()))
