@@ -85,7 +85,8 @@ export function restoreClinicalNote(encounter:ClinicalEncounter):{
 }
 
 export function HealthiaClinicOperations({ area, selectedPatientId, onPatientChange, onNavigate,
-  accessOnly=false, onSessionReady, requestedStep, onEditorState, entry }: {
+  accessOnly=false, onSessionReady, requestedStep, onEditorState, entry, onEntryHandled }: {
+  onEntryHandled?:((sequence:number)=>void)|undefined
   entry?:{kind:'patient'|'encounter';sequence:number}|undefined
   area:Area
   /** Reuse exactly the professional login/setup flow without rendering patient records. */
@@ -147,11 +148,11 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
   useEffect(()=>{
     if(accessOnly||mode!=='ready'||!entry||lastEntry.current===entry.sequence)return
     if(entry.kind==='patient'&&area==='patients'&&canManagePatients){
-      lastEntry.current=entry.sequence;setCreatingPatient(true)
+      lastEntry.current=entry.sequence;setCreatingPatient(true);onEntryHandled?.(entry.sequence)
     }else if(entry.kind==='encounter'&&area==='encounters'&&canManageEncounters&&!dirtyEncounter){
-      lastEntry.current=entry.sequence;setEncounterId('');setCreatingEncounter(true)
+      lastEntry.current=entry.sequence;setEncounterId('');setCreatingEncounter(true);onEntryHandled?.(entry.sequence)
     }
-  },[accessOnly,mode,entry,area,canManagePatients,canManageEncounters,dirtyEncounter])
+  },[accessOnly,mode,entry,area,canManagePatients,canManageEncounters,dirtyEncounter,onEntryHandled])
   const selectedPatient=patients.find(p=>p.id===patientId)
   const normalizedSearch=patientSearch.trim().toLocaleLowerCase('es')
   const visiblePatients=patients.filter(p=>!normalizedSearch||
