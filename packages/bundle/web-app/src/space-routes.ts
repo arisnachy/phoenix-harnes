@@ -2,6 +2,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-host-webserver'
+import { parseSpaceClipboard, syntheticSpaceDataset } from './space-workflows.ts'
 import { PhoenixSpaceStore } from './space-store.ts'
 import { exportPptx, exportXlsx } from './space-office.ts'
 import { mkdirSync, writeFileSync, mkdtempSync } from 'node:fs'
@@ -104,6 +105,22 @@ export function registerSpaceRoutes(ctx:Context):void {
           const created=catalog.create(data)
           reply(res,201,{item:created})
           return
+        }
+        if(path==='/space-api/clipboard'&&method==='POST'){
+          const data=await body(req)
+          const sheet=parseSpaceClipboard(data.text)
+          reply(res,201,{item:catalog.create({kind:'sheet',space:'personal',title:'Tabla desde portapapeles',mime:'application/vnd.phoenix.sheet+json',content:JSON.stringify(sheet)})});return
+        }
+        if(path==='/space-api/synthetic'&&method==='POST'){
+          const data=await body(req)
+          const sheet=syntheticSpaceDataset(data.seed,data.count)
+          // Same seed and count produce the same stored fixture; preserve user edits.
+          reply(res,201,{item:catalog.create({kind:'sheet',space:'simulacion',title:'FICTICIO · Demanda hospitalaria',mime:'application/vnd.phoenix.sheet+json',content:JSON.stringify(sheet),sourceKey:'synthetic-demand-v1:'+String(data.seed)+':'+String(data.count)})});return
+        }
+        if(path==='/space-api/portable-import'&&method==='POST'){
+          const data=await body(req)
+          if(data.format!=='phoenix-space-portable-v1')throw new Error('Formato inválido')
+          reply(res,201,{item:catalog.create({kind:data.kind,space:'personal',title:data.title,mime:data.mime,content:data.content})});return
         }
         if(path==='/space-api/import'&&method==='POST'){
           const data=await body(req)
