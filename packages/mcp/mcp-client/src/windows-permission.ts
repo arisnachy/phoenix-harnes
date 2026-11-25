@@ -53,6 +53,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
+/** Unknown capabilities are not even advertised to the model. */
+export function isAllowedWindowsMcpTool(rawName: string): boolean {
+  return ALLOWED.has(rawName)
+}
+
 /** A model cannot sneak a script path, URL or arguments into a launcher. */
 export function windowsMcpPreflight(rawName: string, args: unknown): string | null {
   if (!ALLOWED.has(rawName)) return 'WINDOWS_MCP_TOOL_NOT_ALLOWLISTED'
