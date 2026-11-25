@@ -20,6 +20,8 @@ PHOENIX es un espacio de trabajo de agentes de IA de propósito general, orienta
 
 Consulta la última versión publicada y sus notas antes de instalar. Para instalar desde el código fuente, consulta la sección Run. El software es gratuito bajo MIT; los servicios de modelos opcionales pueden tener costos. La firma de código de Windows sigue pendiente.
 
+**¿Te resulta útil PHOENIX?** [Dale una estrella en GitHub](https://github.com/arisnachy/phoenix-harnes) para seguir su desarrollo y ayudar a otros usuarios a descubrirlo. [Comparte tus comentarios o reporta problemas](https://github.com/arisnachy/phoenix-harnes/issues) después de probarlo.
+
 ## Qué puedes hacer
 
 | Capacidad | Qué ofrece PHOENIX |
