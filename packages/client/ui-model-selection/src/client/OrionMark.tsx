@@ -4,6 +4,8 @@ import css from './ModelSelect.module.css'
 /**
  * Brand symbol of the adaptive orchestration route, distinct from the
  * PHOENIX provider emblem and the concrete provider currently serving.
+ * @param props - Icon dimensions and whether the route is currently selected.
+ * @returns Inline accessible-hidden SVG; the surrounding picker owns its label.
  */
 export function OrionMark({ size = 20, active = false }: { size?: number; active?: boolean }) {
   return (
