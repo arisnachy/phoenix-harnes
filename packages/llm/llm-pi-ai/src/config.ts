@@ -282,6 +282,19 @@ export interface ResolvedPiAiProviderProfile
   configuredMaxTokens: ReadonlyMap<string, number>
 }
 
+/** Explicit operator attestation of a zero-overage, zero-cost provider model. */
+export interface NexusFreeRoutePolicy {
+  provider: string
+  model: string
+  baseURL: string
+  verifiedAt: number
+  expiresAt: number
+  allChargesZero: boolean
+  noOverage: boolean
+  supportsTools: boolean
+  contextWindow: number
+}
+
 /** Plugin configuration: the provider routes this instance owns. */
 export interface Config {
   /**
@@ -297,6 +310,8 @@ export interface Config {
    * and registers them the moment a settings section supplies profiles.
    */
   providers?: Record<string, PiAiProviderProfile>
+  /** Optional bounded attestations for additional providers; never inferred from a model name. */
+  nexusFreeRoutes?: NexusFreeRoutePolicy[]
 }
 
 const thinkingBudgets = z.object({
@@ -414,6 +429,12 @@ const profile = z.object({
 export const Config: z<Config> = z.object({
   imageOnly: z.boolean().default(false),
   providers: z.dict(profile).default({}),
+  nexusFreeRoutes: z.array(z.object({
+    provider: z.string().required(), model: z.string().required(), baseURL: z.string().required(),
+    verifiedAt: z.number().step(1).min(0).required(), expiresAt: z.number().step(1).min(0).required(),
+    allChargesZero: z.boolean().required(), noOverage: z.boolean().required(),
+    supportsTools: z.boolean().required(), contextWindow: z.number().step(1).min(1).required(),
+  })).default([]),
 })
 
 /**
