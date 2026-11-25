@@ -8,14 +8,14 @@ import {
   nexusNumericResponseTarget, nexusNumericResponseQuality, nexusOperatorPolicy, nexusQuotaView,
 } from '../src/nexus-runtime.ts'
 
-describe('Nexus synthetic model route', () => {
-  it('advertises Nexus independently from Eclipse and refuses raw synthetic calls', async () => {
+describe('ORIÓN synthetic model route', () => {
+  it('advertises ORIÓN under PHOENIX independently from Eclipse and rejects raw synthetic calls', async () => {
     const adapter = new NexusSelectorAdapter()
-    expect(adapter.providerInfo(NEXUS_PROVIDER).name).toBe('PHOENIX Nexus')
+    expect(adapter.providerInfo(NEXUS_PROVIDER).name).toBe('PHOENIX')
     expect(await adapter.listModels(NEXUS_PROVIDER)).toMatchObject([
-      { provider: NEXUS_PROVIDER, id: NEXUS_MODEL },
+      { provider: NEXUS_PROVIDER, id: NEXUS_MODEL, name: 'ORIÓN' },
     ])
-    expect(() => adapter.stream({} as never)).toThrow('Nexus must resolve')
+    expect(() => adapter.stream({} as never)).toThrow('ORIÓN debe resolver')
   })
   it('selects from actual latest account catalog without creating an unlisted model', () => {
     expect(nexusCodexFallback(['gpt-6-luna', 'gpt-6.1-sol', 'gpt-6.2-sol'], true)).toBe('gpt-6.2-sol')
