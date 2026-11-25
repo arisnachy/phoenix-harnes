@@ -31,15 +31,18 @@ const MAX_POLICY_AGE_MS = 7 * 86_400_000
 /** A manual attestation is restricted to an exact explicit HTTPS endpoint and model. */
 export function nexusOperatorPolicy(policies: readonly NexusFreeRoutePolicy[], provider: string, model: string,
   baseURL: string | undefined, now: number): NexusFreeRoutePolicy | undefined {
-  if (baseURL === undefined || !Number.isFinite(now) || /^(?:phoenix-|ollama|openai-codex|openrouter|opencode-free)/iu.test(provider)) return undefined
+  if (baseURL === undefined || !Number.isFinite(now)
+    || /^(?:phoenix-|ollama|openai-codex|openrouter|opencode-free)/iu.test(provider)) return undefined
   let endpoint: URL
   try { endpoint = new URL(baseURL) } catch { return undefined }
   if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password || endpoint.search || endpoint.hash) return undefined
   const matches = policies.filter(p => p.provider === provider && p.model === model)
   if (matches.length !== 1) return undefined
-  const p = matches[0]!
+  const p = matches[0]
+  if (p === undefined) return undefined
+  const explicitlyTrue = (value: unknown): value is true => value === true
   if (p.baseURL.replace(/\/+$/u, '') !== baseURL.replace(/\/+$/u, '')
-    || p.allChargesZero !== true || p.noOverage !== true || p.supportsTools !== true
+    || !explicitlyTrue(p.allChargesZero) || !explicitlyTrue(p.noOverage) || !explicitlyTrue(p.supportsTools)
     || !Number.isSafeInteger(p.contextWindow) || p.contextWindow < 8_192
     || !Number.isSafeInteger(p.verifiedAt) || !Number.isSafeInteger(p.expiresAt)
     || p.verifiedAt > now || p.expiresAt <= now || p.expiresAt - p.verifiedAt > MAX_POLICY_AGE_MS) return undefined
@@ -132,20 +135,29 @@ export function nexusCodexWithinPace(quota: NexusCodexQuota | undefined, now: nu
 /** Select native subscription windows by their actual duration, never by labels. */
 export function nexusReadNativeCodexQuota(telemetry:unknown):NexusCodexQuota|undefined{
   if(!telemetry||typeof telemetry!=='object')return undefined
-  type Window={usedPercent?:number;windowDurationMins?:number;resetsAt?:number;observedAt?:number}
-  const row=telemetry as {kind?:string;provider?:string;accountType?:string;primaryLimit?:Window;secondaryLimit?:Window}
+  type Window = { usedPercent?: number, windowDurationMins?: number, resetsAt?: number, observedAt?: number }
+  const row = telemetry as {
+    kind?: string
+    provider?: string
+    accountType?: string
+    primaryLimit?: Window
+    secondaryLimit?: Window
+  }
   if(row.kind!=='account'||typeof row.provider!=='string'||row.provider.toLowerCase()!=='codex'
     ||typeof row.accountType!=='string'||row.accountType.toLowerCase()!=='chatgpt')return undefined
   const windows=[row.primaryLimit,row.secondaryLimit]
-  const select=(duration:number)=>{const matches=windows.filter(w=>w?.windowDurationMins===duration);return matches.length===1?matches[0]:undefined}
+  const select = (duration: number) => {
+    const matches = windows.filter(w => w?.windowDurationMins === duration)
+    return matches.length === 1 ? matches[0] : undefined
+  }
   const p=select(300),s=select(10080)
   if(!p||!s)return undefined
   return {
     primaryUsedPercent:p.usedPercent,secondaryUsedPercent:s.usedPercent,
-    ...(p.resetsAt===undefined?{}:{resetPrimaryAt:p.resetsAt}),
-    ...(s.resetsAt===undefined?{}:{resetSecondaryAt:s.resetsAt}),
-    ...(p.observedAt===undefined?{}:{primaryObservedAt:p.observedAt}),
-    ...(s.observedAt===undefined?{}:{secondaryObservedAt:s.observedAt}),
+    ...(p.resetsAt === undefined ? {} : { resetPrimaryAt: p.resetsAt }),
+    ...(s.resetsAt === undefined ? {} : { resetSecondaryAt: s.resetsAt }),
+    ...(p.observedAt === undefined ? {} : { primaryObservedAt: p.observedAt }),
+    ...(s.observedAt === undefined ? {} : { secondaryObservedAt: s.observedAt }),
   }
 }
 /** Automatic admission requires a fresh native sample and a future reset for BOTH windows. */
@@ -223,7 +235,8 @@ export function nexusNumericResponseTarget(text: string): string | undefined {
 
 /** Grade arithmetic independently of instruction-following observations. */
 export function nexusNumericResponseQuality(samples: readonly { numericResponseAccepted?: boolean }[]): number | undefined {
-  return nexusExactResponseQuality(samples.map(s => s.numericResponseAccepted === undefined ? {} : { exactResponseAccepted: s.numericResponseAccepted }))
+  return nexusExactResponseQuality(samples.map(s => s.numericResponseAccepted === undefined
+    ? {} : { exactResponseAccepted: s.numericResponseAccepted }))
 }
 
 type NexusSessionEvent = { readonly type: string; readonly data: unknown }
@@ -504,7 +517,8 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions) 
       }
       const active = activeSessions.get(agent.session.id)
       if (active !== undefined && reasoningEffort !== undefined) active.effort = String(reasoningEffort)
-      return {...base,provider:route.provider,model:route.model,...(reasoningEffort===undefined?{}:{reasoningEffort})}
+      return { ...base, provider: route.provider, model: route.model,
+        ...(reasoningEffort === undefined ? {} : { reasoningEffort }) }
     }
     if (state.routed !== undefined) {
       const route = state.routed
@@ -514,7 +528,8 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions) 
       let eligible = authenticated
       if (route.provider === 'openai-codex') {
         const quota = await getQuota(now, payload.signal)
-        eligible = eligible && nexusCodexFreshReserve(quota,Date.now()) && (complex||nexusCodexWithinPace(quota,Date.now())) && await options.nativeCodexAuthorized()
+        eligible = eligible && nexusCodexFreshReserve(quota, Date.now())
+          && (complex || nexusCodexWithinPace(quota, Date.now())) && await options.nativeCodexAuthorized()
       } else {
         const inventory = await listAuthorizedModels(now)
         const model = inventory.find(item => item.provider === route.provider && item.id === route.model)
@@ -681,7 +696,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions) 
       .sort((a, b) => a.provider.localeCompare(b.provider) || a.id.localeCompare(b.id))
     const offset = Number.isSafeInteger(query.offset) && (query.offset ?? 0) >= 0 ? query.offset ?? 0 : 0
     const page = filtered.slice(offset, offset + 25)
-    const models = await Promise.all(page.map(async model => {
+    const models = await Promise.all(page.map(async (model) => {
       signal.throwIfAborted()
       const info = await ctx.llm.resolveModelInfo(model.provider, model.id, signal).catch(() => undefined)
       const { price: _price, online: _online, ...safe } = model
