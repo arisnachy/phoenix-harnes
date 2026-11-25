@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { activateSheetContext,disconnectSheetContext,consumeSheetGrant,type ActiveSheetSnapshot } from './active-sheet-context.ts'
+import { activateSheetContext,disconnectSheetContext,consumeSheetGrant,DIRECT_SHEET_NOTICE,type DirectSheetEdit,type DirectSheetOutcome,type ActiveSheetSnapshot } from './active-sheet-context.ts'
 import type { CanvasAction } from './GenerativeCanvas.tsx'
 import { PhoenixUiIcon } from '@phoenix-ai/dsh-client-ui-primitives'
 import css from './InteractiveUi.module.css'
@@ -385,7 +385,33 @@ export function SpreadsheetSurface({spec,conversationId,onAction,autoOpen=true}:
   }
   const [contextAttached,setContextAttached]=useState(false)
   const detach=()=>{if(conversationId)disconnectSheetContext(conversationId,studioOwner);setContextAttached(false)}
-  const attach=()=>{if(conversationId){activateSheetContext(conversationId,studioOwner,snapshot);setContextAttached(true)}}
+
+  const directEdit=(edits:readonly DirectSheetEdit[]):DirectSheetOutcome=>{
+    try{
+      const target=anchorRef.current?.closest('[data-conversation-scroll]')?.querySelector<HTMLElement>(':scope > [data-live-studio-host]')
+      if(target?.dataset.studioOwner!==studioOwner)throw Error('SHEET_NOT_VISIBLE')
+      const current=snapshot()
+      if(!current)throw Error('SHEET_NOT_FOUND')
+      const changes=edits.map(({cell,value})=>{
+        const pos=reference(cell)
+        if(!pos||pos[0]<0||pos[0]>=200||pos[1]>=current.columns.length)throw Error('SHEET_RANGE')
+        return {cell,before:current.rows[pos[0]]?.[pos[1]]??'',after:value}
+      }).filter(e=>e.before!==e.after)
+      if(!changes.length){
+        const text=DIRECT_SHEET_NOTICE+'Los valores ya están guardados.'
+        setLibraryStatus(text);return {kind:'success',text}
+      }
+      const result=applySpreadsheetPatch(localStorage,key,{component:'spreadsheet_patch',version:1,props:{id:current.id,expectedRevision:current.revision,edits:changes}})
+      window.dispatchEvent(new CustomEvent(SHEET_EVENT,{detail:key}))
+      const text=DIRECT_SHEET_NOTICE+changes.length+' celda(s) actualizada(s) · v'+result.draft.revision+' · '+changes.map(e=>e.cell+' = '+e.after).join(' · ')
+      setLibraryStatus(text);setError('')
+      return {kind:'success',text}
+    }catch{
+      const text=DIRECT_SHEET_NOTICE+'No se pudo guardar la edición; verifica que la hoja esté abierta y el rango exista.'
+      setError(text);return {kind:'error',text}
+    }
+  }
+  const attach=()=>{if(conversationId){activateSheetContext(conversationId,studioOwner,snapshot,directEdit);setContextAttached(true)}}
   const closeStudio=(explicit=true)=>{
     if(host?.dataset.studioOwner===studioOwner){
       delete host.dataset.studioOwner
