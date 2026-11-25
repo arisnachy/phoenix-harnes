@@ -61,7 +61,7 @@ export function nexusPriceClass(model: Pick<NexusModel, 'price'>, now: number): 
     && price.allowanceRemaining !== undefined && price.allowanceRemaining > 0
     && Number.isFinite(price.allowanceRemaining)) return 'limited-free'
   if (!ratesKnown) return 'unknown'
-  if (input! > 0 || output! > 0 || price.extraCharges === true) return 'paid'
+  if (input > 0 || output > 0 || price.extraCharges === true) return 'paid'
   return price.allChargesVerified === true ? 'verified-free' : 'unknown'
 }
 
@@ -69,6 +69,7 @@ export function nexusPriceClass(model: Pick<NexusModel, 'price'>, now: number): 
 /** Read nonnegative numeric prices in the official OpenRouter catalog. */
 function openRouterRate(value: unknown): number | undefined {
   if (typeof value !== 'string' && typeof value !== 'number') return undefined
+  if (typeof value === 'string' && value.trim() === '') return undefined
   const parsed = Number(value)
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined
 }
@@ -232,7 +233,7 @@ export function chooseNexusRoute(
 ): NexusRoute | undefined {
   const requiredInput = Math.max(0, task.inputTokens ?? 0)
   const minimumQuality = task.minimumQuality ?? 0
-  const list = models.flatMap(model => {
+  const list = models.flatMap((model) => {
     if (!model.configured || !model.authorized || !model.online) return []
     if (model.local && task.allowLocal !== true) return []
     if (task.allowedProviders !== undefined && !task.allowedProviders.includes(model.provider)) return []
@@ -246,8 +247,11 @@ export function chooseNexusRoute(
       && !task.allowedThinkingLevels.some(level => model.thinkingLevels?.includes(level))) return []
     const priceClass = nexusPriceClass(model, now)
     if (priceClass === 'unknown') return []
+    // A limited allowance is not a reservation; concurrent use or overage can bill.
+    // Keep it visible in the inventory but exclude it from autonomous dispatch.
+    if (priceClass === 'limited-free') return []
     if (priceClass === 'paid' && task.allowPaid !== true) return []
-    const cost = priceClass === 'verified-free' || priceClass === 'limited-free'
+    const cost = priceClass === 'verified-free'
       ? 0 : estimatedUsd(model, requiredInput, 2_048)
     if (cost === undefined && task.allowPaid !== true) return []
     // An unmeasured model is not assumed to be high quality. Sufficient quality

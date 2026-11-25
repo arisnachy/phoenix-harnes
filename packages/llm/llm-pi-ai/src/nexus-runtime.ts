@@ -47,7 +47,11 @@ export interface NexusCodexQuota {
 
 /** Whether a subscription call stays within the configured reserve. */
 export function nexusCodexHasReserve(quota: NexusCodexQuota | undefined): boolean {
-  return (quota?.primaryUsedPercent ?? 0) < 95 && (quota?.secondaryUsedPercent ?? 0) < 90
+  if (quota === undefined) return false
+  const primary = quota.primaryUsedPercent
+  const secondary = quota.secondaryUsedPercent
+  return primary !== undefined && Number.isFinite(primary) && primary >= 0 && primary < 95
+    && secondary !== undefined && Number.isFinite(secondary) && secondary >= 0 && secondary < 90
 }
 
 /** Select the latest real Codex model in one family, never inventing a model ID. */
@@ -63,46 +67,44 @@ export function nexusCodexFallback(ids: readonly string[], complex: boolean): st
 /** Decide whether accuracy/tools must take priority over an unbenchmarked free model. */
 export function nexusRequiresStrongModel(text: string): boolean {
   return text.length > 380
-    || /\b(?:implement|refactor|debug|repair|analy[sz]e|develop|deploy|execute|diagnos|clinical|medical|legal|security|research|audit|architecture|build|program|code|script|arregl\p{L}*|desarroll\p{L}*|implement\p{L}*|repar\p{L}*|diagnostic\p{L}*|investig\p{L}*|analiz\p{L}*|c[oó]digo|aplicaci[oó]n|sistema|seguridad)\b/iu.test(text)
+    || /\b(?:implement|refactor|debug|repair|analy[sz]e|develop|deploy|execute|diagnos|clinical|medical|legal|security)\b/iu.test(text)
+    || /\b(?:research|audit|architecture|build|program|code|script|arregl\p{L}*|desarroll\p{L}*|implement\p{L}*)\b/iu.test(text)
+    || /\b(?:repar\p{L}*|diagnostic\p{L}*|investig\p{L}*|analiz\p{L}*|c[oó]digo|aplicaci[oó]n|sistema|seguridad)\b/iu.test(text)
+}
+
+type NexusSessionEvent = { readonly type: string, readonly data: unknown }
+type NexusMessagePart = { readonly type?: string, readonly text?: unknown }
+
+function humanTurnParts(events: readonly NexusSessionEvent[], turn: number): NexusMessagePart[] {
+  const parts: NexusMessagePart[] = []
+  let active = false
+  for (const event of events) {
+    if (event.type === 'turn/start') {
+      if (active) break
+      active = (event.data as { turn?: number }).turn === turn
+      continue
+    }
+    if (!active || event.type !== 'user/message') continue
+    const message = event.data as {
+      readonly source?: { readonly kind?: string }
+      readonly content?: readonly NexusMessagePart[]
+    }
+    if (message.source?.kind === 'user' && message.content !== undefined) {
+      parts.push(...message.content)
+    }
+  }
+  return parts
 }
 
 /** Last genuine user text in a turn; durable UserMessage is the event data. */
-export function nexusTurnText(
-  events: readonly { readonly type: string; readonly data: unknown }[], turn: number,
-): string {
-  const fragments: string[] = []
-  for (let i = events.length - 1; i >= 0; i--) {
-    const event = events[i]
-    if (event?.type === 'turn/start' && (event.data as { turn?: number }).turn === turn) break
-    if (event?.type !== 'user/message') continue
-    const message = event.data as {
-      readonly source?: { readonly kind?: string }
-      readonly content?: readonly { readonly type?: string; readonly text?: unknown }[]
-    }
-    if (message.source?.kind !== 'user') continue
-    const text = message.content?.filter(part => part.type === 'text'
-      && typeof part.text === 'string').map(part => String(part.text)).join(' ').trim()
-    if (text !== undefined && text.length > 0) fragments.push(text)
-  }
-  return fragments.reverse().join('\n')
+export function nexusTurnText(events: readonly NexusSessionEvent[], turn: number): string {
+  return humanTurnParts(events, turn).filter(part => part.type === 'text'
+    && typeof part.text === 'string').map(part => String(part.text)).join(' ').trim()
 }
 
 /** Image detection examines actual author and this turn's message envelope. */
-export function nexusTurnHasHumanImage(
-  events: readonly { readonly type: string; readonly data: unknown }[], turn: number,
-): boolean {
-  for (let i = events.length - 1; i >= 0; i--) {
-    const event = events[i]
-    if (event?.type === 'turn/start' && (event.data as { turn?: number }).turn === turn) break
-    if (event?.type !== 'user/message') continue
-    const message = event.data as {
-      readonly source?: { readonly kind?: string }
-      readonly content?: readonly { readonly type?: string }[]
-    }
-    if (message.source?.kind === 'user'
-      && message.content?.some(part => part.type === 'image') === true) return true
-  }
-  return false
+export function nexusTurnHasHumanImage(events: readonly NexusSessionEvent[], turn: number): boolean {
+  return humanTurnParts(events, turn).some(part => part.type === 'image')
 }
 
 /** Restrict remote price probes to the provider's published public listing. */
@@ -129,9 +131,9 @@ export class NexusOpenRouterPrices {
         this.latest = new Map(openRouterPriceEvidence(payload, now, CATALOG_AGE_MS))
         const entries = typeof payload === 'object' && payload !== null && 'data' in payload
           ? (payload as { data?: unknown }).data : undefined
-        this.tools = new Set(Array.isArray(entries) ? entries.flatMap(entry => {
+        this.tools = new Set(Array.isArray(entries) ? entries.flatMap((entry) => {
           if (typeof entry !== 'object' || entry === null) return []
-          const row = entry as { id?: unknown; supported_parameters?: unknown }
+          const row = entry as { id?: unknown, supported_parameters?: unknown }
           return typeof row.id === 'string' && Array.isArray(row.supported_parameters)
             && row.supported_parameters.includes('tools') ? [row.id] : []
         }) : [])
@@ -156,12 +158,12 @@ export class NexusOpenRouterPrices {
 /** Narrow Agent events bridge avoids importing Agent source into the LLM package. */
 interface NexusAgentEventBridge {
   on(event: 'agent/request', listener: (
-    payload: { agent: NexusAgentHandle; turn: number; step: number; signal: AbortSignal },
+    payload: { agent: NexusAgentHandle, turn: number, step: number, signal: AbortSignal },
     next: () => Promise<LlmCallConfig>,
   ) => Promise<LlmCallConfig>): void
   on(event: 'agent/request-error', listener: (
-    payload: { agent: NexusAgentHandle; turn: number; step: number;
-      provider: string; failure: { code: string }; signal: AbortSignal },
+    payload: { agent: NexusAgentHandle, turn: number, step: number,
+      provider: string, failure: { code: string }, signal: AbortSignal },
     next: () => Promise<{ kind: 'retry' } | undefined>,
   ) => Promise<{ kind: 'retry' } | undefined>): void
 }
@@ -204,13 +206,13 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     if (now < quotaReadAt + 60_000) return quotaCache
     quotaReadAt = now
     const auth = ctx.get('authorization')
-    if (auth === undefined) return quotaCache
+    if (auth === undefined) return undefined
     const codex = auth.list().find(entry => String(entry.key).includes('openai-codex'))
-    if (codex === undefined) return quotaCache
+    if (codex === undefined) return undefined
     try {
       const timeout = AbortSignal.timeout(2_000)
       const inspection = await auth.inspect(codex.key, AbortSignal.any([signal, timeout]))
-      if (inspection?.kind !== 'account') return quotaCache
+      if (inspection?.kind !== 'account') { quotaCache = undefined; return undefined }
       const p = inspection.primaryLimit
       const s = inspection.secondaryLimit
       const valid = (v: number | undefined) => v !== undefined && Number.isFinite(v)
@@ -222,7 +224,8 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
         ...(s?.resetsAt === undefined ? {} : { resetSecondaryAt: s.resetsAt }),
       }
     } catch {
-      // The previous provider snapshot is a hint, never a fabricated balance.
+      // A failed refresh must not authorize additional subscription usage.
+      quotaCache = undefined
     }
     return quotaCache
   }
@@ -235,16 +238,13 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       const providers = ctx.llm.listProviders().filter(entry =>
         entry.id !== NEXUS_PROVIDER && entry.id !== 'phoenix-local' && authorized.has(entry.id))
       await prices.refresh(now)
-      const batches = await Promise.all(providers.map(async provider => {
+      const batches = await Promise.all(providers.map(async (provider) => {
         let advertised: readonly LlmModelInfo[]
         try { advertised = await ctx.llm.listModels(provider.id) } catch { return [] }
-        return advertised.map(model => {
+        return advertised.map((model) => {
           const key = routeKey(provider.id, model.id)
-          const evidence = provider.id === 'openrouter' ? prices.get(model.id)
-            : provider.id === 'opencode-free'
-              ? { source: 'operator-confirmed' as const, observedAt: now,
-                expiresAt: now + 60_000, inputPerMillion: 0,
-                outputPerMillion: 0, allChargesVerified: true } : undefined
+          // Provider names are not price evidence; unverified catalogs stay unknown.
+          const evidence = provider.id === 'openrouter' ? prices.get(model.id) : undefined
           return {
             provider: provider.id,
             id: model.id,

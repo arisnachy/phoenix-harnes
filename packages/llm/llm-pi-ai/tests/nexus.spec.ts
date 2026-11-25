@@ -48,7 +48,9 @@ describe('Nexus quota governance', () => {
   })
   it('rejects negative receipts', () => {
     const meter = new NexusQuotaGovernor()
-    expect(() => meter.record({ provider: 'x', model: 'x', timestamp: NOW, inputTokens: -1, outputTokens: 0 })).toThrow()
+    expect(() => {
+      meter.record({ provider: 'x', model: 'x', timestamp: NOW, inputTokens: -1, outputTokens: 0 })
+    }).toThrow()
   })
 })
 describe('Nexus route safety', () => {
@@ -57,6 +59,11 @@ describe('Nexus route safety', () => {
       provider: 'openrouter', model: 'model-a', priceClass: 'verified-free',
     })
     expect(chooseNexusRoute([paid], {}, NOW)).toBeUndefined()
+    const limited: NexusModel = { ...free, price: {
+      source: 'provider-api', observedAt: NOW, freeAllowance: true,
+      accountEligible: true, allowanceRemaining: 1, allowanceUnit: 'requests',
+    } }
+    expect(chooseNexusRoute([limited], {}, NOW)).toBeUndefined()
     expect(chooseNexusRoute([{ ...free, authorized: false }], {}, NOW)).toBeUndefined()
   })
   it('keeps local models disabled by default and validates context/tools', () => {
@@ -89,8 +96,10 @@ describe('OpenRouter pricing', () => {
       { id: 'request-paid', pricing: { prompt: '0', completion: '0', request: '0.1' } },
       { id: 'per-token-paid', pricing: { prompt: '0.000001', completion: '0.000002' } },
       { id: 'bad', pricing: { prompt: 'unknown', completion: '0' } },
+      { id: 'blank', pricing: { prompt: ' ', completion: '0' } },
     ] }, NOW, 2_000)
     expect(listed.has('bad')).toBe(false)
+    expect(listed.has('blank')).toBe(false)
     expect(nexusPriceClass({ price: listed.get('genuine-free') }, NOW)).toBe('verified-free')
     expect(nexusPriceClass({ price: listed.get('genuine-free') }, NOW + 2_000)).toBe('unknown')
     expect(nexusPriceClass({ price: listed.get('request-paid') }, NOW)).toBe('paid')
