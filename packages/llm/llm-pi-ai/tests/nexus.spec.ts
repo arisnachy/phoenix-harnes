@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   NexusQuotaGovernor, chooseNexusRoute, nexusEstimatedQuality, nexusInventory,
-  nexusPriceClass, updateNexusCalibration,
+  nexusPriceClass, updateNexusCalibration, openRouterPriceEvidence,
 } from '../src/nexus.ts'
 import type { NexusModel } from '../src/nexus.ts'
 
@@ -11,7 +11,7 @@ const free: NexusModel = {
   supportsTools: true, contextWindow: 32_768, observedQuality: 0.85,
   observedLatencyMs: 500,
   price: { source: 'provider-api', observedAt: NOW - 1_000, expiresAt: NOW + 2_000,
-    inputPerMillion: 0, outputPerMillion: 0, accountEligible: true },
+    inputPerMillion: 0, outputPerMillion: 0, accountEligible: true, allChargesVerified: true },
 }
 const paid: NexusModel = {
   ...free, provider: 'openai-codex', id: 'gpt-x',
@@ -79,5 +79,27 @@ describe('Nexus calibration and inventory', () => {
     expect(inventory).toHaveLength(2)
     expect(inventory[0]?.authorized).toBe(false)
     expect(inventory[1]?.local).toBe(true)
+  })
+})
+
+describe('OpenRouter pricing', () => {
+  it('normalizes per-token rates, extra request charges and expiry', () => {
+    const listed = openRouterPriceEvidence({ data: [
+      { id: 'genuine-free', pricing: { prompt: '0', completion: '0', request: '0' } },
+      { id: 'request-paid', pricing: { prompt: '0', completion: '0', request: '0.1' } },
+      { id: 'per-token-paid', pricing: { prompt: '0.000001', completion: '0.000002' } },
+      { id: 'bad', pricing: { prompt: 'unknown', completion: '0' } },
+    ] }, NOW, 2_000)
+    expect(listed.has('bad')).toBe(false)
+    expect(nexusPriceClass({ price: listed.get('genuine-free') }, NOW)).toBe('verified-free')
+    expect(nexusPriceClass({ price: listed.get('genuine-free') }, NOW + 2_000)).toBe('unknown')
+    expect(nexusPriceClass({ price: listed.get('request-paid') }, NOW)).toBe('paid')
+    expect(listed.get('per-token-paid')?.inputPerMillion).toBe(1)
+  })
+  it('refuses free classification when an extra charge cannot be interpreted', () => {
+    const prices = openRouterPriceEvidence({ data: [{ id: 'ambiguous', pricing: {
+      prompt: '0', completion: '0', image: 'unavailable',
+    } }] }, NOW)
+    expect(nexusPriceClass({ price: prices.get('ambiguous') }, NOW)).toBe('unknown')
   })
 })

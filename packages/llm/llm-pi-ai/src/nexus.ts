@@ -20,6 +20,10 @@ export interface NexusPriceEvidence {
   readonly allowanceRemaining?: number
   readonly allowanceUnit?: 'tokens' | 'requests' | 'credits'
   readonly accountEligible?: boolean
+  /** True only when fixed and per-request/image charges were inspected. */
+  readonly allChargesVerified?: boolean
+  /** True if a non-token charge applies to the route. */
+  readonly extraCharges?: boolean
 }
 
 /** Complete observed identity; model names are not evidence of prices. */
@@ -57,7 +61,63 @@ export function nexusPriceClass(model: Pick<NexusModel, 'price'>, now: number): 
     && price.allowanceRemaining !== undefined && price.allowanceRemaining > 0
     && Number.isFinite(price.allowanceRemaining)) return 'limited-free'
   if (!ratesKnown) return 'unknown'
-  return input === 0 && output === 0 ? 'verified-free' : 'paid'
+  if (input! > 0 || output! > 0 || price.extraCharges === true) return 'paid'
+  return price.allChargesVerified === true ? 'verified-free' : 'unknown'
+}
+
+
+/** Read nonnegative numeric prices in the official OpenRouter catalog. */
+function openRouterRate(value: unknown): number | undefined {
+  if (typeof value !== 'string' && typeof value !== 'number') return undefined
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined
+}
+
+/**
+ * Normalize OpenRouter's public model pricing. This does not prove that an
+ * account may use the model; the caller separately checks authorization.
+ * @param payload - Untrusted provider /models JSON response.
+ * @param observedAt - Retrieval time of the signed-off provider source.
+ * @param ttlMs - Maximum price age; expired prices are never free.
+ * @returns Per-id price evidence, excluding incomplete or malformed entries.
+ */
+export function openRouterPriceEvidence(
+  payload: unknown, observedAt: number, ttlMs = 300_000,
+): ReadonlyMap<string, NexusPriceEvidence> {
+  const prices = new Map<string, NexusPriceEvidence>()
+  if (typeof payload !== 'object' || payload === null || !('data' in payload)) return prices
+  const data = (payload as { data?: unknown }).data
+  if (!Array.isArray(data)) return prices
+  for (const entry of data) {
+    if (typeof entry !== 'object' || entry === null) continue
+    const record = entry as { id?: unknown; pricing?: unknown }
+    if (typeof record.id !== 'string' || record.id.length === 0
+      || typeof record.pricing !== 'object' || record.pricing === null) continue
+    const pricing = record.pricing as Record<string, unknown>
+    const prompt = openRouterRate(pricing.prompt)
+    const completion = openRouterRate(pricing.completion)
+    if (prompt === undefined || completion === undefined) continue
+    const extraKeys = ['request', 'image', 'web_search', 'internal_reasoning',
+      'input_cache_read', 'input_cache_write'] as const
+    let additionalCharges = false
+    let unknownCharge = false
+    for (const key of extraKeys) {
+      if (pricing[key] === undefined || pricing[key] === null) continue
+      const rate = openRouterRate(pricing[key])
+      if (rate === undefined) unknownCharge = true
+      else if (rate > 0) additionalCharges = true
+    }
+    prices.set(record.id, {
+      source: 'provider-api',
+      observedAt,
+      expiresAt: observedAt + ttlMs,
+      inputPerMillion: prompt * 1_000_000,
+      outputPerMillion: completion * 1_000_000,
+      allChargesVerified: !unknownCharge,
+      extraCharges: additionalCharges,
+    })
+  }
+  return prices
 }
 
 /** One measured consumption event, not a guessed token balance. */
@@ -179,15 +239,14 @@ export function chooseNexusRoute(
     if (task.needsTools && model.supportsTools !== true) return []
     if (task.needsImages && model.supportsImages !== true) return []
     if (model.contextWindow !== undefined && requiredInput > model.contextWindow) return []
-    if (model.observedQuality !== undefined && model.observedQuality < minimumQuality) return []
+    if (minimumQuality > 0 && (model.observedQuality === undefined || model.observedQuality < minimumQuality)) return []
     if (task.maximumLatencyMs !== undefined && model.observedLatencyMs !== undefined
       && model.observedLatencyMs > task.maximumLatencyMs) return []
     if (task.allowedThinkingLevels !== undefined
       && !task.allowedThinkingLevels.some(level => model.thinkingLevels?.includes(level))) return []
     const priceClass = nexusPriceClass(model, now)
-    if (priceClass === 'unknown' || priceClass === 'paid') {
-      if (task.allowPaid !== true) return []
-    }
+    if (priceClass === 'unknown') return []
+    if (priceClass === 'paid' && task.allowPaid !== true) return []
     const cost = priceClass === 'verified-free' || priceClass === 'limited-free'
       ? 0 : estimatedUsd(model, requiredInput, 2_048)
     if (cost === undefined && task.allowPaid !== true) return []
