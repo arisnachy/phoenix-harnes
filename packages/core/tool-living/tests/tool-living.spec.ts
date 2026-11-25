@@ -232,3 +232,15 @@ describe('tool-living', () => {
     expect(() => root.living.inspect(id)).toThrow(/unknown living creation/i)
   })
 })
+
+describe('provider-neutral intelligence amplifier integration',()=>{
+  it('registers a real deterministic tool and reports local verification without assuming model connectivity',async()=>{
+    const root=await bench()
+    const tool=root.tools.get('phoenix_amplifier')
+    expect(tool).toBeDefined()
+    const output=await tool!.execute({operation:'logos',input_json:JSON.stringify({variables:{x:3},expression:{op:'mul',args:[{var:'x'},4]},constraints:[{op:'eq',value:12}]})},{} as never) as string
+    expect(JSON.parse(output)).toMatchObject({value:12,valid:true,verifiedInputs:false})
+    const raw=await root.tools.get('system_runtime_inspect')!.execute({},{} as never) as string
+    expect(JSON.parse(raw).offlineVerification).toMatchObject({registered:true,requiresNetwork:false,requiresModelForCalculation:false,modelAvailability:'not-inspected'})
+  })
+})
