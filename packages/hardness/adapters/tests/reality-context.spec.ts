@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { REALITY_OPERATING_PROTOCOL } from '../src/reality-protocol.ts'
 import {
   RealityContextEngine,
+  quotaBudgetSnapshot,
   realityConfigFromEnvironment,
 } from '../src/reality-context.ts'
 
@@ -414,5 +415,34 @@ describe('Phoenix reality context', () => {
     const rendered = engine.render({ get() { return undefined } } as never)
     expect(rendered).toContain('<phoenix_reality_context>')
     expect(rendered).toContain('Treat stale/unknown fields as unavailable')
+  })
+})
+
+describe('Quota budget proprioception', () => {
+  it('keeps short and weekly limits independent, without guessing tokens', () => {
+    const now = Date.parse('2026-11-25T12:00:00Z')
+    const sec = now / 1000
+    const limits = [{ key: 'codex', provider: 'Codex',
+      primaryLimit: { usedPercent: 40, windowDurationMins: 300, resetsAt: sec + 7200 },
+      secondaryLimit: { usedPercent: 30, windowDurationMins: 10080, resetsAt: sec + 345600 },
+    }]
+    expect(quotaBudgetSnapshot(limits, now, false)).toMatchObject([{
+      accountKey: 'codex', advisoryOnly: true, windows: [
+        { remainingPercent: 60, remainingTokens: null, secondsUntilReset: 7200,
+          suggestedPercentPerHour: 25.5, status: 'observed' },
+        { remainingPercent: 70, daysUntilReset: 4, suggestedPercentPerDay: 14.875 },
+      ],
+    }])
+    expect(quotaBudgetSnapshot(limits, now, true)).toMatchObject([{
+      windows: [{ status: 'stale', suggestedPercentPerHour: null },
+        { status: 'stale', suggestedPercentPerDay: null }],
+    }])
+    expect(quotaBudgetSnapshot(limits, now + 7200000, false)).toMatchObject([{
+      windows: [{ status: 'awaiting-refresh', remainingPercent: 60, suggestedPercentPerHour: null }, {}],
+    }])
+    expect(quotaBudgetSnapshot([{ primaryLimit: { usedPercent: 101 } }], now, false)).toEqual([])
+    expect(quotaBudgetSnapshot([{ primaryLimit: { usedPercent: 20 } }], now, false)).toMatchObject([{
+      windows: [{ remainingPercent: 80, secondsUntilReset: null, suggestedPercentPerDay: null }],
+    }])
   })
 })
