@@ -781,7 +781,15 @@ export function registerCodexAccountFlow(
     methods: [{ id: 'oauth', label: 'Sign in with ChatGPT' }],
     async inspect(signal) {
       try {
-        return codexAccountTelemetry(await inspectSnapshot(signal ?? new AbortController().signal))
+        const snapshot=await inspectSnapshot(signal ?? new AbortController().signal)
+        const telemetry=codexAccountTelemetry(snapshot)
+        // Never renew the age of cached data just because it was read again.
+        const observedAt=cached?.probeStartedAt
+        if(telemetry===undefined||observedAt===undefined)return telemetry
+        return {...telemetry,
+          ...(telemetry.primaryLimit===undefined?{}:{primaryLimit:{...telemetry.primaryLimit,observedAt}}),
+          ...(telemetry.secondaryLimit===undefined?{}:{secondaryLimit:{...telemetry.secondaryLimit,observedAt}}),
+        }
       } catch (error: unknown) {
         // Account/quota inspection powers UI telemetry only. A transient Codex
         // app-server/RPC timeout must never fail PHOENIX boot or tear down Host.
