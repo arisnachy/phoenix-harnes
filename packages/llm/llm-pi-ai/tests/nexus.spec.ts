@@ -112,3 +112,21 @@ describe('OpenRouter pricing', () => {
     expect(nexusPriceClass({ price: prices.get('ambiguous') }, NOW)).toBe('unknown')
   })
 })
+
+
+describe('Nexus strict pricing and context admission', () => {
+  it('does not authorize stale, indefinite, malformed or newly introduced charges', () => {
+    const { expiresAt: _expires, ...noExpiry } = free.price!
+    expect(nexusPriceClass({ price: noExpiry }, NOW)).toBe('unknown')
+    expect(nexusPriceClass({ price: { ...free.price!, observedAt: NaN } }, NOW)).toBe('unknown')
+    const listing = openRouterPriceEvidence({ data: [
+      { id: 'unknown-charge', pricing: { prompt: '0', completion: '0', future_fee: '1' } },
+      { id: 'duplicate', pricing: { prompt: '0', completion: '0' } },
+      { id: 'duplicate', pricing: { prompt: '1', completion: '1' } },
+    ] }, NOW)
+    expect(nexusPriceClass({ price: listing.get('unknown-charge') }, NOW)).toBe('unknown')
+    expect(nexusPriceClass({ price: listing.get('duplicate') }, NOW)).toBe('unknown')
+    const { contextWindow: _context, ...unknownContext } = free
+    expect(chooseNexusRoute([unknownContext], { inputTokens: 8192 }, NOW)).toBeUndefined()
+  })
+})
