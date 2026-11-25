@@ -14,6 +14,22 @@ PHOENIX is a general-purpose, local-first AI agent workspace created and led by 
 
 [Get started](#run) · [Windows releases](https://github.com/arisnachy/phoenix-harnes/releases) · [Community](https://github.com/arisnachy/phoenix-harnes/discussions) · [Report an issue](https://github.com/arisnachy/phoenix-harnes/issues)
 
+## Discover PHOENIX skills
+
+Explore the [official PHOENIX website](https://arisnachy.github.io/phoenix-harnes/) and the [public SkillsCat catalog](https://skills.cat/u/arisnachy).
+
+| Skill | Public catalog |
+| --- | --- |
+| Game Studio | [phoenix-game-studio](https://skills.cat/skills/arisnachy/phoenix-harnes/phoenix-game-studio) |
+| Comic Studio | [phoenix-comic-studio](https://skills.cat/skills/arisnachy/phoenix-harnes/phoenix-comic-studio) |
+| Business | [phoenix-business](https://skills.cat/skills/arisnachy/phoenix-harnes/phoenix-business) |
+| Geo Intelligence | [geo-intelligence](https://skills.cat/skills/arisnachy/phoenix-harnes/geo-intelligence) |
+| Clinical Guidance | [clinical-guidance](https://skills.cat/skills/arisnachy/phoenix-harnes/clinical-guidance) |
+
+PHOENIX skill definitions are published in this repository. Third-party catalogs may index them independently. Listing a skill does not imply endorsement, verified usage, or standalone compatibility with other agents: inspect its requirements, permissions, dependencies and license before installing. Clinical content requires qualified professional review. The repository and its existing third-party notices remain the source of truth.
+
+If you maintain an agent-skills directory or have tested PHOENIX, we welcome factual listings, interoperability reports and feedback in [GitHub Discussions](https://github.com/arisnachy/phoenix-harnes/discussions).
+
 ## What you can do
 
 | Capability | What PHOENIX provides |
