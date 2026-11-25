@@ -14,6 +14,7 @@ type RecipeMemory={
 }
 export type RecipeContext={memory:RecipeMemory;sessionId:string;eventSeq:number;agent?:unknown;signal?:AbortSignal;ask?:AdaptiveApprovalService}
 const PREFIX='phoenix.amplifier.recipe.'
+const inFlight=new WeakMap<RecipeMemory,Set<string>>()
 const hash=(value:string)=>createHash('sha256').update(value).digest('hex')
 const scope=(row:RecordRow,projectId:string|undefined,sessionId:string)=>projectId===undefined
   ?row.projectId===undefined&&row.sessionId===sessionId:row.projectId===projectId
@@ -39,6 +40,12 @@ export async function saveNumericRecipe(raw:string,ctx:RecipeContext){
   const selected=reply.answers?.find(a=>a.id===approvalId)?.selected
   if(reply.automatic===true||ctx.signal?.aborted||selected?.length!==1||selected[0]!==allow)throw Error('AMPLIFIER_RECIPE_APPROVAL_REQUIRED')
   if(ctx.memory.projectIdForSession(ctx.sessionId)!==projectId)throw Error('AMPLIFIER_RECIPE_SCOPE_CHANGED')
+  const scopeKey=JSON.stringify([projectId??null,projectId===undefined?ctx.sessionId:null])
+  let active=inFlight.get(ctx.memory)
+  if(!active){active=new Set();inFlight.set(ctx.memory,active)}
+  if(active.has(scopeKey))throw Error('AMPLIFIER_RECIPE_SAVE_BUSY')
+  active.add(scopeKey)
+  try{
   if(find())return {id:digest,stored:true,reused:true,fixtures:checked.passed}
   if(rows(ctx,projectId).length>=32)throw Error('AMPLIFIER_RECIPE_QUOTA')
   const record=await ctx.memory.rememberCognitive({sessionId:ctx.sessionId,eventSeq:ctx.eventSeq,
@@ -48,6 +55,7 @@ export async function saveNumericRecipe(raw:string,ctx:RecipeContext){
     sourceEventType:'tool/phoenix_recipe_save',occurredAt:Date.now(),confidence:0.8,importance:0.5})
   if(record.value!==canonical||record.subject!==subject||!scope(record,projectId,ctx.sessionId)||record.status!=='active')throw Error('AMPLIFIER_RECIPE_PERSISTENCE_UNVERIFIED')
   return {id:digest,stored:true,reused:false,fixtures:checked.passed}
+  }finally{active.delete(scopeKey)}
 }
 export function runStoredNumericRecipe(digest:unknown,inputs:unknown,ctx:RecipeContext){
   if(typeof digest!=='string'||!/^[a-f0-9]{64}$/u.test(digest))throw Error('AMPLIFIER_RECIPE_ID')
