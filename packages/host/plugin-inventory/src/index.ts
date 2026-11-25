@@ -169,7 +169,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
   private readonly chatGptWeb: ChatGptWebIntegration
   private readonly managedMcp: ManagedMcpController
   private readonly openClawConnectors: OpenClawConnectorBridge
-  private readonly openClawConversation: OpenClawConversation
+  private readonly openClawChat: OpenClawConversation
   private readonly telegram: TelegramInbox
   private readonly telemetry: TokenTelemetryCollector
   private readonly pluginPreferences = new PluginEnablementStore()
@@ -180,7 +180,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
     this.chatGptWeb = createChatGptWebIntegration()
     this.managedMcp = new ManagedMcpController(ctx.loader)
     this.openClawConnectors = new OpenClawConnectorBridge()
-    this.openClawConversation = new OpenClawConversation(async () => {
+    this.openClawChat = new OpenClawConversation(async () => {
       try {
         const service = (ctx.get as (key: string) => unknown)('credentials') as {
           resolve(ref: CredentialRef): Promise<{ value: string } | undefined>
@@ -190,7 +190,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
       } catch { /* explicit environment fallback */ }
       return process.env.PHOENIX_OPENCLAW_GATEWAY_TOKEN ?? process.env.OPENCLAW_GATEWAY_TOKEN
     })
-    ctx.effect(() => () => { this.openClawConversation.cancel() }, 'OpenClaw conversation cleanup')
+    ctx.effect(() => () => { this.openClawChat.cancel() }, 'OpenClaw conversation cleanup')
     // One receiver owned by this Host service, shared by all Settings RPCs.
     this.telemetry = new TokenTelemetryCollector()
     void ctx.effect(() => {
@@ -496,28 +496,28 @@ export class PluginInventoryGateway extends TypertRemoteService {
   }
 
   @Remote('openClawConversation')
-  openClawConversationState(): OpenClawConversationSnapshot { return this.openClawConversation.snapshot() }
+  openClawConversation(): OpenClawConversationSnapshot { return this.openClawChat.snapshot() }
 
   @Remote('configureOpenClawEngine')
   configureOpenClawEngine(request: OpenClawEngineConfig): OpenClawConversationSnapshot {
-    return this.openClawConversation.configure(request)
+    return this.openClawChat.configure(request)
   }
 
   @Remote('checkOpenClawEngine')
   async checkOpenClawEngine(): Promise<{ available: boolean }> {
-    return { available: await this.openClawConversation.available() }
+    return { available: await this.openClawChat.available() }
   }
 
   @Remote('sendOpenClawConversation')
   sendOpenClawConversation(request: OpenClawConversationSend): OpenClawConversationSnapshot {
-    return this.openClawConversation.start(request)
+    return this.openClawChat.start(request)
   }
 
   @Remote('newOpenClawConversation')
-  newOpenClawConversation(): OpenClawConversationSnapshot { return this.openClawConversation.newThread() }
+  newOpenClawConversation(): OpenClawConversationSnapshot { return this.openClawChat.newThread() }
 
   @Remote('cancelOpenClawConversation')
-  cancelOpenClawConversation(): OpenClawConversationSnapshot { return this.openClawConversation.cancel() }
+  cancelOpenClawConversation(): OpenClawConversationSnapshot { return this.openClawChat.cancel() }
 
   @Remote('openClawPluginTools')
   async openClawPluginTools(): Promise<OpenClawRoutingSnapshot> {

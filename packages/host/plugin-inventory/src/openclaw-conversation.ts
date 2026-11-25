@@ -105,7 +105,7 @@ export class OpenClawConversation {
     this.thread = state && THREAD.test(state.thread) ? state.thread : randomUUID()
     this.messages = state && Array.isArray(state.messages) ? state.messages.filter(item =>
       (item.role === 'user' || item.role === 'assistant') && typeof item.text === 'string').slice(-100) : []
-    this.phase = state?.phase === 'running' || state?.phase === 'unconfirmed' ? 'unconfirmed' : 'idle'
+    this.phase = state?.phase === 'running' || state?.phase === 'unconfirmed' ? 'unconfirmed' : state?.phase === 'failed' ? 'failed' : 'idle'
   }
 
   snapshot(): OpenClawConversationSnapshot {
@@ -198,7 +198,7 @@ export class OpenClawConversation {
       const reply = await readOpenClawStream(response, value => { this.partial = redact(value, token) })
       this.messages = [...this.messages, { role: 'assistant', text: reply.split(token).join('[REDACTED]') }].slice(-100) as OpenClawConversationMessage[]
       this.phase = 'idle'
-    } catch { this.phase = submitted ? 'unconfirmed' : 'idle' }
+    } catch { this.phase = submitted ? 'unconfirmed' : 'failed' }
     finally {
       this.partial = ''; this.running = undefined
       try { this.save() } catch { this.phase = 'unconfirmed' }

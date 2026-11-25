@@ -654,7 +654,7 @@ export interface OpenClawConversationSnapshot {
   readonly config: OpenClawEngineConfig
   readonly thread: string
   readonly messages: readonly OpenClawConversationMessage[]
-  readonly phase: 'idle' | 'running' | 'unconfirmed'
+  readonly phase: 'idle' | 'running' | 'failed' | 'unconfirmed'
   readonly partial: string
 }
 export interface OpenClawConversationSend {

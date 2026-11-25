@@ -22,7 +22,7 @@ export function OpenClawEnginePanel({ registry }: { registry?: McpRegistryClient
     const timer = window.setInterval(poll, 1000)
     return () => { active = false; window.clearInterval(timer) }
   }, [load])
-  if (!load || !state || !draft) return null
+  if (!registry || !load || !state || !draft) return null
   const run = (action: (() => Promise<OpenClawConversationSnapshot>) | undefined, saved = false): void => {
     if (!action || busy) return
     setBusy(true); setNotice('')
@@ -66,7 +66,7 @@ export function OpenClawEnginePanel({ registry }: { registry?: McpRegistryClient
               () => setNotice('Gateway verification failed')).finally(() => setBusy(false))
           }}>Verify connection</button>
       </div>
-      {state.config.mode === 'hybrid' && <p className={css.safetyNote}>Kira can delegate explicit tasks through the OpenClaw bridge. Native PHOENIX stays active.</p>}
+      {state.config.mode === 'hybrid' && <p className={css.safetyNote}>Restart PHOENIX to register hybrid tools; Kira can then delegate explicit tasks. Native PHOENIX stays active.</p>}
       {state.config.mode === 'direct' && <>
         <div className={styles.transcript} aria-live="polite">
           {state.messages.map((message, i) => <article key={i}>
@@ -75,11 +75,12 @@ export function OpenClawEnginePanel({ registry }: { registry?: McpRegistryClient
           </article>)}
           {running && <article><strong>OpenClaw</strong><p>{state.partial || 'Running…'}</p></article>}
         </div>
+        {state.phase === 'failed' && <p role="alert">Connection or agent verification failed before submission. You can retry.</p>}
         {state.phase === 'unconfirmed' && <p role="alert">Previous run not confirmed. Inspect OpenClaw before retrying, or start a new thread.</p>}
-        <textarea className={styles.input} aria-label="Message to OpenClaw" value={text} disabled={disabled || state.phase !== 'idle'}
+        <textarea className={styles.input} aria-label="Message to OpenClaw" value={text} disabled={disabled || state.phase === 'unconfirmed'}
           onChange={event => setText(event.target.value)} />
         <div className={css.toolbar}>
-          <button type="button" className={css.compactButton} disabled={disabled || changed || state.phase !== 'idle' || !text.trim() || !registry.sendOpenClawConversation}
+          <button type="button" className={css.compactButton} disabled={disabled || changed || state.phase === 'unconfirmed' || !text.trim() || !registry.sendOpenClawConversation}
             onClick={() => { const message = text; run(async () => {
               const result = await registry.sendOpenClawConversation!({ thread: state.thread, text: message })
               setText(''); return result

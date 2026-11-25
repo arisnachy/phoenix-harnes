@@ -133,6 +133,17 @@ function gatewayPort(): number {
 
 /** Execution is disabled by default; a Gateway credential alone never enables agent delegation. */
 export function registerOpenClawAgentBridge(ctx: Context): void {
+  // Keep schemas out of native conversations unless the owner enabled Hybrid
+  // before Host startup. Recheck policy at every invocation for revocation.
+  let hybrid = false
+  try {
+    const home = process.env.DSH_HOME ?? join(homedir(), '.dsh')
+    const policy = record(JSON.parse(readFileSync(join(home, 'toolchains', 'openclaw-engine.json'), 'utf8')) as unknown)
+    hybrid = policy.version === 1 && policy.mode === 'hybrid'
+    if (policy.version === 1 && !hybrid) return
+  } catch { /* legacy environment opt-in */ }
+  if (process.env.PHOENIX_OPENCLAW_AGENT_BRIDGE === '0'
+    || (!hybrid && process.env.PHOENIX_OPENCLAW_AGENT_BRIDGE !== '1')) return
   const options = async (signal: AbortSignal): Promise<GatewayOptions> => {
     const home = process.env.DSH_HOME ?? join(homedir(), '.dsh')
     let policy: Record<string, unknown> = {}
