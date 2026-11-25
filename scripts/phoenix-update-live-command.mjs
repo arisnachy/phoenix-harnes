@@ -83,6 +83,28 @@ function main() {
     return 1
   }
 
+  // A compiler can be silent for minutes. Report liveness independently of
+  // stdout/stderr; this is not a progress percentage or a success receipt.
+  const heartbeatPath = join(dirname(config.statePath), 'phoenix-update-command-heartbeat.json')
+  const heartbeat = () => {
+    if (!SHA.test(config.target) || !STEPS.has(config.step) || child.pid === undefined
+      || child.exitCode !== null || child.signalCode !== null) return
+    const tmp = heartbeatPath + '.' + String(process.pid) + '.tmp'
+    try {
+      writeFileSync(tmp, JSON.stringify({
+        schema: 1, target: config.target, step: config.step,
+        at: new Date().toISOString(), pid: process.pid, childPid: child.pid,
+      }) + '\n', { mode: 0o600 })
+      renameSync(tmp, heartbeatPath)
+    } catch { /* presentation telemetry must not interrupt the command */ }
+    finally { try { unlinkSync(tmp) } catch { /* best effort */ } }
+    writeLine(config, 'stdout', '[PHOENIX UPDATE] Proceso activo; esperando que termine la etapa.')
+    flushLines(config)
+  }
+  heartbeat()
+  const heartbeatTimer = setInterval(heartbeat, 20_000)
+  heartbeatTimer.unref()
+
   const consume = (stream, chunk) => {
     process[stream].write(chunk)
     const text = tails[stream] + String(chunk)
@@ -104,6 +126,11 @@ function main() {
   const finish = (code, reason) => {
     if (recorded) return
     recorded = true
+    clearInterval(heartbeatTimer)
+    try {
+      const marker = JSON.parse(readFileSync(heartbeatPath, 'utf8'))
+      if (marker.pid === process.pid) unlinkSync(heartbeatPath)
+    } catch { /* the marker is also bounded by freshness */ }
     for (const stream of ['stdout', 'stderr']) {
       if (tails[stream]) {
         writeLine(config, stream, tails[stream])

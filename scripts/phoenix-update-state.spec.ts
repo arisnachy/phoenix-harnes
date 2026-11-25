@@ -184,6 +184,32 @@ describe('PHOENIX updater state persistence', () => {
     expect(entries).toContain('Supervisor observado en los últimos 30 segundos: sí')
   })
 
+  it('does not time out a silent live compiler, but rejects stale or foreign command heartbeats', () => {
+    const root = mkdtempSync(join(tmpdir(), 'phoenix-update-command-heartbeat-'))
+    roots.push(root)
+    const path = join(root, 'phoenix-update-state.json')
+    const marker = join(root, 'phoenix-update-command-heartbeat.json')
+    const target = 'c'.repeat(40)
+    const now = Date.parse('2026-10-25T16:00:00Z')
+    const reset = () => writeFileSync(path, JSON.stringify({
+      schema: 1, status: 'applying', phase: 'restart', target,
+      at: new Date(now - 25 * 60_000).toISOString(),
+    }))
+    const mark = (sha: string, age: number) => writeFileSync(marker, JSON.stringify({
+      schema: 1, target: sha, step: 'build', pid: 123, childPid: 124,
+      at: new Date(now - age).toISOString(),
+    }))
+    reset()
+    mark(target, 10_000)
+    expect(diagnoseStalledPhoenixActivation(path, now)).toBe(false)
+    expect(JSON.parse(readFileSync(path, 'utf8')).status).toBe('applying')
+    mark(target, 61_000)
+    expect(diagnoseStalledPhoenixActivation(path, now)).toBe(true)
+    reset()
+    mark('d'.repeat(40), 1_000)
+    expect(diagnoseStalledPhoenixActivation(path, now)).toBe(true)
+  })
+
   it('replaces the state document atomically and leaves no temporary file', () => {
     process.env.PHOENIX_UPDATE_SUPERVISED = '0'
     const root = mkdtempSync(join(tmpdir(), 'phoenix-update-state-write-'))

@@ -84,10 +84,13 @@ export function activationNeedsVerification(
     readonly status: string
     readonly at?: string
     readonly events?: readonly { readonly step: string; readonly result: string; readonly at: string }[]
+    readonly console?: readonly { readonly step: string; readonly at: string; readonly line: string }[]
   },
   now = Date.now(),
 ): boolean {
   if (snapshot.status !== 'restarting' && snapshot.status !== 'applying') return false
+
+  if (activeUpdateCommand(snapshot, now) !== undefined) return false
 
   const recentRestarts = snapshot.events?.filter((event) => {
     const at = Date.parse(event.at)
@@ -98,4 +101,27 @@ export function activationNeedsVerification(
 
   const since = Date.parse(snapshot.at ?? '')
   return Number.isFinite(since) && since <= now && now - since >= 10 * 60_000
+}
+
+/** Fresh helper heartbeats prove the command is running, not that it succeeded. */
+export function activeUpdateCommand(
+  snapshot: {
+    readonly at?: string
+    readonly console?: readonly { readonly step: string; readonly at: string; readonly line: string }[]
+    readonly events?: readonly { readonly step: string; readonly result: string; readonly at: string }[]
+  },
+  now = Date.now(),
+): string | undefined {
+  const since = Date.parse(snapshot.at ?? '')
+  const heartbeat = snapshot.console?.slice().reverse().find(line => {
+    const at = Date.parse(line.at)
+    return line.line === '[PHOENIX UPDATE] Proceso activo; esperando que termine la etapa.'
+      && Number.isFinite(at) && (!Number.isFinite(since) || at >= since)
+      && at <= now && now - at <= 60_000
+  })
+  if (heartbeat === undefined) return undefined
+  const finished = snapshot.events?.some(event => event.step === heartbeat.step
+    && (event.result === 'ok' || event.result === 'failed')
+    && Date.parse(event.at) >= Date.parse(heartbeat.at))
+  return finished ? undefined : heartbeat.step
 }
