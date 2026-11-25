@@ -5,6 +5,7 @@ import {
   type AdaptiveDestination, type AdaptiveInputKind, type AdaptiveOutput, type AdaptiveFormDraft,
 } from './AdaptiveAppCatalog.ts'
 import { readAdaptiveForm, saveAdaptiveForm } from './AdaptiveFormMetadataStore.ts'
+import { reconcileFormValues, type FormValueDraft } from './AdaptiveFormValueMigration.ts'
 import { AdaptiveAiFieldControl } from './AdaptiveAiFieldControl.tsx'
 import { readFieldAiConfig } from './AdaptiveIntelligentFields.ts'
 import css from './HealthiaWorkspace.module.css'
@@ -24,7 +25,9 @@ export function AdaptiveFormPanel({ appId, sectionId }: { appId: string; section
   const [kind, setKind] = useState<AdaptiveInputKind>('text')
   const [destination, setDestination] = useState<AdaptiveDestination>('local')
   const [output, setOutput] = useState<AdaptiveOutput>('inline')
-  const [values, setValues] = useState<Record<string, string>>({})
+  const [draft,setDraft]=useState<FormValueDraft>({values:{},recovery:[],overflow:false})
+  const values=draft.values
+  const setValues=(update:(old:Record<string,string>)=>Record<string,string>)=>setDraft(old=>({...old,values:update(old.values)}))
   const [reviewFieldId, setReviewFieldId] = useState<string | null>(null)
   const [error, setError] = useState('')
   // Refresh only metadata after an explicit chat-card approval.
@@ -34,19 +37,21 @@ export function AdaptiveFormPanel({ appId, sectionId }: { appId: string; section
       if (detail?.appId !== appId || detail?.sectionId !== sectionId) return
       const revised = readAdaptiveForm(appId, sectionId)
       if (!revised) return
+      setDraft(old=>reconcileFormValues(form,revised,old))
       setForm(revised)
       setHistory([])
-      setValues({})
       setReviewFieldId(null)
       setError('')
     }
     window.addEventListener('phoenix:adaptive-form-refreshed', onRefresh)
     return () => window.removeEventListener('phoenix:adaptive-form-refreshed', onRefresh)
-  }, [appId, sectionId])
+  }, [appId, sectionId,form])
   const commit = (next: AdaptiveFormDraft): void => {
     try {
       saveAdaptiveForm(next)
       setHistory(items => [...items.slice(-19), form])
+      setDraft(old=>reconcileFormValues(form,next,old))
+      setReviewFieldId(null)
       setForm(next)
       setError('')
     } catch {
@@ -60,6 +65,8 @@ export function AdaptiveFormPanel({ appId, sectionId }: { appId: string; section
       // Rollback creates a new revision instead of mutating old persisted history.
       const reverted = { ...previous, revision: form.revision + 1 }
       saveAdaptiveForm(reverted)
+      setDraft(old=>reconcileFormValues(form,reverted,old))
+      setReviewFieldId(null)
       setForm(reverted)
       setHistory(items => items.slice(0, -1))
       setError('')
@@ -131,6 +138,12 @@ export function AdaptiveFormPanel({ appId, sectionId }: { appId: string; section
       <Button variant="primary" size="sm" type="submit" disabled={!label.trim()}>Añadir campo</Button>
     </form>
     {error && <p role="alert">{error}</p>}
+    {(draft.recovery.length>0||draft.overflow)&&<section aria-label="Valores locales pendientes de reubicación">
+      <h3>Valores pendientes de reubicación</h3><p>Un cambio de tipo, destino o eliminación de campo requiere revisión. Estos valores no se enviaron ni se guardaron en disco.</p>
+      {draft.recovery.map((entry,i)=><div key={entry.id+':'+i}><strong>{entry.label}</strong><textarea readOnly aria-label={'Valor anterior de '+entry.label} value={entry.value}/></div>)}
+      {draft.overflow&&<p role="alert">Se alcanzó el límite de recuperación temporal. Algunos valores incompatibles anteriores no pudieron conservarse.</p>}
+      <button type="button" onClick={()=>setDraft(old=>({...old,recovery:[],overflow:false}))}>Descartar valores pendientes</button>
+    </section>}
     {form.fields.length > 0 && <div className={[css.formPreview,ui.preview].join(' ')}>
       <h3>Vista operativa local</h3>
       <div className={ui.fieldGrid}>{form.fields.map(field => <div key={field.id} className={[css.formSelect,ui.field].join(' ')}>
