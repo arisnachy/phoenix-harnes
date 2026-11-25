@@ -8,6 +8,7 @@ import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync }
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
+import { mergeLibraryDraft } from './space-merge.ts'
 import { summarizeSpaceSheet } from './space-workflows.ts'
 
 export type SpaceKind = 'document'|'slides'|'sheet'|'image'|'game'|'app'|'code'|'file'
@@ -218,6 +219,23 @@ export class PhoenixSpaceStore {
     }
   }
 
+  /** Reconcile independent concurrent edits using the actual retained base. */
+  reconcileEdit(id:string,baseRevision:number,raw:unknown):SpaceItem{
+    if(!raw||typeof raw!=='object'||Array.isArray(raw))throw Error('Edición inválida')
+    const x=raw as Record<string,unknown>
+    if(Object.keys(x).some(k=>!['title','content','space'].includes(k))||typeof x.title!=='string'||typeof x.content!=='string'||typeof x.space!=='string')throw Error('Edición inválida')
+    const proposed={title:x.title,content:x.content,space:x.space}
+    this.db.exec('BEGIN IMMEDIATE')
+    try{
+      const current=this.get(id),base=this.version(id,baseRevision)
+      if(!current||current.deleted||current.bytes>0||!base||baseRevision>current.revision)throw Error('CONFLICT')
+      // Moving a concurrent creation between spaces is not automatically reconciled.
+      if(current.space!==base.space||proposed.space!==base.space)throw Error('CONFLICT')
+      const result=this.updateInternal(id,current.revision,mergeLibraryDraft(base,current,proposed,current.kind),false)
+      this.db.exec('COMMIT')
+      return result
+    }catch(error){this.db.exec('ROLLBACK');throw error}
+  }
   /** Return a prior version without changing the active item. */
   version(id:string,revision:number):{title:string;content:string;space:string}|null {
     const current=this.get(id)
