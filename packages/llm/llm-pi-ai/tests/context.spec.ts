@@ -827,3 +827,24 @@ describe('pi-ai request context conversion', () => {
   })
 
 })
+
+
+describe('Phoenix Local agent discovery context', () => {
+  it('keeps the current user task, gateway and complete tool pair while projecting old chat', () => {
+    const old = createUserMessage({ content: [{ type: 'text', text: 'old '.repeat(20_000) }], source: { kind: 'user' } })
+    const task = createUserMessage({ content: [{ type: 'text', text: 'Edit two spreadsheet cells' }], source: { kind: 'user' } })
+    const callId = CallId('discover')
+    const call = history('assistant', [{ type: 'tool-call', id: callId, name: 'tool_search', arguments: '{"query":"spreadsheet"}' }])
+    const result = user([{ type: 'tool-result', toolCallId: callId, content: [{ type: 'text', text: 'Found spreadsheet_edit' }] }])
+    const options: GenerateOptions = {
+      ...request([old, task, call, result]), provider: 'phoenix-local', model: 'phoenix-local',
+      tools: [{ name: 'tool_search', description: 'Discover tools', parameters: { type: 'object' } }, { name: 'spreadsheet_edit', description: 'Edit cells', parameters: { type: 'object' } }],
+    }
+    const fitted = fitPhoenixLocalTextTurn(options, 4096, 512)
+    expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+    expect(fitted.options.messages).toEqual([task, call, result])
+    expect(fitted.options.tools?.map(tool => tool.name)).toContain('tool_search')
+    expect(fitted.options.tools?.map(tool => tool.name)).toContain('spreadsheet_edit')
+    expect(options.messages).toHaveLength(4)
+  })
+})
