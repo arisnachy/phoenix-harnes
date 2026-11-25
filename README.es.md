@@ -22,6 +22,23 @@ Consulta la última versión publicada y sus notas antes de instalar. Para insta
 
 **¿Te resulta útil PHOENIX?** [Dale una estrella en GitHub](https://github.com/arisnachy/phoenix-harnes) para seguir su desarrollo y ayudar a otros usuarios a descubrirlo. [Comparte tus comentarios o reporta problemas](https://github.com/arisnachy/phoenix-harnes/issues) después de probarlo.
 
+## Prueba PHOENIX con una tarea real
+
+1. [Descarga la última versión publicada para Windows](https://github.com/arisnachy/phoenix-harnes/releases/latest) o [ejecuta desde el código fuente](#run).
+2. En **Settings → Models**, configura un modelo local o en la nube disponible. Los límites gratuitos y requisitos de hardware varían.
+3. Inicia una conversación con Kira y prueba una de estas solicitudes:
+
+| Tu objetivo | Ejemplo de solicitud |
+| --- | --- |
+| Comprender un repositorio | Inspecciona este repositorio, explica su arquitectura y sugiere una pequeña mejora con un plan de pruebas. |
+| Analizar datos | Revisa este CSV, identifica valores faltantes, resume los resultados y propón un gráfico. |
+| Investigar un tema | Compara tres enfoques para este problema, cita las fuentes y señala las afirmaciones inciertas. |
+| Probar IA local | Utiliza mi modelo local configurado para resumir este documento de ejemplo. Indica si alguna herramienta o capacidad no está disponible. |
+
+Empieza con datos de ejemplo no sensibles y revisa los permisos antes de aprobar cambios. Son flujos sugeridos, no resultados de pruebas de rendimiento ni garantías; su disponibilidad depende de la versión y el modelo.
+
+**Ayuda a mejorar PHOENIX:** [cuéntanos cómo fue tu primera experiencia](https://github.com/arisnachy/phoenix-harnes/issues/new/choose), incluyendo la versión, modelo/proveedor y qué funcionó o falló. Elimina credenciales y datos privados antes de publicar. Si PHOENIX te resulta útil, [dale una estrella](https://github.com/arisnachy/phoenix-harnes) o compártelo con alguien que pueda aprovecharlo.
+
 ## Qué puedes hacer
 
 | Capacidad | Qué ofrece PHOENIX |
