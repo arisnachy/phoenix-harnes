@@ -486,10 +486,10 @@ export const en = {
 /** Spanish dictionary. Untranslated specialist copy temporarily inherits the
  * complete English dictionary while the primary conversation path is native. */
 export const es = {
+  ...en,
   'image.captureScreen': 'Capturar pantalla (solo borrador)',
   'image.cancelCapture': 'Cancelar captura',
   'image.captureFailed': 'No se capturó la pantalla. Inténtalo de nuevo.',
-  ...en,
   'context.tools': 'Herramientas',
   'status.thinking': 'Phoenix está pensando',
   'status.preparing': 'Phoenix está preparando la respuesta',
