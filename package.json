@@ -56,7 +56,7 @@
     "test:healthia:exchange": "node --test scripts/phoenix-healthia-exchange-contract.test.mjs",
     "test:healthia:patient": "node --test packages/bundle/web-app/tests/health-patient-portal.test.mjs",
     "test:adaptive:host": "vitest run packages/core/tool-living/tests/system-proprioception.spec.ts packages/core/tool-living/tests/approved-action.spec.ts packages/core/tool-living/tests/tool-living.spec.ts",
-    "test:adaptive:guardian": "node --test scripts/phoenix-windows-guardian.test.mjs",
+    "test:adaptive:guardian": "node --test scripts/phoenix-windows-guardian.test.mjs scripts/phoenix-retire-integrated-workspaces.test.mjs",
     "adaptive:inspect": "node scripts/phoenix-adaptive-self-model.mjs --json",
     "test:adaptive:self": "node --test scripts/phoenix-adaptive-self-model.test.mjs",
     "amplifier:offline": "node --experimental-strip-types scripts/phoenix-amplifier-cli.mjs",
