@@ -1,0 +1,10 @@
+import { strict as assert } from "node:assert";
+import { test } from "node:test";
+import { chooseNexusModel, remainingDailyAllowance, type NexusModel } from "../nexus-governor.js";
+const free: NexusModel = {id:"free",provider:"example",enabled:true,available:true,costClass:"free",priceEvidence:"provider",inputCostPerMillion:0,outputCostPerMillion:0,quality:0.8,toolCalling:true};
+const paid: NexusModel = {id:"paid",provider:"example",enabled:true,available:true,costClass:"paid",priceEvidence:"provider",inputCostPerMillion:2,outputCostPerMillion:8,quality:1,toolCalling:true};
+test("never silently routes to paid",()=>assert.equal(chooseNexusModel([paid,free],{requiresTools:true}).model?.id,"free"));
+test("local disabled by default",()=>assert.equal(chooseNexusModel([{...free,local:true}],{}).model,undefined));
+test("unverified free excluded",()=>assert.equal(chooseNexusModel([{...free,priceEvidence:"estimated"}],{}).model,undefined));
+test("capability and quota gate",()=>assert.equal(chooseNexusModel([{...free,toolCalling:false},{...free,id:"zero",quotaRemaining:0}],{requiresTools:true}).model,undefined));
+test("reserve weekly budget",()=>assert.equal(remainingDailyAllowance({allowPaid:false,allowLocal:false,requireVerifiedFree:true,reserveFraction:.2,remainingWeeklyBudget:700,daysUntilReset:7}),80));
