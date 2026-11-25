@@ -350,6 +350,7 @@ export function apply(ctx: Context): void {
         livingConnectors:connected,
         authority:'registration-only',
         permissions:'must-check-current-tool-policy-and-user-approval',
+        offlineVerification:{registered:names.includes('phoenix_amplifier'),operations:[...AMPLIFIER_OPERATIONS],requiresNetwork:false,requiresModelForCalculation:false,modelAvailability:'not-inspected',internetConnectivity:'not-inspected'},
         authentication:'not-inspected',
         externalExecution:'not-attempted',
         clinicalBoundary:'never-export-patient-information-to-ordinary-chat',
