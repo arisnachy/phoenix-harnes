@@ -19,7 +19,7 @@ import { ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import type { Context } from '@phoenix-ai/cordis'
 import { isImageAdmissionError } from '@phoenix-ai/dsh-attachment'
-import { authorizeWindowsMcpCall, windowsMcpPreflight, WINDOWS_FLAUI_SERVER_NAME } from './windows-permission.ts'
+import { authorizeWindowsMcpCall, isAllowedWindowsMcpTool, windowsMcpPreflight, WINDOWS_FLAUI_SERVER_NAME } from './windows-permission.ts'
 import type { WindowsMcpQuestionService } from './windows-permission.ts'
 import type { AttachmentStore, ImageAttachmentRef, ImageMediaType, SaveImageAttachment } from '@phoenix-ai/dsh-attachment'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
@@ -309,6 +309,7 @@ export async function syncTools(
           `mcp-client(${opts.serverName}): server listed tool "${tool.name}" more than once — invalid tool list`,
         )
       }
+      if (opts.serverName === WINDOWS_FLAUI_SERVER_NAME && !isAllowedWindowsMcpTool(tool.name)) continue
       const mondayCompatibility = opts.serverName === MONDAY_SERVER_NAME
       definitions.set(publicName, createDefinition(
         client,
