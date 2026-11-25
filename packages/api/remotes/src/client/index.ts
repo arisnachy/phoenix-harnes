@@ -32,6 +32,7 @@ export type {
   OpenClawRuntimeSnapshot,
   OpenClawRoutedTool, OpenClawRoutingSnapshot, OpenClawRoutingRequest,
   OpenClawGatewayCredentialState, OpenClawGatewayCredentialRequest,
+  OpenClawEngineMode, OpenClawEngineConfig, OpenClawConversationSnapshot, OpenClawConversationSend, OpenClawConversationMessage,
   ClawHubCatalogRequest, ClawHubCatalogItem, ClawHubCatalogSnapshot,
   ClawHubFamily, ClawHubState, ClawHubInstallRequest, ClawHubInstallReceipt,
 } from '@phoenix-ai/dsh-host-plugin-inventory/types'

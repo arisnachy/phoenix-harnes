@@ -23,6 +23,7 @@ import { searchOfficialMcpRegistry } from './mcp-registry.ts'
 import { readBlenderLocalState } from './blender-local.ts'
 import { readAnatomyConnectors, installAnatomyConnector } from './anatomy-connectors.ts'
 import { readBusinessLibrarySnapshot } from './business-library.ts'
+import { OpenClawConversation } from './openclaw-conversation.ts'
 import { OpenClawConnectorBridge } from './openclaw-connectors.ts'
 import { readOpenClawRuntimeSnapshot } from './openclaw-runtime.ts'
 import { readOpenClawRouting, setOpenClawRoutingPermission, setOpenClawPluginEnabled } from './openclaw-plugin-routing.ts'
@@ -68,6 +69,7 @@ import type {
   OpenClawRuntimeSnapshot,
   OpenClawRoutingSnapshot, OpenClawRoutingRequest, OpenClawPluginActivationRequest,
   OpenClawGatewayCredentialState, OpenClawGatewayCredentialRequest,
+  OpenClawEngineConfig, OpenClawConversationSnapshot, OpenClawConversationSend,
   ClawHubCatalogRequest, ClawHubCatalogSnapshot, ClawHubInstallRequest, ClawHubInstallReceipt, ClawHubState,
   PhoenixLocalEndpointReceipt,
   PhoenixLocalModeRequest,
@@ -167,6 +169,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
   private readonly chatGptWeb: ChatGptWebIntegration
   private readonly managedMcp: ManagedMcpController
   private readonly openClawConnectors: OpenClawConnectorBridge
+  private readonly openClawConversation: OpenClawConversation
   private readonly telegram: TelegramInbox
   private readonly telemetry: TokenTelemetryCollector
   private readonly pluginPreferences = new PluginEnablementStore()
@@ -177,6 +180,17 @@ export class PluginInventoryGateway extends TypertRemoteService {
     this.chatGptWeb = createChatGptWebIntegration()
     this.managedMcp = new ManagedMcpController(ctx.loader)
     this.openClawConnectors = new OpenClawConnectorBridge()
+    this.openClawConversation = new OpenClawConversation(async () => {
+      try {
+        const service = (ctx.get as (key: string) => unknown)('credentials') as {
+          resolve(ref: CredentialRef): Promise<{ value: string } | undefined>
+        } | undefined
+        const stored = await service?.resolve(credentialRef('PHOENIX_OPENCLAW_GATEWAY_TOKEN'))
+        if (stored?.value) return stored.value
+      } catch { /* explicit environment fallback */ }
+      return process.env.PHOENIX_OPENCLAW_GATEWAY_TOKEN ?? process.env.OPENCLAW_GATEWAY_TOKEN
+    })
+    ctx.effect(() => () => { this.openClawConversation.cancel() }, 'OpenClaw conversation cleanup')
     // One receiver owned by this Host service, shared by all Settings RPCs.
     this.telemetry = new TokenTelemetryCollector()
     void ctx.effect(() => {
@@ -480,6 +494,30 @@ export class PluginInventoryGateway extends TypertRemoteService {
     await service.set(credentialRef('PHOENIX_OPENCLAW_GATEWAY_TOKEN'), request.token)
     return { configured: true, source: 'vault' }
   }
+
+  @Remote('openClawConversation')
+  openClawConversationState(): OpenClawConversationSnapshot { return this.openClawConversation.snapshot() }
+
+  @Remote('configureOpenClawEngine')
+  configureOpenClawEngine(request: OpenClawEngineConfig): OpenClawConversationSnapshot {
+    return this.openClawConversation.configure(request)
+  }
+
+  @Remote('checkOpenClawEngine')
+  async checkOpenClawEngine(): Promise<{ available: boolean }> {
+    return { available: await this.openClawConversation.available() }
+  }
+
+  @Remote('sendOpenClawConversation')
+  sendOpenClawConversation(request: OpenClawConversationSend): OpenClawConversationSnapshot {
+    return this.openClawConversation.start(request)
+  }
+
+  @Remote('newOpenClawConversation')
+  newOpenClawConversation(): OpenClawConversationSnapshot { return this.openClawConversation.newThread() }
+
+  @Remote('cancelOpenClawConversation')
+  cancelOpenClawConversation(): OpenClawConversationSnapshot { return this.openClawConversation.cancel() }
 
   @Remote('openClawPluginTools')
   async openClawPluginTools(): Promise<OpenClawRoutingSnapshot> {
