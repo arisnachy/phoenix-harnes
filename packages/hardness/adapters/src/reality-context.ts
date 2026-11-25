@@ -748,6 +748,61 @@ function sameModel(
     && left.model === right.model
 }
 
+/** Derive an advisory spending envelope from provider-reported quota windows.
+ * Percentages are quota units, not token counts or a guaranteed allowance.
+ * @param limits - Sanitized account telemetry, kept separate by account.
+ * @param nowMs - Clock used for countdowns.
+ * @param stale - Whether the host telemetry cache is expired.
+ * @returns Bounded per-account windows; expired snapshots never imply a refill.
+ */
+export function quotaBudgetSnapshot(
+  limits: readonly Record<string, unknown>[],
+  nowMs: number,
+  stale: boolean,
+): Record<string, unknown>[] {
+  return limits.slice(0, 16).flatMap(account => {
+    const windows = (['primaryLimit', 'secondaryLimit'] as const).flatMap(key => {
+      const raw = asRecord(account[key])
+      const used = numericValue(raw?.usedPercent)
+      if (used === null || used < 0 || used > 100) return []
+      const duration = numericValue(raw?.windowDurationMins)
+      const reset = numericValue(raw?.resetsAt)
+      const resetMs = reset !== null && reset > 0 && reset <= 8_640_000_000_000
+        ? reset * 1000 : null
+      const seconds = resetMs !== null && Number.isFinite(nowMs)
+        ? Math.max(0, Math.ceil((resetMs - nowMs) / 1000)) : null
+      const status = stale ? 'stale' : seconds === 0 ? 'awaiting-refresh' : 'observed'
+      const remaining = 100 - used
+      // Retain 15% of the remaining quota as a configurable future policy
+      // reserve; this projection is advisory and cannot authorize spending.
+      const spendable = remaining * 0.85
+      return [{
+        window: key,
+        durationMinutes: duration !== null && duration > 0 ? duration : null,
+        remainingPercent: remaining,
+        remainingTokens: null,
+        resetsAt: resetMs === null ? null : new Date(resetMs).toISOString(),
+        secondsUntilReset: seconds,
+        daysUntilReset: seconds === null ? null : Math.floor(seconds / 86400),
+        hoursAfterDays: seconds === null ? null : Math.floor(seconds % 86400 / 3600),
+        minutesAfterHours: seconds === null ? null : Math.floor(seconds % 3600 / 60),
+        status,
+        suggestedPercentPerDay: status === 'observed' && seconds !== null && seconds > 0
+          ? Math.min(spendable, spendable * 86400 / seconds) : null,
+        suggestedPercentPerHour: status === 'observed' && seconds !== null && seconds > 0
+          ? Math.min(spendable, spendable * 3600 / seconds) : null,
+      }]
+    })
+    return windows.length === 0 ? [] : [{
+      accountKey: account.key ?? null,
+      provider: account.provider ?? null,
+      unit: 'provider-quota-percent-not-tokens',
+      advisoryOnly: true,
+      windows,
+    }]
+  })
+}
+
 function sessionAiSnapshot(
   ctx: Context,
   assembly: RealityAssemblyContext | undefined,
@@ -1490,11 +1545,13 @@ export class RealityContextEngine {
         configurableProviders: runtimeValue?.ai.configurableProviders ?? [],
         accumulatedCost: runtimeValue?.ai.accumulatedCost ?? null,
         accountLimits: runtimeValue?.ai.accountLimits ?? [],
+        quotaBudget: quotaBudgetSnapshot(runtimeValue?.ai.accountLimits ?? [], epoch, runtimeServices.stale),
+        modelIdentityBasis: 'agent-selection-not-provider-execution-receipt',
         tokenMeterAvailable: serviceCapabilities(ctx).includes('tokenMeter'),
         observedAt: runtimeServices.observedAt,
         expiresAt: runtimeServices.expiresAt,
         stale: runtimeServices.stale,
-        rule: 'activeModel and token pressure are scoped to the agent assembling this prompt. Registered provider is not the same as healthy provider. Context headroom is reported only when the active model matches exact cached model metadata; accumulated cost remains unknown unless a provider exposes it.',
+        rule: 'activeModel and token pressure are scoped to the agent assembling this prompt. Registered provider is not the same as healthy provider. Context headroom is reported only when the active model matches exact cached model metadata; accumulated cost remains unknown unless a provider exposes it. Quota pacing is advisory only; never infer exact subscription tokens or a refill from a countdown. Agent selection is not proof of the actual dispatched model or effective provider reasoning.',
       },
       region: {
         locale: intl.locale,
