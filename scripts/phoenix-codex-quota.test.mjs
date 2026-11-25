@@ -41,3 +41,32 @@ test('inspection uses only native Codex flow and removes unrelated account field
   assert.equal(JSON.stringify(result).includes('private'),false)
   assert.equal((await inspectCodexQuota(undefined)).policy,'unknown')
 })
+
+test('forecast uses native window-average as a labelled estimate, not a token count',()=>{
+  const result=projectCodexQuota(telemetry,now)
+  assert.equal(result.fiveHours.forecast.basis,'window-average')
+  assert.equal(result.fiveHours.forecast.observedPercentPerHour,null)
+  assert.ok(result.fiveHours.forecast.planningPercentPerHour>0)
+  assert.equal(result.exactRemainingTokens,null)
+})
+test('same-window consumption and conservative pacing forecast',()=>{
+  const earlier={...telemetry,primaryLimit:{...telemetry.primaryLimit,usedPercent:10,observedAt:now-1801000},secondaryLimit:{...telemetry.secondaryLimit,usedPercent:40,observedAt:now-1801000}}
+  const result=projectCodexQuota(telemetry,now,earlier)
+  assert.equal(result.fiveHours.forecast.basis,'same-window-observations')
+  assert.equal(result.fiveHours.forecast.observedPercentPerHour,60)
+  assert.equal(result.fiveHours.forecast.reserveAtRisk,true)
+  assert.equal(result.forecastRecommendation,'reduce-burn')
+})
+test('stale, duplicate, reversed consumption and reset changes cannot be measured rates',()=>{
+  assert.equal(projectCodexQuota(telemetry,now+121000,telemetry).fiveHours.forecast.basis,'unknown')
+  assert.equal(projectCodexQuota(telemetry,now,telemetry).fiveHours.forecast.observedPercentPerHour,null)
+  for(const previous of [{...telemetry.primaryLimit,usedPercent:70,observedAt:now-1801000},{...telemetry.primaryLimit,resetsAt:telemetry.primaryLimit.resetsAt-18000,observedAt:now-1801000}]){
+    assert.equal(projectCodexQuota(telemetry,now,{...telemetry,primaryLimit:previous}).fiveHours.forecast.observedPercentPerHour,null)
+  }
+})
+test('reserve breach is immediate even with an insufficient observation period',()=>{
+  const result=projectCodexQuota({...telemetry,primaryLimit:w(300,97,5)},now)
+  // The sample predates the window start by one second, so it is not usable for forecasting.
+  assert.equal(result.fiveHours.forecast.basis,'unknown')
+  assert.equal(result.policy,'protect-reserve')
+})
