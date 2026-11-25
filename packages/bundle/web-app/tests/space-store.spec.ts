@@ -228,3 +228,16 @@ it('bounds large revision history without deleting active content or bypassing f
   db.update(forks[0]!.id,1,{deleted:true})
   expect(()=>db.fork(item.id,15,'Overflow')).toThrow(/Límite/)
 })
+
+it('reconciles independent edits while refusing overlapping cells, structural changes and stale missing bases',()=>{
+  const db=store()
+  const content=(a:string,b:string)=>JSON.stringify({columns:['a','b'],rows:[[a,b]]})
+  const item=db.create({kind:'sheet',space:'personal',title:'Sheet',mime:'application/vnd.phoenix.sheet+json',content:content('1','2')})
+  db.update(item.id,1,{content:content('3','2')})
+  const merged=db.reconcileEdit(item.id,1,{title:'Sheet renamed',space:'personal',content:content('1','4')})
+  expect(merged.title).toBe('Sheet renamed')
+  expect(merged.content).toBe(content('3','4'))
+  expect(()=>db.reconcileEdit(item.id,1,{title:'Sheet',space:'personal',content:content('5','2')})).toThrow('CONFLICT')
+  expect(()=>db.reconcileEdit(item.id,1,{title:'Sheet',space:'other',content:content('1','2')})).toThrow('CONFLICT')
+  expect(db.get(item.id)?.revision).toBe(3)
+})
