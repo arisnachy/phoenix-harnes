@@ -47,7 +47,12 @@ export interface NexusModel {
   readonly modelReportedByProvider?: string
 }
 
-/** Price evaluation keeps facts, evidence age, and account eligibility separate. */
+/**
+ * Price evaluation keeps facts, evidence age, and account eligibility separate.
+ * @param model - route price evidence.
+ * @param now - current time in milliseconds.
+ * @returns Evidence-backed price class.
+ */
 export function nexusPriceClass(model: Pick<NexusModel, 'price'>, now: number): NexusPriceClass {
   const price = model.price
   if (price === undefined || price.source === 'catalog-unverified'
@@ -159,7 +164,10 @@ function measuredUnits(event: NexusUsage, unit: NexusQuotaWindow['unit']): numbe
 /** In-memory governor over measured, nonnegative token/request usage. */
 export class NexusQuotaGovernor {
   private readonly events: NexusUsage[] = []
-  /** Add one real usage receipt; no negative balance corrections are inferred. */
+  /**
+ * Add one real usage receipt; no negative balance corrections are inferred.
+ * @param event - locally measured usage.
+ */
   record(event: NexusUsage): void {
     if (!Number.isFinite(event.timestamp)
       || ![event.inputTokens, event.outputTokens, event.requests ?? 1].every(
@@ -168,7 +176,12 @@ export class NexusQuotaGovernor {
     this.events.push({ ...event })
   }
 
-  /** Forecast a rolling or anchored quota window from observed receipts. */
+  /**
+ * Forecast a rolling or anchored quota window from observed receipts.
+ * @param window - quota window definition.
+ * @param now - current time in milliseconds.
+ * @returns A locally observed forecast, not an exact account balance.
+ */
   forecast(window: NexusQuotaWindow, now: number): NexusQuotaForecast {
     if (!Number.isFinite(window.windowMs) || window.windowMs <= 0
       || !Number.isFinite(window.anchorAt)) throw new Error('Invalid Nexus quota window')
@@ -225,7 +238,13 @@ function estimatedUsd(model: NexusModel, input: number, output: number): number 
   return (input * price.inputPerMillion + output * price.outputPerMillion) / 1_000_000
 }
 
-/** Strict fail-closed filtering before deterministic quality/cost/latency ranking. */
+/**
+ * Strict fail-closed filtering before deterministic quality/cost/latency ranking.
+ * @param models - candidate model inventory.
+ * @param task - task requirements and permissions.
+ * @param now - current time in milliseconds.
+ * @returns An eligible route, or undefined when none qualify.
+ */
 export function chooseNexusRoute(
   models: readonly NexusModel[],
   task: NexusTask,
@@ -283,7 +302,14 @@ export interface NexusCalibration {
   readonly totalLatencyMs: number
   readonly totalTokens: number
 }
-/** Record whether an output passed deterministic acceptance checks. */
+/**
+ * Record whether an output passed deterministic acceptance checks.
+ * @param prior - existing calibration observations.
+ * @param accepted - result of independent acceptance checks.
+ * @param latencyMs - measured latency.
+ * @param tokens - observed token consumption.
+ * @returns Updated calibration.
+ */
 export function updateNexusCalibration(
   prior: NexusCalibration | undefined,
   accepted: boolean,
@@ -300,12 +326,20 @@ export function updateNexusCalibration(
     totalTokens: (prior?.totalTokens ?? 0) + tokens,
   }
 }
-/** Prior-weighted success estimate; a single lucky run is not proof. */
+/**
+ * Prior-weighted success estimate; a single lucky run is not proof.
+ * @param calibration - acceptance observations.
+ * @returns Smoothed quality estimate.
+ */
 export function nexusEstimatedQuality(calibration: NexusCalibration): number {
   return (calibration.accepted + 2) / (calibration.attempts + 4)
 }
 
-/** Flatten the actual authorized provider directory without inventing models. */
+/**
+ * Flatten the actual provider directory without inventing models.
+ * @param groups - reported provider and model groups.
+ * @returns Unverified inventory entries pending authorization.
+ */
 export function nexusInventory(groups: readonly {
   readonly id: string
   readonly name?: string
