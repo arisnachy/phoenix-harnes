@@ -1326,6 +1326,25 @@ async function finishAfterParentExit(root, pending, preparedTarget) {
   }
 }
 
+// The watcher is replaced with each active runtime; the supervisor may not
+// be. Run the new janitor from this release so legacy installations migrate
+// automatically, with no manual PowerShell step or dependency on the network.
+function runLiveStorageMigration(root) {
+  if (process.platform !== 'win32' || process.env.PHOENIX_UPDATE_SUPERVISED !== '1') return
+  const runtime = process.env.PHOENIX_RUNTIME_ROOT?.trim()
+  if (!runtime) return
+  const helper = join(runtime, 'scripts', 'phoenix-windows-supervisor.mjs')
+  if (!existsSync(helper)) return
+  const state = durableUpdateState(root)
+  if (!state || !['current', 'updated', 'checking', 'paused', 'available'].includes(state.status)) return
+  const result = spawnSync(process.execPath, [helper, '--live-storage-migration'], {
+    cwd: root, env: process.env, windowsHide: true, stdio: 'inherit', timeout: 120_000,
+  })
+  if (result.error || result.status !== 0) {
+    console.error('[PHOENIX STORAGE] automatic migration deferred; retrying on a later idle sweep.')
+  }
+}
+
 async function watch(root, parentPid) {
   if (UPDATE_MODE === 'off') return
 
@@ -1336,6 +1355,7 @@ async function watch(root, parentPid) {
   let lastNetworkWarningAt = Number.NEGATIVE_INFINITY
   let blockedStorageTarget
   let nextStorageRetryAt = 0
+  let nextLiveStorageMigrationAt = Date.now() + 30_000
   cleanupUpdaterRuntimeStorage(root)
   recoverStaleStagingIndexLock(root)
   clearRefreshRequest(root)
@@ -1351,6 +1371,10 @@ async function watch(root, parentPid) {
   }
 
   while (parentAlive(parentPid)) {
+    if (Date.now() >= nextLiveStorageMigrationAt) {
+      nextLiveStorageMigrationAt = Date.now() + STORAGE_RETRY_MS
+      runLiveStorageMigration(root)
+    }
     const manualRefreshRequested = existsSync(refreshRequestPath(root))
     clearRefreshRequest(root)
     // This check is independent of network availability. If the supervisor
