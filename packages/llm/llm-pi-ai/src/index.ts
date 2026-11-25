@@ -256,6 +256,7 @@ export function apply(ctx: Context, config: Config): void {
     return
   }
 
+  const EMPTY_NEXUS_POLICIES = Object.freeze([])
   const openCodeCatalog = createOpenCodeFreeCatalog()
   let openCodeCatalogRevision = 0
   const codexCatalog = new CodexLiveCatalog({ logger: ctx.logger })
@@ -420,9 +421,9 @@ export function apply(ctx: Context, config: Config): void {
     registeredFacts = facts
   }
   ensureRegistrationFacts()
-  installNexusRuntime(ctx, {
+  const inspectNexus = installNexusRuntime(ctx, {
     profiles,
-    freeRoutePolicies: () => current().nexusFreeRoutes ?? [],
+    freeRoutePolicies: () => current().nexusFreeRoutes ?? EMPTY_NEXUS_POLICIES,
     providerAuthorized: async (provider, profile) => {
       try { return (await resolveApiKey(provider, profile)) !== undefined }
       catch { return false }
@@ -431,6 +432,39 @@ export function apply(ctx: Context, config: Config): void {
       try { return (await codexNativeAccessToken()).length > 0 }
       catch { return false }
     },
+  })
+
+  // Model-facing self-inspection uses only metadata, never credentials or prompt contents.
+  ctx.inject(['tools'], (toolCtx) => {
+    type InspectionRegistry = {
+      tools: { register(definition: {
+        name: string; description: string; parameters: Record<string, unknown>
+        output: { schema: Record<string, unknown>; render(args: unknown, value: unknown): { type: 'text'; text: string }[] }
+        timeoutMs: number
+        execute(args: unknown, exec: { signal: AbortSignal; agent?: { session?: { id?: string } } }): Promise<unknown>
+      }): () => void }
+    }
+    const registry = (toolCtx as unknown as InspectionRegistry).tools
+    registry.register({
+      name: 'phoenix_nexus_inspect',
+      description: 'Read-only PHOENIX self-inspection: actual model inventory, provider authorization status, pricing evidence class, supported reasoning efforts, native Codex 5h/7d percentages and reset times. No generation or paid probe. Results are paginated; unknown data is not zero. Last dispatched route is not a provider-verified response model.',
+      parameters: { type: 'object', additionalProperties: false, properties: {
+        provider: { type: 'string', description: 'Optional exact provider ID' },
+        offset: { type: 'integer', minimum: 0, description: 'Pagination offset; 25 models per page' },
+      } },
+      output: { schema: { type: 'object', additionalProperties: true },
+        render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
+      timeoutMs: 30_000,
+      execute: async (args, exec) => {
+        const query = args !== null && typeof args === 'object' ? args as { provider?: unknown; offset?: unknown } : {}
+        const sessionId = exec.agent?.session?.id
+        return inspectNexus(exec.signal, {
+          ...(typeof query.provider === 'string' ? { provider: query.provider } : {}),
+          ...(typeof query.offset === 'number' ? { offset: query.offset } : {}),
+          ...(typeof sessionId === 'string' ? { sessionId } : {}),
+        })
+      },
+    })
   })
 
   // The bridge is loopback-only. It gives pi-ai the local Authorization marker
