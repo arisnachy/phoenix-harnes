@@ -129,7 +129,7 @@ const MODEL_ENGINE_LABEL: Readonly<Record<ModelEngineFamily, string>> = {
 }
 
 /** Display verified model provenance outside the portrait in message headers.
- * Other providers are visibly called Orión, while the tooltip retains their actual identity.
+ * The header shows the exact serving model; the family label remains in the tooltip.
  */
 export function ModelEngineBadge({ model, provider, placement = 'avatar' }: {
   model?: string | undefined
@@ -157,7 +157,7 @@ export function ModelEngineBadge({ model, provider, placement = 'avatar' }: {
       </svg>
     )}
     <span className={css.engineMarkText}>{modelEngineMark(model, provider)}</span>
-    {placement === 'header' && <span className={css.engineName}>{label}</span>}
+    {placement === 'header' && <span className={css.engineName}>{model}</span>}
   </span>
 }
 
