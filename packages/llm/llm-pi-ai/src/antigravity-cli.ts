@@ -1,13 +1,14 @@
 /** Account-backed Gemini model route through the official Antigravity CLI. No token extraction. */
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
 import { credentialKey } from '@phoenix-ai/dsh-credentials'
 import { CallId, LlmAdapter, LlmError } from '@phoenix-ai/dsh-llm'
 import type { GenerateOptions, LlmModelInfo, StreamChunk } from '@phoenix-ai/dsh-llm'
+import { antigravityExecutable, antigravityInstalled, ensureAntigravityInstalled, installAntigravity } from './antigravity-install.ts'
 
 export const GOOGLE_ACCOUNT_PROVIDER = 'google-account'
 export const GOOGLE_ACCOUNT_KEY = credentialKey('llm-pi-ai', GOOGLE_ACCOUNT_PROVIDER)
@@ -47,17 +48,12 @@ export function googleAccountEnvironment(env: NodeJS.ProcessEnv): NodeJS.Process
   return Object.fromEntries(Object.entries(env).filter(([key]) => !['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'AGY_ADC_AUTH', 'GOOGLE_APPLICATION_CREDENTIALS'].includes(key.toUpperCase())))
 }
 
-function executable(): string {
-  const local = process.env.LOCALAPPDATA
-  const installed = local === undefined ? undefined : join(local, 'agy', 'bin', 'agy.exe')
-  return installed !== undefined && existsSync(installed) ? installed : 'agy'
-}
 
 /** Send sensitive prompts through stdin, never process command arguments. */
 export function runGoogleCli(args: readonly string[], input = '', signal?: AbortSignal): Promise<string> {
   assertGoogleAccountMode()
   return new Promise((resolve, reject) => {
-    const child = spawn(executable(), [...args], {
+    const child = spawn(antigravityExecutable(), [...args], {
       shell: false, windowsHide: true, cwd: tmpdir(), stdio: ['pipe', 'pipe', 'pipe'],
       env: googleAccountEnvironment(process.env),
       ...(signal === undefined ? {} : { signal }),
@@ -236,16 +232,31 @@ export function registerGoogleAccountCli(ctx: Context): void {
     authorized.authorization.registerFlow({
       key: GOOGLE_ACCOUNT_KEY,
       label: 'Google Antigravity CLI (cuenta Google)',
-      methods: [{ id: 'cli', label: 'Verificar acceso con Google' }],
+      methods: [{ id: 'cli', label: 'Instalar y conectar cuenta Google' }],
       async inspect() {
+        if (!await antigravityInstalled().catch(() => false)) return undefined
         const stored = await authorized.credentials.readRecord(GOOGLE_ACCOUNT_KEY)
         return stored === undefined ? undefined : {
           kind: 'account', provider: 'Google Antigravity CLI', accountType: 'google-native-cli',
         }
       },
       async run(session) {
+        assertGoogleAccountMode()
+        session.notify({ message: 'Comprobando instalación de Antigravity CLI…' })
+        await ensureAntigravityInstalled({
+          installed: () => antigravityInstalled(session.signal),
+          consent: async () => {
+            const answer = await session.prompt({ kind: 'text', message: 'Antigravity CLI no está instalada. PHOENIX descargará y ejecutará el instalador oficial de Google en tu cuenta de usuario. Escribe INSTALAR para autorizarlo.', placeholder: 'INSTALAR', signal: session.signal })
+            return answer.trim().toUpperCase() === 'INSTALAR'
+          },
+          install: async () => {
+            session.notify({ message: 'Instalando Antigravity CLI desde Google…' })
+            await installAntigravity(session.signal)
+          },
+        })
+        const exe = antigravityExecutable()
         session.notify({
-          message: 'Ejecuta agy en PowerShell, inicia sesión en Google desde el navegador y regresa aquí. Nunca pegues tokens ni contraseñas.',
+          message: 'CLI instalada y verificada. Abre una terminal nueva, ejecuta ' + exe + ' (entre comillas si contiene espacios) e inicia sesión con Google. En PowerShell utiliza & antes de una ruta entre comillas. Regresa aquí para verificar el modelo. Nunca pegues tokens ni contraseñas.',
           url: 'https://antigravity.google/docs/install/',
         })
         const answer = await session.prompt({
