@@ -9,7 +9,7 @@ import { NexusReceiptStore } from './nexus-receipts.ts'
 import type { Context } from '@phoenix-ai/cordis'
 import { LlmAdapter, LlmError } from '@phoenix-ai/dsh-llm'
 import type { GenerateOptions, LlmModelInfo, StreamChunk, LlmCallConfig } from '@phoenix-ai/dsh-llm'
-import type { ResolvedPiAiProviderProfile } from './config.ts'
+import type { NexusFreeRoutePolicy, ResolvedPiAiProviderProfile } from './config.ts'
 import {
   chooseNexusRoute, nexusPriceClass, openRouterPriceEvidence, nexusEstimatedQuality,
   type NexusModel, type NexusPriceEvidence, type NexusRoute, type NexusUsage,
@@ -22,6 +22,25 @@ export const NEXUS_MODEL = 'nexus-auto'
 const CATALOG_AGE_MS = 300_000
 const OPENROUTER_PRICE_URL = 'https://openrouter.ai/api/v1/models'
 const FAILURE_COOLDOWN_MS = 180_000
+const MAX_POLICY_AGE_MS = 7 * 86_400_000
+
+/** A manual attestation is restricted to an exact explicit HTTPS endpoint and model. */
+export function nexusOperatorPolicy(policies: readonly NexusFreeRoutePolicy[], provider: string, model: string,
+  baseURL: string | undefined, now: number): NexusFreeRoutePolicy | undefined {
+  if (baseURL === undefined || !Number.isFinite(now) || /^(?:phoenix-|ollama|openai-codex|openrouter|opencode-free)/iu.test(provider)) return undefined
+  let endpoint: URL
+  try { endpoint = new URL(baseURL) } catch { return undefined }
+  if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password || endpoint.search || endpoint.hash) return undefined
+  const matches = policies.filter(p => p.provider === provider && p.model === model)
+  if (matches.length !== 1) return undefined
+  const p = matches[0]!
+  if (p.baseURL.replace(/\/+$/u, '') !== baseURL.replace(/\/+$/u, '')
+    || p.allChargesZero !== true || p.noOverage !== true || p.supportsTools !== true
+    || !Number.isSafeInteger(p.contextWindow) || p.contextWindow < 8_192
+    || !Number.isSafeInteger(p.verifiedAt) || !Number.isSafeInteger(p.expiresAt)
+    || p.verifiedAt > now || p.expiresAt <= now || p.expiresAt - p.verifiedAt > MAX_POLICY_AGE_MS) return undefined
+  return p
+}
 
 /** A non-executable selector advertises Nexus without claiming model capabilities. */
 export class NexusSelectorAdapter extends LlmAdapter {
@@ -320,6 +339,7 @@ interface NexusAgentRouteState {
 /** Runtime collaborators are supplied from the existing authorized Host. */
 export interface NexusRuntimeOptions {
   readonly profiles: () => ReadonlyMap<string, ResolvedPiAiProviderProfile>
+  readonly freeRoutePolicies?: () => readonly NexusFreeRoutePolicy[]
   readonly nativeCodexAuthorized: () => Promise<boolean>
   readonly providerAuthorized: (provider: string, profile: ResolvedPiAiProviderProfile) => Promise<boolean>
 }
@@ -339,6 +359,8 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
   let quotaReadAt = 0
   let modelsCache: readonly NexusModel[] = []
   let catalogReadAt = 0
+  let catalogProfiles: ReadonlyMap<string, ResolvedPiAiProviderProfile> | undefined
+  let catalogPolicies: readonly NexusFreeRoutePolicy[] | undefined
   let catalogInFlight: Promise<readonly NexusModel[]> | undefined
   const routeKey = (provider: string, model: string) => provider + '/' + model
 
@@ -361,13 +383,16 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
   }
 
   const listAuthorizedModels = async (now: number): Promise<readonly NexusModel[]> => {
-    if (now < catalogReadAt + 60_000 && modelsCache.length > 0) return modelsCache
+    const currentProfiles = options.profiles()
+    const currentPolicies = options.freeRoutePolicies?.()
+    if (now < catalogReadAt + 60_000 && modelsCache.length > 0
+      && catalogProfiles === currentProfiles && catalogPolicies === currentPolicies) return modelsCache
     if (catalogInFlight !== undefined) return catalogInFlight
     const read = async (): Promise<readonly NexusModel[]> => {
-      const authorized = options.profiles()
+      const authorized = currentProfiles
       const providers = ctx.llm.listProviders().filter(entry =>
         entry.id !== NEXUS_PROVIDER && entry.id !== 'phoenix-local' && authorized.has(entry.id))
-      await prices.refresh(now)
+      if (providers.some(p => p.id === 'openrouter')) await prices.refresh(now)
       const batches = await Promise.all(providers.map(async (provider) => {
         let advertised: readonly LlmModelInfo[]
         try { advertised = await ctx.llm.listModels(provider.id) } catch { return [] }
@@ -379,8 +404,12 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
         return advertised.map((model) => {
           const key = routeKey(provider.id, model.id)
           // Provider names are not price evidence; unverified catalogs stay unknown.
-          const evidence = officialOpenRouter ? prices.get(model.id) : undefined
-          const contextWindow = officialOpenRouter ? prices.contextWindow(model.id) : undefined
+          const policy = nexusOperatorPolicy(currentPolicies ?? [], provider.id, model.id, profile.baseURL, now)
+          const evidence: NexusPriceEvidence | undefined = officialOpenRouter ? prices.get(model.id)
+            : policy === undefined ? undefined : { source: 'operator-confirmed', observedAt: policy.verifiedAt,
+              expiresAt: policy.expiresAt, inputPerMillion: 0, outputPerMillion: 0,
+              allChargesVerified: true, accountEligible: true }
+          const contextWindow = officialOpenRouter ? prices.contextWindow(model.id) : policy?.contextWindow
           return {
             provider: provider.id,
             id: model.id,
@@ -390,7 +419,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
             online: (blockedUntil.get(key) ?? 0) <= now,
             local: false,
             supportsImages: model.inputModalities?.includes('image') === true,
-            supportsTools: officialOpenRouter && prices.supportsTools(model.id),
+            supportsTools: officialOpenRouter ? prices.supportsTools(model.id) : policy?.supportsTools === true,
             ...(evidence === undefined ? {} : { price: evidence }),
             ...(contextWindow === undefined ? {} : { contextWindow }),
           } satisfies NexusModel
@@ -398,6 +427,8 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       }))
       modelsCache = batches.flat()
       catalogReadAt = now
+      catalogProfiles = currentProfiles
+      catalogPolicies = currentPolicies
       return modelsCache
     }
     const promise = read()
@@ -445,16 +476,17 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       let eligible = authenticated
       if (route.provider === 'openai-codex') {
         const quota = await getQuota(now, payload.signal)
-        eligible = eligible && nexusCodexFreshReserve(quota,now) && (complex||nexusCodexWithinPace(quota,now)) && await options.nativeCodexAuthorized()
+        eligible = eligible && nexusCodexFreshReserve(quota,Date.now()) && (complex||nexusCodexWithinPace(quota,Date.now())) && await options.nativeCodexAuthorized()
       } else {
         const inventory = await listAuthorizedModels(now)
         const model = inventory.find(item => item.provider === route.provider && item.id === route.model)
         eligible = eligible && model !== undefined && model.online && model.supportsTools === true
           && (!hasImage || model.supportsImages === true)
-          && (model.contextWindow === undefined || model.contextWindow >= 8_192)
-          && nexusPriceClass(model, now) === 'verified-free'
-          && route.provider === 'openrouter' && (profile?.baseURL === undefined
+          && model.contextWindow !== undefined && model.contextWindow >= 8_192
+          && nexusPriceClass(model, Date.now()) === 'verified-free'
+          && (route.provider === 'openrouter' ? (profile?.baseURL === undefined
             || profile.baseURL.replace(/\/+$/u, '') === 'https://openrouter.ai/api/v1')
+            : nexusOperatorPolicy(options.freeRoutePolicies?.() ?? [], route.provider, route.model, profile?.baseURL, Date.now()) !== undefined)
       }
       if (!eligible) {
         state.excluded.add(routeKey(route.provider, route.model))
@@ -485,7 +517,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       minimumQuality: 0,
       allowPaid: false,
       allowLocal: false,
-    }, now)
+    }, Date.now())
     let route = complex ? undefined : free
     if (complex || free === undefined) {
       // A native ChatGPT/Codex seat is a user-existing subscription, not a new
@@ -495,7 +527,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
         && (!hasImage || model.supportsImages === true)
         && !state.excluded.has(routeKey(model.provider, model.id))).map(model => model.id)
       const candidate = nexusCodexFallback(ids, complex)
-      const withinBudget = nexusCodexFreshReserve(quota,now) && (complex || nexusCodexWithinPace(quota,now))
+      const withinBudget = nexusCodexFreshReserve(quota,Date.now()) && (complex || nexusCodexWithinPace(quota,Date.now()))
       if (candidate !== undefined && withinBudget && await options.nativeCodexAuthorized()) {
         route = { provider: 'openai-codex', model: candidate, priceClass: 'unknown',
           reason: 'existing authorized Codex subscription; model quality or tool requirements' }
@@ -511,6 +543,16 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     if (profile === undefined || !await options.providerAuthorized(route.provider, profile).catch(() => false)) {
       throw new LlmError('Nexus route authorization changed before dispatch', 'NEXUS_NO_ELIGIBLE_ROUTE')
     }
+    if (route.provider !== 'openai-codex' && route.provider !== 'openrouter'
+      && nexusOperatorPolicy(options.freeRoutePolicies?.() ?? [], route.provider, route.model, profile.baseURL, Date.now()) === undefined) {
+      throw new LlmError('Nexus free-route attestation changed before dispatch', 'NEXUS_NO_ELIGIBLE_ROUTE')
+    }
+    if (route.provider === 'openrouter' && ((profile.baseURL !== undefined
+      && profile.baseURL.replace(/\/+$/u, '') !== 'https://openrouter.ai/api/v1')
+      || nexusPriceClass({ price: prices.get(route.model) }, Date.now()) !== 'verified-free')) {
+      throw new LlmError('Nexus OpenRouter price or endpoint changed before dispatch', 'NEXUS_NO_ELIGIBLE_ROUTE')
+    }
+    payload.signal.throwIfAborted()
     state.routed = route
     if (activeSessions.size >= 512) {
       const oldest = activeSessions.keys().next().value
