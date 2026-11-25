@@ -191,6 +191,20 @@ export function nexusExactResponseQuality(samples: readonly { exactResponseAccep
     totalLatencyMs: 0, totalTokens: 0 })
 }
 
+/** Independently solve a narrowly scoped integer operation without executing code. */
+export function nexusNumericResponseTarget(text: string): string | undefined {
+  const m = /^(?:calculate|compute|calcula|calcular|cu[aá]nto es)\s+(-?\d{1,7})\s*([+\-*×])\s*(-?\d{1,7})\s*(?:\?|\.)?\s*(?:(?:answer with only the number|responde solo con el n[uú]mero)\.?|)$/iu.exec(text.trim())
+  if (!m) return undefined
+  const a = Number(m[1]), b = Number(m[3])
+  const result = m[2] === '+' ? a + b : m[2] === '-' ? a - b : a * b
+  return Number.isSafeInteger(result) ? String(result) : undefined
+}
+
+/** Grade arithmetic independently of instruction-following observations. */
+export function nexusNumericResponseQuality(samples: readonly { numericResponseAccepted?: boolean }[]): number | undefined {
+  return nexusExactResponseQuality(samples.map(s => s.numericResponseAccepted === undefined ? {} : { exactResponseAccepted: s.numericResponseAccepted }))
+}
+
 type NexusSessionEvent = { readonly type: string; readonly data: unknown }
 type NexusMessagePart = { readonly type?: string; readonly text?: unknown }
 
@@ -351,7 +365,7 @@ export interface NexusRuntimeOptions {
  */
 export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions): void {
   const receipts = new NexusReceiptStore(dshHomePath('nexus-receipts-v1.json'))
-  const activeSessions = new Map<string, { key: string; exact?: string }>()
+  const activeSessions = new Map<string, { key: string; exact?: string; numeric?: string }>()
   const prices = new NexusOpenRouterPrices()
   const perAgent = new WeakMap<object, NexusAgentRouteState>()
   const blockedUntil = new Map<string, number>()
@@ -457,8 +471,9 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     const complex = text.length === 0 || nexusRequiresStrongModel(text)
     const hasImage = nexusTurnHasHumanImage(agent.session.events, payload.turn)
     const exact = !hasImage ? nexusExactResponseTarget(text) : undefined
+    const numeric = !hasImage && exact === undefined ? nexusNumericResponseTarget(text) : undefined
     const activeRoute = (route: NexusRoute) => ({ key: routeKey(route.provider, route.model),
-      ...(exact === undefined ? {} : { exact }) })
+      ...(exact === undefined ? {} : { exact }), ...(numeric === undefined ? {} : { numeric }) })
     const buildRoute=async(route:NexusRoute):Promise<LlmCallConfig>=>{
       const { serviceTier: _tier, reasoningEffort: _effort, ...base }=selected
       let reasoningEffort:LlmCallConfig['reasoningEffort']
@@ -501,7 +516,8 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       const samples = observations.filter(r => r.provider === model.provider && r.model === model.id)
       if (samples.length === 0) return model
       const failures = samples.filter(r => !r.succeeded).length
-      const quality = exact === undefined ? undefined : nexusExactResponseQuality(samples)
+      const quality = exact !== undefined ? nexusExactResponseQuality(samples)
+        : numeric !== undefined ? nexusNumericResponseQuality(samples) : undefined
       return { ...model, observations: samples.length,
         ...(quality === undefined ? {} : { observedQuality: quality }),
         errorRate: (failures + 1) / (samples.length + 5),
@@ -592,6 +608,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       let succeeded = false
       let terminal = false
       let exactResponseAccepted: boolean | undefined
+      let numericResponseAccepted: boolean | undefined
       let answer = ''
       let overflow = false
       try {
@@ -603,7 +620,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
                 + (chunk.usage.cacheWriteTokens ?? 0),
               outputTokens: chunk.usage.outputTokens,
             }
-          } else if (active.exact !== undefined && chunk.type === 'text-delta') {
+          } else if ((active.exact !== undefined || active.numeric !== undefined) && chunk.type === 'text-delta') {
             if (answer.length + chunk.text.length > 512) overflow = true
             else if (!overflow) answer += chunk.text
           } else if (chunk.type === 'finish') {
@@ -611,6 +628,9 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
             succeeded = chunk.reason.kind === 'stop' || chunk.reason.kind === 'tool-calls'
             if (active.exact !== undefined && chunk.reason.kind === 'stop') {
               exactResponseAccepted = !overflow && answer.trim() === active.exact
+            }
+            if (active.numeric !== undefined && chunk.reason.kind === 'stop') {
+              numericResponseAccepted = !overflow && answer.trim() === active.numeric
             }
           }
           yield chunk
@@ -623,6 +643,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
             usageReported: usage !== undefined,
             latencyMs: Math.max(0, Date.now() - started), succeeded,
             ...(exactResponseAccepted === undefined ? {} : { exactResponseAccepted }),
+            ...(numericResponseAccepted === undefined ? {} : { numericResponseAccepted }),
           }).catch(() => { ctx.logger.warn('Nexus receipt persistence failed; no balance was inferred') })
         }
       }
