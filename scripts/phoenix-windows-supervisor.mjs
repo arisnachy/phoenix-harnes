@@ -868,7 +868,7 @@ function windowsProcessReferences(paths) {
   return new Set(result.stdout.split(/\r?\n/u).filter(Boolean).map(runtimePathKey))
 }
 
-function cleanupDetachedLegacyStorage(keep, reportBusy = false) {
+function cleanupDetachedLegacyStorage(keep, reportBusy = false, liveMigration = false) {
   if (!reportBusy && Date.now() < nextDetachedStorageSweepAt) return
   nextDetachedStorageSweepAt = Date.now() + DETACHED_STORAGE_SWEEP_INTERVAL_MS
   const registered = registeredWorktreePaths()
@@ -886,6 +886,7 @@ function cleanupDetachedLegacyStorage(keep, reportBusy = false) {
     return
   }
   for (const { path: candidate, kind } of candidates) {
+    if (liveMigration && !liveStorageMigrationAllowed()) return
     const key = runtimePathKey(candidate)
     const retiredOwner = retiredOwners.get(key)
     if (busyPaths.has(key) || keep.has(key)
@@ -905,7 +906,46 @@ function cleanupDetachedLegacyStorage(keep, reportBusy = false) {
   }
 }
 
-function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false, reapDormantStage = false } = {}) {
+// Called by the updater loaded from the NEW runtime, even when the long-lived
+// supervisor is still executing an older release. Require a healthy current
+// Host and an idle update transaction before touching any disposable storage.
+function liveStorageMigrationAllowed() {
+  if (process.platform !== 'win32' || process.env.PHOENIX_UPDATE_SUPERVISED !== '1'
+    || !officialPhoenixRemote()) return false
+  const expected = process.env.PHOENIX_RUNTIME_ROOT?.trim()
+  if (!expected || runtimePathKey(expected) !== runtimePathKey(supervisorSourceRoot)) return false
+  try {
+    const heartbeatPath = gitControlPath(SUPERVISOR_HEARTBEAT_FILE)
+    const heartbeat = JSON.parse(readFileSync(heartbeatPath, 'utf8'))
+    const age = Date.now() - Date.parse(heartbeat.at)
+    if (heartbeat.schema !== 1 || !Number.isFinite(age) || age < 0 || age > 30_000
+      || !Number.isInteger(heartbeat.hostPid) || heartbeat.hostPid <= 0
+      || !Number.isInteger(heartbeat.supervisorPid) || heartbeat.supervisorPid <= 0
+      || runtimePathKey(heartbeat.runtimeRoot) !== runtimePathKey(expected)) return false
+    process.kill(heartbeat.hostPid, 0)
+    process.kill(heartbeat.supervisorPid, 0)
+    const state = readUpdateState()
+    if (!state || !['current', 'updated', 'checking', 'paused', 'available'].includes(state.status)) return false
+    for (const marker of [PREPARED_FILE, RESTART_REQUEST_FILE, HOST_RESTART_REQUEST_FILE]) {
+      const path = gitControlPath(marker)
+      if (!path || existsSync(path)) return false
+    }
+    const activePath = activeRuntimePath()
+    if (!activePath) return false
+    const active = readActiveRuntimeRecord()
+    if (active) {
+      if (runtimePathKey(active.path) !== runtimePathKey(expected)
+        || !Number.isFinite(Date.parse(active.healthyAt ?? ''))
+        || gitValue(expected, ['rev-parse', 'HEAD']) !== active.target) return false
+    } else if (existsSync(activePath) || runtimePathKey(expected) !== runtimePathKey(root)) return false
+    return sameRepository(expected)
+  } catch {
+    return false
+  }
+}
+
+function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false, reapDormantStage = false, liveMigration = false } = {}) {
+  if (liveMigration && !liveStorageMigrationAllowed()) return
   const keep = new Set([root, supervisorSourceRoot, ...extraKeep.filter(Boolean)].map(runtimePathKey))
   const active = readActiveRuntimeRecord()
   if (active?.path !== undefined) keep.add(runtimePathKey(active.path))
@@ -933,6 +973,7 @@ function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false, reapDorma
     active !== undefined && !Number.isFinite(Date.parse(active.healthyAt ?? '')) ? 1 : 0)
   let retainedInactiveRuntimes = 0
   for (const candidate of inactiveRuntimes) {
+    if (liveMigration && !liveStorageMigrationAllowed()) return
     // Retain a rollback copy only during unconfirmed activation or if configured.
     if (retainedInactiveRuntimes < inactiveBackupLimit) {
       retainedInactiveRuntimes += 1
@@ -943,6 +984,8 @@ function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false, reapDorma
       const references = windowsProcessReferences([candidate])
       if (references === undefined || references.has(runtimePathKey(candidate))) continue
     }
+    if (liveMigration && !liveStorageMigrationAllowed()) return
+    if (runtimeProtectedByOwningCheckout(candidate)) continue
     if (!removeManagedWorktree(candidate, registeredWorktrees, reportBusy)) continue
     removedRuntimes += 1
     console.error(`[PHOENIX UPDATE] removed obsolete isolated runtime: ${candidate}`)
@@ -950,6 +993,7 @@ function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false, reapDorma
 
   const currentStage = runtimePathKey(persistentStage())
   for (const candidate of stageDirectoriesForCleanup()) {
+    if (liveMigration && !liveStorageMigrationAllowed()) return
     const key = runtimePathKey(candidate)
     // A prepared or compiling stage must survive, but once the replacement
     // Host is verified the consumed build tree is disposable. The janitor
@@ -965,6 +1009,8 @@ function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false, reapDorma
         if (references === undefined || references.has(key)) continue
       }
     } else if (managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS) continue
+    if (liveMigration && !liveStorageMigrationAllowed()) return
+    if (stageProtectedByOwningCheckout(candidate)) continue
     if (!removeManagedWorktree(candidate, registeredWorktrees, reportBusy)) continue
     removedStages += 1
     console.error(`[PHOENIX UPDATE] removed stale updater staging worktree: ${candidate}`)
@@ -988,7 +1034,7 @@ function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false, reapDorma
       + `inactive runtime backups kept: ${String(retainedInactiveRuntimes)}.`,
     )
   }
-  cleanupDetachedLegacyStorage(keep, reportBusy)
+  if (!liveMigration || liveStorageMigrationAllowed()) cleanupDetachedLegacyStorage(keep, reportBusy, liveMigration)
 }
 
 // A busy orphan must not make the optional rollback cushion permanently block
@@ -2169,6 +2215,15 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint, 
       return { kind: 'safe-restart', lastObservedFingerprint }
     }
   }
+}
+
+if (process.argv.includes('--live-storage-migration')) {
+  if (!liveStorageMigrationAllowed()) process.exit(0)
+  cleanupObsoleteRuntimes([supervisorSourceRoot], {
+    reapDormantStage: true,
+    liveMigration: true,
+  })
+  process.exit(0)
 }
 
 if (process.argv.includes('--cleanup-storage')) {
