@@ -61,6 +61,7 @@ export const zh = {
   'image.dropDesc': '最多 {count} 张，每张 {size}',
   'image.dropBlocked': '当前无法添加图片',
   'image.captureScreen': '截取共享屏幕（仅草稿）',
+  'image.captureCamera': '拍摄照片（仅草稿）',
   'image.cancelCapture': '取消截取',
   'image.captureFailed': '未能截取屏幕，请重试。',
   'image.pending': '待发送图片',
@@ -300,6 +301,7 @@ export const en = {
   'image.dropDesc': 'Up to {count} images, {size} each',
   'image.dropBlocked': 'Images cannot be added right now',
   'image.captureScreen': 'Capture screen (draft only)',
+  'image.captureCamera': 'Camera photo (draft only)',
   'image.cancelCapture': 'Cancel capture',
   'image.captureFailed': 'No screen image captured. Try again.',
   'image.pending': 'Pending images',
@@ -488,6 +490,7 @@ export const en = {
 export const es = {
   ...en,
   'image.captureScreen': 'Capturar pantalla (solo borrador)',
+  'image.captureCamera': 'Foto de cámara (solo borrador)',
   'image.cancelCapture': 'Cancelar captura',
   'image.captureFailed': 'No se capturó la pantalla. Inténtalo de nuevo.',
   'context.tools': 'Herramientas',
