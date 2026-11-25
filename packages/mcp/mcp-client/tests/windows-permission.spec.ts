@@ -3,6 +3,7 @@ import {
   authorizeWindowsMcpCall,
   windowsMcpPreflight,
 } from '../src/windows-permission.ts'
+import type { WindowsMcpQuestionService } from '../src/windows-permission.ts'
 
 const agent = { id: 'conversation-1' }
 const ALLOW = 'Autorizar una sola acción'
@@ -10,7 +11,7 @@ const QUESTION_ID = 'phoenix-windows-mcp-one-action'
 
 function questions(answer: 'allow' | 'deny' | 'automatic' = 'allow') {
   return {
-    ask: vi.fn(async () => ({
+    ask: vi.fn(async (_request: Parameters<WindowsMcpQuestionService['ask']>[0]) => ({
       ...(answer === 'automatic' ? { automatic: true } : {}),
       answers: [{
         id: QUESTION_ID,
