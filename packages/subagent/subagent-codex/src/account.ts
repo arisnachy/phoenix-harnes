@@ -63,6 +63,8 @@ export interface CodexAccountSnapshot {
   readonly account: unknown
   readonly requiresOpenaiAuth: boolean
   readonly rateLimits?: unknown
+  /** Earliest sampling time of the native account snapshot; not refreshed on cache reads. */
+  readonly quotaObservedAt?: number
   readonly usage?: unknown
   readonly apps?: unknown
   readonly installedApps?: unknown
@@ -722,7 +724,7 @@ export function registerCodexAccountFlow(
   const inspectSnapshot = async (signal: AbortSignal): Promise<CodexAccountSnapshot> => {
     const now = Date.now()
     if (cached !== undefined && now - cached.at < ACCOUNT_INSPECTION_TTL_MS) {
-      return withObservedCodexRateLimits(cached.snapshot, cached.probeStartedAt)
+      return {...withObservedCodexRateLimits(cached.snapshot, cached.probeStartedAt),quotaObservedAt:cached.probeStartedAt}
     }
 
     if (inFlightSnapshot === undefined
@@ -737,9 +739,10 @@ export function registerCodexAccountFlow(
       const probeStartedAt = Date.now()
       const job = readCodexAccountSnapshot(ctx, config, probeSignal).then(
         (snapshot) => {
-          cached = { snapshot, at: Date.now(), probeStartedAt }
+          const sampled={...snapshot,quotaObservedAt:probeStartedAt}
+          cached = { snapshot:sampled, at: Date.now(), probeStartedAt }
           failed = undefined
-          return snapshot
+          return sampled
         },
         (error: unknown) => {
           failed = { error, at: Date.now() }
@@ -760,7 +763,7 @@ export function registerCodexAccountFlow(
     // behind a refresh/backfill. Serve the last sanitized snapshot immediately
     // while the single shared native probe refreshes it in the background.
     if (cached !== undefined) {
-      return withObservedCodexRateLimits(cached.snapshot, cached.probeStartedAt)
+      return {...withObservedCodexRateLimits(cached.snapshot, cached.probeStartedAt),quotaObservedAt:cached.probeStartedAt}
     }
     if (inFlightSnapshot !== undefined) {
       return await waitForSharedSnapshot(inFlightSnapshot, signal)
@@ -781,7 +784,15 @@ export function registerCodexAccountFlow(
     methods: [{ id: 'oauth', label: 'Sign in with ChatGPT' }],
     async inspect(signal) {
       try {
-        return codexAccountTelemetry(await inspectSnapshot(signal ?? new AbortController().signal))
+        const snapshot=await inspectSnapshot(signal ?? new AbortController().signal)
+        const telemetry=codexAccountTelemetry(snapshot)
+        // Never renew the age of cached data just because it was read again.
+        const observedAt=snapshot.quotaObservedAt
+        if(telemetry===undefined||observedAt===undefined)return telemetry
+        return {...telemetry,
+          ...(telemetry.primaryLimit===undefined?{}:{primaryLimit:{...telemetry.primaryLimit,observedAt}}),
+          ...(telemetry.secondaryLimit===undefined?{}:{secondaryLimit:{...telemetry.secondaryLimit,observedAt}}),
+        }
       } catch (error: unknown) {
         // Account/quota inspection powers UI telemetry only. A transient Codex
         // app-server/RPC timeout must never fail PHOENIX boot or tear down Host.
