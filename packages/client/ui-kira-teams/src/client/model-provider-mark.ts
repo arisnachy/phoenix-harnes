@@ -3,7 +3,7 @@
  * @module @phoenix-ai/dsh-client-ui-kira-teams/model-provider-mark
  */
 import {
-  siAnthropic, siCloudflare, siDeepseek, siGithubcopilot, siGooglegemini,
+  siAlibabacloud, siKimi, siAnthropic, siCloudflare, siDeepseek, siGithubcopilot, siGooglegemini,
   siHuggingface, siMeta, siMinimax, siMistralai, siNvidia, siOllama,
   siOpencode, siOpenrouter, siPerplexity, siQwen, siVercel, siXiaomi,
   siZdotai, siMoonshotai,
@@ -36,8 +36,10 @@ const marks: readonly [RegExp, EngineProviderMark][] = [
   [/^huggingface(?:$|[-_/])/u, mark(siHuggingface)],
   [/^minimax(?:$|[-_/])/u, mark(siMinimax)],
   [/^perplexity(?:$|[-_/])/u, mark(siPerplexity)],
-  [/^(?:github-copilot|copilot)(?:$|[-_/])/u, mark(siGithubcopilot)],
-  [/^(?:moonshot|kimi)(?:$|[-_/])/u, mark(siMoonshotai)],
+  [/^(?:github-copilot|githubcopilot|copilot)(?:$|[-_/])/u, mark(siGithubcopilot)],
+  [/^moonshot(?:$|[-_/])/u, mark(siMoonshotai)],
+  [/^kimi(?:$|[-_/])/u, mark(siKimi)],
+  [/^(?:alibaba|alibabacloud)(?:$|[-_/])/u, mark(siAlibabacloud)],
   [/^xiaomi(?:$|[-_/])/u, mark(siXiaomi)],
   [/^(?:zai|z[.]ai)(?:$|[-_/])/u, mark(siZdotai)],
   [/^vercel(?:$|[-_/])/u, mark(siVercel)],
