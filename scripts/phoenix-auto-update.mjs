@@ -589,20 +589,10 @@ function updaterRegisteredWorktrees(root) {
   return paths
 }
 
-function removeOrphanedUpdaterRuntime(path) {
-  try {
-    rmSync(path, { recursive: true, force: true, maxRetries: 2, retryDelay: 250 })
-    return !existsSync(path)
-  } catch {
-    return false
-  }
-}
-
 function removeUpdaterRuntime(root, path, registeredWorktrees) {
   const key = runtimePathKey(path)
-  if (registeredWorktrees !== undefined && !registeredWorktrees.has(key)) {
-    return removeOrphanedUpdaterRuntime(path)
-  }
+  if (registeredWorktrees === undefined || !registeredWorktrees.has(key)
+    || existsSync(join(path, '.phoenix-keep')) || !sameRepositoryWorktree(root, path)) return false
 
   const removed = git(root, ['-c', 'core.longpaths=true', 'worktree', 'remove', '--force', path], {
     allowFailure: true,
@@ -610,10 +600,7 @@ function removeUpdaterRuntime(root, path, registeredWorktrees) {
   if (removed.ok || !existsSync(path)) return true
 
   const refreshed = updaterRegisteredWorktrees(root)
-  if (/(?:is )?not a working tree/iu.test(removed.stderr)
-    || (refreshed !== undefined && !refreshed.has(key))) {
-    return removeOrphanedUpdaterRuntime(path)
-  }
+  if (refreshed !== undefined && !refreshed.has(key)) return false
   return false
 }
 
