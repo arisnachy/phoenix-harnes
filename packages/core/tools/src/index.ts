@@ -1101,6 +1101,7 @@ export class ToolRuntime extends Service {
         const sdk = render(this.sdkSchemas(context.scope, context.agent))
         const view = this.view(context.scope)
         if (!view.visible.has(TOOL_SEARCH_NAME)
+          || (mode === 'code' && !localDiscovery(context.scope))
           || (!localDiscovery(context.scope) && !this.deferredMcpCatalog(view.visible.values(), context.scope))) return sdk
         // Full signatures appear on discovery, but code bindings remain
         // callable and authorization still happens on every execution.
@@ -1814,7 +1815,10 @@ export class ToolRuntime extends Service {
   /** Project admitted/discovered MCP tools, retaining full run_code bindings. */
   private sdkSchemas(scope?: ScopeKey, agent?: Agent): ToolSdkSchema[] {
     const view = this.view(scope)
-    return this.modelVisibleDefinitions(this.promptVisibleDefinitions(view, scope), agent)
+    const definitions = this.modeFor(scope) === 'code' && !localDiscovery(scope)
+      ? [...view.visible.values()].filter(definition => definition.name !== TOOL_SEARCH_NAME)
+      : this.promptVisibleDefinitions(view, scope)
+    return this.modelVisibleDefinitions(definitions, agent)
       .filter(definition => definition.name !== RUN_CODE_NAME)
       .map((definition): ToolSdkSchema => {
         const output = snapshotJsonValue(definition.output.schema)

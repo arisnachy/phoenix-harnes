@@ -149,10 +149,11 @@ async function forward(
         jsonResponse(response, 409, { error: { message: 'Phoenix Local no reconoce el modelo seleccionado.' } })
         return
       }
+      const contextWindow = manager.effectiveContextWindow?.() ?? selected.contextWindow
       jsonResponse(response, 200, {
         selectedModelId: selected.id,
-        contextWindow: manager.effectiveContextWindow?.() ?? selected.contextWindow,
-        maxTokens: Math.min(selected.maxTokens, Math.max(1, Math.floor((manager.effectiveContextWindow?.() ?? selected.contextWindow) / 4))),
+        contextWindow,
+        maxTokens: Math.min(selected.maxTokens, Math.max(1, Math.floor(contextWindow / 4))),
       })
       return
     }
