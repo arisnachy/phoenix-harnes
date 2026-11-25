@@ -8,6 +8,7 @@ import { DropOverlay } from '../DropOverlay.tsx'
 import { ImageLightbox } from '../ImageLightbox.tsx'
 import { attachmentRailLabels, dropOverlayLabels, lightboxLabels } from './labels.ts'
 import css from './ComposerAttachments.module.css'
+import { capturePresenceFrame } from './presence-capture.ts'
 
 /** Rail item retaining its browser-owned attachment for callbacks. */
 interface ComposerRailItem extends AttachmentRailItem {
@@ -21,6 +22,24 @@ export function ComposerAttachments({
   const [preview, setPreview] = useState<ComposerAttachment | null>(null)
   const [dragActive, setDragActive] = useState(false)
   const dragDepth = useRef(0)
+  const capture = useRef<AbortController|null>(null)
+  const [capturing,setCapturing]=useState(false)
+  const [captureError,setCaptureError]=useState(false)
+  const owner=useRef(onAddImages)
+  owner.current=onAddImages
+  useEffect(()=>()=>{capture.current?.abort();capture.current=null},[])
+  useEffect(()=>{if(!canAcceptDrop)capture.current?.abort()},[canAcceptDrop])
+  const startCapture=async()=>{
+    if(!canAcceptDrop||capture.current)return
+    const controller=new AbortController()
+    const target=onAddImages
+    capture.current=controller;setCapturing(true);setCaptureError(false)
+    try{
+      const file=await capturePresenceFrame(controller.signal)
+      if(!controller.signal.aborted&&capture.current===controller&&owner.current===target)target([file])
+    }catch{if(!controller.signal.aborted&&capture.current===controller)setCaptureError(true)}
+    finally{if(capture.current===controller){capture.current=null;setCapturing(false)}}
+  }
   const closePreview = useCallback(() => { setPreview(null) }, [])
 
   useEffect(() => {
@@ -89,6 +108,11 @@ export function ComposerAttachments({
 
   return (
     <>
+      {typeof navigator!=='undefined'&&typeof navigator.mediaDevices?.getDisplayMedia==='function'&&<div className={css.capture}>
+        <button type="button" disabled={!canAcceptDrop||capturing} onClick={()=>{void startCapture()}}>{t('image.captureScreen')}</button>
+        {capturing&&<button type="button" onClick={()=>capture.current?.abort()}>{t('image.cancelCapture')}</button>}
+        {captureError&&<span role="status">{t('image.captureFailed')}</span>}
+      </div>}
       {dragActive && (
         <DropOverlay
           disabled={!canAcceptDrop}

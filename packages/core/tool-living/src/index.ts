@@ -2,6 +2,7 @@
 
 import { randomBytes } from 'node:crypto'
 import { runEvolution, summarizeEvolutionEvents } from './evolution.ts'
+import { AMPLIFIER_OPERATIONS, runAmplifier } from './amplifier.ts'
 import { assessSelfInitiative, SELF_GOALS } from './self-initiative.ts'
 import { inspectSystemEnvironment, searchLocalApps } from './system-proprioception.ts'
 import { confirmAdaptiveExternalAction, type AdaptiveApprovalService } from './approved-action.ts'
@@ -278,6 +279,17 @@ function assertTargetReached(snapshot: LivingCreationSnapshot): void {
 
 /** Register the universal living-creation policy and model controls. */
 export function apply(ctx: Context): void {
+  ctx.systemPrompt.section({name:'phoenix:intelligence-amplifier',order:119,text:'When explicit structured verification is useful, use phoenix_amplifier to evaluate arithmetic and constraints (logos), run bounded deterministic numeric recipes (compression), validate dependency plans (compile), check supplied evidence expiry and disagreements (epistemic), compare declared structural scenarios (counterfactual), test relation mappings (analogy), assess practice evidence (mentor), check translation glossary/placeholders (babel), review proposed side effects (sentinel), and inspect schema changes (morphogenesis). This is an offline deterministic verifier, not a source of facts, a translator, a causal discovery engine, or permission to act. Use only non-sensitive explicit inputs; do not send credentials, patient data or hidden reasoning. Existing tools, native approvals and revision checks remain authoritative. Do not call it on ordinary chat or claim model-level capability gains without measured benchmarks.'})
+  ctx.tools.register(defineTool({
+    name:'phoenix_amplifier',
+    description:'Read-only deterministic structured verification (max 32 KiB JSON). logos: {variables:{id:number},expression:number|{var:id}|{op:add|sub|mul|div|min|max,args:[expr,expr]},constraints:[{op:eq|lt|le|gt|ge,value:number}]}; compression: {variables,steps:[{output,expression}]}; compile: {steps:[{id,dependsOn,requires?,produces?}]}; epistemic: {at:epochMs,evidence:[{id,claim,source,observed,expires,stance:supports|opposes}]}; counterfactual: {baseline,interventions,equations:[{output,expression}],outcome}; analogy: {source,target,mapping:[{source,target}],sourceEdges,targetEdges:[{from,to,relation}]}; mentor: {skills,attempts:[{skill,exercise,correct}]}; babel: {translation,glossary:[{target}],placeholders}; sentinel: {origin:user|external|tool,effect:read|write|external|permission,revisionVerified}; morphogenesis: {before,after,preserved} (field IDs). Use only non-sensitive inputs. No execution, storage, authority, source authentication or semantic correctness guarantee.',
+    parameters:{operation:{type:'string',required:true,enum:AMPLIFIER_OPERATIONS},input_json:{type:'string',required:true}},
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    execute(args){return Promise.resolve(JSON.stringify(runAmplifier(args.operation,args.input_json)))},
+    presentCall:()=>({card:'generic',title:'PHOENIX · Intelligence Amplifier',kind:'read' as const}),
+  }))
+
   ctx.systemPrompt.section({name:'phoenix:evolution-evidence',order:117,text:'PHOENIX can use phoenix_evolution_analyze to consolidate bounded operational observations (dreaming), compare paired fixtures (causal/lab/skill), simulate dependency removal (twin), summarize measured outcomes (metrics), assess current host RAM (homeostasis), suggest tools from explicit goals (intent), and prepare reference-only model handoffs (handoff). Use only opaque non-sensitive identifiers, never patient data, credentials, conversation transcripts or private reasoning. Caller-supplied evidence is unverified; results never authorize promotion, provider switching, resource reservation, or execution. Do not invent observations. No extra persistence or background activity; rely on the existing authorized session and review workflows.'})
   ctx.tools.register(defineTool({
     name: 'phoenix_evolution_analyze',
@@ -323,8 +335,8 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
     isConcurrencySafe:()=>true,
     execute(){
-      const names=ctx.tools.schemas().map(schema=>schema.name)
-        .filter(name=>/^[a-z][a-z0-9_.-]{0,90}$/u.test(name)).slice(0,160)
+      const allNames=ctx.tools.schemas().map(schema=>schema.name)
+      const names=allNames.filter(name=>/^[a-z][a-z0-9_.-]{0,90}$/u.test(name)).slice(0,160)
       const connected=ctx.living.list()
         .filter(item=>!/(?:clinical|patient|health|medic|pacient|expediente|historia)/iu.test(item.manifest.kind))
         .slice(0,40).map(item=>({
@@ -338,6 +350,7 @@ export function apply(ctx: Context): void {
         livingConnectors:connected,
         authority:'registration-only',
         permissions:'must-check-current-tool-policy-and-user-approval',
+        offlineVerification:{registered:allNames.includes('phoenix_amplifier'),operations:[...AMPLIFIER_OPERATIONS],requiresNetwork:false,requiresModelForCalculation:false,modelAvailability:'not-inspected',internetConnectivity:'not-inspected'},
         authentication:'not-inspected',
         externalExecution:'not-attempted',
         clinicalBoundary:'never-export-patient-information-to-ordinary-chat',

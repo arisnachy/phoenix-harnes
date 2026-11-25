@@ -504,22 +504,27 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
     setEditor(e=>e?{...e,...change,dirty:true}:e)
     setStatus('Cambios pendientes')
   }
-  const persist=async(snapshot:Editor):Promise<boolean>=>{
+  const persist=async(snapshot:Editor,reconcile=false):Promise<boolean>=>{
     if(saving.current)return false
     if(!snapshot.dirty)return true
     saving.current=true
     setStatus('Guardando…')
     try{
-      const result=await api<{item:Item}>('/items/'+snapshot.item.id,{
-        revision:snapshot.item.revision,title:snapshot.title,content:snapshot.content,space:snapshot.space,
-      },'PUT')
+      const result=await api<{item:Item}>('/items/'+snapshot.item.id+(reconcile?'/reconcile':''),{
+        revision:snapshot.item.revision,title:snapshot.title,content:snapshot.content,space:snapshot.space,...reconcile?{confirm:true}:{},
+      },reconcile?'POST':'PUT')
       setEditor(current=>{
         if(!current||current.item.id!==snapshot.item.id)return current
         const untouched=current.title===snapshot.title&&current.content===snapshot.content&&current.space===snapshot.space
-        return {...current,item:result.item,dirty:!untouched}
+        if(untouched)return {item:result.item,title:result.item.title,content:result.item.content,space:result.item.space,dirty:false}
+        // If the draft changed during reconciliation, retain its old base; never turn
+        // subsequent local edits into a blind overwrite of the newly merged content.
+        if(reconcile)return current
+        return {...current,item:result.item,dirty:true}
       })
       setRevisionCounter(n=>n+1)
-      setStatus('Guardado')
+      setError('')
+      setStatus(reconcile?'Cambios independientes conciliados':'Guardado')
       return true
     }catch(e){
       setStatus('Sin guardar')
@@ -726,6 +731,7 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
           {(htmlItem||markdownItem||sceneItem||godotItem)&&<button type="button" aria-pressed={showSource} onClick={()=>setShowSource(v=>!v)}>
             {showSource?'Vista visual':markdownItem?'Editar documento':'Ver código'}</button>}
           <button type="button" disabled={!editor.dirty||busy} onClick={()=>{void persist(editor)}}>Guardar</button>
+          {editor.dirty&&error==='CONFLICT'&&<button type="button" disabled={busy} onClick={()=>{void persist(editor,true)}}>Conciliar cambios independientes</button>}
           <button type="button" disabled={editor.dirty||busy} onClick={()=>{void api<{restricted:boolean}>('/items/'+editor.item.id+'/distribution').then(policy=>{
             if(policy.restricted){setError('Consulta bloqueada por la política de distribución de esta creación');return}
             const supported=!binaryItem&&['text/markdown','application/vnd.phoenix.slides+json','application/vnd.phoenix.sheet+json'].includes(editor.item.mime)&&editor.content.length<=24000

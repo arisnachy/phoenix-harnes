@@ -126,3 +126,17 @@ it('enforces distribution on export and inherited alternatives, including explic
   expect((await request(h,path+'/export?format=json')).status).toBe(200)
   expect((await request(h,'/space-api/items/'+child+'/export?format=json')).status).toBe(403)
 })
+
+it('requires explicit reconciliation and preserves independent concurrent metadata edits',async()=>{
+  const h=setup().handler!
+  const created=await request(h,'/space-api/items','POST',{kind:'document',space:'personal',title:'Original',mime:'text/plain',content:'base'})
+  const id=(created.json as {item:{id:string}}).item.id
+  const path='/space-api/items/'+id
+  expect((await request(h,path,'PUT',{revision:1,title:'Remote title'})).status).toBe(200)
+  const draft={revision:1,title:'Original',space:'personal',content:'Local text'}
+  expect((await request(h,path+'/reconcile','POST',{...draft,confirm:false})).status).toBe(400)
+  const merged=await request(h,path+'/reconcile','POST',{...draft,confirm:true})
+  expect(merged.status).toBe(200)
+  expect(merged.json).toMatchObject({item:{title:'Remote title',content:'Local text',revision:3}})
+  expect((await request(h,path+'/reconcile','POST',{...draft,content:'Conflicting text',confirm:true})).status).toBe(409)
+})
