@@ -406,3 +406,17 @@ describe('Phoenix Local universal discovery', () => {
     expect(result.isError).toBe(false)
   })
 })
+
+
+describe('Phoenix Local result paging', () => {
+  it('returns exact pages only from the caller session and rejects unknown IDs', async () => {
+    const { ctx, agent } = await mount()
+    const value = '0123456789'.repeat(200)
+    Object.assign(agent, { options: { provider: 'phoenix-local' }, session: { events: [{ type: 'tool/result', data: { message: { content: [{ type: 'tool-result', toolCallId: 'large', content: [{ type: 'text', text: value }] }] } } }] } })
+    const result = await ctx.tools.execute({ signal, callId: CallId('page'), name: 'tool_search', agent, arguments: { result_call_id: 'large', offset: 900 } })
+    expect(result.isError).toBe(false)
+    expect(result.content).toEqual([{ type: 'text', text: JSON.stringify({ enabled: true, matched: 0, selected: 0, tools: [], resultPage: { callId: 'large', offset: 900, total: 2000, text: value.slice(900, 1800), nextOffset: 1800 } }) }])
+    const missing = await ctx.tools.execute({ signal, callId: CallId('missing'), name: 'tool_search', agent, arguments: { result_call_id: 'other-session' } })
+    expect(missing.isError).toBe(true)
+  })
+})

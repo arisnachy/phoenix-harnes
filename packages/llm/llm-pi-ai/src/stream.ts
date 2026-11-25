@@ -64,8 +64,8 @@ function classifyPiAiError(message: string): string {
   // same request cannot succeed, so it is invalid, not transient.
   if (/\b413\b|failed to buffer the request body:\s*length limit exceeded|payload too large|request body too large/i.test(message)) return 'INVALID_REQUEST'
   if (/\b400\b|invalid.?request|invalid arguments|invalid tool (?:call|arguments)|malformed (?:json|tool|arguments)|schema validation failed/i.test(message)) return 'INVALID_REQUEST'
+  if (/phoenix_local_timeout|\b504\b|\btime(?:d)?\s*out\b|timeout/i.test(message)) return 'TIMEOUT'
   if (/\b5\d\d\b/.test(message)) return 'SERVER'
-  if (/\btime(?:d)?\s*out\b|timeout/i.test(message)) return 'TIMEOUT'
   // A stream truncated before the provider's terminal event: each pi-ai provider
   // throws its own wording when the wire closes mid-response without a terminal
   // event (`… stream ended before message_stop`, `… before a terminal response
@@ -122,7 +122,7 @@ export function mapStopReason(
   const piAiOverflow = isContextOverflow(message, contextWindow)
   const harnessOverflow = message.stopReason === 'error'
     && message.errorMessage !== undefined
-    && isContextWindowExceededError(message.errorMessage)
+    && (isContextWindowExceededError(message.errorMessage) || /local_context_exceeded|local_request_too_large/u.test(message.errorMessage))
   const recoverableLength = !lengthIsOutputLimit && isRecoverableLength(message, desiredMaxOutput)
   if (piAiOverflow || harnessOverflow || recoverableLength) {
     return {

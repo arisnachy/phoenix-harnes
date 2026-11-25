@@ -848,3 +848,22 @@ describe('Phoenix Local agent discovery context', () => {
     expect(options.messages).toHaveLength(4)
   })
 })
+
+
+describe('Phoenix Local paged tool results', () => {
+  it('keeps call IDs, original result and bounded preview with a recovery pointer', () => {
+    const task = createUserMessage({ content: [{ type: 'text', text: 'Read the report' }], source: { kind: 'user' } })
+    const id = CallId('big-result')
+    const call = history('assistant', [{ type: 'tool-call', id, name: 'file_read', arguments: '{}' }])
+    const original = 'A'.repeat(80_000)
+    const result = user([{ type: 'tool-result', toolCallId: id, content: [{ type: 'text', text: original }] }])
+    const options: GenerateOptions = { ...request([task, call, result]), provider: 'phoenix-local', model: 'phoenix-local', tools: [{ name: 'tool_search', description: 'Discover tools or page result', parameters: { type: 'object' } }] }
+    const fitted = fitPhoenixLocalTextTurn(options, 4096, 512)
+    expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+    expect(fitted.options.messages[1]).toEqual(call)
+    expect(JSON.stringify(fitted.options.messages[2])).toContain('result_call_id')
+    expect(JSON.stringify(fitted.options.messages[2])).toContain('big-result')
+    expect(JSON.stringify(result)).toContain(original)
+    expect(fitted.options.tools?.map(tool => tool.name)).toContain('tool_search')
+  })
+})
