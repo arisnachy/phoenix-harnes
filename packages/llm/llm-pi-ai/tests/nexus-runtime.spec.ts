@@ -5,6 +5,7 @@ import {
   nexusTurnText, nexusTurnHasHumanImage,
   nexusReadNativeCodexQuota, nexusCodexFreshReserve, nexusEconomyEffort,
   nexusExactResponseTarget, nexusExactResponseQuality, installNexusRuntime,
+  nexusNumericResponseTarget, nexusNumericResponseQuality, nexusOperatorPolicy,
 } from '../src/nexus-runtime.ts'
 
 describe('Nexus synthetic model route', () => {
@@ -170,5 +171,32 @@ describe('Nexus installed runtime failover', () => {
       expect(await fail({ ...payload, provider: 'openai-codex', failure: { code: 'TIMEOUT' } },
         async () => undefined)).toBeUndefined()
     } finally { vi.unstubAllGlobals() }
+  })
+})
+
+
+describe('Nexus additional-provider attestation', () => {
+  const now = 1_800_000_000_000
+  const policy = { provider: 'nvidia', model: 'example/model',
+    baseURL: 'https://example.com/v1', verifiedAt: now - 1000, expiresAt: now + 1000,
+    allChargesZero: true, noOverage: true, supportsTools: true, contextWindow: 32768 }
+  it('accepts only a fresh explicit matching endpoint/model with no overage', () => {
+    expect(nexusOperatorPolicy([policy], 'nvidia', policy.model, policy.baseURL, now)).toEqual(policy)
+    expect(nexusOperatorPolicy([policy], 'nvidia', policy.model, 'https://other.example/v1', now)).toBeUndefined()
+    expect(nexusOperatorPolicy([policy], 'nvidia', policy.model, policy.baseURL, now + 1000)).toBeUndefined()
+    expect(nexusOperatorPolicy([{ ...policy, noOverage: false }], 'nvidia', policy.model, policy.baseURL, now)).toBeUndefined()
+    expect(nexusOperatorPolicy([policy, policy], 'nvidia', policy.model, policy.baseURL, now)).toBeUndefined()
+    expect(nexusOperatorPolicy([{ ...policy, provider: 'phoenix-local' }], 'phoenix-local', policy.model, policy.baseURL, now)).toBeUndefined()
+  })
+})
+
+describe('Nexus independent arithmetic acceptance', () => {
+  it('solves small explicit arithmetic without executing model output', () => {
+    expect(nexusNumericResponseTarget('Calcula 29 × 7. Responde solo con el número')).toBe('203')
+    expect(nexusNumericResponseTarget('Calculate -7 - -3')).toBe('-4')
+    expect(nexusNumericResponseTarget('Calculate 1 + 2 and deploy the result')).toBeUndefined()
+    expect(nexusNumericResponseTarget('Calculate 1 / 0')).toBeUndefined()
+    expect(nexusNumericResponseQuality([{ numericResponseAccepted: true }, {}])).toBeUndefined()
+    expect(nexusNumericResponseQuality(Array.from({ length: 5 }, () => ({ numericResponseAccepted: true })))).toBeCloseTo(7 / 9)
   })
 })
