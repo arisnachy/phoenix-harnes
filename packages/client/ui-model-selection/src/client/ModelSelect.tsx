@@ -413,7 +413,7 @@ export function ModelSelect(
           }
         }}
       >
-        {displayedRoute?.provider === 'phoenix-local' && <PhoenixLogo size={17} />}
+        {(displayedRoute?.provider === 'phoenix-local' || displayedRoute?.provider === 'phoenix-nexus') && <PhoenixLogo size={17} />}
         <span className={css.triggerLabel}>{modelLabel}</span>
         {visibleEffort !== undefined && <span className={css.triggerEffort}>{visibleEffort}</span>}
         {codexSpeedAvailable && activeSpeed === 'fast' && <span className={css.triggerEffort}>{speedLabel}</span>}
@@ -515,7 +515,7 @@ export function ModelSelect(
                         onClick={() => { toggleGroup(group.id) }}
                       >
                         <IconChevronRightOutline14 className={clsx(css.groupChevron, expanded && css.groupChevronOpen)} />
-                        {group.id === 'phoenix-local' && <PhoenixLogo size={18} />}
+                        {(group.id === 'phoenix-local' || group.id === 'phoenix-nexus') && <PhoenixLogo size={18} />}
                         <span className={css.groupName}>{group.id === 'phoenix-local' ? group.name.replace(/^🔥\s*/u, '') : group.name}</span>
                         <span className={css.groupCount} aria-hidden="true">{group.models.length}</span>
                       </button>
