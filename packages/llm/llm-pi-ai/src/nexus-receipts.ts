@@ -16,6 +16,7 @@ const MAX_BYTES = 8_000_000
 export interface NexusTransportReceipt extends NexusUsage {
   readonly latencyMs: number
   readonly succeeded: boolean
+  readonly usageReported: boolean
 }
 
 function isReceipt(value: unknown): value is NexusTransportReceipt {
@@ -24,6 +25,7 @@ function isReceipt(value: unknown): value is NexusTransportReceipt {
   return typeof r.provider === 'string' && r.provider.length <= 256
     && typeof r.model === 'string' && r.model.length <= 512
     && typeof r.succeeded === 'boolean'
+    && typeof r.usageReported === 'boolean'
     && [r.timestamp, r.inputTokens, r.outputTokens, r.latencyMs].every(
       v => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0,
     )
@@ -31,6 +33,7 @@ function isReceipt(value: unknown): value is NexusTransportReceipt {
 
 /** Persist only locally measured, versioned numeric observations. */
 export class NexusReceiptStore {
+  /** @param filename - private receipt file under the harness home. */
   constructor(private readonly filename: string) {}
 
   /**
