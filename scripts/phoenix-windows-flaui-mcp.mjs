@@ -7,6 +7,7 @@
 import { lstatSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { join, dirname } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import process from 'node:process'
 
 export function locateFlaUiExecutable(options = {}) {
@@ -51,7 +52,7 @@ export function flaUiChildEnvironment(source = process.env) {
   return env
 }
 
-if (process.argv[1] && import.meta.url === new URL('file:///' + process.argv[1].replace(/\\/g, '/')).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const executable = locateFlaUiExecutable()
     const child = spawn(executable, [], {
@@ -61,7 +62,7 @@ if (process.argv[1] && import.meta.url === new URL('file:///' + process.argv[1].
       env: flaUiChildEnvironment(),
     })
     child.on('error', error => {
-      process.stderr.write('WINDOWS_FLAUI_START_FAILED: ' + error.message + '\\n')
+      process.stderr.write('WINDOWS_FLAUI_START_FAILED: ' + error.message + '\n')
       process.exitCode = 1
     })
     child.on('exit', (code, signal) => {
@@ -70,7 +71,7 @@ if (process.argv[1] && import.meta.url === new URL('file:///' + process.argv[1].
     process.on('SIGTERM', () => child.kill('SIGTERM'))
     process.on('SIGINT', () => child.kill('SIGINT'))
   } catch (error) {
-    process.stderr.write(String(error instanceof Error ? error.message : error) + '\\n')
+    process.stderr.write(String(error instanceof Error ? error.message : error) + '\n')
     process.exitCode = 1
   }
 }
