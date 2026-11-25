@@ -68,6 +68,8 @@ import type { PiAiProviderProfile, ResolvedPiAiProviderProfile } from './config.
 import { discoverModels } from './discovery.ts'
 import { installCodexAvatarTransform, installCodexImageGeneration } from './image-generation.ts'
 import { registerPiAiFlows } from './login.ts'
+import { GOOGLE_ACCOUNT_PROVIDER, registerGoogleAccountCli } from './antigravity-cli.ts'
+import { GOOGLE_ANTIGRAVITY_PROVIDER } from './google-antigravity.ts'
 import { NvidiaLiveCatalog, NVIDIA_BUILD_BASE_URL, NVIDIA_MODEL_REFRESH_MS } from './nvidia-live-catalog.ts'
 import {
   OPENCODE_FREE_PROVIDER,
@@ -261,6 +263,8 @@ export function apply(ctx: Context, config: Config): void {
     return
   }
 
+  registerGoogleAccountCli(ctx)
+
   const openCodeCatalog = createOpenCodeFreeCatalog()
   let openCodeCatalogRevision = 0
   const codexCatalog = new CodexLiveCatalog({ logger: ctx.logger })
@@ -291,7 +295,9 @@ export function apply(ctx: Context, config: Config): void {
       && memoized !== undefined
     ) return memoized
 
-    const providers = nvidiaCatalog.overlayProviders(codexCatalog.overlayProviders(raw.providers ?? {}))
+    const providers = { ...nvidiaCatalog.overlayProviders(codexCatalog.overlayProviders(raw.providers ?? {})) }
+    // The native CLI owns this route; never register it as a generic API model.
+    delete providers[GOOGLE_ACCOUNT_PROVIDER]
     const next = resolveProfiles({
       ...providers,
       [PHOENIX_LOCAL_PROVIDER]: phoenixLocalProfile(),
@@ -314,6 +320,8 @@ export function apply(ctx: Context, config: Config): void {
     // itself for the current ChatGPT access JWT; never consult OPENAI_API_KEY
     // or a stale apiKeyEnv for this route. Codex owns login and refresh.
     if (provider === CODEX_PROVIDER) return codexNativeAccessToken()
+    // A configured API-key reference must never override the direct OAuth grant.
+    if (provider === GOOGLE_ANTIGRAVITY_PROVIDER) return undefined
     const ref = profile.apiKeyEnv
     if (ref === undefined) return undefined
     const credentials = ctx.get('credentials')
