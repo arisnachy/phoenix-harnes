@@ -12,7 +12,7 @@ describe('Nexus durable receipts', () => {
       const first = new NexusReceiptStore(filename)
       const second = new NexusReceiptStore(filename)
       const receipt = { provider: 'openrouter', model: 'test/model', timestamp: Date.now(),
-        inputTokens: 10, outputTokens: 5, latencyMs: 50, succeeded: true }
+        inputTokens: 10, outputTokens: 5, latencyMs: 50, succeeded: true, usageReported: true }
       expect(await first.read(Date.now())).toEqual([])
       await Promise.all([first.record(receipt), second.record({ ...receipt, succeeded: false })])
       const restored = await new NexusReceiptStore(filename).read(Date.now())
