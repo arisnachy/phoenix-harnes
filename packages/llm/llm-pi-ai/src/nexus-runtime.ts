@@ -150,6 +150,8 @@ export function nexusCodexFallback(ids: readonly string[], complex: boolean): st
  */
 export function nexusRequiresStrongModel(text: string): boolean {
   return text.length > 380
+    || /^(?:contin[uú]a|sigue|hazlo|dale|termina|completa|arr[eé]glalo|continue|finish|do it|go ahead)(?:\b|$)/iu.test(text.trim())
+    || /\b(?:m[eé]dic\p{L}*|cl[ií]nic\p{L}*|tratamiento|receta|farmac\p{L}*|jur[ií]dic\p{L}*|financ\p{L}*)\b/iu.test(text)
     || /\b(?:implement|refactor|debug|repair|analy[sz]e|develop|deploy|execute|diagnos|clinical|medical|legal|security)\b/iu.test(text)
     || /\b(?:research|audit|architecture|build|program|code|script|arregl\p{L}*|desarroll\p{L}*|implement\p{L}*)\b/iu.test(text)
     || /\b(?:repar\p{L}*|diagnostic\p{L}*|investig\p{L}*|analiz\p{L}*|c[oó]digo|aplicaci[oó]n|sistema|seguridad)\b/iu.test(text)
@@ -447,7 +449,10 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       } else {
         const inventory = await listAuthorizedModels(now)
         const model = inventory.find(item => item.provider === route.provider && item.id === route.model)
-        eligible = eligible && model !== undefined && nexusPriceClass(model, now) === 'verified-free'
+        eligible = eligible && model !== undefined && model.online && model.supportsTools === true
+          && (!hasImage || model.supportsImages === true)
+          && (model.contextWindow === undefined || model.contextWindow >= 8_192)
+          && nexusPriceClass(model, now) === 'verified-free'
           && route.provider === 'openrouter' && (profile?.baseURL === undefined
             || profile.baseURL.replace(/\/+$/u, '') === 'https://openrouter.ai/api/v1')
       }
@@ -473,7 +478,8 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       !state.excluded.has(routeKey(model.provider, model.id))
       && (blockedUntil.get(routeKey(model.provider, model.id)) ?? 0) <= now)
     const free = chooseNexusRoute(models, {
-      needsTools: complex,
+      // Even short turns inherit the harness tool schema; only capable routes are safe.
+      needsTools: true,
       needsImages: hasImage,
       inputTokens: 8_192,
       minimumQuality: 0,
@@ -520,7 +526,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
   agentEvents.on('agent/request-error', async (payload, next) => {
     const state = perAgent.get(payload.agent)
     const active = state?.turn === payload.turn ? state : undefined
-    if (active?.routed === undefined || active.routed.provider !== payload.provider
+    if (payload.signal.aborted || active?.routed === undefined || active.routed.provider !== payload.provider
       || active.failovers >= 2
       || !['RATE_LIMIT', 'TIMEOUT', 'TRANSPORT', 'SERVER', 'AUTH', 'MISSING_CREDENTIAL', 'MODEL_NOT_FOUND'].includes(payload.failure.code)) {
       return next()
