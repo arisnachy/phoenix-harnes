@@ -45,6 +45,8 @@ export interface NexusCodexQuota {
   readonly secondaryUsedPercent?: number | undefined
   readonly resetPrimaryAt?: number
   readonly resetSecondaryAt?: number
+  readonly primaryObservedAt?: number
+  readonly secondaryObservedAt?: number
 }
 
 /**
@@ -86,6 +88,44 @@ export function nexusCodexWithinPace(quota: NexusCodexQuota | undefined, now: nu
   return quota !== undefined && nexusCodexHasReserve(quota)
     && pacedWindow(quota.primaryUsedPercent, quota.resetPrimaryAt, now, 5 * HOUR_MS)
     && pacedWindow(quota.secondaryUsedPercent, quota.resetSecondaryAt, now, 7 * 24 * HOUR_MS)
+}
+
+
+/** Select native subscription windows by their actual duration, never by labels. */
+export function nexusReadNativeCodexQuota(telemetry:unknown):NexusCodexQuota|undefined{
+  if(!telemetry||typeof telemetry!=='object')return undefined
+  type Window={usedPercent?:number;windowDurationMins?:number;resetsAt?:number;observedAt?:number}
+  const row=telemetry as {kind?:string;provider?:string;accountType?:string;primaryLimit?:Window;secondaryLimit?:Window}
+  if(row.kind!=='account'||row.provider?.toLowerCase()!=='codex'||row.accountType?.toLowerCase()!=='chatgpt')return undefined
+  const windows=[row.primaryLimit,row.secondaryLimit]
+  const select=(duration:number)=>{const matches=windows.filter(w=>w?.windowDurationMins===duration);return matches.length===1?matches[0]:undefined}
+  const p=select(300),s=select(10080)
+  if(!p||!s)return undefined
+  return {
+    primaryUsedPercent:p.usedPercent,secondaryUsedPercent:s.usedPercent,
+    ...(p.resetsAt===undefined?{}:{resetPrimaryAt:p.resetsAt}),
+    ...(s.resetsAt===undefined?{}:{resetSecondaryAt:s.resetsAt}),
+    ...(p.observedAt===undefined?{}:{primaryObservedAt:p.observedAt}),
+    ...(s.observedAt===undefined?{}:{secondaryObservedAt:s.observedAt}),
+  }
+}
+/** Automatic admission requires a fresh native sample and a future reset for BOTH windows. */
+export function nexusCodexFreshReserve(quota:NexusCodexQuota|undefined,now:number):boolean{
+  if(!quota||!nexusCodexHasReserve(quota))return false
+  const valid=(observed:number|undefined,reset:number|undefined,duration:number)=>
+    observed!==undefined&&Number.isFinite(observed)&&observed<=now&&now-observed<=120000
+    &&reset!==undefined&&Number.isFinite(reset)&&reset*1000>now&&reset*1000-now<=duration
+  return valid(quota.primaryObservedAt,quota.resetPrimaryAt,5*HOUR_MS)
+    &&valid(quota.secondaryObservedAt,quota.resetSecondaryAt,7*24*HOUR_MS)
+}
+/** Use only an effort advertised by the concrete model; complex work retains its default. */
+export function nexusEconomyEffort<T extends string>(supported:readonly T[],complex:boolean):T|undefined{
+  if(complex)return undefined
+  for(const desired of ['low','minimal','off']){
+    const effort=supported.find(id=>id.toLowerCase()===desired)
+    if(effort!==undefined)return effort
+  }
+  return undefined
 }
 
 /**
@@ -275,26 +315,16 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
   const routeKey = (provider: string, model: string) => provider + '/' + model
 
   const getQuota = async (now: number, signal: AbortSignal): Promise<NexusCodexQuota | undefined> => {
-    if (now < quotaReadAt + 60_000 && quotaCache !== undefined) return quotaCache
+    if (now < quotaReadAt + 10_000 && nexusCodexFreshReserve(quotaCache,now)) return quotaCache
     quotaReadAt = now
     const auth = ctx.get('authorization')
     if (auth === undefined) { quotaCache = undefined; return undefined }
-    const codex = auth.list().find(entry => String(entry.key).includes('openai-codex'))
+    const codex = auth.list().find(entry => String(entry.key)==='subagent-codex/account')
     if (codex === undefined) { quotaCache = undefined; return undefined }
     try {
       const timeout = AbortSignal.timeout(2_000)
       const inspection = await auth.inspect(codex.key, AbortSignal.any([signal, timeout]))
-      if (inspection?.kind !== 'account') { quotaCache = undefined; return undefined }
-      const p = inspection.primaryLimit
-      const s = inspection.secondaryLimit
-      const valid = (v: number | undefined) => v !== undefined && Number.isFinite(v)
-        && v >= 0 && v <= 100
-      quotaCache = {
-        ...(valid(p?.usedPercent) ? { primaryUsedPercent: p?.usedPercent } : {}),
-        ...(valid(s?.usedPercent) ? { secondaryUsedPercent: s?.usedPercent } : {}),
-        ...(p?.resetsAt === undefined ? {} : { resetPrimaryAt: p.resetsAt }),
-        ...(s?.resetsAt === undefined ? {} : { resetSecondaryAt: s.resetsAt }),
-      }
+      quotaCache=nexusReadNativeCodexQuota(inspection)
     } catch {
       // A failed refresh must not authorize additional subscription usage.
       quotaCache = undefined
@@ -362,6 +392,18 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       turn: payload.turn, excluded: new Set<string>(), failovers: 0,
     }
     perAgent.set(agent, state)
+    const text = nexusTurnText(agent.session.events, payload.turn)
+    const complex = text.length === 0 || nexusRequiresStrongModel(text)
+    const hasImage = nexusTurnHasHumanImage(agent.session.events, payload.turn)
+    const buildRoute=async(route:NexusRoute):Promise<LlmCallConfig>=>{
+      const { serviceTier: _tier, reasoningEffort: _effort, ...base }=selected
+      let reasoningEffort:LlmCallConfig['reasoningEffort']
+      if(route.provider==='openai-codex'&&!complex&&!hasImage){
+        const info=await ctx.llm.resolveModelInfo(route.provider,route.model,payload.signal).catch(()=>undefined)
+        reasoningEffort=nexusEconomyEffort(info?.reasoning?.efforts.map(e=>e.id)??[],false)
+      }
+      return {...base,provider:route.provider,model:route.model,...(reasoningEffort===undefined?{}:{reasoningEffort})}
+    }
     if (state.routed !== undefined) {
       const route = state.routed
       const profile = options.profiles().get(route.provider)
@@ -370,7 +412,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       let eligible = authenticated
       if (route.provider === 'openai-codex') {
         const quota = await getQuota(now, payload.signal)
-        eligible = eligible && nexusCodexHasReserve(quota)
+        eligible = eligible && nexusCodexFreshReserve(quota,now) && (complex||nexusCodexWithinPace(quota,now)) && await options.nativeCodexAuthorized()
       } else {
         const inventory = await listAuthorizedModels(now)
         const model = inventory.find(item => item.provider === route.provider && item.id === route.model)
@@ -382,14 +424,10 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
         state.excluded.add(routeKey(route.provider, route.model))
         state.routed = undefined
       } else {
-        const { serviceTier: _tier, reasoningEffort: _effort, ...base } = selected
         activeSessions.set(agent.session.id, routeKey(route.provider, route.model))
-        return { ...base, provider: route.provider, model: route.model }
+        return buildRoute(route)
       }
     }
-    const text = nexusTurnText(agent.session.events, payload.turn)
-    const complex = text.length === 0 || nexusRequiresStrongModel(text)
-    const hasImage = nexusTurnHasHumanImage(agent.session.events, payload.turn)
     const observations = await receipts.read(now).catch(() => [])
     const models = (await listAuthorizedModels(now)).map((model) => {
       const samples = observations.filter(r => r.provider === model.provider && r.model === model.id)
@@ -418,7 +456,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
         && (!hasImage || model.supportsImages === true)
         && !state.excluded.has(routeKey(model.provider, model.id))).map(model => model.id)
       const candidate = nexusCodexFallback(ids, complex)
-      const withinBudget = complex ? nexusCodexHasReserve(quota) : nexusCodexWithinPace(quota, now)
+      const withinBudget = nexusCodexFreshReserve(quota,now) && (complex || nexusCodexWithinPace(quota,now))
       if (candidate !== undefined && withinBudget && await options.nativeCodexAuthorized()) {
         route = { provider: 'openai-codex', model: candidate, priceClass: 'unknown',
           reason: 'existing authorized Codex subscription; model quality or tool requirements' }
@@ -440,8 +478,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       if (oldest !== undefined) activeSessions.delete(oldest)
     }
     activeSessions.set(agent.session.id, routeKey(route.provider, route.model))
-    const { serviceTier: _tier, reasoningEffort: _effort, ...base } = selected
-    return { ...base, provider: route.provider, model: route.model }
+    return buildRoute(route)
   })
 
   // Retry is permitted only before the failed model request has yielded tools;
