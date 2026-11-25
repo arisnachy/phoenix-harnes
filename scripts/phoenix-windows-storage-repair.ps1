@@ -196,9 +196,9 @@ $node = Get-Command node.exe -ErrorAction Stop
 $priorBackups = [Environment]::GetEnvironmentVariable('PHOENIX_UPDATE_RUNTIME_BACKUPS', 'Process')
 $priorOfflineRepair = [Environment]::GetEnvironmentVariable('PHOENIX_OFFLINE_STORAGE_REPAIR', 'Process')
 try {
-    # Offline repair retains one previous rollback runtime and reclaims idle stages
+    # Offline repair removes inactive rollback copies by default and reclaims idle stages
     # only after it has checked the owning Host, updater, and port.
-    [Environment]::SetEnvironmentVariable('PHOENIX_UPDATE_RUNTIME_BACKUPS', '1', 'Process')
+    [Environment]::SetEnvironmentVariable('PHOENIX_UPDATE_RUNTIME_BACKUPS', '0', 'Process')
     [Environment]::SetEnvironmentVariable('PHOENIX_OFFLINE_STORAGE_REPAIR', '1', 'Process')
     Push-Location $repo
     try {
@@ -275,7 +275,7 @@ if ($legacyAfter.Count -gt 0) {
 }
 Write-Host ('[PHOENIX STORAGE] Remaining old non-Git workspaces: ' + @(Get-RetiredWorkspaces).Count)
 # Mirror the supervisor's configurable cap instead of hardcoding 3/3.
-$backupCount = 1
+$backupCount = 0
 $backupOverride = 0
 if ([int]::TryParse($priorBackups, [ref]$backupOverride)) {
     $backupCount = [Math]::Max(0, [Math]::Min(1, $backupOverride))
