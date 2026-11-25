@@ -9,7 +9,7 @@
  * Scope disposal drops the directory (HMR safety).
  */
 import { Context } from '@phoenix-ai/cordis'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createScope } from '@phoenix-ai/dsh-client-runtime/client'
 import type { SessionId } from '@phoenix-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@phoenix-ai/dsh-client-locale/client'
