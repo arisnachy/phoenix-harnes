@@ -656,9 +656,11 @@ function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePat
   // to treat as orphaned managed storage only after the caller has already
   // applied active-runtime protection and retention-age checks.
   const key = runtimePathKey(path)
-  if (registeredWorktrees !== undefined && !registeredWorktrees.has(key)) {
-    return removeOrphanedManagedDirectory(path, reportBusy)
+  if (registeredWorktrees === undefined || existsSync(join(path, '.phoenix-keep'))) return false
+  if (!registeredWorktrees.has(key)) {
+    return detachedWorktreeMetadata(path) && removeOrphanedManagedDirectory(path, reportBusy)
   }
+  if (!sameRepository(path)) return false
 
   // Runtime worktrees contain very deep pnpm/node_modules paths. On Windows,
   // Git must opt into Win32 long-path handling or cleanup can fail with
@@ -679,8 +681,8 @@ function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePat
   // it before declaring the directory "in use". If Git itself says the path is
   // not a worktree, treat it as orphaned managed storage and remove it directly.
   const refreshedWorktrees = registeredWorktreePaths()
-  const becameOrphaned = /(?:is )?not a working tree/iu.test(detail)
-    || (refreshedWorktrees !== undefined && !refreshedWorktrees.has(key))
+  const becameOrphaned = refreshedWorktrees !== undefined && !refreshedWorktrees.has(key)
+    && detachedWorktreeMetadata(path)
   if (becameOrphaned) {
     return removeOrphanedManagedDirectory(path, reportBusy)
   }
@@ -913,7 +915,8 @@ function cleanupObsoleteRuntimes(extraKeep = [], {
   if (active?.path !== undefined) keep.add(runtimePathKey(active.path))
   if (runtimeRoot !== root) keep.add(runtimePathKey(runtimeRoot))
   const inheritedRuntimeRoot = process.env.PHOENIX_RUNTIME_ROOT?.trim()
-  if (inheritedRuntimeRoot !== undefined && inheritedRuntimeRoot.length > 0) {
+  if (inheritedRuntimeRoot !== undefined && inheritedRuntimeRoot.length > 0
+    && runtimePathKey(inheritedRuntimeRoot) === runtimePathKey(runtimeRoot)) {
     keep.add(runtimePathKey(inheritedRuntimeRoot))
   }
 
@@ -932,8 +935,8 @@ function cleanupObsoleteRuntimes(extraKeep = [], {
 
   // Once a replacement Host has passed its healthy checkpoint, an optional
   // rollback copy is no longer necessary by default. An explicit backup
-  // preference remains respected. The checkpoint caller must opt into this:
-  // pre-health and in-flight update paths always preserve the rollback cushion.
+  // preference remains respected:
+  // pre-health and in-flight update paths retain a rollback cushion.
   const inactiveBackupLimit = releaseRollback ? 0 : Math.max(MAX_INACTIVE_RUNTIME_BACKUPS,
     active !== undefined && !Number.isFinite(Date.parse(active.healthyAt ?? '')) ? 1 : 0)
   let retainedInactiveRuntimes = 0
@@ -1009,7 +1012,7 @@ function reclaimInactiveBackupForCapacity(nextRuntime) {
   const active = readActiveRuntimeRecord()
   if (active?.path) keep.add(runtimePathKey(active.path))
   const inherited = process.env.PHOENIX_RUNTIME_ROOT?.trim()
-  if (inherited) keep.add(runtimePathKey(inherited))
+  if (inherited && runtimePathKey(inherited) === runtimePathKey(runtimeRoot)) keep.add(runtimePathKey(inherited))
   const registered = registeredWorktreePaths()
   const inactive = runtimeDirectoriesForCleanup()
     .filter(path => !keep.has(runtimePathKey(path)) && !existsSync(join(path, '.phoenix-keep'))
@@ -2449,8 +2452,7 @@ while (true) {
       // run it only when a background update isn't compiling a new runtime.
       if (readUpdateState()?.status !== 'preparing' || !watcherSupervisor?.isActive()) {
         // A healthy Host is the earliest safe checkpoint for reclaiming the
-        // consumed staging tree. Keep exactly one previous healthy runtime for
-        // rollback instead of deleting every backup after each activation.
+        // consumed staging tree. Retain a rollback copy only if configured.
         cleanupObsoleteRuntimes([], { reapDormantStage: true })
       }
     } catch (error) {
