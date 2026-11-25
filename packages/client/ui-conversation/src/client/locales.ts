@@ -60,6 +60,9 @@ export const zh = {
   'image.dropTitle': '图片拖动到此处即可添加',
   'image.dropDesc': '最多 {count} 张，每张 {size}',
   'image.dropBlocked': '当前无法添加图片',
+  'image.captureScreen': '截取共享屏幕（仅草稿）',
+  'image.cancelCapture': '取消截取',
+  'image.captureFailed': '未能截取屏幕，请重试。',
   'image.pending': '待发送图片',
   'image.openOriginal': '查看原图',
   'image.openOriginalLabel': '{label}，点击查看原图',
@@ -296,6 +299,9 @@ export const en = {
   'image.dropTitle': 'Drag images here to add them',
   'image.dropDesc': 'Up to {count} images, {size} each',
   'image.dropBlocked': 'Images cannot be added right now',
+  'image.captureScreen': 'Capture screen (draft only)',
+  'image.cancelCapture': 'Cancel capture',
+  'image.captureFailed': 'No screen image captured. Try again.',
   'image.pending': 'Pending images',
   'image.openOriginal': 'View original',
   'image.openOriginalLabel': '{label}, click to view original',
@@ -480,6 +486,9 @@ export const en = {
 /** Spanish dictionary. Untranslated specialist copy temporarily inherits the
  * complete English dictionary while the primary conversation path is native. */
 export const es = {
+  'image.captureScreen': 'Capturar pantalla (solo borrador)',
+  'image.cancelCapture': 'Cancelar captura',
+  'image.captureFailed': 'No se capturó la pantalla. Inténtalo de nuevo.',
   ...en,
   'context.tools': 'Herramientas',
   'status.thinking': 'Phoenix está pensando',
