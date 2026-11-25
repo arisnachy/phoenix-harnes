@@ -9,7 +9,7 @@ import { LlmAdapter, LlmError } from '@phoenix-ai/dsh-llm'
 import type { GenerateOptions, LlmModelInfo, StreamChunk, LlmCallConfig } from '@phoenix-ai/dsh-llm'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import {
-  NexusQuotaGovernor, chooseNexusRoute, openRouterPriceEvidence,
+  NexusQuotaGovernor, chooseNexusRoute, nexusPriceClass, openRouterPriceEvidence,
   type NexusModel, type NexusPriceEvidence, type NexusRoute,
 } from './nexus.ts'
 
@@ -208,6 +208,7 @@ interface NexusAgentRouteState {
 export interface NexusRuntimeOptions {
   readonly profiles: () => ReadonlyMap<string, ResolvedPiAiProviderProfile>
   readonly nativeCodexAuthorized: () => Promise<boolean>
+  readonly providerAuthorized: (provider: string, profile: ResolvedPiAiProviderProfile) => Promise<boolean>
 }
 
 /**
@@ -231,9 +232,9 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     if (now < quotaReadAt + 60_000 && quotaCache !== undefined) return quotaCache
     quotaReadAt = now
     const auth = ctx.get('authorization')
-    if (auth === undefined) return undefined
+    if (auth === undefined) { quotaCache = undefined; return undefined }
     const codex = auth.list().find(entry => String(entry.key).includes('openai-codex'))
-    if (codex === undefined) return undefined
+    if (codex === undefined) { quotaCache = undefined; return undefined }
     try {
       const timeout = AbortSignal.timeout(2_000)
       const inspection = await auth.inspect(codex.key, AbortSignal.any([signal, timeout]))
@@ -266,20 +267,25 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       const batches = await Promise.all(providers.map(async (provider) => {
         let advertised: readonly LlmModelInfo[]
         try { advertised = await ctx.llm.listModels(provider.id) } catch { return [] }
+        const profile = authorized.get(provider.id)
+        if (profile === undefined) return []
+        const authenticated = await options.providerAuthorized(provider.id, profile).catch(() => false)
+        const officialOpenRouter = provider.id === 'openrouter' && (profile.baseURL === undefined
+          || profile.baseURL.replace(/\/+$/u, '') === 'https://openrouter.ai/api/v1')
         return advertised.map((model) => {
           const key = routeKey(provider.id, model.id)
           // Provider names are not price evidence; unverified catalogs stay unknown.
-          const evidence = provider.id === 'openrouter' ? prices.get(model.id) : undefined
+          const evidence = officialOpenRouter ? prices.get(model.id) : undefined
           return {
             provider: provider.id,
             id: model.id,
             label: model.name,
             configured: true,
-            authorized: true,
+            authorized: authenticated,
             online: (blockedUntil.get(key) ?? 0) <= now,
             local: false,
             supportsImages: model.inputModalities?.includes('image') === true,
-            supportsTools: provider.id === 'openrouter' && prices.supportsTools(model.id),
+            supportsTools: officialOpenRouter && prices.supportsTools(model.id),
             ...(evidence === undefined ? {} : { price: evidence }),
           } satisfies NexusModel
         })
@@ -308,14 +314,28 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     }
     perAgent.set(agent, state)
     if (state.routed !== undefined) {
-      if (state.routed.provider === 'openai-codex') {
+      const route = state.routed
+      const profile = options.profiles().get(route.provider)
+      const authenticated = profile !== undefined
+        && await options.providerAuthorized(route.provider, profile).catch(() => false)
+      let eligible = authenticated
+      if (route.provider === 'openai-codex') {
         const quota = await getQuota(now, payload.signal)
-        if (!nexusCodexHasReserve(quota) || !await options.nativeCodexAuthorized()) {
-          throw new LlmError('Nexus cannot verify Codex reserve for the next step', 'NEXUS_NO_ELIGIBLE_ROUTE')
-        }
+        eligible = eligible && nexusCodexHasReserve(quota)
+      } else {
+        const inventory = await listAuthorizedModels(now)
+        const model = inventory.find(item => item.provider === route.provider && item.id === route.model)
+        eligible = eligible && model !== undefined && nexusPriceClass(model, now) === 'verified-free'
+          && route.provider === 'openrouter' && (profile?.baseURL === undefined
+            || profile.baseURL.replace(/\/+$/u, '') === 'https://openrouter.ai/api/v1')
       }
-      const { serviceTier: _tier, reasoningEffort: _effort, ...base } = selected
-      return { ...base, provider: state.routed.provider, model: state.routed.model }
+      if (!eligible) {
+        state.excluded.add(routeKey(route.provider, route.model))
+        state.routed = undefined
+      } else {
+        const { serviceTier: _tier, reasoningEffort: _effort, ...base } = selected
+        return { ...base, provider: route.provider, model: route.model }
+      }
     }
     const text = nexusTurnText(agent.session.events, payload.turn)
     const complex = text.length === 0 || nexusRequiresStrongModel(text)
@@ -331,12 +351,13 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       allowPaid: false,
       allowLocal: false,
     }, now)
-    let route = free
+    let route = complex ? undefined : free
     if (complex || free === undefined) {
       // A native ChatGPT/Codex seat is a user-existing subscription, not a new
       // API-key billing route. It remains bounded by the reported quota.
       const quota = await getQuota(now, payload.signal)
-      const ids = models.filter(model => model.provider === 'openai-codex'
+      const ids = models.filter(model => model.provider === 'openai-codex' && model.authorized
+        && (!hasImage || model.supportsImages === true)
         && !state.excluded.has(routeKey(model.provider, model.id))).map(model => model.id)
       const candidate = nexusCodexFallback(ids, complex)
       const withinBudget = complex ? nexusCodexHasReserve(quota) : nexusCodexWithinPace(quota, now)
@@ -351,6 +372,10 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
         'NEXUS_NO_ELIGIBLE_ROUTE',
       )
     }
+    const profile = options.profiles().get(route.provider)
+    if (profile === undefined || !await options.providerAuthorized(route.provider, profile).catch(() => false)) {
+      throw new LlmError('Nexus route authorization changed before dispatch', 'NEXUS_NO_ELIGIBLE_ROUTE')
+    }
     state.routed = route
     const { serviceTier: _tier, reasoningEffort: _effort, ...base } = selected
     return { ...base, provider: route.provider, model: route.model }
@@ -364,7 +389,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     const active = state?.turn === payload.turn ? state : undefined
     if (active?.routed === undefined || active.routed.provider !== payload.provider
       || active.failovers >= 2
-      || !['RATE_LIMIT', 'TIMEOUT', 'TRANSPORT', 'SERVER', 'AUTH', 'MODEL_NOT_FOUND'].includes(payload.failure.code)) {
+      || !['RATE_LIMIT', 'TIMEOUT', 'TRANSPORT', 'SERVER', 'AUTH', 'MISSING_CREDENTIAL', 'MODEL_NOT_FOUND'].includes(payload.failure.code)) {
       return next()
     }
     const failed = routeKey(active.routed.provider, active.routed.model)
