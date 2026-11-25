@@ -304,7 +304,7 @@ export function apply(ctx: Context): void {
       const memory=services.get('learningMemory') as RecipeContext['memory']|undefined
       if(!memory||typeof memory.allCognitiveRecords!=='function'||typeof memory.projectIdForSession!=='function'||typeof memory.rememberCognitive!=='function')throw Error('AMPLIFIER_RECIPE_MEMORY_UNAVAILABLE')
       // Root conversation only: no subagent can independently promote a recipe.
-      if((exec.agent as unknown as {isSubagent?:boolean}).isSubagent===true)throw Error('AMPLIFIER_RECIPE_OWNER_REQUIRED')
+      if(exec.agent.session.header.origin==='subagent')throw Error('AMPLIFIER_RECIPE_OWNER_REQUIRED')
       let ask:AdaptiveApprovalService|undefined
       try{ask=services.get('userQuestions') as AdaptiveApprovalService|undefined}catch{/* fail closed for saves */}
       const context:RecipeContext={memory,sessionId:String(exec.agent.session.id),eventSeq:exec.agent.session.seq,
