@@ -38,7 +38,7 @@ jobs:
       - name: Run adaptive OS and bounded Evolution regressions
         run: pnpm run test:adaptive:os
       - name: Run connected workspace regressions
-        run: pnpm exec vitest run packages/bundle/web-app/tests/space-store.spec.ts packages/bundle/web-app/tests/space-routes.spec.ts packages/client/ui-layout/tests/sheet-demonstration.client.spec.ts packages/client/ui-layout/tests/phoenix-space-visual.client.spec.tsx
+        run: pnpm exec vitest run packages/bundle/web-app/tests/space-store.spec.ts packages/bundle/web-app/tests/space-routes.spec.ts packages/client/ui-layout/tests/sheet-demonstration.client.spec.ts packages/client/ui-layout/tests/phoenix-space-visual.client.spec.tsx packages/client/ui-attachment/tests/presence-capture.client.spec.ts
       - name: Run static gates
         env:
           DSH_ARCHIVE_BASE_REF: ${{ github.event.pull_request.base.sha }}
