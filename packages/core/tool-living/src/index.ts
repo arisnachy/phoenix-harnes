@@ -3,6 +3,7 @@
 import { randomBytes } from 'node:crypto'
 import { runEvolution, summarizeEvolutionEvents } from './evolution.ts'
 import { AMPLIFIER_OPERATIONS, runAmplifier } from './amplifier.ts'
+import { saveNumericRecipe, runStoredNumericRecipe, type RecipeContext } from './amplifier-memory.ts'
 import { assessSelfInitiative, SELF_GOALS } from './self-initiative.ts'
 import { inspectSystemEnvironment, searchLocalApps } from './system-proprioception.ts'
 import { confirmAdaptiveExternalAction, type AdaptiveApprovalService } from './approved-action.ts'
@@ -279,15 +280,39 @@ function assertTargetReached(snapshot: LivingCreationSnapshot): void {
 
 /** Register the universal living-creation policy and model controls. */
 export function apply(ctx: Context): void {
-  ctx.systemPrompt.section({name:'phoenix:intelligence-amplifier',order:119,text:'When explicit structured verification is useful, use phoenix_amplifier to evaluate arithmetic and constraints (logos), run bounded deterministic numeric recipes (compression), validate dependency plans (compile), check supplied evidence expiry and disagreements (epistemic), compare declared structural scenarios (counterfactual), test relation mappings (analogy), assess practice evidence (mentor), check translation glossary/placeholders (babel), review proposed side effects (sentinel), and inspect schema changes (morphogenesis). This is an offline deterministic verifier, not a source of facts, a translator, a causal discovery engine, or permission to act. Use only non-sensitive explicit inputs; do not send credentials, patient data or hidden reasoning. Existing tools, native approvals and revision checks remain authoritative. Do not call it on ordinary chat or claim model-level capability gains without measured benchmarks.'})
+  ctx.systemPrompt.section({name:'phoenix:intelligence-amplifier',order:119,text:'When explicit structured verification is useful, use phoenix_amplifier to evaluate arithmetic and constraints (logos), run bounded deterministic numeric recipes (compression), validate dependency plans (compile), check supplied evidence expiry and disagreements (epistemic), compare declared structural scenarios (counterfactual), test relation mappings (analogy), assess practice evidence (mentor), check translation glossary/placeholders (babel), review proposed side effects (sentinel), and inspect schema changes (morphogenesis). This is an offline deterministic verifier, not a source of facts, a translator, a causal discovery engine, or permission to act. Use only non-sensitive explicit inputs; do not send credentials, patient data or hidden reasoning. Existing tools, native approvals and revision checks remain authoritative. For reusable numeric DAGs, test with recipe-test, then save only when the user approves through phoenix_recipe; reuse the exact saved id and current numeric inputs. No automatic promotion. Do not call it on ordinary chat or claim model-level capability gains without measured benchmarks.'})
   ctx.tools.register(defineTool({
     name:'phoenix_amplifier',
-    description:'Read-only deterministic structured verification (max 32 KiB JSON). logos: {variables:{id:number},expression:number|{var:id}|{op:add|sub|mul|div|min|max,args:[expr,expr]},constraints:[{op:eq|lt|le|gt|ge,value:number}]}; compression: {variables,steps:[{output,expression}]}; compile: {steps:[{id,dependsOn,requires?,produces?}]}; epistemic: {at:epochMs,evidence:[{id,claim,source,observed,expires,stance:supports|opposes}]}; counterfactual: {baseline,interventions,equations:[{output,expression}],outcome}; analogy: {source,target,mapping:[{source,target}],sourceEdges,targetEdges:[{from,to,relation}]}; mentor: {skills,attempts:[{skill,exercise,correct}]}; babel: {translation,glossary:[{target}],placeholders}; sentinel: {origin:user|external|tool,effect:read|write|external|permission,revisionVerified}; morphogenesis: {before,after,preserved} (field IDs). Use only non-sensitive inputs. No execution, storage, authority, source authentication or semantic correctness guarantee.',
+    description:'Read-only deterministic structured verification (max 32 KiB JSON). logos: {variables:{id:number},expression:number|{var:id}|{op:add|sub|mul|div|min|max,args:[expr,expr]},constraints:[{op:eq|lt|le|gt|ge,value:number}]}; compression: {variables,steps:[{output,expression}]}; compile: {steps:[{id,dependsOn,requires?,produces?}]}; epistemic: {at:epochMs,evidence:[{id,claim,source,observed,expires,stance:supports|opposes}]}; counterfactual: {baseline,interventions,equations:[{output,expression}],outcome}; analogy: {source,target,mapping:[{source,target}],sourceEdges,targetEdges:[{from,to,relation}]}; mentor: {skills,attempts:[{skill,exercise,correct}]}; babel: {translation,glossary:[{target}],placeholders}; sentinel: {origin:user|external|tool,effect:read|write|external|permission,revisionVerified}; morphogenesis: {before,after,preserved} (field IDs). Use only non-sensitive inputs. No external execution, storage, authority, source authentication or semantic correctness guarantee. compile-run: {program:{inputs:[id],steps:[{id,dependsOn,output,expression}]},inputs:{id:number}}; recipe-test: {program,fixtures:[{inputs,expected}]} (3–8 distinct cases). analogy-find: {source,target,sourceEdges,targetEdges} (max 8 nodes each). mentor-grade: {skills,exercises:[{id,skill,answer,expected}]}; babel-segments: {segments:[{id,source,translation}],glossary:[{source,target}]}.',
     parameters:{operation:{type:'string',required:true,enum:AMPLIFIER_OPERATIONS},input_json:{type:'string',required:true}},
     output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
     isConcurrencySafe:()=>true,
     execute(args){return Promise.resolve(JSON.stringify(runAmplifier(args.operation,args.input_json)))},
     presentCall:()=>({card:'generic',title:'PHOENIX · Intelligence Amplifier',kind:'read' as const}),
+  }))
+
+  ctx.tools.register(defineTool({
+    name:'phoenix_recipe',
+    description:'Save a reusable numeric DAG after 3–8 distinct passing supplied fixtures and exact human ASK approval, or run a saved recipe by its returned SHA-256 id. Same project or exact session only; never pass sensitive or personal information. save input_json={program:{inputs:[id],steps:[{id,dependsOn,output,expression}]},fixtures:[{inputs,expected}]}; run input_json={id,inputs}. No external actions or automatic skill promotion.',
+    parameters:{operation:{type:'string',required:true,enum:['save','run']},input_json:{type:'string',required:true}},
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>false,
+    async execute(args,exec){
+      if(!exec.agent||Buffer.byteLength(args.input_json,'utf8')>32768)throw Error('AMPLIFIER_RECIPE_CONTEXT')
+      const services=ctx as unknown as {get(name:string):unknown}
+      const memory=services.get('learningMemory') as RecipeContext['memory']|undefined
+      if(!memory||typeof memory.allCognitiveRecords!=='function'||typeof memory.projectIdForSession!=='function'||typeof memory.rememberCognitive!=='function')throw Error('AMPLIFIER_RECIPE_MEMORY_UNAVAILABLE')
+      // Root conversation only: no subagent can independently promote a recipe.
+      if((exec.agent as unknown as {isSubagent?:boolean}).isSubagent===true)throw Error('AMPLIFIER_RECIPE_OWNER_REQUIRED')
+      let ask:AdaptiveApprovalService|undefined
+      try{ask=services.get('userQuestions') as AdaptiveApprovalService|undefined}catch{/* fail closed for saves */}
+      const context:RecipeContext={memory,sessionId:String(exec.agent.session.id),eventSeq:exec.agent.session.seq,
+        agent:exec.agent,...(exec.signal===undefined?{}:{signal:exec.signal}),...(ask===undefined?{}:{ask})}
+      if(args.operation==='save')return JSON.stringify(await saveNumericRecipe(args.input_json,context))
+      const input=JSON.parse(args.input_json) as {id?:unknown;inputs?:unknown}
+      return JSON.stringify(runStoredNumericRecipe(input.id,input.inputs,context))
+    },
+    presentCall:()=>({card:'generic',title:'PHOENIX · Procedimiento numérico reutilizable',kind:'other' as const}),
   }))
 
   ctx.systemPrompt.section({name:'phoenix:evolution-evidence',order:117,text:'PHOENIX can use phoenix_evolution_analyze to consolidate bounded operational observations (dreaming), compare paired fixtures (causal/lab/skill), simulate dependency removal (twin), summarize measured outcomes (metrics), assess current host RAM (homeostasis), suggest tools from explicit goals (intent), and prepare reference-only model handoffs (handoff). Use only opaque non-sensitive identifiers, never patient data, credentials, conversation transcripts or private reasoning. Caller-supplied evidence is unverified; results never authorize promotion, provider switching, resource reservation, or execution. Do not invent observations. No extra persistence or background activity; rely on the existing authorized session and review workflows.'})
