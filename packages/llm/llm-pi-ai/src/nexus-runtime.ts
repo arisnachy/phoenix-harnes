@@ -54,6 +54,31 @@ export function nexusCodexHasReserve(quota: NexusCodexQuota | undefined): boolea
     && secondary !== undefined && Number.isFinite(secondary) && secondary >= 0 && secondary < 90
 }
 
+const HOUR_MS = 3_600_000
+
+function pacedWindow(used: number | undefined, reset: number | undefined, now: number, duration: number): boolean {
+  if (used === undefined || reset === undefined || !Number.isFinite(reset)) return false
+  // Account receipts can express UNIX timestamps in seconds or milliseconds.
+  const resetMs = reset < 100_000_000_000 ? reset * 1_000 : reset
+  const remainingMs = resetMs - now
+  if (remainingMs <= 0 || remainingMs > duration) return false
+  const elapsedFraction = 1 - remainingMs / duration
+  // A small burst is permitted, without allowing an early window to be exhausted.
+  const allowedPercent = Math.min(90, 10 + elapsedFraction * 85)
+  return used < allowedPercent
+}
+
+/**
+ * Admit ordinary subscription work only when both native windows have usable
+ * reset timestamps and consumption is within a conservative elapsed-time budget.
+ * Difficult work may use the separate hard reserve, never an unknown quota.
+ */
+export function nexusCodexWithinPace(quota: NexusCodexQuota | undefined, now: number): boolean {
+  return quota !== undefined && nexusCodexHasReserve(quota)
+    && pacedWindow(quota.primaryUsedPercent, quota.resetPrimaryAt, now, 5 * HOUR_MS)
+    && pacedWindow(quota.secondaryUsedPercent, quota.resetSecondaryAt, now, 7 * 24 * HOUR_MS)
+}
+
 /** Select the latest real Codex model in one family, never inventing a model ID. */
 export function nexusCodexFallback(ids: readonly string[], complex: boolean): string | undefined {
   const candidates = ids.filter(id => complex
@@ -203,7 +228,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
   const routeKey = (provider: string, model: string) => provider + '/' + model
 
   const getQuota = async (now: number, signal: AbortSignal): Promise<NexusCodexQuota | undefined> => {
-    if (now < quotaReadAt + 60_000) return quotaCache
+    if (now < quotaReadAt + 60_000 && quotaCache !== undefined) return quotaCache
     quotaReadAt = now
     const auth = ctx.get('authorization')
     if (auth === undefined) return undefined
@@ -283,6 +308,12 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     }
     perAgent.set(agent, state)
     if (state.routed !== undefined) {
+      if (state.routed.provider === 'openai-codex') {
+        const quota = await getQuota(now, payload.signal)
+        if (!nexusCodexHasReserve(quota) || !await options.nativeCodexAuthorized()) {
+          throw new LlmError('Nexus cannot verify Codex reserve for the next step', 'NEXUS_NO_ELIGIBLE_ROUTE')
+        }
+      }
       const { serviceTier: _tier, reasoningEffort: _effort, ...base } = selected
       return { ...base, provider: state.routed.provider, model: state.routed.model }
     }
@@ -308,8 +339,8 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       const ids = models.filter(model => model.provider === 'openai-codex'
         && !state.excluded.has(routeKey(model.provider, model.id))).map(model => model.id)
       const candidate = nexusCodexFallback(ids, complex)
-      if (candidate !== undefined && nexusCodexHasReserve(quota)
-        && await options.nativeCodexAuthorized()) {
+      const withinBudget = complex ? nexusCodexHasReserve(quota) : nexusCodexWithinPace(quota, now)
+      if (candidate !== undefined && withinBudget && await options.nativeCodexAuthorized()) {
         route = { provider: 'openai-codex', model: candidate, priceClass: 'unknown',
           reason: 'existing authorized Codex subscription; model quality or tool requirements' }
       }

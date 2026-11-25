@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   NEXUS_MODEL, NEXUS_PROVIDER, NexusSelectorAdapter,
-  nexusCodexFallback, nexusCodexHasReserve, nexusRequiresStrongModel,
+  nexusCodexFallback, nexusCodexHasReserve, nexusCodexWithinPace, nexusRequiresStrongModel,
   nexusTurnText, nexusTurnHasHumanImage,
 } from '../src/nexus-runtime.ts'
 
@@ -18,6 +18,20 @@ describe('Nexus synthetic model route', () => {
     expect(nexusCodexFallback(['gpt-6-luna', 'gpt-6.1-sol', 'gpt-6.2-sol'], true)).toBe('gpt-6.2-sol')
     expect(nexusCodexFallback(['gpt-6-luna', 'gpt-6.2-sol'], false)).toBe('gpt-6-luna')
     expect(nexusCodexFallback(['unrelated-model'], true)).toBeUndefined()
+  })
+  it('paces both windows using native reset timestamps rather than token guesses', () => {
+    const now = 1_800_000_000_000
+    const hour = 3_600_000
+    const quota = {
+      primaryUsedPercent: 20, secondaryUsedPercent: 20,
+      resetPrimaryAt: now + 2 * hour, resetSecondaryAt: (now + 3 * 24 * hour) / 1_000,
+    }
+    expect(nexusCodexWithinPace(quota, now)).toBe(true)
+    expect(nexusCodexWithinPace({ ...quota, resetSecondaryAt: now + 7 * 24 * hour }, now)).toBe(false)
+    expect(nexusCodexWithinPace({ ...quota, resetPrimaryAt: now - 1 }, now)).toBe(false)
+    expect(nexusCodexWithinPace({ primaryUsedPercent: 2, secondaryUsedPercent: 2 }, now)).toBe(false)
+    expect(nexusCodexWithinPace(undefined, now)).toBe(false)
+    expect(nexusCodexWithinPace({ ...quota, primaryUsedPercent: 98 }, now)).toBe(false)
   })
   it('protects Codex 5h/7d reserves and requires capability for difficult tasks', () => {
     expect(nexusCodexHasReserve(undefined)).toBe(false)

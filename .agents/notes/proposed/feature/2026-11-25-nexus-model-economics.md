@@ -30,3 +30,12 @@ Implement Nexus as a provider-neutral layer over the existing configured model d
 ## Risks
 
 This change starts with a pure pricing/router library and provider-mark rendering. Production wiring, account-aware quota probes, persistence, and real-provider acceptance tests are still required before automatic cross-provider routing can be enabled safely.
+
+## Validation update
+
+The first CI run exposed a cross-turn evidence regression and Nexus-specific
+lint failures. The branch now bounds extraction by turn, refuses missing quota
+percentages, and excludes unreserved limited allowances and unverified free
+providers. The pacing policy uses both native reset timestamps; it is not an
+exact token forecast. Full CI, persistent calibration, provider-level
+verification and stable integration remain acceptance gates.

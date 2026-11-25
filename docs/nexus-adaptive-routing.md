@@ -9,3 +9,17 @@ The target engine covers all configured provider routes, not just OpenRouter and
 ## Wiring requirements
 
 The current opt-in Host reads the configured provider model registry, public OpenRouter price catalog and Codex account quotas; the Kira team displays actual serving model badges. The next acceptance gates are persistence of usage and calibration across restarts, real readiness checks for each configured provider, account-specific free-tier entitlement detection, proof of in-session failover, and optional UI controls for the local-model gate. Do not promote it as complete until the integrated tests and live provider checks pass.
+
+## Quota and billing safety
+
+Ordinary Codex fallback requires both native quota percentages and valid reset
+timestamps. The pacing allowance is 10 percent plus 85 percent of the elapsed
+window fraction, capped at 90 percent. Complex tasks may use the independent
+hard reserve (95 percent for the five-hour window, 90 percent for seven days).
+Neither policy estimates a provider token balance. Missing quota data fails
+closed. This is a conservative admission heuristic, not a guarantee of seven
+days of capacity; provider-side consumption and concurrent use remain external.
+
+Limited free allowances remain visible as a separate price class, but are not
+automatically consumed without a provable no-overage reservation. Provider
+names never establish a zero price. No premium supervisor is invoked.
