@@ -27,6 +27,23 @@ describe('updater presentation policy', () => {
     expect(activationNeedsVerification({ status: 'restarting', events: [restart(16), restart(17), restart(18)] }, now)).toBe(false)
   })
 
+  it('suppresses elapsed-time and restart warnings while a silent build heartbeat is fresh', () => {
+    const now = Date.parse('2026-10-24T23:55:00Z')
+    const snapshot = {
+      status: 'applying',
+      at: new Date(now - 25 * 60_000).toISOString(),
+      console: [{
+        step: 'build', at: new Date(now - 20_000).toISOString(),
+        line: '[PHOENIX UPDATE] Proceso activo; esperando que termine la etapa.',
+      }],
+    }
+    expect(activationNeedsVerification(snapshot, now)).toBe(false)
+    expect(activationNeedsVerification(snapshot, now + 61_000)).toBe(true)
+    expect(activationNeedsVerification({
+      ...snapshot, events: [{ step: 'build', result: 'failed', at: new Date(now).toISOString() }],
+    }, now)).toBe(true)
+  })
+
   it('hides pauses caused by protected checkout policy', () => {
     expect(isHiddenUpdaterPause('development-branch')).toBe(true)
     expect(isHiddenUpdaterPause('diverged')).toBe(true)

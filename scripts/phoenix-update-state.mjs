@@ -302,6 +302,16 @@ export function diagnoseStalledPhoenixActivation(statePath, now = Date.now()) {
   if (!Number.isFinite(since) || since > now || now - since < RESTART_STALL_MS) return false
 
   const control = dirname(statePath)
+  // The supervisor uses spawnSync during isolated builds, so its own heartbeat
+  // may be quiet even though the detached command helper is still running.
+  try {
+    const command = JSON.parse(readFileSync(join(control, 'phoenix-update-command-heartbeat.json'), 'utf8'))
+    const at = Date.parse(command?.at ?? '')
+    if (command?.schema === 1 && command.target === state.target
+      && COMMAND_STEPS.has(command.step) && Number.isSafeInteger(command.pid) && command.pid > 0
+      && Number.isSafeInteger(command.childPid) && command.childPid > 0
+      && Number.isFinite(at) && at >= since && at <= now && now - at <= 60_000) return false
+  } catch { /* old runtimes or expired telemetry use the normal diagnosis */ }
   let supervisor
   try {
     supervisor = JSON.parse(readFileSync(join(control, SUPERVISOR_HEARTBEAT_FILE), 'utf8'))
