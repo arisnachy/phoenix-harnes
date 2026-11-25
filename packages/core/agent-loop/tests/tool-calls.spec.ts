@@ -97,6 +97,35 @@ async function until(predicate: () => boolean): Promise<void> {
 }
 
 describe('tool-call scheduler: grouping and barriers', () => {
+
+  it('suppresses an identical fourth failed dispatch and permits a changed strategy', async () => {
+    const adapter = new MockAdapter([
+      toolCallResponse('c1', 'flaky', { id: 'bad' }),
+      toolCallResponse('c2', 'flaky', { id: 'bad' }),
+      toolCallResponse('c3', 'flaky', { id: 'bad' }),
+      toolCallResponse('c4', 'flaky', { id: 'bad' }),
+      toolCallResponse('c5', 'flaky', { id: 'good' }),
+      textResponse('recovered'),
+    ])
+    const ctx = await harness(adapter)
+    const attempts: string[] = []
+    ctx.tools.register(defineContentToolFixture({
+      name: 'flaky', description: 'test recovery', parameters: { id: { type: 'string', required: true } },
+      async execute(args) {
+        attempts.push(args.id)
+        if (args.id === 'bad') throw new Error('unavailable')
+        return [{ type: 'text', text: 'verified' }]
+      },
+    }))
+    const agent = ctx.agentLoop.create(SessionId('repeated-tool-failure'), { provider: 'mock', model: 'mock' })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'recover the operation' }], source: { kind: 'user' } }))
+    await agent.whenIdle()
+    expect(attempts).toEqual(['bad', 'bad', 'bad', 'good'])
+    const results = events(agent).filter(event => event.type === 'tool/result')
+    expect(results).toHaveLength(5)
+    expect(results[3]?.data.error?.code).toBe('PHOENIX_REPEATED_TOOL_FAILURE')
+    expect(results[4]?.data.message.content[0]).toMatchObject({ type: 'tool-result', isError: false })
+  })
   it.each([false, true])('keeps a concluding result terminal after a later tool error (parallel=%s)', async (parallel) => {
     const adapter = new MockAdapter([
       multiCall([{ id: 'c1', name: 'finalize', args: {} }, { id: 'c2', name: 'failing', args: {} }]),
