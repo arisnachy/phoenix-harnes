@@ -81,8 +81,6 @@ export function HealthiaClinicDashboard({onNavigate,onPatientChange,accessStatus
   const now=new Date()
   const today=clinicDay(now.toISOString())
   const localDate=now.toLocaleDateString('es-DO',{weekday:'long',day:'numeric',month:'long',year:'numeric',timeZone:'America/Santo_Domingo'})
-  const hour=Number(new Intl.DateTimeFormat('en-GB',{hour:'2-digit',hourCycle:'h23',timeZone:'America/Santo_Domingo'}).format(now))
-  const greeting=hour<12?'Buenos días':hour<19?'Buenas tardes':'Buenas noches'
   const todayVisits=visits.filter(item=>typeof item.startsAt==='string'
     &&Number.isFinite(Date.parse(item.startsAt))
     &&clinicDay(item.startsAt)===today&&item.status!=='cancelled')
@@ -92,19 +90,20 @@ export function HealthiaClinicDashboard({onNavigate,onPatientChange,accessStatus
   const matches=term?patients.filter(p=>[p.name,p.documentNumber,p.phone,p.email].some(v=>
     typeof v==='string'&&v.toLocaleLowerCase('es').includes(term))):patients.slice(0,7)
   const openPatient=(id:string):void=>{onPatientChange(id);onNavigate('patients')}
+  const consultPatient=(id:string):void=>{onPatientChange(id);if(onStart)onStart('encounter');else onNavigate('encounters')}
+  const canConsult=session!==null&&['clinician','psychologist'].includes(session.actor.role)
+  const canRegister=session!==null&&['admin','clinician','reception'].includes(session.actor.role)
 
   return <section className={css.root} aria-label="Inicio de Healthia">
     <header className={css.hero}>
       <div className={css.heroCopy}>
         <span className={css.eyebrow}>{localDate}</span>
-        <span className={css.greeting}>{greeting}, doctor.</span>
-        <h3>Tu jornada clínica, en un solo espacio</h3>
-        <p>Tu jornada, tus pacientes y tu agenda. Usa el chat de PHOENIX para orientar el trabajo o abre una acción clínica directamente.</p>
+        <h3>Jornada clínica</h3>
       </div>
       <div className={css.heroActions}>
-        <button type="button" className={css.primary}
+        <button type="button" className={css.primary} disabled={isUnlocked&&session!==null&&!canConsult}
           onClick={()=>onStart?onStart('encounter'):onNavigate('encounters')}>+ Nueva consulta</button>
-        <button type="button" className={css.secondary}
+        <button type="button" className={css.secondary} disabled={isUnlocked&&session!==null&&!canRegister}
           onClick={()=>onStart?onStart('patient'):onNavigate('patients')}>Registrar paciente</button>
       </div>
     </header>
@@ -112,39 +111,14 @@ export function HealthiaClinicDashboard({onNavigate,onPatientChange,accessStatus
       {DESTINATIONS.map(item=><button key={item.id} className={css.destination} type="button"
         onClick={()=>onNavigate(item.id)}>
         <span className={css.destinationIcon}><ClinicalIcon kind={item.id}/></span>
-        <span className={css.destinationCopy}><strong>{item.label}</strong><small>{item.detail}</small></span>
+        <span className={css.destinationCopy}><strong>{item.label}</strong></span>
         <span className={css.destinationArrow} aria-hidden="true">›</span>
       </button>)}
     </nav>
 
-    {!isUnlocked&&<div className={css.columns}>
-      <div className={css.journey}>
-        <div className={css.sectionHead}>
-          <div><span className={css.eyebrow}>ATENCIÓN INTEGRADA</span><h4>Así trabajará tu clínica</h4></div>
-        </div>
-        <div className={css.steps}>
-          {[['01','Identifica al paciente','Admisión, contacto y expediente longitudinal'],
-            ['02','Registra la consulta','Entrevista, exploración, diagnóstico y evolución'],
-            ['03','Revisa y firma','Decisión profesional antes de emitir documentos'],
-            ['04','Da seguimiento','Citas, estudios, recetas y continuidad asistencial']].map(([number,title,detail])=>
-            <div className={css.step} key={number}>
-              <span className={css.stepNumber}>{number}</span>
-              <div><strong>{title}</strong><small>{detail}</small></div>
-            </div>)}
-        </div>
-        <div className={css.smallNote}>Los menús y formularios están disponibles.
-          Para leer o modificar un expediente real se requiere autorización profesional.</div>
-      </div>
-      <aside className={css.access} aria-label="Acceso profesional">
-        <span className={css.eyebrow}>ACCESO INSTITUCIONAL</span>
-        <h4>{accessStatus==='locked'?'Continuar con mi clínica':'Conectar el servicio clínico'}</h4>
-        <p className={css.accessHelp}>
-          {accessStatus==='locked'
-            ?'Utiliza la cuenta de tu institución. Al acceder aparecerán los pacientes y citas reales.'
-            :'El servicio local no respondió. Puedes explorar el entorno y comprobar la conexión aquí.'}
-        </p>
-        <button type="button" className={css.secondary} onClick={onRequestAccess}>Abrir acceso protegido</button>
-      </aside>
+    {!isUnlocked&&<div className={css.lockedStrip} role="status">
+      <span>{accessStatus==='locked'?'Clínica bloqueada':'Servicio clínico sin conexión'}</span>
+      <button type="button" className={css.primary} onClick={onRequestAccess}>Abrir acceso protegido</button>
     </div>}
 
     {isUnlocked&&<div className={css.operational}>
@@ -154,17 +128,17 @@ export function HealthiaClinicDashboard({onNavigate,onPatientChange,accessStatus
         <button className={css.metric} type="button" onClick={()=>onNavigate('patients')}>
           <small>Pacientes autorizados</small>
           <strong>{canDirectory?patients.length:'—'}</strong>
-          <span>{canDirectory?'Expedientes accesibles':'Sin acceso a directorio'}</span>
+          
         </button>
         <button className={css.metric} type="button" onClick={()=>onNavigate('appointments')}>
           <small>Citas de hoy</small>
           <strong>{canDirectory?todayVisits.length:'—'}</strong>
-          <span>{canDirectory?'Agenda de la institución':'Según permisos de la cuenta'}</span>
+          
         </button>
         <button className={css.metric} type="button" onClick={()=>onNavigate('appointments')}>
           <small>Pendientes de atención</small>
           <strong>{canDirectory?pending.length:'—'}</strong>
-          <span>Programadas para hoy</span>
+          
         </button>
       </div>}
       {session&&<div className={css.columns}>
@@ -179,12 +153,12 @@ export function HealthiaClinicDashboard({onNavigate,onPatientChange,accessStatus
               placeholder="Buscar expediente autorizado…"/>
           </label>}
           <div className={css.people}>
-            {matches.map(patient=><button className={css.person} key={patient.id} type="button"
+            {matches.map(patient=><div className={css.personRow} key={patient.id}><button className={css.person} type="button"
               onClick={()=>openPatient(patient.id)}>
               <span className={css.avatar} aria-hidden="true">{patient.name.trim().split(/\s+/u).slice(0,2).map(word=>word[0]??'').join('').toLocaleUpperCase('es')}</span>
-              <span><strong>{patient.name}</strong><small>Ver expediente longitudinal</small></span>
+              <span><strong>{patient.name}</strong></span>
               <span aria-hidden="true">›</span>
-            </button>)}
+            </button>{canConsult&&<button type="button" className={css.secondary} onClick={()=>consultPatient(patient.id)}>Consultar</button>}</div>)}
             {!matches.length&&<p className={css.empty}>
               {canDirectory?'No se encontraron expedientes en tu ámbito de acceso.':'Tu rol no dispone de acceso al directorio de pacientes.'}
             </p>}
@@ -196,13 +170,13 @@ export function HealthiaClinicDashboard({onNavigate,onPatientChange,accessStatus
             <button type="button" onClick={()=>onNavigate('appointments')}>Ver todas</button>
           </div>
           <div className={css.people}>
-            {todayVisits.slice(0,8).map(item=><button className={css.appointment} key={item.id}
+            {todayVisits.slice(0,8).map(item=><div key={item.id} className={css.personRow}><button className={css.appointment}
               type="button" onClick={()=>typeof item.patientId==='string'
                 ?openPatient(item.patientId):onNavigate('appointments')}>
               <span className={css.appointmentHour}>{clock(item.startsAt)}</span>
               <span><strong>{patients.find(patient=>patient.id===item.patientId)?.name??'Cita registrada'}</strong>
                 <small>{item.status==='scheduled'?'Programada':String(item.status??'Registrada')}</small></span>
-            </button>)}
+            </button>{canConsult&&typeof item.patientId==='string'&&patients.some(p=>p.id===item.patientId)&&item.status==='scheduled'&&<button type="button" className={css.secondary} onClick={()=>consultPatient(String(item.patientId))}>Atender</button>}</div>)}
             {!todayVisits.length&&<p className={css.empty}>No hay citas visibles para hoy en tu ámbito de acceso.</p>}
           </div>
         </aside>
