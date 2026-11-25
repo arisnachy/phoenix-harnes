@@ -18,22 +18,6 @@ Public payload types live under `./types`, and Typert generates the Host and Cli
 
 Telegram owner-paired messages run through the configured Phoenix session gateway; while execution is pending, the Host emits Telegram's ephemeral `sendChatAction(typing)` indicator, not an automatic acknowledgement message. Only model-visible answers or explicit failure reports become chat text. Typing failures do not prevent the Agent from completing.
 
-## Model Experience
-
-None, as this Host-only diagnostics and update-control service registers no prompt, tool, message, or provider request.
-
-#### KV Cache effect
-
-None; this package never assembles model input.
-
-## Known Limitations and Deferred Work
-
-- **Point-in-time plugin state only** — the inventory contains no durable plugin failure history or subscription; a missing root Fiber is reported as `null` regardless of why no live root exists.
-- **Updater progress is phase-based** — the updater reports source, dependency, build, smoke, activation, and rollback phases rather than byte-level download percentages.
-- **Restart is intentionally narrow** — Web can request activation only for the updater's exact prepared `ready` target; arbitrary checkout switching and plugin mutation are outside this service.
-
-Registry installation accepts only concrete remote endpoints. URI templates with literal or percent-encoded braces are excluded from automatic installation, allowing a later concrete endpoint in the same server entry to be selected.
-
 ## Anatomía 3D · Conectores
 
 **Conectores → Anatomía 3D** presenta siete capacidades locales con comprobación independiente y acciones autorizadas desde el Host. El check indica **paquete detectado**, no una integración clínicamente validada. Cada instalación es optativa, aislada en `%LOCALAPPDATA%\\PHOENIX\\anatomy` en Windows y no lee expedientes de HealthIA.
@@ -61,3 +45,19 @@ Kira dispone de `health_anatomy_connectors`, `health_anatomy_status` y `health_a
 Local Ollama management: the Host inventories loopback /api/tags and /api/show, rate-limits refresh, pulls missing models only on explicit install, and exposes a separate confirmed delete action. User-owned Ollama models are never removed by the Phoenix unlink action. Operational context and output limits are bounded by detected capacity. No local model or credential information is committed to the repository.
 
 The chat model selector may call `setDefaultLocalModel` with `installedOnly: true`. This path verifies an existing Ollama tag before linking it, rejects missing managed models, and never pulls weights. The local runtime selection remains Host-wide.
+
+## Model Experience
+
+None, as this Host-only diagnostics and update-control service registers no prompt, tool, message, or provider request.
+
+#### KV Cache effect
+
+None; this package never assembles model input.
+
+## Known Limitations and Deferred Work
+
+- **Point-in-time plugin state only** — the inventory contains no durable plugin failure history or subscription; a missing root Fiber is reported as `null` regardless of why no live root exists.
+- **Updater progress is phase-based** — the updater reports source, dependency, build, smoke, activation, and rollback phases rather than byte-level download percentages.
+- **Restart is intentionally narrow** — Web can request activation only for the updater's exact prepared `ready` target; arbitrary checkout switching and plugin mutation are outside this service.
+
+Registry installation accepts only concrete remote endpoints. URI templates with literal or percent-encoded braces are excluded from automatic installation, allowing a later concrete endpoint in the same server entry to be selected.

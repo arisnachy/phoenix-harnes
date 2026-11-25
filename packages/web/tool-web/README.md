@@ -42,6 +42,12 @@ Tool registration follows product **enablement**, not backend availability. A to
 
 The tool never calls a provider's `available()` and never enumerates providers — its only execution path is `ctx.web.search()` / `ctx.web.fetch()`, and provider unavailability reaches it as the structured `WebError` codes selection throws at execution time. Provider selection stays entirely inside the seam, with one owner.
 
+## Federated scientific research
+
+The search-enabled composition registers `research_federated` and `research_catalog` alongside `research_scholar`. Federated search concurrently queries Europe PMC, Crossref, OpenAlex, DataCite and Semantic Scholar without API keys; each provider reports success, an empty result or unavailability. The 14-second budget, per-provider result cap, DOI/PMID/title deduplication, and 45-record response bound apply before the model receives metadata. Metadata does not authenticate study conclusions or guarantee full-text access.
+
+`research_catalog` exposes 100 source descriptions grouped by subject and access rules. Anonymous automatic candidates are limited to documented `none` and `none_limited` entries; conditional, unverified or credentialed sources are metadata only. The source catalog is stored at `data/research-source-catalog.json`; `src/research-source-catalog.ts` provides its model-facing typed projection. The separate `research_investigate` tool performs document reading through the governed web seam. The federated metadata provider fetches use fixed allowlisted HTTPS endpoints, reject redirects and report rate limits without retry storms.
+
 ## Model Experience
 
 ### System prompt
@@ -145,12 +151,6 @@ Only the failing call adds these retained tokens.
 #### KV Cache effect
 
 Append-only; newly visible content follows the reusable request prefix and does not invalidate existing KV-cache entries.
-
-## Federated scientific research
-
-The search-enabled composition registers `research_federated` and `research_catalog` alongside `research_scholar`. Federated search concurrently queries Europe PMC, Crossref, OpenAlex, DataCite and Semantic Scholar without API keys; each provider reports success, an empty result or unavailability. The 14-second budget, per-provider result cap, DOI/PMID/title deduplication, and 45-record response bound apply before the model receives metadata. Metadata does not authenticate study conclusions or guarantee full-text access.
-
-`research_catalog` exposes 100 source descriptions grouped by subject and access rules. Anonymous automatic candidates are limited to documented `none` and `none_limited` entries; conditional, unverified or credentialed sources are metadata only. The source catalog is stored at `data/research-source-catalog.json`; `src/research-source-catalog.ts` provides its model-facing typed projection. The separate `research_investigate` tool performs document reading through the governed web seam. The federated metadata provider fetches use fixed allowlisted HTTPS endpoints, reject redirects and report rate limits without retry storms.
 
 ## Known Limitations and Deferred Work
 
