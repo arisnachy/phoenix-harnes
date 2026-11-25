@@ -39,7 +39,7 @@ export interface NexusModel {
   readonly supportsImages?: boolean
   readonly contextWindow?: number
   readonly thinkingLevels?: readonly string[]
-  readonly price?: NexusPriceEvidence
+  readonly price?: NexusPriceEvidence | undefined
   readonly observedLatencyMs?: number
   readonly observedQuality?: number
   readonly observations?: number
