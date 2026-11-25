@@ -266,6 +266,10 @@ function selectToolsForPressureBudget(options: GenerateOptions, inputBudgetToken
     const name = tool.name.toLowerCase()
     const description = tool.description.toLowerCase()
     let score = used.has(tool.name) ? 10_000 : 0
+    if (options.provider === 'phoenix-local') {
+      if (tool.name === 'tool_search') score += 100_000
+      else if (tool.name === 'run_code') score += 50_000
+    }
     if (query.includes(name)) score += 2_000
     if (CORE_PRESSURE_TOOL.test(tool.name)) score += 500
     for (const word of words) {
@@ -436,7 +440,34 @@ export function fitPhoenixLocalTextTurn(
 ): ContextBudgetFit {
   const regular = fitGenerateOptionsToContext(options, contextWindow, desiredMaxOutput)
   const localRegular = fitPhoenixLocalHeadroom(regular.options, contextWindow, desiredMaxOutput, regular.compacted)
-  if (localRegular.estimatedTokens <= localRegular.inputBudgetTokens) return localRegular
+  const gateway = options.tools?.find(tool => tool.name === 'tool_search')
+    ?? options.tools?.find(tool => tool.name === 'run_code')
+  if (localRegular.estimatedTokens <= localRegular.inputBudgetTokens
+    && (gateway === undefined || localRegular.options.tools?.some(tool => tool.name === gateway.name))) return localRegular
+
+  // Preserve the active mission and every current tool call/result pair. Drop
+  // only older history from the request projection, never from durable state.
+  // Do not degrade a tool-capable agent into the conversational fallback.
+  if (gateway !== undefined) {
+    const current = options.messages.findLastIndex(message => message.role === 'user' && message.source.kind === 'user')
+    if (current < 0) return fitPhoenixLocalHeadroom(options, contextWindow, desiredMaxOutput, false)
+    const retained = options.messages.slice(current)
+    const prior = options.messages.slice(0, current)
+    const runtime = prior.findLast(message => message.source.kind === 'plugin'
+      && message.source.plugin === '@phoenix-ai/dsh-system-prompt')
+    const suffixHasRuntime = retained.some(message => message.source.kind === 'plugin'
+      && message.source.plugin === '@phoenix-ai/dsh-system-prompt')
+    const messages = runtime !== undefined && !suffixHasRuntime ? [runtime, ...retained] : retained
+    const projected = compactAuxiliaryContextForPressure({ ...options, messages })
+    const projectedFit = fitPhoenixLocalHeadroom(projected, contextWindow, desiredMaxOutput, true)
+    if (projectedFit.estimatedTokens <= projectedFit.inputBudgetTokens) return projectedFit
+    const selected = selectToolsForPressureBudget(projected,
+      Math.max(1, Math.floor(projectedFit.inputBudgetTokens * 3.5 / ESTIMATED_CHARS_PER_TOKEN)))
+    const fitted = fitPhoenixLocalHeadroom(selected, contextWindow, desiredMaxOutput, true)
+    if (fitted.options.tools?.some(tool => tool.name === gateway.name)) return fitted
+    // Explicit context error rather than a misleading tool-free success.
+    return projectedFit
+  }
 
   // Keep the full instructions, real tool signatures and user history whenever
   // a more conservative, request-only projection can still fit the model window.
