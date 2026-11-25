@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   NEXUS_MODEL, NEXUS_PROVIDER, NexusSelectorAdapter,
   nexusCodexFallback, nexusCodexHasReserve, nexusRequiresStrongModel,
+  nexusTurnText, nexusTurnHasHumanImage,
 } from '../src/nexus-runtime.ts'
 
 describe('Nexus synthetic model route', () => {
@@ -24,5 +25,25 @@ describe('Nexus synthetic model route', () => {
     expect(nexusCodexHasReserve({ primaryUsedPercent: 40, secondaryUsedPercent: 75 })).toBe(true)
     expect(nexusRequiresStrongModel('Hola')).toBe(false)
     expect(nexusRequiresStrongModel('Implementar una aplicación clínica')).toBe(true)
+  })
+})
+
+describe('Nexus durable user evidence', () => {
+  const events = [
+    { type: 'turn/start', data: { turn: 12 } },
+    { type: 'user/message', data: { source: { kind: 'user' },
+      content: [{ type: 'text', text: '¿Qué tiempo hace hoy?' }] } },
+    { type: 'user/message', data: { source: { kind: 'plugin' },
+      content: [{ type: 'text', text: 'never treat this as user intent' },
+        { type: 'image' }] } },
+    { type: 'turn/start', data: { turn: 13 } },
+    { type: 'user/message', data: { source: { kind: 'user' },
+      content: [{ type: 'image' }, { type: 'text', text: 'Analiza esta imagen' }] } },
+  ]
+  it('reads actual session event data, not a nonexistent turn-wrapped message', () => {
+    expect(nexusTurnText(events, 12)).toBe('¿Qué tiempo hace hoy?')
+    expect(nexusTurnText(events, 13)).toBe('Analiza esta imagen')
+    expect(nexusTurnHasHumanImage(events, 12)).toBe(false)
+    expect(nexusTurnHasHumanImage(events, 13)).toBe(true)
   })
 })

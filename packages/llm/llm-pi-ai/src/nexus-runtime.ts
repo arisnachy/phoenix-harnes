@@ -67,29 +67,43 @@ export function nexusRequiresStrongModel(text: string): boolean {
     || /\b(?:implement|refactor|debug|repair|analy[sz]e|develop|deploy|execute|diagnos|clinical|medical|legal|security|research|audit|architecture|build|program|code|script|arregl\p{L}*|desarroll\p{L}*|implement\p{L}*|repar\p{L}*|diagnostic\p{L}*|investig\p{L}*|analiz\p{L}*|c[oó]digo|aplicaci[oó]n|sistema|seguridad)\b/iu.test(text)
 }
 
-/** Last authored user text in the current turn; tool and system notices are excluded. */
-function lastHumanText(events: readonly { readonly type: string; readonly data: unknown }[], turn: number): string {
+/** Last genuine user text in a turn; durable UserMessage is the event data. */
+export function nexusTurnText(
+  events: readonly { readonly type: string; readonly data: unknown }[], turn: number,
+): string {
+  const fragments: string[] = []
   for (let i = events.length - 1; i >= 0; i--) {
     const event = events[i]
-    if (event?.type !== 'user/message' || typeof event.data !== 'object' || event.data === null) continue
-    const data = event.data as {
-      turn?: unknown
-      message?: { source?: { kind?: string }; content?: readonly { type?: string; text?: unknown }[] }
+    if (event?.type === 'turn/start' && (event.data as { turn?: number }).turn === turn) break
+    if (event?.type !== 'user/message') continue
+    const message = event.data as {
+      readonly source?: { readonly kind?: string }
+      readonly content?: readonly { readonly type?: string; readonly text?: unknown }[]
     }
-    if (data.turn !== turn || data.message?.source?.kind === 'plugin') continue
-    return data.message?.content?.filter(part => part.type === 'text'
-      && typeof part.text === 'string').map(part => String(part.text)).join(' ') ?? ''
+    if (message.source?.kind !== 'user') continue
+    const text = message.content?.filter(part => part.type === 'text'
+      && typeof part.text === 'string').map(part => String(part.text)).join(' ').trim()
+    if (text !== undefined && text.length > 0) fragments.push(text)
   }
-  return ''
+  return fragments.reverse().join('\n')
 }
 
-/** Refuse image-unsupported routes when current-turn messages contain images. */
-function containsHumanImage(events: readonly { readonly type: string; readonly data: unknown }[], turn: number): boolean {
-  return events.some(event => {
-    if (event.type !== 'user/message' || typeof event.data !== 'object' || event.data === null) return false
-    const data = event.data as { turn?: unknown; message?: { content?: readonly { type?: string }[] } }
-    return data.turn === turn && data.message?.content?.some(part => part.type === 'image') === true
-  })
+/** Image detection examines actual author and this turn's message envelope. */
+export function nexusTurnHasHumanImage(
+  events: readonly { readonly type: string; readonly data: unknown }[], turn: number,
+): boolean {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i]
+    if (event?.type === 'turn/start' && (event.data as { turn?: number }).turn === turn) break
+    if (event?.type !== 'user/message') continue
+    const message = event.data as {
+      readonly source?: { readonly kind?: string }
+      readonly content?: readonly { readonly type?: string }[]
+    }
+    if (message.source?.kind === 'user'
+      && message.content?.some(part => part.type === 'image') === true) return true
+  }
+  return false
 }
 
 /** Restrict remote price probes to the provider's published public listing. */
@@ -255,9 +269,9 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       const { serviceTier: _tier, reasoningEffort: _effort, ...base } = selected
       return { ...base, provider: state.routed.provider, model: state.routed.model }
     }
-    const text = lastHumanText(agent.session.events, payload.turn)
+    const text = nexusTurnText(agent.session.events, payload.turn)
     const complex = text.length === 0 || nexusRequiresStrongModel(text)
-    const hasImage = containsHumanImage(agent.session.events, payload.turn)
+    const hasImage = nexusTurnHasHumanImage(agent.session.events, payload.turn)
     const models = (await listAuthorizedModels(now)).filter(model =>
       !state.excluded.has(routeKey(model.provider, model.id))
       && (blockedUntil.get(routeKey(model.provider, model.id)) ?? 0) <= now)
