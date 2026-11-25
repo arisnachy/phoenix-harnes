@@ -28,7 +28,15 @@ const OPENROUTER_PRICE_URL = 'https://openrouter.ai/api/v1/models'
 const FAILURE_COOLDOWN_MS = 180_000
 const MAX_POLICY_AGE_MS = 7 * 86_400_000
 
-/** A manual attestation is restricted to an exact explicit HTTPS endpoint and model. */
+/**
+ * A manual attestation is restricted to an exact explicit HTTPS endpoint and model.
+ * @param policies - operator attestations.
+ * @param provider - concrete provider identifier.
+ * @param model - exact model identifier.
+ * @param baseURL - configured provider endpoint.
+ * @param now - epoch milliseconds.
+ * @returns Matching valid attestation, when present.
+ */
 export function nexusOperatorPolicy(policies: readonly NexusFreeRoutePolicy[], provider: string, model: string,
   baseURL: string | undefined, now: number): NexusFreeRoutePolicy | undefined {
   if (baseURL === undefined || !Number.isFinite(now)
@@ -40,9 +48,8 @@ export function nexusOperatorPolicy(policies: readonly NexusFreeRoutePolicy[], p
   if (matches.length !== 1) return undefined
   const p = matches[0]
   if (p === undefined) return undefined
-  const explicitlyTrue = (value: unknown): value is true => value === true
   if (p.baseURL.replace(/\/+$/u, '') !== baseURL.replace(/\/+$/u, '')
-    || !explicitlyTrue(p.allChargesZero) || !explicitlyTrue(p.noOverage) || !explicitlyTrue(p.supportsTools)
+    || !Object.is(p.allChargesZero, true) || !Object.is(p.noOverage, true) || !Object.is(p.supportsTools, true)
     || !Number.isSafeInteger(p.contextWindow) || p.contextWindow < 8_192
     || !Number.isSafeInteger(p.verifiedAt) || !Number.isSafeInteger(p.expiresAt)
     || p.verifiedAt > now || p.expiresAt <= now || p.expiresAt - p.verifiedAt > MAX_POLICY_AGE_MS) return undefined
@@ -90,8 +97,25 @@ export function nexusCodexHasReserve(quota: NexusCodexQuota | undefined): boolea
 
 const HOUR_MS = 3_600_000
 
-/** Report native percentage windows without inventing total tokens. */
-export function nexusQuotaView(quota: NexusCodexQuota | undefined, now: number) {
+type NexusQuotaWindowView = { status: 'unknown' } | {
+  status: 'reported'
+  usedPercent: number
+  remainingPercent: number
+  resetAt: string
+  remainingMs: number
+}
+
+/**
+ * Report native percentage windows without inventing total tokens.
+ * @param quota - native account observation.
+ * @param now - epoch milliseconds.
+ * @returns Reported or unknown windows, without inferred token balance.
+ */
+export function nexusQuotaView(quota: NexusCodexQuota | undefined, now: number): {
+  fiveHours: NexusQuotaWindowView
+  sevenDays: NexusQuotaWindowView
+  exactTokenBalance: null
+} {
   const window = (used: number | undefined, reset: number | undefined, observed: number | undefined, duration: number) => {
     const resetAt = reset === undefined ? undefined : reset < 100_000_000_000 ? reset * 1000 : reset
     if (used === undefined || !Number.isFinite(used) || used < 0 || used > 100
@@ -132,7 +156,11 @@ export function nexusCodexWithinPace(quota: NexusCodexQuota | undefined, now: nu
 }
 
 
-/** Select native subscription windows by their actual duration, never by labels. */
+/**
+ * Select native subscription windows by their actual duration, never by labels.
+ * @param telemetry - native account inspection result.
+ * @returns Validated window mapping, when available.
+ */
 export function nexusReadNativeCodexQuota(telemetry:unknown):NexusCodexQuota|undefined{
   if(!telemetry||typeof telemetry!=='object')return undefined
   type Window = { usedPercent?: number, windowDurationMins?: number, resetsAt?: number, observedAt?: number }
@@ -160,7 +188,12 @@ export function nexusReadNativeCodexQuota(telemetry:unknown):NexusCodexQuota|und
     ...(s.observedAt === undefined ? {} : { secondaryObservedAt: s.observedAt }),
   }
 }
-/** Automatic admission requires a fresh native sample and a future reset for BOTH windows. */
+/**
+ * Automatic admission requires a fresh native sample and a future reset for BOTH windows.
+ * @param quota - native account observation.
+ * @param now - epoch milliseconds.
+ * @returns Whether both windows are fresh and retain reserve.
+ */
 export function nexusCodexFreshReserve(quota:NexusCodexQuota|undefined,now:number):boolean{
   if(!quota||!nexusCodexHasReserve(quota))return false
   const valid=(observed:number|undefined,reset:number|undefined,duration:number)=>
@@ -170,7 +203,12 @@ export function nexusCodexFreshReserve(quota:NexusCodexQuota|undefined,now:numbe
   return valid(quota.primaryObservedAt,quota.resetPrimaryAt,5*HOUR_MS)
     &&valid(quota.secondaryObservedAt,quota.resetSecondaryAt,7*24*HOUR_MS)
 }
-/** Use only an effort advertised by the concrete model; complex work retains its default. */
+/**
+ * Use only an effort advertised by the concrete model; complex work retains its default.
+ * @param supported - advertised reasoning efforts.
+ * @param complex - whether stronger reasoning is needed.
+ * @returns An advertised economical effort, when appropriate.
+ */
 export function nexusEconomyEffort<T extends string>(supported:readonly T[],complex:boolean):T|undefined{
   if(complex)return undefined
   for(const desired of ['low','minimal','off']){
@@ -209,13 +247,21 @@ export function nexusRequiresStrongModel(text: string): boolean {
     || /\b(?:repar\p{L}*|diagnostic\p{L}*|investig\p{L}*|analiz\p{L}*|c[oó]digo|aplicaci[oó]n|sistema|seguridad)\b/iu.test(text)
 }
 
-/** Extract only an explicitly quoted exact-answer contract; ordinary text is not graded. */
+/**
+ * Extract only an explicitly quoted exact-answer contract; ordinary text is not graded.
+ * @param text - current human request.
+ * @returns The exact expected answer, when explicitly specified.
+ */
 export function nexusExactResponseTarget(text: string): string | undefined {
   const match = /^(?:(?:reply|respond|answer) (?:with )?(?:exactly|only)|responde (?:exactamente|solo|únicamente))\s*:?\s*["“]([^"”\r\n]{1,120})["”]\.?!?$/iu.exec(text.trim())
   return match?.[1]
 }
 
-/** Exact-response quality is scoped to this measurable task family, never general intelligence. */
+/**
+ * Exact-response quality is scoped to this measurable task family, never general intelligence.
+ * @param samples - observed exact-answer outcomes.
+ * @returns Calibrated estimate when enough graded outcomes exist.
+ */
 export function nexusExactResponseQuality(samples: readonly { exactResponseAccepted?: boolean }[]): number | undefined {
   const graded = samples.filter(s => typeof s.exactResponseAccepted === 'boolean')
   if (graded.length < 5) return undefined
@@ -224,7 +270,11 @@ export function nexusExactResponseQuality(samples: readonly { exactResponseAccep
     totalLatencyMs: 0, totalTokens: 0 })
 }
 
-/** Independently solve a narrowly scoped integer operation without executing code. */
+/**
+ * Independently solve a narrowly scoped integer operation without executing code.
+ * @param text - current human request.
+ * @returns The computed integer answer, when supported.
+ */
 export function nexusNumericResponseTarget(text: string): string | undefined {
   const m = /^(?:calculate|compute|calcula|calcular|cu[aá]nto es)\s+(-?\d{1,7})\s*([+\-*×])\s*(-?\d{1,7})\s*(?:\?|\.)?\s*(?:(?:answer with only the number|responde solo con el n[uú]mero)\.?|)$/iu.exec(text.trim())
   if (!m) return undefined
@@ -233,7 +283,11 @@ export function nexusNumericResponseTarget(text: string): string | undefined {
   return Number.isSafeInteger(result) ? String(result) : undefined
 }
 
-/** Grade arithmetic independently of instruction-following observations. */
+/**
+ * Grade arithmetic independently of instruction-following observations.
+ * @param samples - observed arithmetic outcomes.
+ * @returns Calibrated arithmetic estimate when enough evidence exists.
+ */
 export function nexusNumericResponseQuality(samples: readonly { numericResponseAccepted?: boolean }[]): number | undefined {
   return nexusExactResponseQuality(samples.map(s => s.numericResponseAccepted === undefined
     ? {} : { exactResponseAccepted: s.numericResponseAccepted }))
@@ -350,7 +404,11 @@ export class NexusOpenRouterPrices {
  * @returns Whether tools were advertised.
  */
   supportsTools(id: string): boolean { return this.tools.has(id) }
-  /** Published context capacity, when supplied by the official listing. */
+  /**
+ * Published context capacity, when supplied by the official listing.
+ * @param id - exact model identifier.
+ * @returns Published context window, when available.
+ */
   contextWindow(id: string): number | undefined { return this.contexts.get(id) }
 }
 
@@ -539,7 +597,8 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions) 
           && nexusPriceClass(model, Date.now()) === 'verified-free'
           && (route.provider === 'openrouter' ? (profile?.baseURL === undefined
             || profile.baseURL.replace(/\/+$/u, '') === 'https://openrouter.ai/api/v1')
-            : nexusOperatorPolicy(options.freeRoutePolicies?.() ?? [], route.provider, route.model, profile?.baseURL, Date.now()) !== undefined)
+            : nexusOperatorPolicy(options.freeRoutePolicies?.() ?? [],
+              route.provider, route.model, profile?.baseURL, Date.now()) !== undefined)
       }
       if (!eligible) {
         state.excluded.add(routeKey(route.provider, route.model))
