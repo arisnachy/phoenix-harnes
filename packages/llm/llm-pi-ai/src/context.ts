@@ -426,6 +426,28 @@ function fitPhoenixLocalHeadroom(
   }
 }
 
+/** Page large textual tool results without modifying durable history or call IDs. */
+function pageLocalToolResults(messages: readonly Message[], previewChars: number): Message[] {
+  return messages.map(message => {
+    let changed = false
+    const content = message.content.map(block => {
+      if (block.type !== 'tool-result') return block
+      const text = block.content.filter(item => item.type === 'text').map(item => item.text).join('\n')
+      if (text.length <= previewChars) return block
+      let end = previewChars
+      if (/[\uD800-\uDBFF]/u.test(text.charAt(end - 1))) end--
+      changed = true
+      return { ...block, content: [
+        { type: 'text' as const, text: text.slice(0, end) + '\n[PHOENIX paged result: ' + text.length
+          + ' UTF-16 characters; retrieve more with tool_search({"result_call_id":' + JSON.stringify(block.toolCallId)
+          + ',"offset":' + end + '}). Full original remains in session. Do not infer omitted text.]' },
+        ...block.content.filter(item => item.type !== 'text'),
+      ] }
+    })
+    return changed ? { ...message, content } as Message : message
+  })
+}
+
 /**
  * Fit a local turn, using a request-only text projection under context pressure.
  * @param options - Fully assembled request including the latest user message.
@@ -458,9 +480,16 @@ export function fitPhoenixLocalTextTurn(
     const suffixHasRuntime = retained.some(message => message.source.kind === 'plugin'
       && message.source.plugin === '@phoenix-ai/dsh-system-prompt')
     const messages = runtime !== undefined && !suffixHasRuntime ? [runtime, ...retained] : retained
-    const projected = compactAuxiliaryContextForPressure({ ...options, messages })
-    const projectedFit = fitPhoenixLocalHeadroom(projected, contextWindow, desiredMaxOutput, true)
+    let projected = compactAuxiliaryContextForPressure({ ...options, messages })
+    let projectedFit = fitPhoenixLocalHeadroom(projected, contextWindow, desiredMaxOutput, true)
     if (projectedFit.estimatedTokens <= projectedFit.inputBudgetTokens) return projectedFit
+    if (gateway.name === 'tool_search') {
+      for (const preview of [1_200, 600, 240]) {
+        projected = compactAuxiliaryContextForPressure({ ...options, messages: pageLocalToolResults(messages, preview) })
+        projectedFit = fitPhoenixLocalHeadroom(projected, contextWindow, desiredMaxOutput, true)
+        if (projectedFit.estimatedTokens <= projectedFit.inputBudgetTokens) return projectedFit
+      }
+    }
     const selected = selectToolsForPressureBudget(projected,
       Math.max(1, Math.floor(projectedFit.inputBudgetTokens * 3.5 / ESTIMATED_CHARS_PER_TOKEN)))
     const fitted = fitPhoenixLocalHeadroom(selected, contextWindow, desiredMaxOutput, true)

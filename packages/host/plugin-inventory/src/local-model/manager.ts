@@ -52,6 +52,8 @@ export interface LocalModelRuntimeManagerDependencies {
 /** Lifecycle API for installing, starting, stopping, and configuring Phoenix Local. */
 export interface LocalModelRuntimeManager {
   snapshot(): LocalModelRuntimeSnapshot
+  /** Effective context advertised to the adapter; managed runtime allocation is pinned while running. */
+  effectiveContextWindow?(): number | undefined
   subscribe(listener: (snapshot: LocalModelRuntimeSnapshot) => void): () => void
   install(modelId: string): Promise<LocalModelRuntimeSnapshot>
   start(): Promise<LocalModelRuntimeSnapshot>
@@ -69,6 +71,14 @@ export interface LocalModelRuntimeManager {
 
 const MEMORY_HEADROOM_BYTES = 1_000_000_000
 const HEALTH_TIMEOUT_MS = 60_000
+
+/** Conservative CPU allocation: reserve weights, OS headroom and additional KV memory.
+ * These tiers are estimates, not a hardware benchmark or upstream native limit. */
+export function managedContextWindow(nativeLimit: number, estimatedRamBytes: number, freeBytes: number): number {
+  const spare = Math.max(0, freeBytes - estimatedRamBytes - MEMORY_HEADROOM_BYTES)
+  const tier = spare >= 16_000_000_000 ? 32_768 : spare >= 6_000_000_000 ? 16_384 : spare >= 2_000_000_000 ? 8_192 : 4_096
+  return Math.min(nativeLimit, tier)
+}
 
 function apiFor(platform: string): typeof path.win32   {
   return platform === 'win32' ? path.win32 : path.posix
@@ -88,6 +98,7 @@ class RuntimeManager implements LocalModelRuntimeManager {
   private persistent: LocalModelPersistentState
   private current: LocalModelRuntimeSnapshot
   private server: LocalServerHandle | undefined
+  private allocatedContext: { modelId: string; tokens: number } | undefined
   private ensureRunningPromise: Promise<string> | undefined
   private lastOllamaCatalogRead = 0
   private ollamaCatalogInflight: Promise<LocalModelRuntimeSnapshot> | undefined
@@ -105,6 +116,14 @@ class RuntimeManager implements LocalModelRuntimeManager {
 
   snapshot(): LocalModelRuntimeSnapshot {
     return cloneSnapshot(this.current)
+  }
+
+  effectiveContextWindow(): number | undefined {
+    const model = getLocalModel(this.persistent.selectedModelId)
+    if (model === undefined) return undefined
+    if (model.backend === 'ollama') return model.contextWindow
+    if (this.allocatedContext?.modelId === model.id && this.server !== undefined) return this.allocatedContext.tokens
+    return managedContextWindow(model.contextWindow, model.estimatedRamBytes, this.dependencies.freeMemoryBytes())
   }
 
   /** Rate-limited live inventory: avoid flooding the daemon during a model pull. */
@@ -348,6 +367,7 @@ class RuntimeManager implements LocalModelRuntimeManager {
       throw new LocalModelRuntimeFault('insufficient-memory', 'No hay memoria libre suficiente para iniciar Phoenix Local de forma segura.')
     }
 
+    const effectiveContext = managedContextWindow(model.contextWindow, model.estimatedRamBytes, this.dependencies.freeMemoryBytes())
     this.publishPhase('starting')
     const port = await this.dependencies.allocatePort()
     const base = `http://127.0.0.1:${String(port)}`
@@ -355,7 +375,7 @@ class RuntimeManager implements LocalModelRuntimeManager {
       '--model', modelPath,
       '--host', '127.0.0.1',
       '--port', String(port),
-      '--ctx-size', String(model.contextWindow),
+      '--ctx-size', String(effectiveContext),
       // Qwen3.5-4B is a hybrid thinking model. llama-server defaults to
       // automatic reasoning, which can spend the entire completion budget on
       // hidden thinking and return no visible answer. Disable it at process
@@ -381,6 +401,7 @@ class RuntimeManager implements LocalModelRuntimeManager {
         this.publish({ ...rest, phase: 'error', error: publicError })
       })
       this.server = handle
+      this.allocatedContext = { modelId: model.id, tokens: effectiveContext }
       await this.dependencies.probeHealth(base, HEALTH_TIMEOUT_MS)
       const pid = handle.pid
       this.publish({

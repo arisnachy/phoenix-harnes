@@ -1101,6 +1101,7 @@ export class ToolRuntime extends Service {
         const sdk = render(this.sdkSchemas(context.scope, context.agent))
         const view = this.view(context.scope)
         if (!view.visible.has(TOOL_SEARCH_NAME)
+          || (mode === 'code' && !localDiscovery(context.scope))
           || (!localDiscovery(context.scope) && !this.deferredMcpCatalog(view.visible.values(), context.scope))) return sdk
         // Full signatures appear on discovery, but code bindings remain
         // callable and authorization still happens on every execution.
@@ -1197,11 +1198,15 @@ export class ToolRuntime extends Service {
     return {
       name: TOOL_SEARCH_NAME,
       description: local
-        ? 'Discover authorized Phoenix tools (files, browser, workspace, skills). Matching schemas appear on the next step. Use short English keywords or exact names.'
+        ? 'Discover authorized Phoenix tools (files, browser, workspace, skills). Matching schemas appear next. Read paged prior tool output with result_call_id and offset.'
         : 'Search the deferred MCP catalog. Matching tool schemas become available to this agent on the next model request.',
       parameters: {
         type: 'object',
         properties: {
+          ...(local ? {
+            result_call_id: { type: 'string', description: 'Call ID of a previous tool result in this session.' },
+            offset: { type: 'integer', minimum: 0, description: 'UTF-16 offset from result page marker.' },
+          } : {}),
           query: {
             type: 'string',
             description: local ? 'Short tool-name or description keywords.' : 'Case-insensitive text matched against MCP tool names and descriptions.',
@@ -1227,6 +1232,12 @@ export class ToolRuntime extends Service {
             enabled: { type: 'boolean' },
             matched: { type: 'integer' },
             selected: { type: 'integer' },
+            ...(local ? { resultPage: {
+              type: 'object', properties: {
+                callId: { type: 'string' }, offset: { type: 'integer' }, total: { type: 'integer' },
+                nextOffset: { type: 'integer' }, text: { type: 'string' },
+              }, required: ['callId', 'offset', 'total', 'text'], additionalProperties: false,
+            } } : {}),
             tools: {
               type: 'array',
               items: {
@@ -1309,6 +1320,26 @@ export class ToolRuntime extends Service {
     const args = typeof rawArgs === 'object' && rawArgs !== null && !Array.isArray(rawArgs)
       ? rawArgs as Record<string, unknown>
       : {}
+    if (local && typeof args.result_call_id === 'string') {
+      const agent = scope as Agent
+      const callId = args.result_call_id
+      const offset = typeof args.offset === 'number' && Number.isSafeInteger(args.offset) ? Math.max(0, args.offset) : 0
+      const events = agent.session?.events ?? []
+      const event = events.findLast(entry => entry.type === 'tool/result'
+        && entry.data.message.content.some(block => block.type === 'tool-result' && block.toolCallId === callId))
+      if (event?.type !== 'tool/result') throw new HarnessError('No such prior tool result in this session.', 'LOCAL_RESULT_NOT_FOUND')
+      const block = event.data.message.content.find(item => item.type === 'tool-result' && item.toolCallId === callId)
+      if (block?.type !== 'tool-result') throw new HarnessError('Tool result not found.', 'LOCAL_RESULT_NOT_FOUND')
+      const text = block.content.filter(item => item.type === 'text').map(item => item.text).join('\n')
+      if (offset > text.length) throw new HarnessError('Result page offset exceeds text length.', 'LOCAL_RESULT_OFFSET')
+      let end = Math.min(text.length, offset + 900)
+      // Avoid splitting a surrogate pair at the page boundary.
+      if (end < text.length && /[\uD800-\uDBFF]/u.test(text.charAt(end - 1))) end--
+      return { enabled: true, matched: 0, selected: 0, tools: [], resultPage: {
+        callId, offset, total: text.length, text: text.slice(offset, end),
+        ...(end < text.length ? { nextOffset: end } : {}),
+      } }
+    }
     const query = typeof args.query === 'string' ? args.query.trim().toLocaleLowerCase() : ''
     const queryTerms = query.split(/\s+/u).filter(term => term.length > 0)
     const names = Array.isArray(args.names)
@@ -1784,7 +1815,10 @@ export class ToolRuntime extends Service {
   /** Project admitted/discovered MCP tools, retaining full run_code bindings. */
   private sdkSchemas(scope?: ScopeKey, agent?: Agent): ToolSdkSchema[] {
     const view = this.view(scope)
-    return this.modelVisibleDefinitions(this.promptVisibleDefinitions(view, scope), agent)
+    const definitions = this.modeFor(scope) === 'code' && !localDiscovery(scope)
+      ? [...view.visible.values()].filter(definition => definition.name !== TOOL_SEARCH_NAME)
+      : this.promptVisibleDefinitions(view, scope)
+    return this.modelVisibleDefinitions(definitions, agent)
       .filter(definition => definition.name !== RUN_CODE_NAME)
       .map((definition): ToolSdkSchema => {
         const output = snapshotJsonValue(definition.output.schema)
