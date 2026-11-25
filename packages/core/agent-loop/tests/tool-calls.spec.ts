@@ -97,6 +97,33 @@ async function until(predicate: () => boolean): Promise<void> {
 }
 
 describe('tool-call scheduler: grouping and barriers', () => {
+  it.each([
+    { input: ['bad', 'bad', 'bad', 'bad', 'good'], dispatched: ['bad', 'bad', 'bad', 'good'], blocked: [3] },
+    { input: ['bad', 'other', 'bad', 'good', 'bad', 'other', 'bad', 'other', 'other', 'good'], dispatched: ['bad', 'other', 'bad', 'good', 'bad', 'other', 'other', 'good'], blocked: [6, 8] },
+  ])('suppresses repeated failed dispatches without blocking changed strategies ($input)', async ({ input, dispatched, blocked }) => {
+    const adapter = new MockAdapter([
+      ...input.map((id, i) => toolCallResponse(`c${i + 1}`, 'flaky', { id })),
+      textResponse('recovered'),
+    ])
+    const ctx = await harness(adapter)
+    const attempts: string[] = []
+    ctx.tools.register(defineContentToolFixture({
+      name: 'flaky', description: 'test recovery', parameters: { id: { type: 'string', required: true } },
+      async execute(args) {
+        attempts.push(args.id)
+        if (args.id !== 'good') throw new Error('unavailable')
+        return [{ type: 'text', text: 'verified' }]
+      },
+    }))
+    const agent = ctx.agentLoop.create(SessionId('repeated-tool-failure'), { provider: 'mock', model: 'mock' })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'recover the operation' }], source: { kind: 'user' } }))
+    await agent.whenIdle()
+    expect(attempts).toEqual(dispatched)
+    const results = events(agent).filter(event => event.type === 'tool/result')
+    expect(results).toHaveLength(input.length)
+    expect(results.flatMap((event, i) => event.data.error?.code === 'PHOENIX_REPEATED_TOOL_FAILURE' ? [i] : [])).toEqual(blocked)
+    expect(results.at(-1)?.data.message.content[0]).toMatchObject({ type: 'tool-result', isError: false })
+  })
   it.each([false, true])('keeps a concluding result terminal after a later tool error (parallel=%s)', async (parallel) => {
     const adapter = new MockAdapter([
       multiCall([{ id: 'c1', name: 'finalize', args: {} }, { id: 'c2', name: 'failing', args: {} }]),
