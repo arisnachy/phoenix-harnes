@@ -20,6 +20,8 @@ PHOENIX 是由多米尼加共和国的 **Arisnachy Gómez Díaz 博士** 创建�
 
 安装前请查看最新发布版本及其说明。源码安装请参阅下方 Run 章节。软件采用 MIT 许可免费提供；可选的模型服务可能收费。Windows 代码签名仍是发布前的待完成事项。
 
+**觉得 PHOENIX 有用？** 欢迎[在 GitHub 上为项目加星](https://github.com/arisnachy/phoenix-harnes)，关注项目进展并帮助其他开发者发现它。试用后也欢迎[提交反馈或报告问题](https://github.com/arisnachy/phoenix-harnes/issues)。
+
 ## 你可以做什么
 
 | 能力 | PHOENIX 提供的功能 |
