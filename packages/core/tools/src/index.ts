@@ -1090,7 +1090,8 @@ export class ToolRuntime extends Service {
         if (context.omitTools === true) return ''
         const mode = this.modeFor(context.scope)
         // Local models in both mode use native calls instead of a second, large SDK catalog.
-        if (mode === 'native' || (mode === 'both' && localDiscovery(context.scope))) return ''
+        if (mode === 'native' || (mode === 'both' && localDiscovery(context.scope)
+          && this.view(context.scope).visible.has(TOOL_SEARCH_NAME))) return ''
         const runtime = this.requireCodeRuntime(mode)
         // Own-property read: a language like `toString`/`constructor` would
         // otherwise resolve an inherited Object.prototype member as a renderer.
