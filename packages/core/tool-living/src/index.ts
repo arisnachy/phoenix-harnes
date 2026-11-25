@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto'
 import { runEvolution, summarizeEvolutionEvents } from './evolution.ts'
 import { AMPLIFIER_OPERATIONS, runAmplifier } from './amplifier.ts'
 import { saveNumericRecipe, runStoredNumericRecipe, type RecipeContext } from './amplifier-memory.ts'
+import { livingActionSafety } from './living-action-safety.ts'
 import { assessSelfInitiative, SELF_GOALS } from './self-initiative.ts'
 import { inspectSystemEnvironment, searchLocalApps } from './system-proprioception.ts'
 import { confirmAdaptiveExternalAction, type AdaptiveApprovalService } from './approved-action.ts'
@@ -580,6 +581,7 @@ export function apply(ctx: Context): void {
       let input
       try {input=parseInput(args.input_json)}
       catch {return denied('INVALID_JSON')}
+      if(!livingActionSafety(input))return denied('SENTINEL_RESTRICTED_PAYLOAD')
       let provider:AdaptiveApprovalService|undefined
       try {
         provider=(ctx as unknown as {get(name:string):unknown}).get('userQuestions') as AdaptiveApprovalService|undefined
@@ -595,7 +597,7 @@ export function apply(ctx: Context): void {
       try {
         const latest=ctx.living.inspect(LivingCreationId(args.id))
         if (!latest.connected || !latest.manifest.actions.includes(args.action)
-          || latest.manifest.kind !== snapshot.manifest.kind)
+          || JSON.stringify(latest.manifest)!==JSON.stringify(snapshot.manifest))
           return denied('CONNECTOR_CHANGED_DURING_APPROVAL')
         const result=await ctx.living.act(LivingCreationId(args.id),args.action,input)
         return JSON.stringify({status:'executed',executed:true,creationId:args.id,
