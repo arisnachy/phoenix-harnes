@@ -83,6 +83,21 @@ export function nexusCodexHasReserve(quota: NexusCodexQuota | undefined): boolea
 
 const HOUR_MS = 3_600_000
 
+/** Report native percentage windows without inventing total tokens. */
+export function nexusQuotaView(quota: NexusCodexQuota | undefined, now: number) {
+  const window = (used: number | undefined, reset: number | undefined, observed: number | undefined, duration: number) => {
+    const resetAt = reset === undefined ? undefined : reset < 100_000_000_000 ? reset * 1000 : reset
+    if (used === undefined || !Number.isFinite(used) || used < 0 || used > 100
+      || resetAt === undefined || !Number.isFinite(resetAt) || resetAt <= now || resetAt - now > duration
+      || observed === undefined || !Number.isFinite(observed) || observed > now || now - observed > 120_000) return { status: 'unknown' as const }
+    return { status: 'reported' as const, usedPercent: used, remainingPercent: 100 - used,
+      resetAt: new Date(resetAt).toISOString(), remainingMs: resetAt - now }
+  }
+  return { fiveHours: window(quota?.primaryUsedPercent, quota?.resetPrimaryAt, quota?.primaryObservedAt, 5 * HOUR_MS),
+    sevenDays: window(quota?.secondaryUsedPercent, quota?.resetSecondaryAt, quota?.secondaryObservedAt, 7 * 24 * HOUR_MS),
+    exactTokenBalance: null }
+}
+
 function pacedWindow(used: number | undefined, reset: number | undefined, now: number, duration: number): boolean {
   if (used === undefined || reset === undefined || !Number.isFinite(reset)) return false
   // Account receipts can express UNIX timestamps in seconds or milliseconds.
@@ -115,7 +130,8 @@ export function nexusReadNativeCodexQuota(telemetry:unknown):NexusCodexQuota|und
   if(!telemetry||typeof telemetry!=='object')return undefined
   type Window={usedPercent?:number;windowDurationMins?:number;resetsAt?:number;observedAt?:number}
   const row=telemetry as {kind?:string;provider?:string;accountType?:string;primaryLimit?:Window;secondaryLimit?:Window}
-  if(row.kind!=='account'||row.provider?.toLowerCase()!=='codex'||row.accountType?.toLowerCase()!=='chatgpt')return undefined
+  if(row.kind!=='account'||typeof row.provider!=='string'||row.provider.toLowerCase()!=='codex'
+    ||typeof row.accountType!=='string'||row.accountType.toLowerCase()!=='chatgpt')return undefined
   const windows=[row.primaryLimit,row.secondaryLimit]
   const select=(duration:number)=>{const matches=windows.filter(w=>w?.windowDurationMins===duration);return matches.length===1?matches[0]:undefined}
   const p=select(300),s=select(10080)
@@ -133,7 +149,8 @@ export function nexusCodexFreshReserve(quota:NexusCodexQuota|undefined,now:numbe
   if(!quota||!nexusCodexHasReserve(quota))return false
   const valid=(observed:number|undefined,reset:number|undefined,duration:number)=>
     observed!==undefined&&Number.isFinite(observed)&&observed<=now&&now-observed<=120000
-    &&reset!==undefined&&Number.isFinite(reset)&&reset*1000>now&&reset*1000-now<=duration
+    &&reset!==undefined&&Number.isFinite(reset)
+    &&(reset<100_000_000_000?reset*1000:reset)>now&&(reset<100_000_000_000?reset*1000:reset)-now<=duration
   return valid(quota.primaryObservedAt,quota.resetPrimaryAt,5*HOUR_MS)
     &&valid(quota.secondaryObservedAt,quota.resetSecondaryAt,7*24*HOUR_MS)
 }
@@ -363,9 +380,9 @@ export interface NexusRuntimeOptions {
  * @param ctx - Host context with existing LLM/auth/Agent capabilities.
  * @param options - Configured provider truth and native Codex token authority.
  */
-export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions): void {
+export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions) {
   const receipts = new NexusReceiptStore(dshHomePath('nexus-receipts-v1.json'))
-  const activeSessions = new Map<string, { key: string; exact?: string; numeric?: string }>()
+  const activeSessions = new Map<string, { key: string; exact?: string; numeric?: string; effort?: string }>()
   const prices = new NexusOpenRouterPrices()
   const perAgent = new WeakMap<object, NexusAgentRouteState>()
   const blockedUntil = new Map<string, number>()
@@ -405,7 +422,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     const read = async (): Promise<readonly NexusModel[]> => {
       const authorized = currentProfiles
       const providers = ctx.llm.listProviders().filter(entry =>
-        entry.id !== NEXUS_PROVIDER && entry.id !== 'phoenix-local' && authorized.has(entry.id))
+        entry.id !== NEXUS_PROVIDER && authorized.has(entry.id))
       if (providers.some(p => p.id === 'openrouter')) await prices.refresh(now)
       const batches = await Promise.all(providers.map(async (provider) => {
         let advertised: readonly LlmModelInfo[]
@@ -431,7 +448,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
             configured: true,
             authorized: authenticated,
             online: (blockedUntil.get(key) ?? 0) <= now,
-            local: false,
+            local: /^(?:phoenix-local|ollama)(?:$|[-_/])/iu.test(provider.id),
             supportsImages: model.inputModalities?.includes('image') === true,
             supportsTools: officialOpenRouter ? prices.supportsTools(model.id) : policy?.supportsTools === true,
             ...(evidence === undefined ? {} : { price: evidence }),
@@ -481,6 +498,8 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
         const info=await ctx.llm.resolveModelInfo(route.provider,route.model,payload.signal).catch(()=>undefined)
         reasoningEffort=nexusEconomyEffort(info?.reasoning?.efforts.map(e=>e.id)??[],false)
       }
+      const active = activeSessions.get(agent.session.id)
+      if (active !== undefined && reasoningEffort !== undefined) active.effort = String(reasoningEffort)
       return {...base,provider:route.provider,model:route.model,...(reasoningEffort===undefined?{}:{reasoningEffort})}
     }
     if (state.routed !== undefined) {
@@ -649,4 +668,29 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       }
     })()
   })
+
+  // Read-only inspection: no generation, paid probes, credentials or prompt data.
+  return async (signal: AbortSignal, query: { provider?: string; offset?: number; sessionId?: string } = {}) => {
+    signal.throwIfAborted()
+    const listed = await listAuthorizedModels(Date.now())
+    const filtered = listed.filter(m => query.provider === undefined || m.provider === query.provider)
+      .sort((a, b) => a.provider.localeCompare(b.provider) || a.id.localeCompare(b.id))
+    const offset = Number.isSafeInteger(query.offset) && (query.offset ?? 0) >= 0 ? query.offset ?? 0 : 0
+    const page = filtered.slice(offset, offset + 25)
+    const models = await Promise.all(page.map(async model => {
+      signal.throwIfAborted()
+      const info = await ctx.llm.resolveModelInfo(model.provider, model.id, signal).catch(() => undefined)
+      const { price: _price, online: _online, ...safe } = model
+      return { ...safe, priceClass: nexusPriceClass(model, Date.now()),
+        contextWindow: model.contextWindow ?? info?.context?.contextWindow ?? null,
+        thinkingLevels: info?.reasoning?.efforts.map(e => e.id) ?? [],
+        defaultEffort: info?.reasoning?.defaultEffort ?? null,
+        readiness: (blockedUntil.get(routeKey(model.provider, model.id)) ?? 0) > Date.now() ? 'cooldown' : 'not-live-probed' }
+    }))
+    const quota = await getQuota(Date.now(), signal)
+    const last = query.sessionId === undefined ? undefined : activeSessions.get(query.sessionId)
+    return { models, total: filtered.length, offset, nextOffset: offset + page.length < filtered.length ? offset + page.length : null,
+      quota: nexusQuotaView(quota, Date.now()), lastDispatchedRoute: last?.key ?? null,
+      lastDispatchedEffort: last?.effort ?? null, localAutomaticRouting: false }
+  }
 }
