@@ -77,8 +77,7 @@
     "@phoenix-ai/dsh-plan-mode": "workspace:^",
     "@phoenix-ai/dsh-tool-todo": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^",
-    "@phoenix-ai/dsh-user-approval": "workspace:^",
-    "react-dom": "^18.2.0"
+    "@phoenix-ai/dsh-user-approval": "workspace:^"
   },
   "devDependencies": {
     "@phoenix-ai/cordis": "workspace:^",
