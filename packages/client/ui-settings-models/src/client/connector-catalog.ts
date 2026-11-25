@@ -131,6 +131,18 @@ const PUBLIC_CONNECTOR_CATALOG = [
 export const CONNECTOR_CATALOG: readonly ConnectorDefinition[] = [
   ...PUBLIC_CONNECTOR_CATALOG.map(definition => ({ ...definition, provenance: 'vendor-official' as const })),
   {
+    id: 'windows-flaui',
+    aliases: ['windows-mcp', 'flaui', 'desktop-windows', 'automatizacion-windows'],
+    name: 'Windows · Automatización de escritorio (FlaUI-MCP)',
+    category: 'Automation',
+    description: 'Puente PHOENIX optativo a un servidor FlaUI-MCP de terceros, instalado manualmente en Windows. Enumera y maneja ventanas, controles y aplicaciones mediante UI Automation. Cada llamada exige confirmación humana; las acciones en lote, la shell y la escritura de capturas en disco están bloqueadas. Requiere sesión interactiva y binario auditado; instalar el conector no descarga ni instala el servidor.',
+    mode: 'mcp',
+    provenance: 'native',
+    providerFamily: 'windows-flaui',
+    curatedMcp: true,
+    capabilities: ['windows.windows.read', 'windows.accessibility.read', 'windows.ui.action-with-approval'],
+  },
+  {
     id: 'evolucionrd',
     aliases: ['evolucion-rd'],
     name: 'EvolucionRD',
