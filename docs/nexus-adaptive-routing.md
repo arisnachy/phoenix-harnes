@@ -8,7 +8,7 @@ The target engine covers all configured provider routes, not just OpenRouter and
 
 ## Wiring requirements
 
-The current opt-in Host reads the configured provider model registry, public OpenRouter price catalog and Codex account quotas; the Kira team displays actual serving model badges. The runtime revalidates credentials and official OpenRouter pricing before continuing an existing route. The next acceptance gates are broad semantic quality calibration, real readiness checks for each configured provider, account-specific free-tier entitlement detection, proof of in-session failover, and optional UI controls for the local-model gate. Do not promote it as complete until the integrated tests and live provider checks pass.
+The current opt-in Host reads the configured provider model registry, public OpenRouter price catalog, explicit additional-provider attestations and Codex account quotas; the Kira team displays actual serving model badges. The runtime revalidates credentials and official OpenRouter pricing before continuing an existing route. The next acceptance gates are broad semantic quality calibration, real readiness checks for each configured provider, account-specific free-tier entitlement detection, proof of in-session failover, and optional UI controls for the local-model gate. Do not promote it as complete until the integrated tests and live provider checks pass.
 
 ## Quota and billing safety
 
@@ -60,3 +60,38 @@ to a native Codex route with fresh quota evidence, bounded retry, and exhaustion
 This is a simulated integration test, not a live cross-provider account test.
 Team headers show the concrete model ID rather than just its family name;
 unknown providers retain a generic mark rather than a fabricated vendor identity.
+
+
+## Additional providers and self-inspection
+
+The optional llm-pi-ai setting `nexusFreeRoutes` defaults to an empty array.
+A record names the exact configured provider, model and explicit HTTPS baseURL;
+`verifiedAt` and `expiresAt` are Unix milliseconds, with at most seven days
+of validity. `allChargesZero`, `noOverage` and `supportsTools` must be true,
+and `contextWindow` must be an integer of at least 8192. These are explicit
+operator attestations of an independently verified zero-cost arrangement, not
+provider-supplied billing facts. Never configure an attestation for a trial
+that can silently overrun into billing. No third-party attestation ships by
+default. OpenRouter continues to require its official catalog and Codex its
+native account telemetry; local routes remain excluded. The policy is
+rechecked immediately before dispatch and on continuing turns.
+
+`phoenix_nexus_inspect` is a read-only tool in compositions exposing the
+tools registry. It lists configured catalog models in pages of 25 with
+optional exact-provider filter, authorization status, evidence class,
+context, available reasoning efforts and the last dispatched Nexus route
+for the calling session. Readiness is not inferred from a credential or model
+listing. It exposes native Codex 5h/7d used and remaining percentages, UTC
+reset times and remaining milliseconds when the samples are fresh; exact
+token balance remains null unless a provider actually supplies one.
+It never sends model generations, credentials or prompts.
+
+Independent acceptance additionally grades narrowly scoped integer
+addition, subtraction and multiplication. Numeric and exact-answer scores
+are separate; only a bounded response is checked and only a boolean is
+persisted. These checks cannot validate arbitrary medical, legal, coding or
+research reasoning. Full live account verification is still an acceptance
+gate, not an achievement inferred from mocked integration fixtures.
+
+Pricing evidence without expiration, ambiguous or duplicate catalog entries,
+unknown billing dimensions and unknown required context now fail closed.
