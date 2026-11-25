@@ -36,7 +36,7 @@ export type {
 export type {
   ChatFileMentions, ChatNodeOwnerProps, ChatNodeViewProps,
   ChatStore, ChatViewInjected, ChatViewSlotProps, CommandRowOwnerProps, CommandRowProps, ComposerBarInjected,
-  ComposerAttachment, ComposerAttachmentsOwnerProps, ComposerAttachmentsProps, ComposerChainProps, ConversationInjected,
+  ComposerAttachment, ComposerAttachmentsOwnerProps, ComposerAttachmentsProps, ComposerCaptureProps, ComposerChainProps, ConversationInjected,
   ConversationHeaderLineageOwnerProps, ConversationSessionHeaderInjected, ConversationSessionInjected,
   ConversationSlotProps, ConvViewOwnerProps,
   ConvViewProps, DetailsInjected, DetailsSlotProps, DetailsToolOwnerProps, EmptyWorkspaceOwnerProps, HeroBrandMarkOwnerProps,
