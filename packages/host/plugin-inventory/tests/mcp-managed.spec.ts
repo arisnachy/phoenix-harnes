@@ -390,6 +390,44 @@ describe('ManagedMcpController', () => {
     expect(created).toHaveLength(restored.installed.length)
   })
 
+  it('keeps FlaUI desktop control opt-in and pins a Windows-only local launcher', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+
+    await expect(controller.ensureCoreMcpPack({ installMissing: false }))
+      .resolves.toMatchObject({ installed: [] })
+    expect(live.create).not.toHaveBeenCalled()
+
+    const receipt = await controller.installCuratedMcp('windows-flaui')
+    expect(receipt).toMatchObject({
+      status: 'installed',
+      connector: {
+        serverName: 'windows-flaui', url: 'stdio://windows-flaui',
+        source: { kind: 'curated', connectorId: 'windows-flaui' },
+      },
+    })
+    expect(live.create).toHaveBeenCalledWith(expect.objectContaining({
+      config: expect.objectContaining({
+        transport: 'stdio',
+        command: 'node',
+        args: ['scripts/phoenix-windows-flaui-mcp.mjs'],
+        supportedPlatforms: ['win32'],
+        env: {},
+        envCredentialRefs: {},
+        failOnStartupError: false,
+      }),
+    }))
+    expect(await controller.installCuratedMcp('windows-flaui'))
+      .toMatchObject({ status: 'already-installed' })
+    const persisted = JSON.parse(readFileSync(patchPath, 'utf8')) as Array<{
+      insert: Array<{ config: { command: string; args: string[] } }>
+    }>
+    expect(persisted[0]?.insert[0]?.config).toMatchObject({
+      command: 'node', args: ['scripts/phoenix-windows-flaui-mcp.mjs'],
+    })
+  })
+
   it('keeps Blender opt-in on boot and persists its pinned official bridge when enabled', async () => {
     const patchPath = tempPatch()
     const live = loader()
