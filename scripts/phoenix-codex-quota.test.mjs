@@ -70,3 +70,18 @@ test('reserve breach is immediate even with an insufficient observation period',
   assert.equal(result.fiveHours.forecast.basis,'unknown')
   assert.equal(result.policy,'protect-reserve')
 })
+
+test('inspector does not mix historical samples across account changes or expose identity',async()=>{
+  const time=Date.now()
+  let email='one@example.test',calls=0
+  const primary={windowDurationMins:300,usedPercent:40,resetsAt:(time+2*hour)/1000,observedAt:time-1000}
+  const secondary={windowDurationMins:10080,usedPercent:50,resetsAt:(time+72*hour)/1000,observedAt:time-1000}
+  const auth={list:()=>[{key:'subagent-codex/account',label:'Codex'}],inspect:async()=>{calls++;return {kind:'account',provider:'Codex',accountType:'chatgpt',email,primaryLimit:primary,secondaryLimit:secondary}}}
+  const first=await inspectCodexQuota(auth)
+  email='two@example.test'
+  const second=await inspectCodexQuota(auth)
+  assert.equal(first.fiveHours.forecast.observedPercentPerHour,null)
+  assert.equal(second.fiveHours.forecast.observedPercentPerHour,null)
+  assert.equal(JSON.stringify(second).includes('@example.test'),false)
+  assert.equal(calls,2)
+})
