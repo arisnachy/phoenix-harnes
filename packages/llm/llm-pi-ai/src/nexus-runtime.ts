@@ -45,7 +45,7 @@ export function nexusOperatorPolicy(policies: readonly NexusFreeRoutePolicy[], p
   const p = matches[0]
   if (p === undefined) return undefined
   if (p.baseURL.replace(/\/+$/u, '') !== baseURL.replace(/\/+$/u, '')
-    || !p.allChargesZero || !p.noOverage || !p.supportsTools
+    || !Object.is(p.allChargesZero, true) || !Object.is(p.noOverage, true) || !Object.is(p.supportsTools, true)
     || !Number.isSafeInteger(p.contextWindow) || p.contextWindow < 8_192
     || !Number.isSafeInteger(p.verifiedAt) || !Number.isSafeInteger(p.expiresAt)
     || p.verifiedAt > now || p.expiresAt <= now || p.expiresAt - p.verifiedAt > MAX_POLICY_AGE_MS) return undefined
@@ -93,6 +93,14 @@ export function nexusCodexHasReserve(quota: NexusCodexQuota | undefined): boolea
 
 const HOUR_MS = 3_600_000
 
+type NexusQuotaWindowView = { status: 'unknown' } | {
+  status: 'reported'
+  usedPercent: number
+  remainingPercent: number
+  resetAt: string
+  remainingMs: number
+}
+
 /**
  * Report native percentage windows without inventing total tokens.
  * @param quota - native account observation.
@@ -100,8 +108,8 @@ const HOUR_MS = 3_600_000
  * @returns Reported or unknown windows, without inferred token balance.
  */
 export function nexusQuotaView(quota: NexusCodexQuota | undefined, now: number): {
-  fiveHours: { status: 'unknown' } | { status: 'reported'; usedPercent: number; remainingPercent: number; resetAt: string; remainingMs: number }
-  sevenDays: { status: 'unknown' } | { status: 'reported'; usedPercent: number; remainingPercent: number; resetAt: string; remainingMs: number }
+  fiveHours: NexusQuotaWindowView
+  sevenDays: NexusQuotaWindowView
   exactTokenBalance: null
 } {
   const window = (used: number | undefined, reset: number | undefined, observed: number | undefined, duration: number) => {
