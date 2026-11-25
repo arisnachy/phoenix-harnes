@@ -1115,6 +1115,10 @@ export function InputBar({
                 <IconPaperclipOutline16 size={14} />
               </button>
             </Tooltip>
+            {renderSlot('conversation.input.capture', {
+              canAcceptDrop,
+              onAddImages: intakeImages,
+            })}
             <input
               ref={fileInputRef}
               className={css.filePicker}
