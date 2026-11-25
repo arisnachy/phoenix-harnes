@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   NEXUS_MODEL, NEXUS_PROVIDER, NexusSelectorAdapter,
   nexusCodexFallback, nexusCodexHasReserve, nexusCodexWithinPace, nexusRequiresStrongModel,
   nexusTurnText, nexusTurnHasHumanImage,
   nexusReadNativeCodexQuota, nexusCodexFreshReserve, nexusEconomyEffort,
+  nexusExactResponseTarget, nexusExactResponseQuality, installNexusRuntime,
 } from '../src/nexus-runtime.ts'
 
 describe('Nexus synthetic model route', () => {
@@ -86,5 +87,88 @@ describe('native Codex window freshness and economic reasoning',()=>{
     expect(nexusEconomyEffort(['high','low','medium'],false)).toBe('low')
     expect(nexusEconomyEffort(['high','medium'],false)).toBeUndefined()
     expect(nexusEconomyEffort(['high','low'],true)).toBeUndefined()
+  })
+})
+
+
+describe('independent Nexus acceptance', () => {
+  it('only grades explicit exact-response contracts and requires five measured outcomes', () => {
+    expect(nexusExactResponseTarget('Responde exactamente: "OK"')).toBe('OK')
+    expect(nexusExactResponseTarget('Reply exactly: "42"')).toBe('42')
+    expect(nexusExactResponseTarget('Analiza estos datos')).toBeUndefined()
+    expect(nexusExactResponseTarget('Reply exactly: "42" and explain')).toBeUndefined()
+    expect(nexusExactResponseQuality([{ exactResponseAccepted: true }, {}])).toBeUndefined()
+    expect(nexusExactResponseQuality(Array.from({ length: 5 }, () =>
+      ({ exactResponseAccepted: true })))).toBeCloseTo(7 / 9)
+    expect(nexusExactResponseQuality(Array.from({ length: 5 }, () =>
+      ({ exactResponseAccepted: false })))).toBeCloseTo(2 / 9)
+  })
+})
+
+describe('Nexus installed runtime failover', () => {
+  it('retries the same turn from a failed free provider to a quota-authorized Codex route', async () => {
+    const now = Date.now()
+    const telemetry = { kind: 'account', provider: 'Codex', accountType: 'chatgpt',
+      primaryLimit: { windowDurationMins: 300, usedPercent: 1,
+        resetsAt: Math.floor((now + 3_600_000) / 1000), observedAt: now },
+      secondaryLimit: { windowDurationMins: 10080, usedPercent: 1,
+        resetsAt: Math.floor((now + 3 * 86_400_000) / 1000), observedAt: now },
+    }
+    const hooks = new Map<string, unknown>()
+    const ctx = {
+      on: (event: string, listener: unknown) => { hooks.set(event, listener) },
+      get: () => ({
+        list: () => [{ key: 'subagent-codex/account' }],
+        inspect: async () => telemetry,
+      }),
+      llm: {
+        registerAdapter: () => undefined,
+        listProviders: () => [{ id: 'openrouter' }, { id: 'openai-codex' }],
+        listModels: async (provider: string) => provider === 'openrouter'
+          ? [{ id: 'fixture/free', name: 'Free' }]
+          : [{ id: 'gpt-6-luna', name: 'Luna' }],
+        resolveModelInfo: async () => ({ reasoning: { efforts: [{ id: 'low' }] } }),
+      },
+    }
+    const profiles = new Map([['openrouter', {}], ['openai-codex', {}]])
+    const agent = { session: { id: 'nexus-fixture', events: [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'user/message', data: { source: { kind: 'user' },
+        content: [{ type: 'text', text: 'Hola' }] } },
+    ] } }
+    const payload = { agent, turn: 1, step: 1, signal: new AbortController().signal }
+    const selected = { provider: NEXUS_PROVIDER, model: NEXUS_MODEL }
+    type Route = { provider: string; model: string; reasoningEffort?: string }
+    type Failure = typeof payload & { provider: string; failure: { code: string } }
+    vi.stubGlobal('fetch', async () => ({
+      ok: true, text: async () => JSON.stringify({ data: [{
+        id: 'fixture/free', pricing: { prompt: '0', completion: '0', request: '0' },
+        context_length: 32768, supported_parameters: ['tools'],
+      }] }),
+    }))
+    try {
+      installNexusRuntime(ctx as never, {
+        profiles: () => profiles as never,
+        providerAuthorized: async () => true,
+        nativeCodexAuthorized: async () => true,
+      })
+      const route = hooks.get('agent/request') as
+        (p: typeof payload, next: () => Promise<Route>) => Promise<Route>
+      const fail = hooks.get('agent/request-error') as
+        (p: Failure, next: () => Promise<undefined>) => Promise<{ kind: string } | undefined>
+      expect(await route(payload, async () => selected)).toMatchObject({
+        provider: 'openrouter', model: 'fixture/free',
+      })
+      expect(await fail({ ...payload, provider: 'openrouter', failure: { code: 'RATE_LIMIT' } },
+        async () => undefined)).toEqual({ kind: 'retry' })
+      expect(await route(payload, async () => selected)).toMatchObject({
+        provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'low',
+      })
+      expect(await fail({ ...payload, provider: 'openai-codex', failure: { code: 'TIMEOUT' } },
+        async () => undefined)).toEqual({ kind: 'retry' })
+      await expect(route(payload, async () => selected)).rejects.toThrow('no verified free model')
+      expect(await fail({ ...payload, provider: 'openai-codex', failure: { code: 'TIMEOUT' } },
+        async () => undefined)).toBeUndefined()
+    } finally { vi.unstubAllGlobals() }
   })
 })
