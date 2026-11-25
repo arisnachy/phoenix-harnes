@@ -705,8 +705,57 @@ describe('Phoenix Local installed model branding', () => {
   })
 })
 
-describe('Nexus provider identity in model picker', () => {
-  it('shows Nexus as a separate selectable route with the PHOENIX emblem', () => {
+describe('PHOENIX → ORIÓN model picker', () => {
+  it('shows a single PHOENIX provider with the ORIÓN constellation and a stable legacy route', async () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      current: { provider: 'phoenix-nexus', model: 'nexus-auto' },
+      groups: [
+        { id: 'phoenix', name: 'Phoenix',
+          models: [{ id: 'phoenix-auto', name: 'Phoenix Auto' }] },
+        { id: 'phoenix-nexus', name: 'PHOENIX Nexus',
+          models: [{ id: 'nexus-auto', name: 'PHOENIX Nexus' }] },
+      ],
+    }))
+    const select = vi.fn().mockResolvedValue(true)
+    render(<ModelSelect locked={false} available directory={directory}
+      load={vi.fn()} select={select} t={t} />)
+
+    const trigger = screen.getByRole('button', { name: /ORIÓN/ })
+    expect(trigger.querySelector('svg[data-orion-mark="belt"]')).not.toBeNull()
+    fireEvent.click(trigger)
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    expect(screen.getAllByRole('menuitem', { name: 'PHOENIX' })).toHaveLength(1)
+    const group = screen.getByRole('menuitem', { name: 'PHOENIX' })
+    expect(group.querySelector('img[src="/phoenix-emblem.png"]')).not.toBeNull()
+    const orion = screen.getByRole('menuitemradio', { name: 'ORIÓN' })
+    expect(orion.querySelector('svg[data-orion-mark="belt"]')).not.toBeNull()
+    expect(orion.getAttribute('aria-checked')).toBe('true')
+    const eclipse = screen.getByRole('menuitemradio', { name: 'Fénix Eclipse' })
+    fireEvent.click(eclipse)
+    await waitFor(() => expect(select).toHaveBeenCalledWith({ provider: 'phoenix', model: 'phoenix-auto' }))
+  })
+
+  it('sends an exact Nexus wire route when ORIÓN is selected, even in a merged PHOENIX group', async () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      current: { provider: 'phoenix', model: 'phoenix-auto' },
+      groups: [
+        { id: 'phoenix', name: 'Phoenix',
+          models: [{ id: 'phoenix-auto', name: 'Phoenix Auto' }] },
+        { id: 'phoenix-nexus', name: 'PHOENIX',
+          models: [{ id: 'nexus-auto', name: 'ORIÓN' }] },
+      ],
+    }))
+    const select = vi.fn().mockResolvedValue(true)
+    render(<ModelSelect locked={false} available directory={directory}
+      load={vi.fn()} select={select} t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: /Fénix Eclipse/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    const orion = screen.getByRole('menuitemradio', { name: 'ORIÓN' })
+    fireEvent.click(orion)
+    await waitFor(() => expect(select).toHaveBeenCalledWith({ provider: 'phoenix-nexus', model: 'nexus-auto' }))
+  })
+
+  it('displays legacy standalone Nexus catalog entries as PHOENIX → ORIÓN', () => {
     const directory = createSnapshotStore<ModelDirectoryState>(state({
       current: { provider: 'phoenix-nexus', model: 'nexus-auto' },
       groups: [{ id: 'phoenix-nexus', name: 'PHOENIX Nexus',
@@ -714,10 +763,9 @@ describe('Nexus provider identity in model picker', () => {
     }))
     render(<ModelSelect locked={false} available directory={directory}
       load={vi.fn()} select={vi.fn().mockResolvedValue(true)} t={t} />)
-    fireEvent.click(screen.getByRole('button', { name: /PHOENIX Nexus/ }))
+    fireEvent.click(screen.getByRole('button', { name: /ORIÓN/ }))
     fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
-    const group = screen.getByRole('menuitem', { name: 'PHOENIX Nexus' })
-    expect(group.querySelector('img[src="/phoenix-emblem.png"]')).not.toBeNull()
-    expect(screen.getByRole('menuitemradio', { name: 'PHOENIX Nexus' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'PHOENIX' })).toBeTruthy()
+    expect(screen.getByRole('menuitemradio', { name: 'ORIÓN' })).toBeTruthy()
   })
 })
