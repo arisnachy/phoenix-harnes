@@ -47,7 +47,11 @@ export interface NexusCodexQuota {
   readonly resetSecondaryAt?: number
 }
 
-/** Whether a subscription call stays within the configured reserve. */
+/**
+ * Whether a subscription call stays within the configured reserve.
+ * @param quota - native account window observations.
+ * @returns Whether both windows have measurable reserve.
+ */
 export function nexusCodexHasReserve(quota: NexusCodexQuota | undefined): boolean {
   if (quota === undefined) return false
   const primary = quota.primaryUsedPercent
@@ -74,6 +78,9 @@ function pacedWindow(used: number | undefined, reset: number | undefined, now: n
  * Admit ordinary subscription work only when both native windows have usable
  * reset timestamps and consumption is within a conservative elapsed-time budget.
  * Difficult work may use the separate hard reserve, never an unknown quota.
+ * @param quota - native window observations.
+ * @param now - current time in milliseconds.
+ * @returns Whether ordinary work fits both windows.
  */
 export function nexusCodexWithinPace(quota: NexusCodexQuota | undefined, now: number): boolean {
   return quota !== undefined && nexusCodexHasReserve(quota)
@@ -81,7 +88,12 @@ export function nexusCodexWithinPace(quota: NexusCodexQuota | undefined, now: nu
     && pacedWindow(quota.secondaryUsedPercent, quota.resetSecondaryAt, now, 7 * 24 * HOUR_MS)
 }
 
-/** Select the latest real Codex model in one family, never inventing a model ID. */
+/**
+ * Select the latest real Codex model in one family, never inventing a model ID.
+ * @param ids - available model IDs.
+ * @param complex - whether stronger task capability is needed.
+ * @returns An advertised model ID, when present.
+ */
 export function nexusCodexFallback(ids: readonly string[], complex: boolean): string | undefined {
   const candidates = ids.filter(id => complex
     ? /^gpt-\d+(?:\.\d+)?-(?:astra|sol)(?:$|-)/iu.test(id)
@@ -91,7 +103,11 @@ export function nexusCodexFallback(ids: readonly string[], complex: boolean): st
   return candidates[0]
 }
 
-/** Decide whether accuracy/tools must take priority over an unbenchmarked free model. */
+/**
+ * Decide whether accuracy/tools must take priority over an unbenchmarked free model.
+ * @param text - current human request.
+ * @returns Whether the request needs a stronger route.
+ */
 export function nexusRequiresStrongModel(text: string): boolean {
   return text.length > 380
     || /\b(?:implement|refactor|debug|repair|analy[sz]e|develop|deploy|execute|diagnos|clinical|medical|legal|security)\b/iu.test(text)
@@ -99,8 +115,8 @@ export function nexusRequiresStrongModel(text: string): boolean {
     || /\b(?:repar\p{L}*|diagnostic\p{L}*|investig\p{L}*|analiz\p{L}*|c[oó]digo|aplicaci[oó]n|sistema|seguridad)\b/iu.test(text)
 }
 
-type NexusSessionEvent = { readonly type: string, readonly data: unknown }
-type NexusMessagePart = { readonly type?: string, readonly text?: unknown }
+type NexusSessionEvent = { readonly type: string; readonly data: unknown }
+type NexusMessagePart = { readonly type?: string; readonly text?: unknown }
 
 function humanTurnParts(events: readonly NexusSessionEvent[], turn: number): NexusMessagePart[] {
   const parts: NexusMessagePart[] = []
@@ -123,13 +139,23 @@ function humanTurnParts(events: readonly NexusSessionEvent[], turn: number): Nex
   return parts
 }
 
-/** Last genuine user text in a turn; durable UserMessage is the event data. */
+/**
+ * Last genuine user text in a turn; durable UserMessage is the event data.
+ * @param events - authoritative session events.
+ * @param turn - current turn number.
+ * @returns Concatenated human text.
+ */
 export function nexusTurnText(events: readonly NexusSessionEvent[], turn: number): string {
   return humanTurnParts(events, turn).filter(part => part.type === 'text'
     && typeof part.text === 'string').map(part => String(part.text)).join(' ').trim()
 }
 
-/** Image detection examines actual author and this turn's message envelope. */
+/**
+ * Image detection examines actual author and this turn's message envelope.
+ * @param events - authoritative session events.
+ * @param turn - current turn number.
+ * @returns Whether a human provided an image in this turn.
+ */
 export function nexusTurnHasHumanImage(events: readonly NexusSessionEvent[], turn: number): boolean {
   return humanTurnParts(events, turn).some(part => part.type === 'image')
 }
@@ -141,7 +167,10 @@ export class NexusOpenRouterPrices {
   private validUntil = 0
   private refreshing: Promise<void> | undefined
 
-  /** Refresh at most once per TTL; unavailable evidence never becomes free. */
+  /**
+ * Refresh at most once per TTL; unavailable evidence never becomes free.
+ * @param now - current time in milliseconds.
+ */
   async refresh(now: number): Promise<void> {
     if (now < this.validUntil) return
     if (this.refreshing !== undefined) return this.refreshing
@@ -160,7 +189,7 @@ export class NexusOpenRouterPrices {
           ? (payload as { data?: unknown }).data : undefined
         this.tools = new Set(Array.isArray(entries) ? entries.flatMap((entry) => {
           if (typeof entry !== 'object' || entry === null) return []
-          const row = entry as { id?: unknown, supported_parameters?: unknown }
+          const row = entry as { id?: unknown; supported_parameters?: unknown }
           return typeof row.id === 'string' && Array.isArray(row.supported_parameters)
             && row.supported_parameters.includes('tools') ? [row.id] : []
         }) : [])
@@ -176,21 +205,35 @@ export class NexusOpenRouterPrices {
     this.refreshing = promise
     try { await promise } finally { this.refreshing = undefined }
   }
-  /** Latest price evidence; expiration is checked by the core classifier. */
+  /**
+ * Latest price evidence; expiration is checked by the core classifier.
+ * @param id - exact model ID.
+ * @returns Observed price evidence when available.
+ */
   get(id: string): NexusPriceEvidence | undefined { return this.latest.get(id) }
-  /** True only when the official entry explicitly advertised function tools. */
+  /**
+ * True only when the official entry explicitly advertised function tools.
+ * @param id - exact model ID.
+ * @returns Whether tools were advertised.
+ */
   supportsTools(id: string): boolean { return this.tools.has(id) }
 }
 
 /** Narrow Agent events bridge avoids importing Agent source into the LLM package. */
 interface NexusAgentEventBridge {
   on(event: 'agent/request', listener: (
-    payload: { agent: NexusAgentHandle, turn: number, step: number, signal: AbortSignal },
+    payload: { agent: NexusAgentHandle; turn: number; step: number; signal: AbortSignal },
     next: () => Promise<LlmCallConfig>,
   ) => Promise<LlmCallConfig>): void
   on(event: 'agent/request-error', listener: (
-    payload: { agent: NexusAgentHandle, turn: number, step: number,
-      provider: string, failure: { code: string }, signal: AbortSignal },
+    payload: {
+      agent: NexusAgentHandle
+      turn: number
+      step: number
+      provider: string
+      failure: { code: string }
+      signal: AbortSignal
+    },
     next: () => Promise<{ kind: 'retry' } | undefined>,
   ) => Promise<{ kind: 'retry' } | undefined>): void
 }
@@ -449,6 +492,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
           await receipts.record({
             provider: request.provider, model: request.model, timestamp: Date.now(),
             inputTokens: usage?.inputTokens ?? 0, outputTokens: usage?.outputTokens ?? 0,
+            usageReported: usage !== undefined,
             latencyMs: Math.max(0, Date.now() - started), succeeded,
           }).catch(() => { ctx.logger.warn('Nexus receipt persistence failed; no balance was inferred') })
         }
