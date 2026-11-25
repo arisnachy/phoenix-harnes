@@ -73,6 +73,13 @@ const MAX_MCP_TOOL_SUMMARY_DESCRIPTION_CHARS = 512
 const MAX_DISCOVERED_MCP_TOOLS = 64
 const MAX_DISCOVERED_MCP_SCHEMA_CHARS = 64_000
 const MAX_EAGER_MCP_SCHEMA_CHARS = 8_000
+const LOCAL_DISCOVERY_SCHEMA_CHARS = 6_000
+const LOCAL_DISCOVERY_LIMIT = 3
+
+/** Local discovery changes model presentation, never execution permissions. */
+function localDiscovery(scope?: ScopeKey): boolean {
+  return (scope as Partial<Agent> | undefined)?.options?.provider === 'phoenix-local'
+}
 
 function isMcpToolName(name: string): boolean {
   return name.startsWith(MCP_TOOL_PREFIX)
@@ -1082,7 +1089,8 @@ export class ToolRuntime extends Service {
         // it would swamp small local models and contradict the empty tool list.
         if (context.omitTools === true) return ''
         const mode = this.modeFor(context.scope)
-        if (mode === 'native') return ''
+        // Local models in both mode use native calls instead of a second, large SDK catalog.
+        if (mode === 'native' || (mode === 'both' && localDiscovery(context.scope))) return ''
         const runtime = this.requireCodeRuntime(mode)
         // Own-property read: a language like `toString`/`constructor` would
         // otherwise resolve an inherited Object.prototype member as a renderer.
@@ -1092,10 +1100,10 @@ export class ToolRuntime extends Service {
         const sdk = render(this.sdkSchemas(context.scope, context.agent))
         const view = this.view(context.scope)
         if (!view.visible.has(TOOL_SEARCH_NAME)
-          || !this.deferredMcpCatalog(view.visible.values(), context.scope)) return sdk
+          || (!localDiscovery(context.scope) && !this.deferredMcpCatalog(view.visible.values(), context.scope))) return sdk
         // Full signatures appear on discovery, but code bindings remain
         // callable and authorization still happens on every execution.
-        return sdk + '\nTo use other MCP capabilities, call tools.tool_search({ query: "task keywords" })'
+        return sdk + (localDiscovery(context.scope) ? '\nTo use other Phoenix capabilities, call tools.tool_search({ query: "task keywords" })' : '\nTo use other MCP capabilities, call tools.tool_search({ query: "task keywords" })')
           + ' inside run_code. The next step shows their exact full signatures.'
       },
     }
@@ -1184,21 +1192,23 @@ export class ToolRuntime extends Service {
   }
 
   /** Definition for the deferred MCP catalog search/discovery capability. */
-  private createMcpSearchTool(): ToolDefinition {
+  private createMcpSearchTool(local = false): ToolDefinition {
     return {
       name: TOOL_SEARCH_NAME,
-      description: 'Search the deferred MCP catalog. Matching tool schemas become available to this agent on the next model request.',
+      description: local
+        ? 'Discover authorized Phoenix tools (files, browser, workspace, skills). Matching schemas appear on the next step. Use short English keywords or exact names.'
+        : 'Search the deferred MCP catalog. Matching tool schemas become available to this agent on the next model request.',
       parameters: {
         type: 'object',
         properties: {
           query: {
             type: 'string',
-            description: 'Case-insensitive text matched against MCP tool names and descriptions.',
+            description: local ? 'Short tool-name or description keywords.' : 'Case-insensitive text matched against MCP tool names and descriptions.',
           },
           names: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Optional exact MCP tool names to discover.',
+            description: local ? 'Optional exact tool names.' : 'Optional exact MCP tool names to discover.',
           },
           limit: {
             type: 'integer',
@@ -1272,6 +1282,11 @@ export class ToolRuntime extends Service {
     // the admitted MCP catalog eager rather than hiding it without a route.
     const deferred = view.visible.has(TOOL_SEARCH_NAME) && this.deferredMcpCatalog(view.visible.values(), scope)
     const selected = this.selectedMcpTools(scope)
+    if (localDiscovery(scope) && view.visible.has(TOOL_SEARCH_NAME)) {
+      return [...view.visible.values()].filter(definition =>
+        definition.name === TOOL_SEARCH_NAME || definition.name === RUN_CODE_NAME
+        || definition.name === NATIVE_IMAGE_GENERATION_TOOL || selected.has(definition.name))
+    }
     return [...view.visible.values()].filter((definition) => {
       if (definition.name === TOOL_SEARCH_NAME) return deferred
       return !isMcpToolName(definition.name) || !deferred || selected.has(definition.name)
@@ -1281,8 +1296,12 @@ export class ToolRuntime extends Service {
   /** Return and select a bounded set of visible MCP schemas for one agent. */
   private searchMcpTools(rawArgs: unknown, scope?: ScopeKey): JsonValue {
     const view = this.view(scope)
-    const candidates = [...view.visible.values()].filter(definition => isMcpToolName(definition.name))
-    if (!this.deferredMcpCatalog(view.visible.values(), scope) || scope === undefined) {
+    const local = localDiscovery(scope)
+    const candidates = [...view.visible.values()].filter(definition => local
+      ? definition.name !== TOOL_SEARCH_NAME && definition.name !== RUN_CODE_NAME
+      : isMcpToolName(definition.name))
+    if ((!local && !this.deferredMcpCatalog(view.visible.values(), scope)) || scope === undefined
+      || !view.visible.has(TOOL_SEARCH_NAME)) {
       return { enabled: false, matched: 0, selected: 0, tools: [] }
     }
 
@@ -1295,7 +1314,10 @@ export class ToolRuntime extends Service {
       ? new Set(args.names.filter((name): name is string => typeof name === 'string'))
       : undefined
     const parsedLimit = typeof args.limit === 'number' && Number.isInteger(args.limit) ? args.limit : DEFAULT_MCP_TOOL_SEARCH_LIMIT
-    const limit = Math.max(1, Math.min(DEFAULT_MCP_TOOL_SEARCH_LIMIT, parsedLimit))
+    const limit = Math.max(1, Math.min(local ? LOCAL_DISCOVERY_LIMIT : DEFAULT_MCP_TOOL_SEARCH_LIMIT, parsedLimit))
+    const schemaBudget = local ? LOCAL_DISCOVERY_SCHEMA_CHARS : MAX_DISCOVERED_MCP_SCHEMA_CHARS
+    const resultBudget = local ? 2_000 : MAX_MCP_TOOL_SEARCH_RESULT_CHARS
+    const descriptionBudget = local ? 160 : MAX_MCP_TOOL_SUMMARY_DESCRIPTION_CHARS
     const matched = candidates.filter((definition) => {
       if (names !== undefined && !names.has(definition.name)) return false
       if (queryTerms.length === 0) return true
@@ -1336,9 +1358,9 @@ export class ToolRuntime extends Service {
     // description search may use the same exception only when it has one
     // oversized match; broad oversized results return name metadata requiring
     // an exact follow-up instead of silently returning an empty result.
-    const oversizedMatches = matched.filter(definition => schemaLength(definition) > MAX_DISCOVERED_MCP_SCHEMA_CHARS)
+    const oversizedMatches = matched.filter(definition => schemaLength(definition) > schemaBudget)
     const oversizedExceptionCandidate = matched.find(definition =>
-      isExactNameRequest(definition) && schemaLength(definition) > MAX_DISCOVERED_MCP_SCHEMA_CHARS)
+      isExactNameRequest(definition) && schemaLength(definition) > schemaBudget)
       ?? (matched.length === 1 && oversizedMatches.length === 1 ? oversizedMatches[0] : undefined)
     const selectionCandidates = oversizedExceptionCandidate === undefined ? matched : [oversizedExceptionCandidate]
     if (oversizedExceptionCandidate !== undefined) {
@@ -1364,14 +1386,14 @@ export class ToolRuntime extends Service {
       }
 
       const candidateLength = schemaLength(definition)
-      const oversizedException = candidateLength > MAX_DISCOVERED_MCP_SCHEMA_CHARS
+      const oversizedException = candidateLength > schemaBudget
         && (definition === oversizedExceptionCandidate || isExactNameRequest(definition))
-      if (candidateLength > MAX_DISCOVERED_MCP_SCHEMA_CHARS && !oversizedException) {
+      if (candidateLength > schemaBudget && !oversizedException) {
         // Broad oversized searches still reveal names, but require an exact
         // follow-up before activating one in the prompt window.
         const metadata = {
           name: schema.name,
-          description: schema.description.slice(0, MAX_MCP_TOOL_SUMMARY_DESCRIPTION_CHARS),
+          description: schema.description.slice(0, descriptionBudget),
           schemaDeferred: true,
           requiresExact: true,
         }
@@ -1381,7 +1403,7 @@ export class ToolRuntime extends Service {
           selected: selectedNames.length,
           tools: [...selected, metadata],
         }).length
-        if (metadataLength <= MAX_MCP_TOOL_SEARCH_RESULT_CHARS) selected.push(metadata)
+        if (metadataLength <= resultBudget) selected.push(metadata)
         continue
       }
 
@@ -1398,16 +1420,16 @@ export class ToolRuntime extends Service {
       }).length
       const summaryWithDescription = {
         name: schema.name,
-        description: schema.description.slice(0, MAX_MCP_TOOL_SUMMARY_DESCRIPTION_CHARS),
+        description: schema.description.slice(0, descriptionBudget),
         schemaDeferred: true,
       }
-      const resultEntry: JsonValue = resultLength(summaryWithDescription) <= MAX_MCP_TOOL_SEARCH_RESULT_CHARS
+      const resultEntry: JsonValue = resultLength(summaryWithDescription) <= resultBudget
         ? summaryWithDescription
         : { name: schema.name, description: '', schemaDeferred: true }
-      if (resultLength(resultEntry) > MAX_MCP_TOOL_SEARCH_RESULT_CHARS) continue
+      if (resultLength(resultEntry) > resultBudget) continue
 
       const alreadyActive = discovered.has(definition.name)
-      if (candidateLength > MAX_DISCOVERED_MCP_SCHEMA_CHARS && !oversizedException) continue
+      if (candidateLength > schemaBudget && !oversizedException) continue
       if (!alreadyActive && oversizedException) {
         // The exact-name exception deliberately replaces the whole active
         // window, including any names selected earlier in this request.
@@ -1417,14 +1439,14 @@ export class ToolRuntime extends Service {
         // Evict only prior-window entries. Never evict a name selected earlier
         // in this same batch; otherwise `selected` would overstate the active
         // prompt window when many large schemas match one search.
-        while (activeSchemaChars + candidateLength > MAX_DISCOVERED_MCP_SCHEMA_CHARS) {
+        while (activeSchemaChars + candidateLength > schemaBudget) {
           const oldest = [...discovered].find(name => !selectedThisBatch.has(name))
           if (oldest === undefined) break
           const oldDefinition = definitionByName.get(oldest)
           if (oldDefinition !== undefined) activeSchemaChars -= schemaLength(oldDefinition)
           discovered.delete(oldest)
         }
-        if (activeSchemaChars + candidateLength > MAX_DISCOVERED_MCP_SCHEMA_CHARS) continue
+        if (activeSchemaChars + candidateLength > schemaBudget) continue
         activeSchemaChars += candidateLength
       }
 
@@ -1435,7 +1457,7 @@ export class ToolRuntime extends Service {
       selectedNames.push(schema.name)
     }
 
-    while (discovered.size > MAX_DISCOVERED_MCP_TOOLS) {
+    while (discovered.size > (local ? LOCAL_DISCOVERY_LIMIT : MAX_DISCOVERED_MCP_TOOLS)) {
       const oldest = [...discovered].find(name => !selectedThisBatch.has(name))
       if (oldest === undefined) break
       discovered.delete(oldest)
@@ -1471,6 +1493,9 @@ export class ToolRuntime extends Service {
     // language with no SDK renderer.
     this.requireCodeRuntime(mode)
     const schemas = visible.map(definition => this.schemaOf(definition, false))
+    if (mode === 'both' && localDiscovery(scope) && view.visible.has(TOOL_SEARCH_NAME)) {
+      return { schemas: schemas.filter(schema => schema.name !== RUN_CODE_NAME), knownNames: [...view.knownNames, RUN_CODE_NAME] }
+    }
     if (mode === 'code') {
       return {
         schemas: schemas.filter(schema => schema.name === RUN_CODE_NAME),
@@ -1677,9 +1702,10 @@ export class ToolRuntime extends Service {
     const deferred = this.deferredMcpCatalog(visible.values(), scope)
     // `tool_search` is a virtual global only for an exposed deferred catalog;
     // empty/small scopes must keep the historical known-name set unchanged.
-    if (deferred) restrictableNames.add(TOOL_SEARCH_NAME)
-    if (deferred && layers.every(layer => layer.admits(TOOL_SEARCH_NAME))) {
-      visible.set(TOOL_SEARCH_NAME, this.createMcpSearchTool())
+    const discovery = deferred || localDiscovery(scope)
+    if (discovery) restrictableNames.add(TOOL_SEARCH_NAME)
+    if (discovery && layers.every(layer => layer.admits(TOOL_SEARCH_NAME))) {
+      visible.set(TOOL_SEARCH_NAME, this.createMcpSearchTool(localDiscovery(scope)))
       knownNames.add(TOOL_SEARCH_NAME)
     }
     return { visible, knownNames, restrictableNames }
