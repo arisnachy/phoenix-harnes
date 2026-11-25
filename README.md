@@ -14,6 +14,12 @@ PHOENIX is a general-purpose, local-first AI agent workspace created and led by 
 
 [Get started](#run) · [Windows releases](https://github.com/arisnachy/phoenix-harnes/releases) · [Community](https://github.com/arisnachy/phoenix-harnes/discussions) · [Report an issue](https://github.com/arisnachy/phoenix-harnes/issues)
 
+[![Download PHOENIX for Windows](https://img.shields.io/badge/PHOENIX-Windows%20Download-B58B35?style=for-the-badge&logo=github)](https://github.com/arisnachy/phoenix-harnes/releases/latest)
+
+**[Download PHOENIX for Windows](https://github.com/arisnachy/phoenix-harnes/releases/latest)** · [Official website](https://arisnachy.github.io/phoenix-harnes/) · [Inspect installation script](https://github.com/arisnachy/phoenix-harnes/blob/main/install-phoenix.ps1)
+
+Prefer the latest published release and read its notes before installing. For a source-based installation, see the Run section below. The software is free under MIT; optional model services may charge separately. Windows code signing is still a release gate.
+
 ## What you can do
 
 | Capability | What PHOENIX provides |
