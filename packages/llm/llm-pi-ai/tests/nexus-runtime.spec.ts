@@ -178,7 +178,7 @@ describe('Nexus installed runtime failover', () => {
       expect(snapshot.models.map(m => m.priceClass)).toContain('verified-free')
       expect(await fail({ ...payload, provider: 'openai-codex', failure: { code: 'TIMEOUT' } },
         async () => undefined)).toEqual({ kind: 'retry' })
-      await expect(route(payload, async () => selected)).rejects.toThrow('no verified free model')
+      await expect(route(payload, async () => selected)).rejects.toMatchObject({ code: 'NEXUS_NO_ELIGIBLE_ROUTE' })
       expect(await fail({ ...payload, provider: 'openai-codex', failure: { code: 'TIMEOUT' } },
         async () => undefined)).toBeUndefined()
     } finally { vi.unstubAllGlobals() }
