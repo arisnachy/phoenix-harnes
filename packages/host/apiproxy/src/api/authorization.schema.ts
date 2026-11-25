@@ -16,6 +16,7 @@ const rateLimitWindowSchema = z.object({
   usedPercent: z.number().min(0).max(100),
   windowDurationMins: z.number().nonnegative().optional(),
   resetsAt: z.number().nonnegative().optional(),
+  observedAt: z.number().nonnegative().optional(),
 })
 const creditsTelemetrySchema = z.object({
   hasCredits: z.boolean(),

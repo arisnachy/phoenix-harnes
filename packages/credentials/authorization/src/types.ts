@@ -85,6 +85,8 @@ export interface AuthorizationRateLimitWindow {
   windowDurationMins?: number
   /** Unix timestamp in seconds when the window resets. */
   resetsAt?: number
+  /** Host time of the underlying native account sample, in Unix milliseconds. */
+  observedAt?: number
 }
 
 /** Public credit facts. No credential or billing instrument is represented. */
