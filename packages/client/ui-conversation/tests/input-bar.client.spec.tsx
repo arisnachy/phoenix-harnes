@@ -1532,7 +1532,7 @@ describe('command launcher chrome and control seats', () => {
     expect(view.queryByLabelText(/^访问模式/)).toBeNull()
     // Every seat dispatched, nothing rendered.
     expect(slotCalls.map(c => c.key)).toEqual([
-      'conversation.input.attachments', 'conversation.input.plan', 'conversation.input.model',
+      'conversation.input.attachments', 'conversation.input.capture', 'conversation.input.plan', 'conversation.input.model',
     ])
     expect(view.queryByLabelText('Plan mode')).toBeNull()
     expect(view.queryByLabelText('Model')).toBeNull()
@@ -1679,14 +1679,16 @@ describe('command launcher chrome and control seats', () => {
     expect(view.getByTestId('plan-entry')).toBeTruthy()
     expect(view.getByTestId('model-entry')).toBeTruthy()
     // The bar hands its chrome disable state to the filling entry.
-    const controls = slotCalls.filter(call => call.key !== 'conversation.input.attachments')
+    const controls = slotCalls.filter(call => call.key !== 'conversation.input.attachments' && call.key !== 'conversation.input.capture')
     expect(controls.every(c => (c.owner as { locked: boolean }).locked)).toBe(true)
     expect(attachmentOwner(slotCalls).canAcceptDrop).toBe(false)
+    expect(slotCalls.find(call => call.key === 'conversation.input.capture')?.owner).toMatchObject({ canAcceptDrop: false, onAddImages: expect.any(Function) })
     cleanup()
     const live = bench({ running: true })
-    const liveControls = live.slotCalls.filter(call => call.key !== 'conversation.input.attachments')
+    const liveControls = live.slotCalls.filter(call => call.key !== 'conversation.input.attachments' && call.key !== 'conversation.input.capture')
     expect(liveControls.every(c => !(c.owner as { locked: boolean }).locked)).toBe(true)
     expect(attachmentOwner(live.slotCalls).canAcceptDrop).toBe(true)
+    expect(live.slotCalls.find(call => call.key === 'conversation.input.capture')?.owner).toMatchObject({ canAcceptDrop: true, onAddImages: expect.any(Function) })
   })
 
   it('disabled locks the Access chip and command launcher (running does not)', () => {

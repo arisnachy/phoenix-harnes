@@ -277,6 +277,12 @@ declare module '@phoenix-ai/dsh-client-ui-slots' {
       scope: 'session-maybe'
       owner: ComposerAttachmentsOwnerProps
     }
+    /** Optional compact screen/camera capture tools in the composer toolbar. */
+    'conversation.input.capture': {
+      kind: 'single'
+      scope: 'session-maybe'
+      owner: Pick<ComposerAttachmentsOwnerProps, 'canAcceptDrop' | 'onAddImages'>
+    }
     /**
      * The named plan-status seat in the composer tool row, immediately right
      * of the access-mode control — one occupant, so taking it means rendering
@@ -696,7 +702,7 @@ export interface InputControlOwnerProps {
 export type ComposerBarProps =
   PropsRuntime<'conversation.composer.bar'>
   & PropsRenderSlots<
-    'conversation.input.attachments' | 'conversation.input.plan' | 'conversation.input.model'
+    'conversation.input.attachments' | 'conversation.input.capture' | 'conversation.input.plan' | 'conversation.input.model'
   >
   & InjectFace<ComposerBarInjected>
   & PropsLocale<'conversation'>
@@ -901,6 +907,10 @@ export type ChatViewSlotProps =
 /** Full props of the attachment plugin's composer entry. */
 export type ComposerAttachmentsProps =
   PropsRuntime<'conversation.input.attachments'> & PropsLocale<'conversation'>
+
+/** Full props of the attachment plugin's compact capture tools. */
+export type ComposerCaptureProps =
+  PropsRuntime<'conversation.input.capture'> & PropsLocale<'conversation'>
 
 /** Full props of the attachment plugin's message-gallery entry. */
 export type MessageImagesProps = PropsRuntime<'conversation.message.images'> & PropsLocale<'conversation'>
