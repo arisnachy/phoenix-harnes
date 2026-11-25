@@ -119,16 +119,17 @@ function epistemic(x:Obj){
     const e=obj(raw),key=id(e.id),claim=id(e.claim),source=id(e.source),observed=timestamp(e.observed),expires=timestamp(e.expires)
     if(seen.has(key)||expires<observed)throw Error('AMPLIFIER_EVIDENCE')
     seen.add(key)
+    if(e.stance!=='supports'&&e.stance!=='opposes')throw Error('AMPLIFIER_STANCE')
+    if(!claims.has(claim))claims.set(claim,new Set())
     if(observed>at){future.push(key);continue}
     if(expires<=at){expired.push(key);continue}
-    if(e.stance!=='supports'&&e.stance!=='opposes')throw Error('AMPLIFIER_STANCE')
     const stances=claims.get(claim)??new Set<string>()
     stances.add(e.stance+':'+source);claims.set(claim,stances)
   }
   return {claims:[...claims].map(([claim,stances])=>{
     const supports=[...stances].filter(v=>v.startsWith('supports:')).length
     const opposes=[...stances].filter(v=>v.startsWith('opposes:')).length
-    return {claim,supports,opposes,status:supports&&opposes?'contradicted':supports?'supported-by-supplied-evidence':'opposed-by-supplied-evidence'}
+    return {claim,supports,opposes,status:supports&&opposes?'contradicted':supports?'supported-by-supplied-evidence':opposes?'opposed-by-supplied-evidence':'no-current-evidence'}
   }),expired,future,verifiedSources:false,probability:null}
 }
 function counterfactual(x:Obj){
@@ -207,7 +208,129 @@ function morphology(x:Obj){
   const risk=removed.length>0||before.some(v=>after.includes(v)&&!preserved.includes(v))
   return {added,removed,preserved,requiresBackup:risk,requiresMigrationTest:true,executionAuthorized:false}
 }
-export const AMPLIFIER_OPERATIONS=['logos','compression','compile','epistemic','counterfactual','analogy','mentor','babel','sentinel','morphogenesis'] as const
+
+/** Compile a numeric DAG to a reusable program. Every variable reference is
+ * checked against its initial inputs or transitive dependency producers. */
+function compileNumeric(raw:unknown){
+  const x=obj(raw),inputs=uniqueIds(x.inputs)
+  if(Object.keys(x).some(k=>k!=='inputs'&&k!=='steps'))throw Error('AMPLIFIER_RECIPE_FIELDS')
+  const steps=list(x.steps,16).map(raw=>{
+    const s=obj(raw)
+    if(Object.keys(s).some(k=>!['id','dependsOn','output','expression'].includes(k)))throw Error('AMPLIFIER_RECIPE_FIELDS')
+    return {id:id(s.id),dependsOn:uniqueIds(s.dependsOn),output:id(s.output),expression:s.expression}
+  })
+  if(!steps.length)throw Error('AMPLIFIER_RECIPE_EMPTY')
+  const refs=(raw:unknown,out:Set<string>,budget:{remaining:number},depth=0):Expr=>{
+    if(--budget.remaining<0||depth>16)throw Error('AMPLIFIER_EXPRESSION_LIMIT')
+    if(typeof raw==='number')return num(raw)
+    const e=obj(raw)
+    if(Object.hasOwn(e,'var')){
+      if(Object.keys(e).length!==1)throw Error('AMPLIFIER_EXPRESSION')
+      const name=id(e.var);out.add(name);return {var:name}
+    }
+    if(Object.keys(e).length!==2||!['add','sub','mul','div','min','max'].includes(String(e.op)))throw Error('AMPLIFIER_OPERATOR')
+    const args=list(e.args,2)
+    if(args.length!==2)throw Error('AMPLIFIER_ARITY')
+    return {op:e.op as 'add'|'sub'|'mul'|'div'|'min'|'max',args:args.map(a=>refs(a,out,budget,depth+1))}
+  }
+  const budget={remaining:512}
+  const normalized=steps.map(s=>{
+    if(inputs.includes(s.output))throw Error('AMPLIFIER_DUPLICATE_OUTPUT')
+    const used=new Set<string>(),expr=refs(s.expression,used,budget)
+    return {...s,expression:expr,requires:[...used].filter(v=>!inputs.includes(v)),produces:[s.output]}
+  })
+  const plan=compile(normalized)
+  return {inputs,steps:plan.order.map(key=>{
+    const s=normalized.find(v=>v.id===key)!
+    return {id:s.id,dependsOn:s.dependsOn,output:s.output,expression:s.expression}
+  })}
+}
+export function executeNumericRecipe(raw:unknown,initial:unknown){
+  const program=compileNumeric(raw),values=variables(initial),budget={remaining:512}
+  if(values.size!==program.inputs.length||program.inputs.some(k=>!values.has(k)))throw Error('AMPLIFIER_RECIPE_INPUTS')
+  const results:Record<string,number>=Object.create(null) as Record<string,number>
+  for(const step of program.steps){
+    const value=expression(step.expression,values,budget)
+    values.set(step.output,value);results[step.output]=value
+  }
+  return {results,order:program.steps.map(s=>s.id),deterministic:true,executionAuthorized:false}
+}
+/** Fixtures are caller supplied, not external validation or proof of generalization. */
+export function verifyNumericRecipe(raw:unknown){
+  const x=obj(raw),program=compileNumeric(x.program)
+  if(Object.keys(x).some(k=>k!=='program'&&k!=='fixtures'))throw Error('AMPLIFIER_RECIPE_FIELDS')
+  const fixtures=list(x.fixtures,8)
+  if(fixtures.length<3)throw Error('AMPLIFIER_RECIPE_FIXTURES')
+  const seen=new Set<string>()
+  const normalized=fixtures.map(raw=>{
+    const f=obj(raw),inputs=variables(f.inputs),expected=variables(f.expected)
+    if(Object.keys(f).some(k=>k!=='inputs'&&k!=='expected'))throw Error('AMPLIFIER_RECIPE_FIELDS')
+    const key=JSON.stringify([...inputs].sort(([a],[b])=>a.localeCompare(b)))
+    if(seen.has(key))throw Error('AMPLIFIER_DUPLICATE_FIXTURE')
+    seen.add(key)
+    const result=executeNumericRecipe(program,Object.fromEntries(inputs)).results
+    if(expected.size!==Object.keys(result).length||Object.keys(result).some(k=>expected.get(k)!==result[k]))throw Error('AMPLIFIER_RECIPE_FIXTURE_FAILED')
+    return {inputs:Object.fromEntries(inputs),expected:Object.fromEntries(expected)}
+  })
+  return {program,fixtures:normalized,passed:normalized.length,verifiedInputs:false}
+}
+/** Find a bounded structure-preserving graph mapping, not a semantic analogy proof. */
+function findAnalogy(x:Obj){
+  const source=uniqueIds(x.source),target=uniqueIds(x.target)
+  if(source.length>8||target.length>8||source.length>target.length||source.length===0)throw Error('AMPLIFIER_ANALOGY_LIMIT')
+  const edgeList=(raw:unknown,nodes:string[])=>list(raw).map(v=>{
+    const e=obj(v),from=id(e.from),to=id(e.to),relation=id(e.relation)
+    if(!nodes.includes(from)||!nodes.includes(to))throw Error('AMPLIFIER_EDGE')
+    return {from,to,relation}
+  })
+  const a=edgeList(x.sourceEdges,source),b=edgeList(x.targetEdges,target)
+  if(!a.length)throw Error('AMPLIFIER_ANALOGY_NO_RELATIONS')
+  const edges=new Set(b.map(e=>JSON.stringify([e.from,e.to,e.relation])))
+  const mapping=new Map<string,string>(),used=new Set<string>()
+  let best:{source:string;target:string}[]=[],score=-1,explored=0
+  const visit=(i:number)=>{
+    if(i===source.length){
+      explored++
+      const matched=a.filter(e=>edges.has(JSON.stringify([mapping.get(e.from),mapping.get(e.to),e.relation]))).length
+      if(matched>score){score=matched;best=[...mapping].map(([source,target])=>({source,target}))}
+      return
+    }
+    const key=source[i]!
+    for(const t of target){if(used.has(t))continue;mapping.set(key,t);used.add(t);visit(i+1);mapping.delete(key);used.delete(t)}
+  }
+  visit(0)
+  return {mapping:best,preserved:score,total:a.length,explored,analogyProven:false}
+}
+function gradePractice(x:Obj){
+  const skills=uniqueIds(x.skills),seen=new Set<string>()
+  const attempts=list(x.exercises).map(raw=>{
+    const e=obj(raw),skill=id(e.skill),exercise=id(e.id)
+    if(!skills.includes(skill)||seen.has(exercise))throw Error('AMPLIFIER_ATTEMPT')
+    seen.add(exercise)
+    if(typeof e.expected!=='number'||typeof e.answer!=='number')throw Error('AMPLIFIER_NUMBER')
+    return {skill,exercise,correct:num(e.expected)===num(e.answer)}
+  })
+  const assessment=mentor({skills,attempts})
+  return {...assessment,attempts,practiceNext:assessment.skills.filter(s=>s.status!=='practice-transfer').map(s=>s.skill),answerKeysVerified:false}
+}
+function checkSegments(x:Obj){
+  const segments=list(x.segments,32),seen=new Set<string>()
+  const glossary=list(x.glossary,32).map(raw=>{
+    const g=obj(raw);return {source:text(g.source,160).normalize('NFC'),target:text(g.target,160).normalize('NFC')}
+  })
+  const tokenPattern=/\{\{[\w.-]+\}\}|\{[\w.-]+\}|%[sdif]|\$\{[\w.-]+\}/gu
+  const results=segments.map(raw=>{
+    const s=obj(raw),key=id(s.id),original=text(s.source,4000).normalize('NFC'),translated=text(s.translation,4000).normalize('NFC')
+    if(seen.has(key))throw Error('AMPLIFIER_DUPLICATE');seen.add(key)
+    const tokens=(v:string)=>(v.match(tokenPattern)??[]).sort()
+    const placeholdersPreserved=JSON.stringify(tokens(original))===JSON.stringify(tokens(translated))
+    const missing=glossary.filter(g=>original.includes(g.source)&&!translated.includes(g.target)).map(g=>g.target)
+    return {id:key,placeholdersPreserved,missing,valid:placeholdersPreserved&&!missing.length}
+  })
+  return {segments:results,valid:results.every(s=>s.valid),semanticEquivalenceVerified:false}
+}
+
+export const AMPLIFIER_OPERATIONS=['logos','compression','compile','epistemic','counterfactual','analogy','mentor','babel','sentinel','morphogenesis','compile-run','recipe-test','analogy-find','mentor-grade','babel-segments'] as const
 /** Parse only bounded explicit structured proposals. No raw transcripts. */
 export function runAmplifier(operation:string,raw:string):unknown{
   if(Buffer.byteLength(raw,'utf8')>32768)throw Error('AMPLIFIER_LIMIT')
@@ -223,6 +346,11 @@ export function runAmplifier(operation:string,raw:string):unknown{
     case 'babel':return babel(x)
     case 'sentinel':return sentinel(x)
     case 'morphogenesis':return morphology(x)
+    case 'compile-run':return executeNumericRecipe(x.program,x.inputs)
+    case 'recipe-test':return verifyNumericRecipe(x)
+    case 'analogy-find':return findAnalogy(x)
+    case 'mentor-grade':return gradePractice(x)
+    case 'babel-segments':return checkSegments(x)
     default:throw Error('AMPLIFIER_OPERATION')
   }
 }
