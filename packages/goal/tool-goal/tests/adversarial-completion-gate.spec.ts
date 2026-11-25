@@ -333,6 +333,49 @@ describe('adversarial completion tester', () => {
     })
   })
 
+
+  it.each(['failed-gate', 'false-pass', 'negative-judge', 'cleared'] as const)(
+    'does not restore a certified PASS after %s when the verifier is offline',
+    async (kind) => {
+      const objective = 'Ship the verified artifact.'
+      const goalId = 'goal-revoked'
+      const gate = {
+        goalId, revision: 1, round: 2, attemptId: 'gate-pass',
+        checks: passingChecks, evidenceLedger: passingLedger,
+        artifactFingerprint: 'sha256:old-artifact', cleanRoomEvidence: 'verified clean copy',
+        findings: [], proceduralLessons: [],
+      }
+      const judge = {
+        goalId, revision: 1, round: 2, verdict: 'pass',
+        summary: 'Previously certified.', findings: [], requiredChanges: [],
+      }
+      const invalidation = kind === 'failed-gate'
+        ? { type: 'goal/completion-gate', data: { ...gate, round: 3, checks: { ...passingChecks, startup: 'fail' } } }
+        : kind === 'false-pass'
+          ? { type: 'goal/false-pass', data: { goalId, revision: 1, detectedRound: 3 } }
+          : kind === 'negative-judge'
+            ? { type: 'goal/judge', data: { ...judge, round: 3, verdict: 'needs_changes' } }
+            : { type: 'goal/change', data: { operation: 'clear' } }
+      const result = await judgeGoalCompletion({
+        subagents: undefined,
+        provider: 'spawn',
+        parent: {
+          options: {},
+          session: { events: [
+            { type: 'goal/change', data: { operation: 'create', goal: { id: goalId, revision: 1, objective } } },
+            { type: 'goal/completion-gate', data: gate },
+            { type: 'goal/judge', data: judge },
+            invalidation,
+          ] },
+        } as never,
+        objective,
+        round: 4,
+        signal: new AbortController().signal,
+      })
+      expect(result.verdict).toBe('blocked')
+    },
+  )
+
   it('does not reuse a historical PASS whose gate has no mandatory criterion', async () => {
     const objective = 'Ship the verified artifact.'
     const goalId = 'goal-weak-history'
