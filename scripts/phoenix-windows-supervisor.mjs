@@ -9,6 +9,7 @@
  */
 
 import { createHash } from 'node:crypto'
+import { retireIntegratedWorkspaces } from './phoenix-retire-integrated-workspaces.mjs'
 import { spawn, spawnSync } from 'node:child_process'
 import {
   existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, statfsSync, unlinkSync, writeFileSync,
@@ -1048,6 +1049,16 @@ function cleanupObsoleteRuntimes(extraKeep = [], {
     )
   }
   if (!liveMigration || liveStorageMigrationAllowed()) cleanupDetachedLegacyStorage(keep, reportBusy, liveMigration)
+  // This additional migration is intentionally separate from disposable
+  // runtimes: old development worktrees require proof of integration and
+  // absence of user files. Run it only during the guarded idle transaction.
+  if (liveMigration && liveStorageMigrationAllowed()) {
+    retireIntegratedWorkspaces({
+      root, base: runtimeBaseDirectory(), keep, pathKey: runtimePathKey,
+      registered: registeredWorktreePaths(), processReferences: windowsProcessReferences,
+      leaseValid: liveStorageMigrationAllowed,
+    })
+  }
 }
 
 // A busy orphan must not make the optional rollback cushion permanently block
