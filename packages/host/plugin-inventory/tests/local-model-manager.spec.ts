@@ -111,13 +111,16 @@ describe('LocalModelRuntimeManager', () => {
     expect(args).toEqual(expect.arrayContaining([
       '--host', '127.0.0.1',
       '--port', '17842',
-      '--ctx-size', '131072',
+      '--ctx-size', '16384',
       '--cache-type-k', 'q8_0',
       '--cache-type-v', 'q8_0',
       '--model', expect.stringContaining('gemma-4-E2B-it-Q4_0.gguf'),
     ]))
     expect(args).not.toContain('--reasoning')
     expect(manager.snapshot()).toMatchObject({ phase: 'running', pid: 4242, port: 17842 })
+    expect(manager.effectiveContextWindow?.()).toBe(16_384)
+    vi.mocked(dependencies.freeMemoryBytes).mockReturnValue(2_000_000_000)
+    expect(manager.effectiveContextWindow?.()).toBe(16_384)
   })
 
   it('keeps Qwen3.5-4B as an installable and selectable alternative', async () => {
@@ -131,7 +134,7 @@ describe('LocalModelRuntimeManager', () => {
 
     const [, args] = vi.mocked(dependencies.spawnServer).mock.calls[0]!
     expect(args).toEqual(expect.arrayContaining([
-      '--ctx-size', '262144',
+      '--ctx-size', '16384',
       '--reasoning', 'off',
       '--model', expect.stringContaining('Qwen_Qwen3.5-4B-Q4_K_M.gguf'),
     ]))

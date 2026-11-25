@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import type { LocalModelRuntimeManager } from './manager.js'
+import { LocalModelRuntimeFault, type LocalModelRuntimeManager } from './manager.js'
 import { getLocalModel } from './catalog.js'
 import type { LocalModelCatalogEntry, LocalThinking } from './types.js'
 import { NativeOllamaChatError, relayNativeOllamaChat, toNativeOllamaChat } from './ollama-native-chat.js'
@@ -30,7 +30,7 @@ async function readBody(request: IncomingMessage): Promise<Uint8Array<ArrayBuffe
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array)
     size += buffer.length
-    if (size > MAX_REQUEST_BYTES) throw new Error('Phoenix Local request is larger than 16 MiB.')
+    if (size > MAX_REQUEST_BYTES) throw new NativeOllamaChatError('Phoenix Local request is larger than 16 MiB.', 413, 'local_request_too_large')
     chunks.push(buffer)
   }
   const body = Buffer.concat(chunks)
@@ -149,10 +149,11 @@ async function forward(
         jsonResponse(response, 409, { error: { message: 'Phoenix Local no reconoce el modelo seleccionado.' } })
         return
       }
+      const contextWindow = manager.effectiveContextWindow?.() ?? selected.contextWindow
       jsonResponse(response, 200, {
         selectedModelId: selected.id,
-        contextWindow: selected.contextWindow,
-        maxTokens: selected.maxTokens,
+        contextWindow,
+        maxTokens: Math.min(selected.maxTokens, Math.max(1, Math.floor(contextWindow / 4))),
       })
       return
     }
@@ -181,7 +182,10 @@ async function forward(
       })
       return
     }
+    const clientClosed = new AbortController()
+    response.once('close', () => { clientClosed.abort() })
     const backendBaseUrl = await manager.ensureRunning()
+    if (clientClosed.signal.aborted || response.destroyed) return
     // Starting a managed backend can await a download/process health check.
     // Re-read the selection before rewriting or forwarding so a concurrent
     // Settings switch cannot send a request fitted for the previous model to
@@ -215,8 +219,6 @@ async function forward(
         copy.set(encoded)
         return copy
       })()
-    const clientClosed = new AbortController()
-    response.once('close', () => { clientClosed.abort() })
     // Slow local prefill may need several minutes without visible chunks. Refresh
     // the idle timer on each native Ollama byte while retaining the finite
     // request-wide 10-minute cap and caller cancellation.
@@ -240,14 +242,24 @@ async function forward(
       ...(useStreamIdle ? [streamIdle.signal] : []),
     ])
     const started = Date.now()
-    const upstream = await fetch(nativeChat === undefined
-      ? `${backendBaseUrl}${suffix}`
-      : new URL('/api/chat', backendBaseUrl), {
-      method: request.method ?? 'POST',
-      headers: requestHeaders(request),
-      ...(forwardedBody === undefined ? {} : { body: forwardedBody }),
-      signal,
+    const upstreamUrl = nativeChat === undefined ? `${backendBaseUrl}${suffix}` : new URL('/api/chat', backendBaseUrl)
+    const send = (): Promise<Response> => fetch(upstreamUrl, {
+      method: request.method ?? 'POST', headers: requestHeaders(request),
+      ...(forwardedBody === undefined ? {} : { body: forwardedBody }), signal,
     })
+    // Retry only an inference connection failure before sending any bytes to
+    // the model consumer. Never repeat an actual Phoenix tool action here.
+    let upstream: Response
+    try {
+      upstream = await send()
+    } catch (error) {
+      if (signal.aborted || manager.snapshot().selectedModelId !== runtime.selectedModelId) throw error
+      if (!(error instanceof TypeError)) throw error
+      await new Promise(resolve => setTimeout(resolve, 250))
+      signal.throwIfAborted()
+      if (manager.snapshot().selectedModelId !== runtime.selectedModelId) throw error
+      upstream = await send()
+    }
     markActivity()
     if (nativeChat !== undefined) {
       await relayNativeOllamaChat(upstream, response, nativeChat, async payload => fetch(
@@ -291,6 +303,8 @@ async function forward(
     }
     const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')
     const nativeError = error instanceof NativeOllamaChatError ? error : undefined
+    const runtimeError = error instanceof LocalModelRuntimeFault ? error : undefined
+    if (response.destroyed) return
     response.statusCode = nativeError?.statusCode ?? (timedOut ? 504 : 503)
     response.setHeader('content-type', 'application/json; charset=utf-8')
     response.end(JSON.stringify({
@@ -298,7 +312,7 @@ async function forward(
         message: timedOut
           ? 'PHOENIX Local: Ollama dejó de transmitir o superó el límite máximo de tiempo. Comprueba /api/chat directamente y ollama ps.'
           : error instanceof Error ? error.message : String(error),
-        type: nativeError?.code ?? (timedOut ? 'phoenix_local_timeout' : 'phoenix_local_unavailable'),
+        type: nativeError?.code ?? runtimeError?.code ?? (timedOut ? 'phoenix_local_timeout' : 'phoenix_local_unavailable'),
       },
     }))
   } finally {
