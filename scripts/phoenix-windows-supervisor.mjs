@@ -656,9 +656,11 @@ function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePat
   // to treat as orphaned managed storage only after the caller has already
   // applied active-runtime protection and retention-age checks.
   const key = runtimePathKey(path)
-  if (registeredWorktrees !== undefined && !registeredWorktrees.has(key)) {
-    return removeOrphanedManagedDirectory(path, reportBusy)
+  if (registeredWorktrees === undefined || existsSync(join(path, '.phoenix-keep'))) return false
+  if (!registeredWorktrees.has(key)) {
+    return detachedWorktreeMetadata(path) && removeOrphanedManagedDirectory(path, reportBusy)
   }
+  if (!sameRepository(path)) return false
 
   // Runtime worktrees contain very deep pnpm/node_modules paths. On Windows,
   // Git must opt into Win32 long-path handling or cleanup can fail with
@@ -679,8 +681,8 @@ function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePat
   // it before declaring the directory "in use". If Git itself says the path is
   // not a worktree, treat it as orphaned managed storage and remove it directly.
   const refreshedWorktrees = registeredWorktreePaths()
-  const becameOrphaned = /(?:is )?not a working tree/iu.test(detail)
-    || (refreshedWorktrees !== undefined && !refreshedWorktrees.has(key))
+  const becameOrphaned = refreshedWorktrees !== undefined && !refreshedWorktrees.has(key)
+    && detachedWorktreeMetadata(path)
   if (becameOrphaned) {
     return removeOrphanedManagedDirectory(path, reportBusy)
   }
@@ -909,7 +911,8 @@ function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false, reapDorma
   if (active?.path !== undefined) keep.add(runtimePathKey(active.path))
   if (runtimeRoot !== root) keep.add(runtimePathKey(runtimeRoot))
   const inheritedRuntimeRoot = process.env.PHOENIX_RUNTIME_ROOT?.trim()
-  if (inheritedRuntimeRoot !== undefined && inheritedRuntimeRoot.length > 0) {
+  if (inheritedRuntimeRoot !== undefined && inheritedRuntimeRoot.length > 0
+    && runtimePathKey(inheritedRuntimeRoot) === runtimePathKey(runtimeRoot)) {
     keep.add(runtimePathKey(inheritedRuntimeRoot))
   }
 
@@ -930,9 +933,7 @@ function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false, reapDorma
     active !== undefined && !Number.isFinite(Date.parse(active.healthyAt ?? '')) ? 1 : 0)
   let retainedInactiveRuntimes = 0
   for (const candidate of inactiveRuntimes) {
-    // Keep at most one newest inactive runtime as a rollback cushion. Every
-    // older runtime is disposable immediately: retaining by age let frequent
-    // releases accumulate tens of gigabytes before the grace window expired.
+    // Retain a rollback copy only during unconfirmed activation or if configured.
     if (retainedInactiveRuntimes < inactiveBackupLimit) {
       retainedInactiveRuntimes += 1
       continue
@@ -999,7 +1000,7 @@ function reclaimInactiveBackupForCapacity(nextRuntime) {
   const active = readActiveRuntimeRecord()
   if (active?.path) keep.add(runtimePathKey(active.path))
   const inherited = process.env.PHOENIX_RUNTIME_ROOT?.trim()
-  if (inherited) keep.add(runtimePathKey(inherited))
+  if (inherited && runtimePathKey(inherited) === runtimePathKey(runtimeRoot)) keep.add(runtimePathKey(inherited))
   const registered = registeredWorktreePaths()
   const inactive = runtimeDirectoriesForCleanup()
     .filter(path => !keep.has(runtimePathKey(path)) && !existsSync(join(path, '.phoenix-keep'))
