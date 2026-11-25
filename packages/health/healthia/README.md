@@ -32,18 +32,15 @@ change.
 
 #### What the model sees
 
-`ctx.healthia` contributes no prompt, tool schema, or patient data by itself;
-model-facing consumers decide which bounded patient projection enters a request.
+`ctx.healthia` contributes no prompt, tool schema, or patient data by itself; model-facing consumers decide which bounded patient projection enters a request.
 
 #### Token effect
 
-No model tokens are added by this service definition alone. HealthIA consumers
-pay only for the clinical context they explicitly project.
+No model tokens are added by this service definition alone. HealthIA consumers pay only for the clinical context they explicitly project.
 
 #### KV Cache effect
 
-The seam is prefix-neutral by itself. Cache behavior changes only when a
-model-facing HealthIA consumer mounts prompt content or patient-scoped tools.
+The seam is prefix-neutral by itself. Cache behavior changes only when a model-facing HealthIA consumer mounts prompt content or patient-scoped tools.
 
 ## Known Limitations and Deferred Work
 
