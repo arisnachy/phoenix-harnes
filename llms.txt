@@ -11,3 +11,10 @@
 
 - [Early testers and contributors](https://github.com/arisnachy/phoenix-harnes/issues/1959)
 - [External skill catalog](https://skills.cat/u/arisnachy)
+
+## Open learning and community resources (Spanish)
+- [PHOENIX academy](https://arisnachy.github.io/phoenix-harnes/academy/)
+- [PHOENIX hub](https://arisnachy.github.io/phoenix-harnes/hub/)
+- [PHOENIX insights](https://arisnachy.github.io/phoenix-harnes/insights/)
+- [PHOENIX lab](https://arisnachy.github.io/phoenix-harnes/lab/)
+- [PHOENIX news](https://arisnachy.github.io/phoenix-harnes/news/)
