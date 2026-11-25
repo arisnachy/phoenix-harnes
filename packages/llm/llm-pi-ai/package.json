@@ -32,30 +32,34 @@
   ],
   "license": "MIT",
   "peerDependencies": {
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/dsh-atomic-write": "workspace:^",
     "@phoenix-ai/dsh-attachment": "workspace:^",
     "@phoenix-ai/dsh-authorization": "workspace:^",
     "@phoenix-ai/dsh-credentials": "workspace:^",
-    "@phoenix-ai/dsh-launch-environment": "workspace:^",
+    "@phoenix-ai/dsh-home-paths": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-launch-environment": "workspace:^",
     "@phoenix-ai/dsh-llm": "workspace:^",
     "@phoenix-ai/dsh-settings": "workspace:^",
-    "@phoenix-ai/dsh-timeout": "workspace:^",
-    "@phoenix-ai/cordis": "workspace:^"
+    "@phoenix-ai/dsh-timeout": "workspace:^"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "^0.82.1",
     "@phoenix-ai/schemastery": "workspace:^"
   },
   "devDependencies": {
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/dsh-atomic-write": "workspace:^",
     "@phoenix-ai/dsh-attachment": "workspace:^",
     "@phoenix-ai/dsh-authorization": "workspace:^",
     "@phoenix-ai/dsh-credentials": "workspace:^",
-    "@phoenix-ai/dsh-launch-environment": "workspace:^",
+    "@phoenix-ai/dsh-home-paths": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
+    "@phoenix-ai/dsh-launch-environment": "workspace:^",
     "@phoenix-ai/dsh-llm": "workspace:^",
     "@phoenix-ai/dsh-llm-deepseek": "workspace:^",
     "@phoenix-ai/dsh-settings": "workspace:^",
-    "@phoenix-ai/dsh-timeout": "workspace:^",
-    "@phoenix-ai/cordis": "workspace:^"
+    "@phoenix-ai/dsh-timeout": "workspace:^"
   }
 }
