@@ -172,6 +172,12 @@ export interface McpRegistryClient {
   /** Reuse already-authenticated OpenClaw connector routes when present. */
   openClawState?(): Promise<OpenClawConnectorSnapshot>
   openClawRuntimeState?(): Promise<OpenClawRuntimeSnapshot>
+  openClawConversation?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawConversationSnapshot>
+  configureOpenClawEngine?(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawEngineConfig): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawConversationSnapshot>
+  checkOpenClawEngine?(): Promise<{ available: boolean }>
+  sendOpenClawConversation?(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawConversationSend): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawConversationSnapshot>
+  newOpenClawConversation?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawConversationSnapshot>
+  cancelOpenClawConversation?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawConversationSnapshot>
   openClawPluginTools?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>
   openClawGatewayCredential?(): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialState>
   configureOpenClawGatewayCredential?(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialRequest): Promise<import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialState>
