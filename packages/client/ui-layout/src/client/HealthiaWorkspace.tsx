@@ -9,6 +9,8 @@ import { HealthiaClinicOperations } from './HealthiaClinicOperations.tsx'
 import type { ClinicalEditorRequest, ClinicalEditorViewState } from './HealthiaEditorSupport.ts'
 import { HealthiaClinicDashboard } from './HealthiaClinicDashboard.tsx'
 import { HealthiaOperationsBoard } from './HealthiaOperationsBoard.tsx'
+import { clinicalBmi } from './HealthiaClinicalNote.tsx'
+import { estimatedMap } from './HealthiaEditorSupport.ts'
 import type { AdaptiveLiveSnapshot } from './AdaptiveLiveSlots.ts'
 import { probeClinicalSession, type ClinicalRouteStatus } from './HealthiaClinicalBridge.ts'
 import {
@@ -68,6 +70,9 @@ export function HealthiaWorkspace({
   const [output, setOutput] = useState<AdaptiveOutput>('inline')
   const [draftError, setDraftError] = useState('')
   const [showEditor, setShowEditor] = useState(false)
+  const [calculator,setCalculator]=useState({weight:'',height:'',sys:'',dia:''})
+  const bmi=clinicalBmi(calculator)
+  const pam=estimatedMap(calculator)
   const [minimized, setMinimized] = useState(false)
   const [entry, setEntry] = useState<{kind:'patient'|'encounter';sequence:number}|undefined>()
   const entrySequence = useRef(0)
@@ -220,18 +225,32 @@ export function HealthiaWorkspace({
         )}
         {active === 'tools' && !isPatient && (
           <div className={css.tools}>
-            <div className={css.quickGrid}>
-              <div className={css.quickCard}><strong>Calculadoras</strong><span>IMC incorporado a la historia clínica cuando se registra peso y talla. Otras escalas requieren validación.</span></div>
-              <div className={css.quickCard}><strong>Plantillas</strong><span>Primera consulta, evolución, SOAP, pediatría y gineco-obstetricia.</span></div>
-              <div className={css.quickCard}><strong>Configuración de datos</strong><span>Almacenamiento local cifrado existente. Conexión a nube opcional todavía no configurada.</span></div>
+            <div className={css.toolActions}>
+              <button className={css.action} type="button" onClick={()=>start('encounter')}>Abrir consulta</button>
+              <button className={css.action} type="button" onClick={()=>setShowEditor(value=>!value)} aria-expanded={showEditor}>{showEditor?'Cerrar editor de plantillas':'Editar estructura de formularios'}</button>
+              <button className={css.action} type="button" onClick={()=>setCalculator({weight:'',height:'',sys:'',dia:''})}>Limpiar cálculos</button>
             </div>
-            <button type="button" className={css.action} aria-expanded={showEditor}
-              onClick={() => setShowEditor(value => !value)}>
-              {showEditor ? 'Cerrar editor de plantillas' : 'Editar estructura de formularios'}
-            </button>
+            <div className={css.calculatorGrid}>
+              <section className={css.calculator} aria-label="Calculadora de IMC">
+                <h3>IMC</h3>
+                <div className={css.calculatorFields}>
+                  <label>Peso (kg)<input type="number" min="0.05" max="1000" step="any" value={calculator.weight} onChange={e=>setCalculator(old=>({...old,weight:e.target.value}))}/></label>
+                  <label>Talla (cm)<input type="number" min="10" max="300" step="any" value={calculator.height} onChange={e=>setCalculator(old=>({...old,height:e.target.value}))}/></label>
+                </div>
+                <output aria-label="Resultado IMC" className={css.calculatorResult}>{bmi===undefined?'—':bmi.toFixed(1)+' kg/m²'}</output>
+              </section>
+              <section className={css.calculator} aria-label="Calculadora de presión arterial media">
+                <h3>PAM estimada</h3>
+                <div className={css.calculatorFields}>
+                  <label>Sistólica (mmHg)<input type="number" min="1" max="400" step="any" value={calculator.sys} onChange={e=>setCalculator(old=>({...old,sys:e.target.value}))}/></label>
+                  <label>Diastólica (mmHg)<input type="number" min="1" max="300" step="any" value={calculator.dia} onChange={e=>setCalculator(old=>({...old,dia:e.target.value}))}/></label>
+                </div>
+                <output aria-label="Resultado PAM" className={css.calculatorResult}>{pam===undefined?'—':pam.toFixed(1)+' mmHg'}</output>
+              </section>
+            </div>
             {showEditor && (
               <div className={css.formPreview}>
-                <p><strong>Editor de estructura.</strong> Solo modifica nombres y tipos de campos, nunca valores del expediente. Los cambios son borradores sin publicar.</p>
+                <p>Cambios: borradores sin publicar; no modifican expedientes.</p>
                 <div className={css.draftHeader}><span>Plantilla de consulta · revisión {draft.revision}</span>
                   <button type="button" className={css.action} disabled={!history.length}
                     onClick={() => { const last = history.at(-1); if (last) setDraft(last); setHistory(items => items.slice(0, -1)) }}>Deshacer cambio</button>
