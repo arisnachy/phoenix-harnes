@@ -422,7 +422,10 @@ export function apply(ctx: Context, config: Config): void {
   ensureRegistrationFacts()
   installNexusRuntime(ctx, {
     profiles,
-    nativeCodexAuthorized: async () => (await codexNativeAccessToken()) !== undefined,
+    nativeCodexAuthorized: async () => {
+      try { return (await codexNativeAccessToken()).length > 0 }
+      catch { return false }
+    },
   })
 
   // The bridge is loopback-only. It gives pi-ai the local Authorization marker
