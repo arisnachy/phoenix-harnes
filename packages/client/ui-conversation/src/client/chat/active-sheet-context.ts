@@ -7,7 +7,7 @@ export interface ActiveSheetSnapshot {
   columns:readonly string[]
   rows:readonly (readonly string[])[]
 }
-type Active={owner:string;read:()=>ActiveSheetSnapshot|null}
+type Active={owner:string;read:()=>ActiveSheetSnapshot|null;write?:((edits:readonly DirectSheetEdit[])=>DirectSheetOutcome)|undefined}
 type Grant={token:string;owner:string;id:string;revision:number;expires:number}
 const active=new Map<string,Active>()
 const grants=new Map<string,Grant>()
@@ -18,9 +18,9 @@ export function isRecentSheetSubmission(session:string,time:number):boolean{
   return sent!==undefined&&Number.isFinite(time)&&time>=sent-1000&&Date.now()-sent<=600000
 }
 /** Register one active sheet in its own session. */
-export function activateSheetContext(session:string,owner:string,read:Active['read']):void{
+export function activateSheetContext(session:string,owner:string,read:Active['read'],write?:Active['write']):void{
   if(active.get(session)?.owner!==owner)grants.delete(session)
-  active.set(session,{owner,read})
+  active.set(session,{owner,read,write})
 }
 /** Disconnect only the exact mounted owner. */
 export function disconnectSheetContext(session:string,owner:string):void{
@@ -66,4 +66,42 @@ export function splitSheetMessage(text:string):{text:string;attachment?:{title:s
     if(!v||typeof v.title!=='string'||typeof v.id!=='string'||typeof v.revision!=='number'||!Number.isSafeInteger(v.revision)||!Array.isArray(v.columns)||!Array.isArray(v.rows)||typeof v.editToken!=='string'||!/^[a-f0-9-]{36}$/iu.test(v.editToken))return {text}
     return {text:text.slice(0,start),attachment:{title:v.title,revision:v.revision}}
   }catch{return {text}}
+}
+
+
+export const DIRECT_SHEET_NOTICE='PHOENIX Office · '
+export type DirectSheetEdit={cell:string;value:string}
+export type DirectSheetOutcome={kind:'success'|'error';text:string}
+/** Only fully matched, explicit literal assignments bypass the model. */
+export function parseDirectSheetEdit(text:string):DirectSheetEdit[]|undefined{
+  const input=text.trim().replace(/[.!]$/u,'')
+  const address='(?:[A-Pa-p](?:[2-9]|[1-9]\\d|1\\d{2}|20[01])|(?:[2-9]|[1-9]\\d|1\\d{2}|20[01])[A-Pa-p])'
+  const normalize=(s:string)=>s.toUpperCase().replace(/^(\d+)([A-P])$/u,'$2$1')
+  const literal=(s:string)=>/^(?:-?\d+(?:\.\d+)?|[\p{L}][\p{L}\p{M}\d _-]{0,79})$/u.test(s)&&!/\b(?:no|excepto|si|después|luego|borra|elimina|busca|investiga|calcula|cambia|pon|coloca|escribe|actualiza)\b/iu.test(s)
+  const make=(cell:string,value:string):DirectSheetEdit|undefined=>literal(value)?{cell:normalize(cell),value}:undefined
+  const price=new RegExp('^(?:coloca|pon|escribe) el (?:valor|vlaor|precio) en (-?\\d+(?:\\.\\d+)?) d(?:el|e la|e) ([\\p{L}\\p{M} ]{1,50}) en (?:la )?('+address+') y ('+address+')$','iu').exec(input)
+  if(price){
+    const a=normalize(price[3]!),b=normalize(price[4]!),name=price[2]!.trim()
+    if(a.slice(1)!==b.slice(1)||b.charCodeAt(0)!==a.charCodeAt(0)+1||!literal(name))return undefined
+    return [{cell:a,value:/^caf[eé]$/iu.test(name)?'Café':name.charAt(0).toUpperCase()+name.slice(1)},{cell:b,value:price[1]!}]
+  }
+  const command=/^(?:coloca|pon|escribe|cambia|actualiza|set)\s+(.+)$/iu.exec(input)
+  if(!command&&!new RegExp('^'+address+'\\s*=','iu').test(input))return undefined
+  const parts=(command?.[1]??input).split(/\s+(?:y|and)\s+|\s*;\s*/iu)
+  if(parts.length>20)return undefined
+  const edits:DirectSheetEdit[]=[]
+  for(const part of parts){
+    const left=new RegExp('^('+address+')\\s*(?:=|\\s+a\\s+|\\s+to\\s+)\\s*(.+)$','iu').exec(part)
+    const right=new RegExp('^(.+?)\\s+en\\s+(?:la\\s+)?('+address+')$','iu').exec(part)
+    const edit=left?make(left[1]!,left[2]!.trim()):right?make(right[2]!,right[1]!.trim()):undefined
+    if(!edit||edits.some(e=>e.cell===edit.cell))return undefined
+    edits.push(edit)
+  }
+  return edits.length?edits:undefined
+}
+export function tryDirectSheetEdit(session:string,text:string):DirectSheetOutcome|undefined{
+  const edits=parseDirectSheetEdit(text),entry=active.get(session)
+  if(!edits||!entry?.write)return undefined
+  grants.delete(session)
+  try{return entry.write(edits)}catch{return {kind:'error',text:DIRECT_SHEET_NOTICE+'No se pudo verificar la edición. La hoja no se enviará al modelo.'}}
 }

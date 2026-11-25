@@ -18,6 +18,7 @@ import type {
 } from './contract.ts'
 import type { InputSubmitMode } from '../contract/composer-submission.ts'
 import { InputMachine, projectClipboard } from './machine.ts'
+import { DIRECT_SHEET_NOTICE } from '../chat/active-sheet-context.ts'
 
 /** Popup face the shell needs (dismissal only; typed structurally to avoid a value import). */
 export interface PopupDismissFace {
@@ -541,7 +542,7 @@ export class SessionInputShell implements SessionInput {
         // the local receipt after success so Enter never creates a blank visual
         // gap. ChatView hands it off to the authoritative durable/steering row.
         // A refusal must retire it immediately because the exact draft is restored.
-        if (outcome.kind !== 'success' && this.pendingSubmit?.seq === attempt.seq) {
+        if ((outcome.kind !== 'success' || outcome.text?.startsWith(DIRECT_SHEET_NOTICE)) && this.pendingSubmit?.seq === attempt.seq) {
           this.pendingSubmit = undefined
         }
         if (outcome.kind === 'success' && imageIds.length > 0) {
