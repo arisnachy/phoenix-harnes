@@ -75,14 +75,14 @@ describe('PHOENIX embedded Healthia', () => {
       throw Error('Una sesión bloqueada no debe acceder a datos: '+uri)
     }))
     render(<ScreenHarness/>)
-    expect(screen.getByRole('heading',{name:'Tu jornada clínica, en un solo espacio'})).toBeTruthy()
+    expect(screen.getByRole('heading',{name:'Jornada clínica'})).toBeTruthy()
     expect(screen.getByText('Accesos manuales').closest('details')?.open).toBe(false)
     fireEvent.click(screen.getByText('Accesos manuales'))
     const nav=screen.getByRole('navigation',{name:'Secciones del espacio clínico'})
     expect(within(nav).getByRole('button',{name:'Pacientes'})).toBeTruthy()
     expect(within(nav).getByRole('button',{name:'Consultas'})).toBeTruthy()
     expect(screen.getByRole('navigation',{name:'Accesos clínicos rápidos'})).toBeTruthy()
-    expect(screen.getByText('Así trabajará tu clínica')).toBeTruthy()
+    expect(screen.queryByText('Así trabajará tu clínica')).toBeNull()
     expect(screen.queryByText('Pacientes autorizados')).toBeNull()
     expect(screen.queryByText('Reintentar conexión')).toBeNull()
     expect(screen.queryByRole('heading',{name:'Inicio de sesión profesional'})).toBeNull()
@@ -126,6 +126,7 @@ describe('PHOENIX embedded Healthia', () => {
     expect(requested).toContain('patients')
     expect(screen.getByText('Pacientes autorizados')).toBeTruthy()
     expect(screen.queryByRole('heading',{name:'Inicio de sesión profesional'})).toBeNull()
+    expect(screen.getByRole('button',{name:'Consultar'})).toBeTruthy()
   })
 
   it('moves the legacy editable form structure into Tools, not the main menu', () => {
@@ -207,5 +208,23 @@ describe('Native clinical editor continuity',()=>{
     const parts=formatClinicalNoteParts('first',{icd11:'SYNTHETIC',icd11Evidence:'Synthetic test evidence'})
     expect(parts.assessment).toContain('CIE-11 propuesto: SYNTHETIC')
     expect(parts.assessment).toContain('Evidencia de consulta OMS (CIE-11): Synthetic test evidence')
+  })
+})
+
+
+describe('Action-first clinical tools',()=>{
+  it('calculates BMI and estimated MAP without needing clinical credentials or patient data',()=>{
+    render(<ScreenHarness/>)
+    fireEvent.click(screen.getByText('Accesos manuales'))
+    fireEvent.click(screen.getByRole('button',{name:'Herramientas'}))
+    fireEvent.change(screen.getByLabelText('Peso (kg)'),{target:{value:'72'}})
+    fireEvent.change(screen.getByLabelText('Talla (cm)'),{target:{value:'170'}})
+    expect(screen.getByLabelText('Resultado IMC').textContent).toBe('24.9 kg/m²')
+    fireEvent.change(screen.getByLabelText('Sistólica (mmHg)'),{target:{value:'120'}})
+    fireEvent.change(screen.getByLabelText('Diastólica (mmHg)'),{target:{value:'80'}})
+    expect(screen.getByLabelText('Resultado PAM').textContent).toBe('93.3 mmHg')
+    fireEvent.click(screen.getByRole('button',{name:'Limpiar cálculos'}))
+    expect(screen.getByLabelText('Resultado IMC').textContent).toBe('—')
+    expect(screen.getByLabelText('Resultado PAM').textContent).toBe('—')
   })
 })
