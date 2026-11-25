@@ -76,6 +76,7 @@ import {
   startOpenCodeFreeProxy,
 } from './opencode-free.ts'
 
+export * from './nexus.ts'
 export { PiAiAdapter } from './adapter.ts'
 export type { PiAiAdapterOptions } from './adapter.ts'
 export { Config } from './config.ts'
