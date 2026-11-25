@@ -82,7 +82,7 @@ const UPDATE_STORAGE_RETENTION_MS = Math.max(
 )
 // Runtimes are full dependency/build copies and can exceed a gigabyte each.
 // Time-based retention allowed a burst of stable updates to fill ~/p before
-// the grace period elapsed. Keep only one inactive runtime as rollback cushion;
+// the grace period elapsed. Keep no inactive runtime by default after health;
 // active runtimes, the currently executing runtime, and owning-checkout leases
 // are protected separately below.
 const configuredInactiveRuntimeBackups = Number.parseInt(
@@ -91,7 +91,7 @@ const configuredInactiveRuntimeBackups = Number.parseInt(
 )
 const MAX_INACTIVE_RUNTIME_BACKUPS = Number.isFinite(configuredInactiveRuntimeBackups)
   ? Math.max(0, Math.min(1, configuredInactiveRuntimeBackups))
-  : 1
+  : 0
 // Absolute circuit breaker: even if Windows temporarily locks stale worktrees,
 // PHOENIX must never keep allocating full runtime copies until the drive fills.
 // Default capacity is active + candidate + configured rollback cushion.
@@ -904,7 +904,7 @@ function cleanupDetachedLegacyStorage(keep, reportBusy = false) {
 }
 
 function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false, reapDormantStage = false } = {}) {
-  const keep = new Set(extraKeep.filter(Boolean).map(runtimePathKey))
+  const keep = new Set([root, supervisorSourceRoot, ...extraKeep.filter(Boolean)].map(runtimePathKey))
   const active = readActiveRuntimeRecord()
   if (active?.path !== undefined) keep.add(runtimePathKey(active.path))
   if (runtimeRoot !== root) keep.add(runtimePathKey(runtimeRoot))
@@ -914,26 +914,34 @@ function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false, reapDorma
   }
 
   const registeredWorktrees = registeredWorktreePaths()
+  if (registeredWorktrees === undefined) return // Never delete without Git ownership evidence.
   let removedRuntimes = 0
   let removedStages = 0
 
   const inactiveRuntimes = runtimeDirectoriesForCleanup()
     .filter((candidate) => {
       const key = runtimePathKey(candidate)
-      return !keep.has(key) && !runtimeProtectedByOwningCheckout(candidate)
+      return !keep.has(key) && !existsSync(join(candidate, '.phoenix-keep'))
+        && !runtimeProtectedByOwningCheckout(candidate)
     })
     .sort((left, right) => managedDirectoryMtimeMs(right) - managedDirectoryMtimeMs(left))
 
+  const inactiveBackupLimit = Math.max(MAX_INACTIVE_RUNTIME_BACKUPS,
+    active !== undefined && !Number.isFinite(Date.parse(active.healthyAt ?? '')) ? 1 : 0)
   let retainedInactiveRuntimes = 0
   for (const candidate of inactiveRuntimes) {
     // Keep at most one newest inactive runtime as a rollback cushion. Every
     // older runtime is disposable immediately: retaining by age let frequent
     // releases accumulate tens of gigabytes before the grace window expired.
-    if (retainedInactiveRuntimes < MAX_INACTIVE_RUNTIME_BACKUPS) {
+    if (retainedInactiveRuntimes < inactiveBackupLimit) {
       retainedInactiveRuntimes += 1
       continue
     }
 
+    if (process.platform === 'win32') {
+      const references = windowsProcessReferences([candidate])
+      if (references === undefined || references.has(runtimePathKey(candidate))) continue
+    }
     if (!removeManagedWorktree(candidate, registeredWorktrees, reportBusy)) continue
     removedRuntimes += 1
     console.error(`[PHOENIX UPDATE] removed obsolete isolated runtime: ${candidate}`)
@@ -946,6 +954,7 @@ function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false, reapDorma
     // Host is verified the consumed build tree is disposable. The janitor
     // rechecks its owning checkout and Windows processes before deletion.
     if (key === currentStage && !reapDormantStage) continue
+    if (keep.has(key) || existsSync(join(candidate, '.phoenix-keep'))) continue
     if (!sameRepository(candidate)) continue
     if (stageProtectedByOwningCheckout(candidate)) continue
     if (key === currentStage) {
@@ -986,17 +995,23 @@ function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false, reapDorma
 // backup (oldest first). The running runtime, active marker, runtime held by
 // a different checkout, and the intended candidate remain protected.
 function reclaimInactiveBackupForCapacity(nextRuntime) {
-  const keep = new Set([runtimeRoot, nextRuntime, root].map(runtimePathKey))
+  const keep = new Set([runtimeRoot, nextRuntime, root, supervisorSourceRoot].map(runtimePathKey))
   const active = readActiveRuntimeRecord()
   if (active?.path) keep.add(runtimePathKey(active.path))
   const inherited = process.env.PHOENIX_RUNTIME_ROOT?.trim()
   if (inherited) keep.add(runtimePathKey(inherited))
   const registered = registeredWorktreePaths()
   const inactive = runtimeDirectoriesForCleanup()
-    .filter(path => !keep.has(runtimePathKey(path)) && !runtimeProtectedByOwningCheckout(path))
+    .filter(path => !keep.has(runtimePathKey(path)) && !existsSync(join(path, '.phoenix-keep'))
+      && !runtimeProtectedByOwningCheckout(path))
     .sort((left, right) => managedDirectoryMtimeMs(left) - managedDirectoryMtimeMs(right))
   for (const candidate of inactive) {
     if (runtimeDirectoriesForCleanup().length < MAX_RUNTIME_DIRECTORIES) break
+    if (registered === undefined) break
+    if (process.platform === 'win32') {
+      const references = windowsProcessReferences([candidate])
+      if (references === undefined || references.has(runtimePathKey(candidate))) continue
+    }
     if (!removeManagedWorktree(candidate, registered, true)) continue
     console.error(`[PHOENIX UPDATE] reclaimed inactive rollback runtime to stay within storage limit: ${candidate}`)
   }
@@ -1016,9 +1031,17 @@ function cleanupFailedPreparedRuntime(target) {
   if (!existsSync(candidate)
     || key === runtimePathKey(runtimeRoot)
     || key === runtimePathKey(root)
+    || key === runtimePathKey(supervisorSourceRoot)
+    || existsSync(join(candidate, '.phoenix-keep'))
     || (active?.path !== undefined && key === runtimePathKey(active.path))
     || runtimeProtectedByOwningCheckout(candidate)) return
-  if (removeManagedWorktree(candidate, registeredWorktreePaths(), true)) {
+  const registered = registeredWorktreePaths()
+  if (registered === undefined) return
+  if (process.platform === 'win32') {
+    const references = windowsProcessReferences([candidate])
+    if (references === undefined || references.has(key)) return
+  }
+  if (removeManagedWorktree(candidate, registered, true)) {
     console.error(`[PHOENIX UPDATE] removed failed isolated runtime before it consumed another storage slot: ${candidate}`)
   }
 }
