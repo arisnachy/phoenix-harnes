@@ -19,6 +19,8 @@ import { ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import type { Context } from '@phoenix-ai/cordis'
 import { isImageAdmissionError } from '@phoenix-ai/dsh-attachment'
+import { authorizeWindowsMcpCall, windowsMcpPreflight, WINDOWS_FLAUI_SERVER_NAME } from './windows-permission.ts'
+import type { WindowsMcpQuestionService } from './windows-permission.ts'
 import type { AttachmentStore, ImageAttachmentRef, ImageMediaType, SaveImageAttachment } from '@phoenix-ai/dsh-attachment'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 import type { ToolDefinition, ToolExecution, ToolExecutionResult } from '@phoenix-ai/dsh-tools'
@@ -507,6 +509,25 @@ function createExecutor(
     }
     const routedArgs = chromeScope && ownerId !== undefined
       ? { ...wireArgs, sessionId: ownerId } : wireArgs
+    if (opts.serverName === WINDOWS_FLAUI_SERVER_NAME) {
+      const refused = windowsMcpPreflight(rawName, routedArgs)
+      if (refused !== null) throw new Error(refused)
+      // Every read and write requires a fresh in-session human decision. A
+      // discovered MCP tool never inherits permission to inspect the desktop.
+      let questions: WindowsMcpQuestionService | undefined
+      try {
+        questions = (ctx as unknown as { get(name: string): unknown })
+          .get('userQuestions') as WindowsMcpQuestionService | undefined
+      } catch { /* no ASK service means deny */ }
+      const permitted = await authorizeWindowsMcpCall({
+        rawName,
+        args: routedArgs,
+        ...(exec.agent === undefined ? {} : { agent: exec.agent }),
+        signal: exec.signal,
+        ...(questions === undefined ? {} : { questions }),
+      })
+      if (!permitted) throw new Error('WINDOWS_MCP_HUMAN_APPROVAL_REQUIRED')
+    }
     const result = await callToolUncached(client, rawName, routedArgs, exec, opts).catch((error: unknown) => {
       reportToolAuthorizationFailure(opts, error)
       throw error
