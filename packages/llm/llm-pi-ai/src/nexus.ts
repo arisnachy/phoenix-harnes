@@ -56,7 +56,8 @@ export interface NexusModel {
 export function nexusPriceClass(model: Pick<NexusModel, 'price'>, now: number): NexusPriceClass {
   const price = model.price
   if (price === undefined || price.source === 'catalog-unverified'
-    || price.observedAt > now || (price.expiresAt !== undefined && price.expiresAt <= now)) return 'unknown'
+    || !Number.isFinite(now) || !Number.isFinite(price.observedAt) || price.observedAt > now
+    || (price.expiresAt !== undefined && (!Number.isFinite(price.expiresAt) || price.expiresAt <= now))) return 'unknown'
   if (price.accountEligible === false) return 'unknown'
   const input = price.inputPerMillion
   const output = price.outputPerMillion
@@ -67,7 +68,8 @@ export function nexusPriceClass(model: Pick<NexusModel, 'price'>, now: number): 
     && Number.isFinite(price.allowanceRemaining)) return 'limited-free'
   if (!ratesKnown) return 'unknown'
   if (input > 0 || output > 0 || price.extraCharges === true) return 'paid'
-  return price.allChargesVerified === true ? 'verified-free' : 'unknown'
+  return price.allChargesVerified === true && price.expiresAt !== undefined
+    && price.expiresAt > price.observedAt ? 'verified-free' : 'unknown'
 }
 
 
@@ -106,12 +108,19 @@ export function openRouterPriceEvidence(
     const extraKeys = ['request', 'image', 'web_search', 'internal_reasoning',
       'input_cache_read', 'input_cache_write'] as const
     let additionalCharges = false
-    let unknownCharge = false
+    // A new or unrecognized billing dimension cannot silently become free.
+    const knownKeys = new Set<string>(['prompt', 'completion', ...extraKeys])
+    let unknownCharge = Object.keys(pricing).some(key => !knownKeys.has(key))
     for (const key of extraKeys) {
       if (pricing[key] === undefined || pricing[key] === null) continue
       const rate = openRouterRate(pricing[key])
       if (rate === undefined) unknownCharge = true
       else if (rate > 0) additionalCharges = true
+    }
+    if (prices.has(record.id)) {
+      // Conflicting catalog entries must not authorize a free request.
+      prices.set(record.id, { source: 'catalog-unverified', observedAt })
+      continue
     }
     prices.set(record.id, {
       source: 'provider-api',
@@ -258,7 +267,8 @@ export function chooseNexusRoute(
     if (task.allowedProviders !== undefined && !task.allowedProviders.includes(model.provider)) return []
     if (task.needsTools && model.supportsTools !== true) return []
     if (task.needsImages && model.supportsImages !== true) return []
-    if (model.contextWindow !== undefined && requiredInput > model.contextWindow) return []
+    if (requiredInput > 0 && (model.contextWindow === undefined
+      || !Number.isFinite(model.contextWindow) || requiredInput > model.contextWindow)) return []
     if (minimumQuality > 0 && (model.observedQuality === undefined || model.observedQuality < minimumQuality)) return []
     if (task.maximumLatencyMs !== undefined && model.observedLatencyMs !== undefined
       && model.observedLatencyMs > task.maximumLatencyMs) return []
