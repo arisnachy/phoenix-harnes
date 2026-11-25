@@ -3,6 +3,7 @@ import {
   NEXUS_MODEL, NEXUS_PROVIDER, NexusSelectorAdapter,
   nexusCodexFallback, nexusCodexHasReserve, nexusCodexWithinPace, nexusRequiresStrongModel,
   nexusTurnText, nexusTurnHasHumanImage,
+  nexusReadNativeCodexQuota, nexusCodexFreshReserve, nexusEconomyEffort,
 } from '../src/nexus-runtime.ts'
 
 describe('Nexus synthetic model route', () => {
@@ -64,5 +65,26 @@ describe('Nexus durable user evidence', () => {
     expect(nexusTurnHasHumanImage(events, 13)).toBe(true)
     expect(nexusTurnText(events, 99)).toBe('')
     expect(nexusTurnHasHumanImage(events, 99)).toBe(false)
+  })
+})
+
+describe('native Codex window freshness and economic reasoning',()=>{
+  const now=1_800_000_000_000,hour=3_600_000
+  const window=(minutes:number,used:number,hours:number)=>({windowDurationMins:minutes,usedPercent:used,resetsAt:(now+hours*hour)/1000,observedAt:now-1000})
+  const telemetry={kind:'account',provider:'Codex',accountType:'chatgpt',primaryLimit:window(10080,30,72),secondaryLimit:window(300,20,2)}
+  it('maps actual window durations and rejects API-key, stale, expired and ambiguous samples',()=>{
+    const quota=nexusReadNativeCodexQuota(telemetry)
+    expect(quota?.primaryUsedPercent).toBe(20)
+    expect(quota?.secondaryUsedPercent).toBe(30)
+    expect(nexusCodexFreshReserve(quota,now)).toBe(true)
+    expect(nexusCodexFreshReserve(quota,now+121000)).toBe(false)
+    expect(nexusCodexFreshReserve({...quota,resetPrimaryAt:now/1000},now)).toBe(false)
+    expect(nexusReadNativeCodexQuota({...telemetry,accountType:'apiKey'})).toBeUndefined()
+    expect(nexusReadNativeCodexQuota({...telemetry,secondaryLimit:telemetry.primaryLimit})).toBeUndefined()
+  })
+  it('never invents effort names or reduces complex task reasoning',()=>{
+    expect(nexusEconomyEffort(['high','low','medium'],false)).toBe('low')
+    expect(nexusEconomyEffort(['high','medium'],false)).toBeUndefined()
+    expect(nexusEconomyEffort(['high','low'],true)).toBeUndefined()
   })
 })
