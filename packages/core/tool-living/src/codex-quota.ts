@@ -1,4 +1,5 @@
 /** Secret-free account quota projection. Native percentages are not token balances. */
+import { createHash } from 'node:crypto'
 export interface NativeQuotaWindow {usedPercent:number;windowDurationMins?:number;resetsAt?:number;observedAt?:number}
 export interface NativeQuotaTelemetry {kind:string;provider:string;accountType?:string;primaryLimit?:NativeQuotaWindow;secondaryLimit?:NativeQuotaWindow}
 const MINUTE=60000
@@ -77,13 +78,13 @@ function sampleTime(t:NativeQuotaTelemetry){return Math.max(t.primaryLimit?.obse
 export async function inspectCodexQuota(auth:QuotaAuthorization|undefined,signal?:AbortSignal){
   try{
     const entry=auth?.list().find(x=>x.key==='subagent-codex/account')
-    if(!auth||!entry)return projectCodexQuota(undefined)
+    if(!auth||!entry){if(auth)observations.delete(auth);return projectCodexQuota(undefined)}
     const timeout=AbortSignal.timeout(2500)
     const telemetry=await auth.inspect(entry.key,signal===undefined?timeout:AbortSignal.any([signal,timeout]))
     if(signal?.aborted||timeout.aborted)return projectCodexQuota(undefined)
     const now=Date.now()
     const email=(telemetry as (NativeQuotaTelemetry&{email?:unknown})|undefined)?.email
-    const identity=typeof email==='string'&&email.trim()!==''?email.trim().toLowerCase():undefined
+    const identity=typeof email==='string'&&email.trim()!==''?createHash('sha256').update(email.trim().toLowerCase()).digest('hex'):undefined
     const current=projectCodexQuota(telemetry,now)
     if(!telemetry||identity===undefined||current.fiveHours.status!=='fresh'||current.sevenDays.status!=='fresh'){
       observations.delete(auth)
@@ -98,9 +99,16 @@ export async function inspectCodexQuota(auth:QuotaAuthorization|undefined,signal
     }
     const time=sampleTime(sample),latestTime=sampleTime(record.latest),baselineTime=sampleTime(record.baseline)
     if(time<latestTime)return current
+    // A reset or downward correction invalidates this baseline; do not compare across it.
+    const discontinuity=[300,10080].some(minutes=>{
+      const select=(t:NativeQuotaTelemetry)=>[t.primaryLimit,t.secondaryLimit].find(w=>w?.windowDurationMins===minutes)
+      const a=select(record.latest),b=select(sample)
+      return !a||!b||a.resetsAt!==b.resetsAt||b.usedPercent<a.usedPercent
+    })
+    if(discontinuity){observations.set(auth,{identity,baseline:sample,latest:sample});return current}
     const prior=record.baseline
     // Keep a useful baseline through repeated cached reads; roll it after one hour.
     if(time>latestTime)observations.set(auth,{identity,baseline:time-baselineTime>=3600000?record.latest:prior,latest:sample})
     return projectCodexQuota(telemetry,now,prior)
-  }catch{return projectCodexQuota(undefined)}
+  }catch{if(auth)observations.delete(auth);return projectCodexQuota(undefined)}
 }
