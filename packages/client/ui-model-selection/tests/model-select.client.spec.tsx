@@ -704,3 +704,20 @@ describe('Phoenix Local installed model branding', () => {
     await waitFor(() => expect(select).toHaveBeenCalledWith({ provider: 'phoenix-local', model: 'ollama:qwen3.5:2b' }))
   })
 })
+
+describe('Nexus provider identity in model picker', () => {
+  it('shows Nexus as a separate selectable route with the PHOENIX emblem', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      current: { provider: 'phoenix-nexus', model: 'nexus-auto' },
+      groups: [{ id: 'phoenix-nexus', name: 'PHOENIX Nexus',
+        models: [{ id: 'nexus-auto', name: 'PHOENIX Nexus' }] }],
+    }))
+    render(<ModelSelect locked={false} available directory={directory}
+      load={vi.fn()} select={vi.fn().mockResolvedValue(true)} t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: /PHOENIX Nexus/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    const group = screen.getByRole('menuitem', { name: 'PHOENIX Nexus' })
+    expect(group.querySelector('img[src="/phoenix-emblem.png"]')).not.toBeNull()
+    expect(screen.getByRole('menuitemradio', { name: 'PHOENIX Nexus' })).toBeTruthy()
+  })
+})

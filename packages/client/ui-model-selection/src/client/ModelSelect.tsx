@@ -50,11 +50,13 @@ function ProviderLogo({ providerId, providerName, modelId, modelName }: {
   providerId: string; providerName: string; modelId?: string; modelName?: string
 }) {
   const local = providerId === 'phoenix-local'
-  const mark = local ? localModelBrandMark(modelId ?? '', modelName ?? '') : providerBrandMark(providerId, providerName)
+  const phoenix = providerId === 'phoenix-nexus'
+  const mark = local ? localModelBrandMark(modelId ?? '', modelName ?? '')
+    : phoenix ? undefined : providerBrandMark(providerId, providerName)
   return (
     <span className={css.providerLogo} role="img" aria-label={`${local ? modelName ?? 'PHOENIX' : providerName} logo`}>
       {mark === undefined
-        ? local ? <PhoenixLogo size={20} /> : <span className={css.providerLogoFallback} aria-hidden="true">{providerInitial(providerName)}</span>
+        ? local || phoenix ? <PhoenixLogo size={20} /> : <span className={css.providerLogoFallback} aria-hidden="true">{providerInitial(providerName)}</span>
         : (
           <svg
             className={css.providerLogoMark}
