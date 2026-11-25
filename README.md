@@ -22,6 +22,23 @@ Prefer the latest published release and read its notes before installing. For a 
 
 **Like PHOENIX?** If it is useful to you, [star the project on GitHub](https://github.com/arisnachy/phoenix-harnes) to follow its development and help other developers discover it. [Share feedback or report an issue](https://github.com/arisnachy/phoenix-harnes/issues) after trying it.
 
+## Try PHOENIX with a real task
+
+1. [Get the latest published Windows release](https://github.com/arisnachy/phoenix-harnes/releases/latest) or [run from source](#run).
+2. In **Settings → Models**, configure an available local or cloud model. Free-tier availability and local hardware requirements vary.
+3. Start a conversation with Kira and try one of these prompts:
+
+| Your goal | Example prompt |
+| --- | --- |
+| Understand a codebase | Inspect this repository, explain its architecture, and suggest a small improvement with a test plan. |
+| Analyze your data | Review this CSV, identify missing values, summarize the results, and propose a chart. |
+| Research a topic | Compare three approaches to this problem, cite your sources, and flag uncertain claims. |
+| Try local AI | Use my configured local model to summarize this sample document. Tell me if a tool or capability is unavailable. |
+
+Start with non-sensitive sample data and review tool permissions before approving changes. These are suggested workflows, not benchmark results or guarantees; availability depends on your installed release and model.
+
+**Help improve PHOENIX:** [report your first-run experience](https://github.com/arisnachy/phoenix-harnes/issues/new/choose), including the release, model/provider and what worked or failed. Remove credentials and private data before posting. If PHOENIX earned a place in your toolkit, [give it a star](https://github.com/arisnachy/phoenix-harnes) or share it with someone who could use it.
+
 ## What you can do
 
 | Capability | What PHOENIX provides |
