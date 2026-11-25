@@ -59,6 +59,7 @@ import { assertUsableApiKey, LlmError } from '@phoenix-ai/dsh-llm'
 import type { AdapterRegistrationHandle, DirectoryRegistrationHandle, LlmConfigurableProvider } from '@phoenix-ai/dsh-llm'
 import { deepEqualJson, installSettingsSection, settingsNamespace } from '@phoenix-ai/dsh-settings'
 import { PiAiAdapter, type PhoenixLocalModelMetadata } from './adapter.ts'
+import { installNexusRuntime } from './nexus-runtime.ts'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
 import { catalogProviderIds } from './catalog.ts'
 import { CODEX_PROVIDER, CodexLiveCatalog } from './codex-live-catalog.ts'
@@ -77,6 +78,7 @@ import {
 } from './opencode-free.ts'
 
 export * from './nexus.ts'
+export { NEXUS_PROVIDER, NEXUS_MODEL, NexusSelectorAdapter, nexusCodexFallback, nexusCodexHasReserve, nexusRequiresStrongModel } from './nexus-runtime.ts'
 export { PiAiAdapter } from './adapter.ts'
 export type { PiAiAdapterOptions } from './adapter.ts'
 export { Config } from './config.ts'
@@ -418,6 +420,10 @@ export function apply(ctx: Context, config: Config): void {
     registeredFacts = facts
   }
   ensureRegistrationFacts()
+  installNexusRuntime(ctx, {
+    profiles,
+    nativeCodexAuthorized: async () => (await codexNativeAccessToken()) !== undefined,
+  })
 
   // The bridge is loopback-only. It gives pi-ai the local Authorization marker
   // it requires, then strips that marker before the request leaves Phoenix.
