@@ -1,6 +1,7 @@
 /** Browser attachment plugin: fills conversation's composer and message-image slots. */
 import type { ClientContext } from '@phoenix-ai/dsh-client-runtime/client'
 import type {} from '@phoenix-ai/dsh-client-ui-conversation/client'
+import { CaptureTools } from './CaptureTools.tsx'
 import { ComposerAttachments } from './ComposerAttachments.tsx'
 import { MessageImages } from './MessageImages.tsx'
 
@@ -13,6 +14,10 @@ export function apply(ctx: ClientContext): void {
     name: 'conversation.input.attachments',
     locale: 'conversation',
   }, ComposerAttachments))
+  ctx.slots.inject('conversation.input.capture', () => ctx.slots.register({
+    name: 'conversation.input.capture',
+    locale: 'conversation',
+  }, CaptureTools))
   ctx.slots.inject('conversation.message.images', () => ctx.slots.register({
     name: 'conversation.message.images',
     locale: 'conversation',
