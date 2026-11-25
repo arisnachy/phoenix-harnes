@@ -60,7 +60,7 @@ import type { AdapterRegistrationHandle, DirectoryRegistrationHandle, LlmConfigu
 import { deepEqualJson, installSettingsSection, settingsNamespace } from '@phoenix-ai/dsh-settings'
 import { PiAiAdapter, type PhoenixLocalModelMetadata } from './adapter.ts'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
-import { catalogProviderIds } from './catalog.ts'
+import { catalogProvider, catalogProviderIds } from './catalog.ts'
 import { CODEX_PROVIDER, CodexLiveCatalog } from './codex-live-catalog.ts'
 import { codexNativeAccessToken } from './codex-auth.ts'
 import { assertServiceable, CHATGPT_WEB_PROVIDER, chatgptWebDefaults, Config, DEFAULT_PHOENIX_LOCAL_STREAM_IDLE_TIMEOUT_MS, resolveProfiles } from './config.ts'
@@ -97,6 +97,11 @@ export {
   chatgptWebDefaults,
 } from './config.ts'
 export { recordKeyFor } from './auth.ts'
+export {
+  GOOGLE_ANTIGRAVITY_DEFAULT_MODELS,
+  GOOGLE_ANTIGRAVITY_DISPLAY_NAME,
+  GOOGLE_ANTIGRAVITY_PROVIDER,
+} from './google-antigravity.ts'
 export { supportedProtocols } from './provider.ts'
 export {
   OPENCODE_FREE_BASE_URL,
@@ -232,7 +237,10 @@ function directoryEntries(
     })
   }
   for (const provider of knownRoutes) {
-    declare(provider, provider === CHATGPT_WEB_PROVIDER ? chatgptWebDefaults().displayName : provider)
+    const defaultName = provider === CHATGPT_WEB_PROVIDER
+      ? chatgptWebDefaults().displayName
+      : catalogProvider(provider)?.name ?? provider
+    declare(provider, defaultName)
   }
   for (const [provider, profile] of profiles) {
     if (provider === PHOENIX_LOCAL_PROVIDER || provider === OPENCODE_FREE_PROVIDER) continue
