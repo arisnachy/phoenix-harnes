@@ -194,6 +194,9 @@
           # Antigravity CLI OAuth is not a permitted generic model credential.
           google:
             apiKeyEnv: GEMINI_API_KEY
+          # Google Antigravity (Cloud Code Assist) OAuth route. Configured from
+          # Settings -> Models -> Google Antigravity using standard Google OAuth PKCE.
+          google-antigravity: {}
           # Optional local ChatGPT Web bridge. It exposes selectable bridge
           # models immediately; requests remain loopback-only and fail clearly
           # until the user configures PHOENIX_CHATGPT_WEB_COMMAND and starts it.
