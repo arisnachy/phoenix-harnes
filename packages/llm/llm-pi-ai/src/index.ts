@@ -422,6 +422,7 @@ export function apply(ctx: Context, config: Config): void {
   ensureRegistrationFacts()
   installNexusRuntime(ctx, {
     profiles,
+    freeRoutePolicies: () => current().nexusFreeRoutes ?? [],
     providerAuthorized: async (provider, profile) => {
       try { return (await resolveApiKey(provider, profile)) !== undefined }
       catch { return false }
