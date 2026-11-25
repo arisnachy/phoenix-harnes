@@ -35,3 +35,17 @@ describe('user-selected presence frame',()=>{
     expect(chooser).toHaveBeenCalledOnce()
   })
 })
+
+it('camera requests video only and releases a stream acquired after cancellation',async()=>{
+  const stop=vi.fn()
+  let release:(value:unknown)=>void=()=>undefined
+  const camera=vi.fn(()=>new Promise(resolve=>{release=resolve}))
+  Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{getUserMedia:camera}})
+  const controller=new AbortController()
+  const capture=capturePresenceFrame(controller.signal,'camera')
+  controller.abort()
+  release({getTracks:()=>[{readyState:'live',stop}]})
+  await expect(capture).rejects.toThrow('CAPTURE_CANCELLED')
+  expect(camera).toHaveBeenCalledWith({video:{width:{ideal:1280},height:{ideal:720}},audio:false})
+  expect(stop).toHaveBeenCalledOnce()
+})
