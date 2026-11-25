@@ -2,13 +2,13 @@
 
 Nexus is an independent model-selection system, not a new foundation model or an automatic premium supervisor. The current initial modules live in `packages/llm/llm-pi-ai/src/nexus.ts` and the team provenance UI. The existing Eclipse runtime remains unchanged.
 
-The Nexus foundation offers price classification, official OpenRouter catalog normalization, a measured quota forecaster, conservative model selection and quality calibration. Its opt-in `phoenix-nexus/nexus-auto` selector now resolves to a real provider/model before streaming; unverified pricing never qualifies for free routing, and local models remain excluded. Account quota telemetry is used for guarded Codex subscription fallback. Transport receipts now persist in the private harness home. Provider-specific billing probes, semantic quality calibration and full e2e checks are still incomplete, so the autonomous deployment has not passed acceptance.
+The Nexus foundation offers price classification, official OpenRouter catalog normalization, a measured quota forecaster, conservative model selection and quality calibration. Its opt-in `phoenix-nexus/nexus-auto` selector now resolves to a real provider/model before streaming; unverified pricing never qualifies for free routing, and local models remain excluded. Account quota telemetry is used for guarded Codex subscription fallback. Transport receipts now persist in the private harness home. Provider-specific billing probes, broad semantic quality calibration and full live e2e checks are still incomplete, so the autonomous deployment has not passed acceptance.
 
 The target engine covers all configured provider routes, not just OpenRouter and NVIDIA. Free rates must be confirmed from supported provider pricing sources or an explicit operator-confirmed policy, with an expiration; a model name alone never proves zero cost. A model can be free but quota-limited, and some providers disclose only partial quota data. Local models must stay excluded from automatic selection until the user enables them explicitly.
 
 ## Wiring requirements
 
-The current opt-in Host reads the configured provider model registry, public OpenRouter price catalog and Codex account quotas; the Kira team displays actual serving model badges. The runtime revalidates credentials and official OpenRouter pricing before continuing an existing route. The next acceptance gates are semantic quality calibration, real readiness checks for each configured provider, account-specific free-tier entitlement detection, proof of in-session failover, and optional UI controls for the local-model gate. Do not promote it as complete until the integrated tests and live provider checks pass.
+The current opt-in Host reads the configured provider model registry, public OpenRouter price catalog and Codex account quotas; the Kira team displays actual serving model badges. The runtime revalidates credentials and official OpenRouter pricing before continuing an existing route. The next acceptance gates are broad semantic quality calibration, real readiness checks for each configured provider, account-specific free-tier entitlement detection, proof of in-session failover, and optional UI controls for the local-model gate. Do not promote it as complete until the integrated tests and live provider checks pass.
 
 ## Quota and billing safety
 
@@ -35,3 +35,28 @@ No prompts, session IDs or credentials are stored. On restart, observed latency
 and transport failure rates can inform ranking. Successful transport is not
 proof of semantic quality, and these local receipts never establish an exact
 account-wide quota balance.
+
+
+## Independent acceptance and route recovery
+
+The runtime now extracts an answer key only for a standalone explicit quoted
+exact-response instruction (English or Spanish). For a completed text response
+it compares the bounded visible text with that key, never asking the model to
+grade itself. Only the boolean outcome is persisted; answer keys and output text
+are not written to the receipt file. After at least five such observations,
+Bayesian-smoothed acceptance informs ranking only for the same exact-response
+task class. Unmeasured ordinary, clinical, coding and research quality remains
+unknown. No paid benchmark requests are sent automatically.
+
+The official OpenRouter catalog also supplies declared context capacities.
+The current 8,192-token routing floor is not a measurement of the full assembled
+prompt. The adapter still owns final capacity validation. Automatic free routes
+must advertise tool support, and short continuation or high-stakes requests
+are classified conservatively. Provider authorization is checked at dispatch;
+unknown prices, local models and unreserved allowances remain excluded.
+
+The runtime integration fixture exercises an OpenRouter rate-limit, transition
+to a native Codex route with fresh quota evidence, bounded retry, and exhaustion.
+This is a simulated integration test, not a live cross-provider account test.
+Team headers show the concrete model ID rather than just its family name;
+unknown providers retain a generic mark rather than a fabricated vendor identity.
