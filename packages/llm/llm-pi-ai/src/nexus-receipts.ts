@@ -19,6 +19,8 @@ export interface NexusTransportReceipt extends NexusUsage {
   readonly usageReported: boolean
   /** Independent exact-response acceptance, when the task has an explicit answer key. */
   readonly exactResponseAccepted?: boolean
+  /** Deterministically graded bounded arithmetic, separate from exact instruction following. */
+  readonly numericResponseAccepted?: boolean
 }
 
 function isReceipt(value: unknown): value is NexusTransportReceipt {
@@ -29,6 +31,7 @@ function isReceipt(value: unknown): value is NexusTransportReceipt {
     && typeof r.succeeded === 'boolean'
     && typeof r.usageReported === 'boolean'
     && (r.exactResponseAccepted === undefined || typeof r.exactResponseAccepted === 'boolean')
+    && (r.numericResponseAccepted === undefined || typeof r.numericResponseAccepted === 'boolean')
     && [r.timestamp, r.inputTokens, r.outputTokens, r.latencyMs].every(
       v => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0,
     )
