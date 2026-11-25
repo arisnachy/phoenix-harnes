@@ -379,7 +379,9 @@ export function ModelSelect(
   // The current host selection is authoritative even while the provider
   // catalog is loading, empty, or temporarily unavailable. Do not erase the
   // model's visible identity and make the control look like it disappeared.
-  const displayedRoute = state.current
+  // Once a fresh catalog is ready, a genuinely removed model needs reselection.
+  // During reconnect/loading/error the last host identity remains visible.
+  const displayedRoute = state.status === 'ready' && currentChoice === undefined ? null : state.current
   const modelLabel = currentChoice === undefined
     ? displayedRoute === null
       ? t('trigger.fallback')
