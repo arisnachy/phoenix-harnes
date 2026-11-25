@@ -7,7 +7,7 @@ import { Tooltip } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { SidebarFooterActionOwnerProps } from '@phoenix-ai/dsh-client-ui-sidebar/client'
 import type { InjectFace, PropsLocale } from '@phoenix-ai/dsh-client-ui-slots'
 import type { PluginInventoryLocaleKey } from './locales.ts'
-import { activationNeedsVerification, isHiddenUpdaterPause, recentlyUpdated, updateStepLabelKey } from './update-presentation.ts'
+import { activeUpdateCommand, activationNeedsVerification, isHiddenUpdaterPause, recentlyUpdated, updateStepLabelKey } from './update-presentation.ts'
 import css from './UpdateFooterAction.module.css'
 
 /** Poll cadence for the repository-local updater state while Web is open. */
@@ -291,15 +291,20 @@ export function UpdateFooterAction({
 
   const ready = snapshot.status === 'ready'
   const unverifiedActivation = activationNeedsVerification(snapshot)
-  const busy = requesting || (!unverifiedActivation && isBusy(snapshot))
-  const label = unverifiedActivation ? t('updateRestartUnverified') : t(labelKey)
+  const busy = requesting || isBusy(snapshot)
+  const activeCommand = isBusy(snapshot) ? activeUpdateCommand(snapshot) : undefined
+  const commandLabel = activeCommand === undefined ? undefined : updateStepLabelKey(activeCommand)
+  const label = commandLabel !== undefined ? t(commandLabel)
+    : unverifiedActivation ? t('updateRestartUnverified') : t(labelKey)
   const actionLabel = ready ? t('updateRestart') : label
   const errorState = snapshot.status === 'error' || snapshot.status === 'rollback-failed'
   const tone = ready
     ? css.ready
-    : errorState || unverifiedActivation
+    : errorState
       ? css.error
-      : busy
+      : unverifiedActivation
+        ? css.neutral
+        : busy
         ? css.busy
         : css.neutral
   const className = `${ready ? css.action : css.status} ${tone}${wide ? '' : ` ${css.rail}`}`
@@ -346,8 +351,10 @@ export function UpdateFooterAction({
   const events = snapshot.events?.slice(-20).reverse() ?? []
   const target = snapshot.target?.slice(0, 12)
   const retryable = errorState || snapshot.status === 'paused'
-  const detail = unverifiedActivation
-    ? t('updateRestartUnverifiedHint')
+  const detail = activeCommand !== undefined
+    ? t(commandLabel ?? labelKey)
+    : unverifiedActivation
+      ? t('updateRestartUnverifiedHint')
     : retryable
       ? snapshot.detail ?? t(snapshot.status === 'paused' ? 'updatePausedHint' : 'updateErrorHint')
       : snapshot.detail
