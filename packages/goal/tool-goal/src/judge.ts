@@ -256,7 +256,7 @@ function sessionGatePassed(event: SessionEvent<'goal/completion-gate'>): boolean
 /** Find a PASS whose semantic review happened after its exact executable gate. */
 function settledGoalPass(parent: Agent, objective: string): SettledGoalPass | undefined {
   const current = parent.session.events.findLast(event =>
-    event.type === 'goal/change' && event.data.operation !== 'clear')
+    event.type === 'goal/change')
   if (current?.type !== 'goal/change' || current.data.operation === 'clear'
     || current.data.goal.objective !== objective) return undefined
   const goalId = current.data.goal.id
@@ -264,16 +264,18 @@ function settledGoalPass(parent: Agent, objective: string): SettledGoalPass | un
   const gateIndex = parent.session.events.findLastIndex((event): event is SessionEvent<'goal/completion-gate'> =>
     event.type === 'goal/completion-gate'
       && event.data.goalId === goalId
-      && event.data.revision === revision
-      && sessionGatePassed(event))
+      && event.data.revision === revision)
   if (gateIndex < 0) return undefined
   const gate = parent.session.events[gateIndex] as SessionEvent<'goal/completion-gate'>
-  const judge = parent.session.events.slice(gateIndex + 1).findLast((event): event is SessionEvent<'goal/judge'> =>
+  if (!sessionGatePassed(gate)) return undefined
+  const subsequent = parent.session.events.slice(gateIndex + 1)
+  if (subsequent.some(event => event.type === 'goal/false-pass'
+    && event.data.goalId === goalId && event.data.revision === revision)) return undefined
+  const judge = subsequent.findLast((event): event is SessionEvent<'goal/judge'> =>
     event.type === 'goal/judge'
       && event.data.goalId === goalId
-      && event.data.revision === revision
-      && event.data.verdict === 'pass')
-  if (judge === undefined) return undefined
+      && event.data.revision === revision)
+  if (judge?.data.verdict !== 'pass' || judge.data.round !== gate.data.round) return undefined
   return {
     artifactFingerprint: gate.data.artifactFingerprint,
     result: {
@@ -523,11 +525,9 @@ export async function judgeGoalCompletion(input: {
  * @param entry - bounded independent judge result for one exact goal revision.
  */
 export function recordGoalJudge(session: Session, entry: GoalJudgeAuditEntry): void {
-  const settledPass = session.events.some(event => event.type === 'goal/judge'
-    && event.data.goalId === entry.goalId
-    && event.data.revision === entry.revision
-    && event.data.verdict === 'pass')
-  if (settledPass && entry.verdict === 'blocked') return
+  const latest = session.events.findLast(event => (event.type === 'goal/judge' || event.type === 'goal/false-pass')
+    && event.data.goalId === entry.goalId && event.data.revision === entry.revision)
+  if (latest?.type === 'goal/judge' && latest.data.verdict === 'pass' && entry.verdict === 'blocked') return
   session.append('goal/judge', {
     ...entry,
     findings: [...entry.findings],
