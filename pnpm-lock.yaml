@@ -6115,9 +6115,6 @@ importers:
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
     devDependencies:
-      '@phoenix-ai/dsh-agent':
-        specifier: workspace:^
-        version: link:../../core/agent
       '@phoenix-ai/cordis':
         specifier: workspace:^
         version: link:../../../vendor/cordis

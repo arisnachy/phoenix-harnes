@@ -7,7 +7,6 @@
 import type { Context } from '@phoenix-ai/cordis'
 import { LlmAdapter, LlmError } from '@phoenix-ai/dsh-llm'
 import type { GenerateOptions, LlmModelInfo, StreamChunk, LlmCallConfig } from '@phoenix-ai/dsh-llm'
-import type {} from '@phoenix-ai/dsh-agent'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import {
   NexusQuotaGovernor, chooseNexusRoute, openRouterPriceEvidence,
@@ -40,8 +39,8 @@ export class NexusSelectorAdapter extends LlmAdapter {
 
 /** Trusted account quota percentages, not fictional available token counts. */
 export interface NexusCodexQuota {
-  readonly primaryUsedPercent?: number
-  readonly secondaryUsedPercent?: number
+  readonly primaryUsedPercent?: number | undefined
+  readonly secondaryUsedPercent?: number | undefined
   readonly resetPrimaryAt?: number
   readonly resetSecondaryAt?: number
 }
@@ -154,10 +153,27 @@ export class NexusOpenRouterPrices {
   supportsTools(id: string): boolean { return this.tools.has(id) }
 }
 
+/** Narrow Agent events bridge avoids importing Agent source into the LLM package. */
+interface NexusAgentEventBridge {
+  on(event: 'agent/request', listener: (
+    payload: { agent: NexusAgentHandle; turn: number; step: number; signal: AbortSignal },
+    next: () => Promise<LlmCallConfig>,
+  ) => Promise<LlmCallConfig>): void
+  on(event: 'agent/request-error', listener: (
+    payload: { agent: NexusAgentHandle; turn: number; step: number;
+      provider: string; failure: { code: string }; signal: AbortSignal },
+    next: () => Promise<{ kind: 'retry' } | undefined>,
+  ) => Promise<{ kind: 'retry' } | undefined>): void
+}
+/** Only the authoritative session log is read; no mutable Agent internals. */
+interface NexusAgentHandle {
+  readonly session: { readonly events: readonly { readonly type: string; readonly data: unknown }[] }
+}
+
 interface NexusAgentRouteState {
   readonly turn: number
   excluded: Set<string>
-  routed?: NexusRoute
+  routed?: NexusRoute | undefined
   failovers: number
 }
 
@@ -254,7 +270,8 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
 
   ctx.llm.registerAdapter([NEXUS_PROVIDER], new NexusSelectorAdapter())
 
-  ctx.on('agent/request', async (payload, next): Promise<LlmCallConfig> => {
+  const agentEvents = ctx as unknown as NexusAgentEventBridge
+  agentEvents.on('agent/request', async (payload, next): Promise<LlmCallConfig> => {
     const selected = await next()
     if (selected.provider !== NEXUS_PROVIDER || selected.model !== NEXUS_MODEL) return selected
     payload.signal.throwIfAborted()
@@ -311,7 +328,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
   // Retry is permitted only before the failed model request has yielded tools;
   // the Agent loop's own request-error seam retries the same step from its
   // durable context, not side-effecting tool calls.
-  ctx.on('agent/request-error', async (payload, next) => {
+  agentEvents.on('agent/request-error', async (payload, next) => {
     const state = perAgent.get(payload.agent)
     const active = state?.turn === payload.turn ? state : undefined
     if (active?.routed === undefined || active.routed.provider !== payload.provider
