@@ -383,3 +383,26 @@ describe('lazy MCP tool presentation', () => {
     expect(sdk).not.toContain('tool_search:')
   })
 })
+
+
+describe('Phoenix Local universal discovery', () => {
+  it('discovers native tools and executes them without exposing the full catalog to local models', async () => {
+    const { ctx, agent } = await mount()
+    Object.assign(agent, { options: { provider: 'phoenix-local' } })
+    ctx.tools.register(tool('spreadsheet_edit', 'Edit spreadsheet cells'))
+    ctx.tools.register(tool('browser_inspect', 'Inspect browser'))
+    ctx.tools.register(tool('file_read', 'Read a file'))
+    const cloud = await addAgent(ctx, 'cloud')
+    const initial = await ctx.systemPrompt.assemble({ scope: agent })
+    expect(initial.tools.map(item => item.name)).toEqual(['tool_search'])
+    const cloudAssembly = await ctx.systemPrompt.assemble({ scope: cloud })
+    expect(cloudAssembly.tools.map(item => item.name)).toContain('spreadsheet_edit')
+    expect(cloudAssembly.tools.map(item => item.name)).not.toContain('tool_search')
+    const found = await ctx.tools.execute({ signal, callId: CallId('local-search'), name: 'tool_search', agent, arguments: { names: ['spreadsheet_edit'] } })
+    expect(found.isError).toBe(false)
+    const selected = await ctx.systemPrompt.assemble({ scope: agent })
+    expect(selected.tools.map(item => item.name)).toEqual(['spreadsheet_edit', 'tool_search'])
+    const result = await ctx.tools.execute({ signal, callId: CallId('local-edit'), name: 'spreadsheet_edit', agent, arguments: {} })
+    expect(result.isError).toBe(false)
+  })
+})
