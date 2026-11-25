@@ -5,7 +5,7 @@ import {
   nexusTurnText, nexusTurnHasHumanImage,
   nexusReadNativeCodexQuota, nexusCodexFreshReserve, nexusEconomyEffort,
   nexusExactResponseTarget, nexusExactResponseQuality, installNexusRuntime,
-  nexusNumericResponseTarget, nexusNumericResponseQuality, nexusOperatorPolicy,
+  nexusNumericResponseTarget, nexusNumericResponseQuality, nexusOperatorPolicy, nexusQuotaView,
 } from '../src/nexus-runtime.ts'
 
 describe('Nexus synthetic model route', () => {
@@ -148,7 +148,7 @@ describe('Nexus installed runtime failover', () => {
       }] }),
     }))
     try {
-      installNexusRuntime(ctx as never, {
+      const inspect = installNexusRuntime(ctx as never, {
         profiles: () => profiles as never,
         providerAuthorized: async () => true,
         nativeCodexAuthorized: async () => true,
@@ -165,6 +165,12 @@ describe('Nexus installed runtime failover', () => {
       expect(await route(payload, async () => selected)).toMatchObject({
         provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'low',
       })
+      const snapshot = await inspect(payload.signal, { sessionId: agent.session.id })
+      expect(snapshot.lastDispatchedRoute).toBe('openai-codex/gpt-6-luna')
+      expect(snapshot.lastDispatchedEffort).toBe('low')
+      expect(snapshot.quota.fiveHours).toMatchObject({ status: 'reported', remainingPercent: 99 })
+      expect(snapshot.total).toBe(2)
+      expect(snapshot.models.map(m => m.priceClass)).toContain('verified-free')
       expect(await fail({ ...payload, provider: 'openai-codex', failure: { code: 'TIMEOUT' } },
         async () => undefined)).toEqual({ kind: 'retry' })
       await expect(route(payload, async () => selected)).rejects.toThrow('no verified free model')
@@ -198,5 +204,19 @@ describe('Nexus independent arithmetic acceptance', () => {
     expect(nexusNumericResponseTarget('Calculate 1 / 0')).toBeUndefined()
     expect(nexusNumericResponseQuality([{ numericResponseAccepted: true }, {}])).toBeUndefined()
     expect(nexusNumericResponseQuality(Array.from({ length: 5 }, () => ({ numericResponseAccepted: true })))).toBeCloseTo(7 / 9)
+  })
+})
+
+
+describe('Nexus native account snapshot', () => {
+  it('shows exhausted or available percentages and reset times without fictional token balances', () => {
+    const now = 1_800_000_000_000
+    const view = nexusQuotaView({ primaryUsedPercent: 100, secondaryUsedPercent: 40,
+      resetPrimaryAt: (now + 3_600_000) / 1000, resetSecondaryAt: now + 86_400_000,
+      primaryObservedAt: now, secondaryObservedAt: now }, now)
+    expect(view.fiveHours).toMatchObject({ status: 'reported', remainingPercent: 0, remainingMs: 3_600_000 })
+    expect(view.sevenDays).toMatchObject({ status: 'reported', remainingPercent: 60, remainingMs: 86_400_000 })
+    expect(view.exactTokenBalance).toBeNull()
+    expect(nexusQuotaView(undefined, now).fiveHours).toEqual({ status: 'unknown' })
   })
 })
