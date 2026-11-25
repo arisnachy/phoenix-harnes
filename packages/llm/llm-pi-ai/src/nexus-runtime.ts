@@ -11,7 +11,7 @@ import { LlmAdapter, LlmError } from '@phoenix-ai/dsh-llm'
 import type { GenerateOptions, LlmModelInfo, StreamChunk, LlmCallConfig } from '@phoenix-ai/dsh-llm'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import {
-  chooseNexusRoute, nexusPriceClass, openRouterPriceEvidence,
+  chooseNexusRoute, nexusPriceClass, openRouterPriceEvidence, nexusEstimatedQuality,
   type NexusModel, type NexusPriceEvidence, type NexusRoute, type NexusUsage,
 } from './nexus.ts'
 
@@ -155,6 +155,21 @@ export function nexusRequiresStrongModel(text: string): boolean {
     || /\b(?:repar\p{L}*|diagnostic\p{L}*|investig\p{L}*|analiz\p{L}*|c[oó]digo|aplicaci[oó]n|sistema|seguridad)\b/iu.test(text)
 }
 
+/** Extract only an explicitly quoted exact-answer contract; ordinary text is not graded. */
+export function nexusExactResponseTarget(text: string): string | undefined {
+  const match = /^(?:(?:reply|respond|answer) (?:with )?(?:exactly|only)|responde (?:exactamente|solo|únicamente))\s*:?\s*["“]([^"”\r\n]{1,120})["”]\.?!?$/iu.exec(text.trim())
+  return match?.[1]
+}
+
+/** Exact-response quality is scoped to this measurable task family, never general intelligence. */
+export function nexusExactResponseQuality(samples: readonly { exactResponseAccepted?: boolean }[]): number | undefined {
+  const graded = samples.filter(s => typeof s.exactResponseAccepted === 'boolean')
+  if (graded.length < 5) return undefined
+  return nexusEstimatedQuality({ attempts: graded.length,
+    accepted: graded.filter(s => s.exactResponseAccepted === true).length,
+    totalLatencyMs: 0, totalTokens: 0 })
+}
+
 type NexusSessionEvent = { readonly type: string; readonly data: unknown }
 type NexusMessagePart = { readonly type?: string; readonly text?: unknown }
 
@@ -204,6 +219,7 @@ export function nexusTurnHasHumanImage(events: readonly NexusSessionEvent[], tur
 export class NexusOpenRouterPrices {
   private latest = new Map<string, NexusPriceEvidence>()
   private tools = new Set<string>()
+  private contexts = new Map<string, number>()
   private validUntil = 0
   private refreshing: Promise<void> | undefined
 
@@ -227,6 +243,13 @@ export class NexusOpenRouterPrices {
         this.latest = new Map(openRouterPriceEvidence(payload, now, CATALOG_AGE_MS))
         const entries = typeof payload === 'object' && payload !== null && 'data' in payload
           ? (payload as { data?: unknown }).data : undefined
+        this.contexts = new Map(Array.isArray(entries) ? entries.flatMap((entry): [string, number][] => {
+          if (typeof entry !== 'object' || entry === null) return []
+          const row = entry as { id?: unknown; context_length?: unknown }
+          return typeof row.id === 'string' && typeof row.context_length === 'number'
+            && Number.isSafeInteger(row.context_length) && row.context_length > 0
+            ? [[row.id, row.context_length]] : []
+        }) : [])
         this.tools = new Set(Array.isArray(entries) ? entries.flatMap((entry) => {
           if (typeof entry !== 'object' || entry === null) return []
           const row = entry as { id?: unknown; supported_parameters?: unknown }
@@ -237,6 +260,7 @@ export class NexusOpenRouterPrices {
         // Fail closed on missing price data; never reuse an expired free claim.
         this.latest.clear()
         this.tools.clear()
+        this.contexts.clear()
       } finally {
         this.validUntil = now + CATALOG_AGE_MS
       }
@@ -257,6 +281,8 @@ export class NexusOpenRouterPrices {
  * @returns Whether tools were advertised.
  */
   supportsTools(id: string): boolean { return this.tools.has(id) }
+  /** Published context capacity, when supplied by the official listing. */
+  contextWindow(id: string): number | undefined { return this.contexts.get(id) }
 }
 
 /** Narrow Agent events bridge avoids importing Agent source into the LLM package. */
@@ -303,7 +329,7 @@ export interface NexusRuntimeOptions {
  */
 export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions): void {
   const receipts = new NexusReceiptStore(dshHomePath('nexus-receipts-v1.json'))
-  const activeSessions = new Map<string, string>()
+  const activeSessions = new Map<string, { key: string; exact?: string }>()
   const prices = new NexusOpenRouterPrices()
   const perAgent = new WeakMap<object, NexusAgentRouteState>()
   const blockedUntil = new Map<string, number>()
@@ -352,6 +378,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
           const key = routeKey(provider.id, model.id)
           // Provider names are not price evidence; unverified catalogs stay unknown.
           const evidence = officialOpenRouter ? prices.get(model.id) : undefined
+          const contextWindow = officialOpenRouter ? prices.contextWindow(model.id) : undefined
           return {
             provider: provider.id,
             id: model.id,
@@ -363,6 +390,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
             supportsImages: model.inputModalities?.includes('image') === true,
             supportsTools: officialOpenRouter && prices.supportsTools(model.id),
             ...(evidence === undefined ? {} : { price: evidence }),
+            ...(contextWindow === undefined ? {} : { contextWindow }),
           } satisfies NexusModel
         })
       }))
@@ -395,6 +423,9 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     const text = nexusTurnText(agent.session.events, payload.turn)
     const complex = text.length === 0 || nexusRequiresStrongModel(text)
     const hasImage = nexusTurnHasHumanImage(agent.session.events, payload.turn)
+    const exact = !hasImage ? nexusExactResponseTarget(text) : undefined
+    const activeRoute = (route: NexusRoute) => ({ key: routeKey(route.provider, route.model),
+      ...(exact === undefined ? {} : { exact }) })
     const buildRoute=async(route:NexusRoute):Promise<LlmCallConfig>=>{
       const { serviceTier: _tier, reasoningEffort: _effort, ...base }=selected
       let reasoningEffort:LlmCallConfig['reasoningEffort']
@@ -424,7 +455,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
         state.excluded.add(routeKey(route.provider, route.model))
         state.routed = undefined
       } else {
-        activeSessions.set(agent.session.id, routeKey(route.provider, route.model))
+        activeSessions.set(agent.session.id, activeRoute(route))
         return buildRoute(route)
       }
     }
@@ -433,7 +464,9 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       const samples = observations.filter(r => r.provider === model.provider && r.model === model.id)
       if (samples.length === 0) return model
       const failures = samples.filter(r => !r.succeeded).length
+      const quality = exact === undefined ? undefined : nexusExactResponseQuality(samples)
       return { ...model, observations: samples.length,
+        ...(quality === undefined ? {} : { observedQuality: quality }),
         errorRate: (failures + 1) / (samples.length + 5),
         observedLatencyMs: samples.reduce((sum, r) => sum + r.latencyMs, 0) / samples.length }
     }).filter(model =>
@@ -477,7 +510,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       const oldest = activeSessions.keys().next().value
       if (oldest !== undefined) activeSessions.delete(oldest)
     }
-    activeSessions.set(agent.session.id, routeKey(route.provider, route.model))
+    activeSessions.set(agent.session.id, activeRoute(route))
     return buildRoute(route)
   })
 
@@ -502,13 +535,17 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
 
   ctx.on('llm/stream', (request, next) => {
     const upstream = next()
-    if (request.sessionId === undefined || request.purpose !== undefined
-      || activeSessions.get(request.sessionId) !== routeKey(request.provider, request.model)) return upstream
+    const active = request.sessionId === undefined ? undefined : activeSessions.get(request.sessionId)
+    if (request.purpose !== undefined || active === undefined
+      || active.key !== routeKey(request.provider, request.model)) return upstream
     return (async function* (): AsyncIterable<StreamChunk> {
       const started = Date.now()
       let usage: NexusUsage | undefined
       let succeeded = false
       let terminal = false
+      let exactResponseAccepted: boolean | undefined
+      let answer = ''
+      let overflow = false
       try {
         for await (const chunk of upstream) {
           if (chunk.type === 'usage') {
@@ -518,9 +555,15 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
                 + (chunk.usage.cacheWriteTokens ?? 0),
               outputTokens: chunk.usage.outputTokens,
             }
+          } else if (active.exact !== undefined && chunk.type === 'text-delta') {
+            if (answer.length + chunk.text.length > 512) overflow = true
+            else if (!overflow) answer += chunk.text
           } else if (chunk.type === 'finish') {
             terminal = true
             succeeded = chunk.reason.kind === 'stop' || chunk.reason.kind === 'tool-calls'
+            if (active.exact !== undefined && chunk.reason.kind === 'stop') {
+              exactResponseAccepted = !overflow && answer.trim() === active.exact
+            }
           }
           yield chunk
         }
@@ -531,6 +574,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
             inputTokens: usage?.inputTokens ?? 0, outputTokens: usage?.outputTokens ?? 0,
             usageReported: usage !== undefined,
             latencyMs: Math.max(0, Date.now() - started), succeeded,
+            ...(exactResponseAccepted === undefined ? {} : { exactResponseAccepted }),
           }).catch(() => { ctx.logger.warn('Nexus receipt persistence failed; no balance was inferred') })
         }
       }
