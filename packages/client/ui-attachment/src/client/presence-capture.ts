@@ -1,9 +1,10 @@
 /** One explicitly selected screen frame, never a persistent screen feed.
  * The native chooser is mandatory; capture is a local draft, not a submission. */
-export async function capturePresenceFrame(signal:AbortSignal):Promise<File>{
+export async function capturePresenceFrame(signal:AbortSignal,source:'screen'|'camera'='screen'):Promise<File>{
   if(signal.aborted)throw Error('CAPTURE_CANCELLED')
-  if(!navigator.mediaDevices?.getDisplayMedia)throw Error('CAPTURE_UNSUPPORTED')
-  const stream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:false})
+  const media=navigator.mediaDevices
+  if(source==='screen'&&!media?.getDisplayMedia||source==='camera'&&!media?.getUserMedia)throw Error('CAPTURE_UNSUPPORTED')
+  const stream=source==='screen'?await media.getDisplayMedia({video:true,audio:false}):await media.getUserMedia({video:{width:{ideal:1280},height:{ideal:720}},audio:false})
   let video:HTMLVideoElement|undefined
   try{
     if(signal.aborted)throw Error('CAPTURE_CANCELLED')
@@ -40,7 +41,7 @@ export async function capturePresenceFrame(signal:AbortSignal):Promise<File>{
     const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(Error('CAPTURE_FRAME_UNAVAILABLE')),'image/jpeg',0.82))
     if(signal.aborted)throw Error('CAPTURE_CANCELLED')
     if(blob.type!=='image/jpeg'||blob.size>4_000_000)throw Error('CAPTURE_FRAME_LIMIT')
-    return new File([blob],'phoenix-screen.jpg',{type:'image/jpeg'})
+    return new File([blob],source==='screen'?'phoenix-screen.jpg':'phoenix-camera.jpg',{type:'image/jpeg'})
   }finally{
     for(const track of stream.getTracks())if(track.readyState!=='ended')track.stop()
     if(video){video.pause();video.srcObject=null}
