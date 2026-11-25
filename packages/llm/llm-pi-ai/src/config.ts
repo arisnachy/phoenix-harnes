@@ -284,14 +284,23 @@ export interface ResolvedPiAiProviderProfile
 
 /** Explicit operator attestation of a zero-overage, zero-cost provider model. */
 export interface NexusFreeRoutePolicy {
+  /** Exact provider identifier of the authorized route; never inferred from display text. */
   provider: string
+  /** Exact model identifier whose billing and tool capabilities were independently verified. */
   model: string
+  /** HTTPS endpoint to which this attestation is bound, not a general provider-wide grant. */
   baseURL: string
+  /** Unix epoch milliseconds at which the operator verified this particular route. */
   verifiedAt: number
+  /** Unix epoch milliseconds after which this attestation must be rejected. */
   expiresAt: number
+  /** Explicit operator confirmation that every applicable charge dimension is zero. */
   allChargesZero: boolean
+  /** Explicit operator confirmation that this route cannot incur paid overage. */
   noOverage: boolean
+  /** Explicit operator confirmation that this exact model supports tool calls. */
   supportsTools: boolean
+  /** Verified positive context capacity in tokens for preflight admission checks. */
   contextWindow: number
 }
 
