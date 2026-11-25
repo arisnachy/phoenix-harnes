@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  NEXUS_MODEL, NEXUS_PROVIDER, NexusSelectorAdapter,
+  NEXUS_MODEL, NEXUS_PROVIDER, ORION_MODEL, ORION_PROVIDER, NexusSelectorAdapter,
   nexusCodexFallback, nexusCodexHasReserve, nexusCodexWithinPace, nexusRequiresStrongModel,
   nexusTurnText, nexusTurnHasHumanImage,
   nexusReadNativeCodexQuota, nexusCodexFreshReserve, nexusEconomyEffort,
@@ -11,6 +11,8 @@ import {
 describe('ORIÓN synthetic model route', () => {
   it('advertises ORIÓN under PHOENIX independently from Eclipse and rejects raw synthetic calls', async () => {
     const adapter = new NexusSelectorAdapter()
+    expect(ORION_PROVIDER).toBe(NEXUS_PROVIDER)
+    expect(ORION_MODEL).toBe(NEXUS_MODEL)
     expect(adapter.providerInfo(NEXUS_PROVIDER).name).toBe('PHOENIX')
     expect(await adapter.listModels(NEXUS_PROVIDER)).toMatchObject([
       { provider: NEXUS_PROVIDER, id: NEXUS_MODEL, name: 'ORIÓN' },
