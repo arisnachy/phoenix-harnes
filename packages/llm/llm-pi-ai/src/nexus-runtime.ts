@@ -19,6 +19,10 @@ import {
 export const NEXUS_PROVIDER = 'phoenix-nexus'
 /** Stable synthetic selector id resolved before any provider request. */
 export const NEXUS_MODEL = 'nexus-auto'
+/** Public ORIÓN alias for the legacy Nexus provider ID (not a second provider). */
+export const ORION_PROVIDER = NEXUS_PROVIDER
+/** Public ORIÓN alias for the legacy Nexus selector ID (not a second model). */
+export const ORION_MODEL = NEXUS_MODEL
 const CATALOG_AGE_MS = 300_000
 const OPENROUTER_PRICE_URL = 'https://openrouter.ai/api/v1/models'
 const FAILURE_COOLDOWN_MS = 180_000
