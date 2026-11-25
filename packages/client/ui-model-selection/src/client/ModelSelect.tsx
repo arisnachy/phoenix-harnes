@@ -35,6 +35,10 @@ import {
 import css from './ModelSelect.module.css'
 import { OrionMark } from './OrionMark.tsx'
 
+/** Accent-insensitive catalog search (ORION and ORIÓN are equivalent). */
+const foldSearchText = (value: string): string =>
+  value.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase()
+
 /** Which pane the dropdown shows: the two-row root or one drilled-in list. */
 type Pane = 'root' | 'model' | 'effort' | 'speed'
 
@@ -145,10 +149,10 @@ export function ModelSelect(
           : { reasoningEffort: model.reasoning.defaultEffort },
       } satisfies ModelSelection,
     }))), [catalogGroups])
-  const normalizedQuery = modelQuery.trim().toLocaleLowerCase()
+  const normalizedQuery = foldSearchText(modelQuery.trim())
   const visibleGroups = useMemo(() => catalogGroups.map((group) => {
-    const providerMatches = group.name.toLocaleLowerCase().includes(normalizedQuery)
-      || group.id.toLocaleLowerCase().includes(normalizedQuery)
+    const providerMatches = foldSearchText(group.name).includes(normalizedQuery)
+      || foldSearchText(group.id).includes(normalizedQuery)
     return {
       ...group,
       models: normalizedQuery === '' || providerMatches
@@ -160,7 +164,7 @@ export function ModelSelect(
               ? t('trigger.auto')
               : presentModel(model.name, model.description).displayName
           return [model.id, model.name, displayName, model.routeProvider]
-            .some(value => value.toLocaleLowerCase().includes(normalizedQuery))
+            .some(value => foldSearchText(value).includes(normalizedQuery))
         }),
     }
   }).filter(group => group.models.length > 0), [catalogGroups, normalizedQuery, t])
