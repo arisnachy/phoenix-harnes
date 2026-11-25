@@ -29,13 +29,13 @@ export function ComposerAttachments({
   owner.current=onAddImages
   useEffect(()=>()=>{capture.current?.abort();capture.current=null},[])
   useEffect(()=>{if(!canAcceptDrop)capture.current?.abort()},[canAcceptDrop])
-  const startCapture=async()=>{
+  const startCapture=async(source:'screen'|'camera')=>{
     if(!canAcceptDrop||capture.current)return
     const controller=new AbortController()
     const target=onAddImages
     capture.current=controller;setCapturing(true);setCaptureError(false)
     try{
-      const file=await capturePresenceFrame(controller.signal)
+      const file=await capturePresenceFrame(controller.signal,source)
       if(!controller.signal.aborted&&capture.current===controller&&owner.current===target)target([file])
     }catch{if(!controller.signal.aborted&&capture.current===controller)setCaptureError(true)}
     finally{if(capture.current===controller){capture.current=null;setCapturing(false)}}
@@ -108,8 +108,9 @@ export function ComposerAttachments({
 
   return (
     <>
-      {typeof navigator!=='undefined'&&typeof navigator.mediaDevices?.getDisplayMedia==='function'&&<div className={css.capture}>
-        <button type="button" disabled={!canAcceptDrop||capturing} onClick={()=>{void startCapture()}}>{t('image.captureScreen')}</button>
+      {typeof navigator!=='undefined'&&(typeof navigator.mediaDevices?.getDisplayMedia==='function'||typeof navigator.mediaDevices?.getUserMedia==='function')&&<div className={css.capture}>
+        {typeof navigator.mediaDevices?.getDisplayMedia==='function'&&<button type="button" disabled={!canAcceptDrop||capturing} onClick={()=>{void startCapture('screen')}}>{t('image.captureScreen')}</button>}
+        {typeof navigator.mediaDevices?.getUserMedia==='function'&&<button type="button" disabled={!canAcceptDrop||capturing} onClick={()=>{void startCapture('camera')}}>{t('image.captureCamera')}</button>}
         {capturing&&<button type="button" onClick={()=>capture.current?.abort()}>{t('image.cancelCapture')}</button>}
         {captureError&&<span role="status">{t('image.captureFailed')}</span>}
       </div>}
