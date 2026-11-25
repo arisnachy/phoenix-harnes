@@ -17,6 +17,8 @@ export interface NexusTransportReceipt extends NexusUsage {
   readonly latencyMs: number
   readonly succeeded: boolean
   readonly usageReported: boolean
+  /** Independent exact-response acceptance, when the task has an explicit answer key. */
+  readonly exactResponseAccepted?: boolean
 }
 
 function isReceipt(value: unknown): value is NexusTransportReceipt {
@@ -26,6 +28,7 @@ function isReceipt(value: unknown): value is NexusTransportReceipt {
     && typeof r.model === 'string' && r.model.length <= 512
     && typeof r.succeeded === 'boolean'
     && typeof r.usageReported === 'boolean'
+    && (r.exactResponseAccepted === undefined || typeof r.exactResponseAccepted === 'boolean')
     && [r.timestamp, r.inputTokens, r.outputTokens, r.latencyMs].every(
       v => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0,
     )
