@@ -986,3 +986,8 @@
 .root .scrollBody:has(> .studioInlineHost > [data-live-studio], > .studioInlineHost > [data-space-with-chat='true']):not(:has(> .adaptiveInlineHost > *))>:global([data-slot='conversation.session'])>.viewArea{grid-column:1;grid-row:2}
 .root .scrollBody:has(> .studioInlineHost > [data-live-studio], > .studioInlineHost > [data-space-with-chat='true']):not(:has(> .adaptiveInlineHost > *))>.composerSeat{grid-column:1;grid-row:3}
 }
+
+/* Match the actual conversation surface, not invisible slot children. */
+.root .scrollBody:has(> .adaptiveInlineHost > *):not(:has(> [data-slot='conversation.session'] > .viewArea)){grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto}
+.root .scrollBody:has(> .adaptiveInlineHost > *):not(:has(> [data-slot='conversation.session'] > .viewArea))>.composerSeat{grid-column:1/-1;grid-row:2}
+.root .scrollBody:has(> .adaptiveInlineHost > *):not(:has(> [data-slot='conversation.session'] > .viewArea))>.adaptiveInlineHost{grid-column:1/-1;grid-row:1}

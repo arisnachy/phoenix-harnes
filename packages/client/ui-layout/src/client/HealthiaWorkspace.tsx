@@ -75,6 +75,20 @@ export function HealthiaWorkspace({
     status: 'unavailable', role: null, patientPortal: 'not-verified',
   })
   const [clinicalRefresh, setClinicalRefresh] = useState(0)
+  const [accessOpen,setAccessOpen]=useState(false)
+  const [accessEpoch,setAccessEpoch]=useState(0)
+  const accessDialog=useRef<HTMLDialogElement>(null)
+  const requestAccess=()=>setAccessOpen(true)
+  const accessReady=()=>{setAccessOpen(false);setAccessEpoch(value=>value+1);setClinicalRefresh(value=>value+1)}
+  useEffect(()=>{
+    if(!accessOpen)return
+    const dialog=accessDialog.current
+    if(!dialog)return
+    if(typeof dialog.showModal==='function')dialog.showModal()
+    else dialog.setAttribute('open','')
+    return()=>{if(typeof dialog.close==='function'&&dialog.open)dialog.close()}
+  },[accessOpen])
+  useEffect(()=>{setAccessOpen(false)},[role])
   const [selectedClinicalPatient, setSelectedClinicalPatient] = useState('')
   const [liveStatus, setLiveStatus] = useState<AdaptiveLiveSnapshot | null>(null)
   const isPatient = role === 'patient'
@@ -128,6 +142,7 @@ export function HealthiaWorkspace({
           <h2>{HEALTHIA_NAV[role].find(item => item.id === active)?.label}</h2>
         </div>
         <div className={css.actions}>
+          {!isPatient&&clinical.status!=='authenticated'&&<button type="button" className={css.action} onClick={requestAccess}>Acceso clínico</button>}
           <details className={css.roleMenu}>
             <summary>Vista: {isPatient ? 'Paciente' : 'Médico'}</summary>
             <div className={css.roleChoices}>
@@ -141,6 +156,10 @@ export function HealthiaWorkspace({
           <button className={css.action} type="button" onClick={onReturn}>Volver al chat</button>
         </div>
       </header>
+      {!isPatient&&accessOpen&&<dialog ref={accessDialog} className={css.accessDialog} aria-label="Acceso clínico seguro" onCancel={event=>{event.preventDefault();setAccessOpen(false)}}>
+        <div className={css.dialogHeader}><strong>Acceso a la clínica</strong><button type="button" className={css.action} onClick={()=>setAccessOpen(false)}>Cerrar</button></div>
+        <HealthiaClinicOperations area="patients" accessOnly onSessionReady={accessReady}/>
+      </dialog>}
       <div className={css.workspaceContent} hidden={minimized}>
       {isPatient && (
         <div className={css.sessionStrip} role="status">
@@ -169,7 +188,7 @@ export function HealthiaWorkspace({
           ? <HealthiaClinicDashboard onNavigate={onSectionChange} onStart={start}
               onPatientChange={setSelectedClinicalPatient}
               accessStatus={clinical.status}
-              onSessionReady={() => setClinicalRefresh(value => value + 1)}/>
+              onRequestAccess={requestAccess}/>
           : <div className={css.dashboard}>
               <p className={css.description}>El portal del paciente utiliza una cuenta vinculada y permisos propios.
                 Cambiar de vista no concede acceso a un expediente.</p>
@@ -183,13 +202,13 @@ export function HealthiaWorkspace({
             </div>
         )}
         {!isPatient && (active === 'encounters' || active === 'patients') &&
-          <HealthiaClinicOperations area={active} selectedPatientId={selectedClinicalPatient}
-            onPatientChange={setSelectedClinicalPatient} onNavigate={onSectionChange} onSessionReady={()=>setClinicalRefresh(value=>value+1)} entry={entry} onEntryHandled={sequence=>setEntry(previous=>previous?.sequence===sequence?undefined:previous)} requestedStep={requestedStep} onEditorState={onEditorState} />}
+          <HealthiaClinicOperations key={accessEpoch} area={active} selectedPatientId={selectedClinicalPatient}
+            onPatientChange={setSelectedClinicalPatient} onNavigate={onSectionChange} onRequestAccess={requestAccess} onSessionReady={()=>setClinicalRefresh(value=>value+1)} entry={entry} onEntryHandled={sequence=>setEntry(previous=>previous?.sequence===sequence?undefined:previous)} requestedStep={requestedStep} onEditorState={onEditorState} />}
         {!isPatient && (active === 'appointments' || active === 'documents' || active === 'management') &&
           (clinical.status==='authenticated'
             ?<HealthiaOperationsBoard section={active} selectedPatientId={selectedClinicalPatient}
               onPatientChange={setSelectedClinicalPatient}/>
-            :<HealthiaClinicOperations key={active} area="patients" accessOnly deferredAccess
+            :<HealthiaClinicOperations key={active} area="patients" accessOnly deferredAccess onRequestAccess={requestAccess}
               onSessionReady={()=>setClinicalRefresh(value=>value+1)}/>)} 
         {active !== 'overview' && active !== 'encounters' && active !== 'patients' && active !== 'tools'
           && (isPatient || !['appointments','documents','management'].includes(active)) && (

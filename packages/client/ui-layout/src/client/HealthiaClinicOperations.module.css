@@ -159,3 +159,6 @@
 .root .patientFocus{border-inline-start:3px solid var(--dsw-specific-phoenix-accent);padding-block:10px}
 .root .patientFocusIdentity strong{font-size:16px;letter-spacing:-.015em}
 .root .interviewQuestion,.root .interviewQuestionActive{overflow-wrap:anywhere;white-space:normal}
+
+/* Keep the clinical surface and its protected ASK workflow in one column: the actual Kira conversation owns the right-hand content lane. */
+@container clinicalEncounter (min-width:820px){.consultationGrid[data-assistance='available']{grid-template-columns:minmax(0,1fr)}.consultationGrid .interviewCard{position:static;max-height:none;overflow:visible}}
