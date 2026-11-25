@@ -335,8 +335,8 @@ export function apply(ctx: Context): void {
     output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
     isConcurrencySafe:()=>true,
     execute(){
-      const names=ctx.tools.schemas().map(schema=>schema.name)
-        .filter(name=>/^[a-z][a-z0-9_.-]{0,90}$/u.test(name)).slice(0,160)
+      const allNames=ctx.tools.schemas().map(schema=>schema.name)
+      const names=allNames.filter(name=>/^[a-z][a-z0-9_.-]{0,90}$/u.test(name)).slice(0,160)
       const connected=ctx.living.list()
         .filter(item=>!/(?:clinical|patient|health|medic|pacient|expediente|historia)/iu.test(item.manifest.kind))
         .slice(0,40).map(item=>({
@@ -350,7 +350,7 @@ export function apply(ctx: Context): void {
         livingConnectors:connected,
         authority:'registration-only',
         permissions:'must-check-current-tool-policy-and-user-approval',
-        offlineVerification:{registered:names.includes('phoenix_amplifier'),operations:[...AMPLIFIER_OPERATIONS],requiresNetwork:false,requiresModelForCalculation:false,modelAvailability:'not-inspected',internetConnectivity:'not-inspected'},
+        offlineVerification:{registered:allNames.includes('phoenix_amplifier'),operations:[...AMPLIFIER_OPERATIONS],requiresNetwork:false,requiresModelForCalculation:false,modelAvailability:'not-inspected',internetConnectivity:'not-inspected'},
         authentication:'not-inspected',
         externalExecution:'not-attempted',
         clinicalBoundary:'never-export-patient-information-to-ordinary-chat',
