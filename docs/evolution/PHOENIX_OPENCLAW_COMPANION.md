@@ -106,3 +106,9 @@ El puente verifica el agente en GET /v1/models y ejecuta POST /v1/chat/completio
 **Límite de esta fase:** el token HTTP conserva permisos de operador; PHOENIX no sustituye las aprobaciones ni el sandbox del agente remoto. El selector nativo de motores, sincronización de conversaciones, streaming, WebSocket/identidad de dispositivo, aprobaciones interactivas y selección automática Nexus son trabajo posterior. No se presenta una conexión como verificada hasta consultar el Gateway real.
 
 API oficial: https://docs.openclaw.ai/gateway/openai-http-api
+
+## Universal Bridge — visual engine selection and direct conversation
+
+In Settings → Connectors → ClawHub, select Native, Direct or Hybrid and save. Direct runs an isolated OpenClaw chat from the Host without invoking Kira. Hybrid enables the existing explicit-task delegation tool after a Host restart; switching to native revokes invocation immediately. The direct conversation uses the official SSE chat endpoint and a PHOENIX-owned stable user ID for each thread. The local transcript is persisted with restricted file permissions; it is not a bidirectional import of OpenClaw history. Failed/uncertain runs are not replayed. The UI polls the Host's bounded partial stream; this is SSE, not the Gateway WebSocket protocol.
+
+For a remote installation, create an authenticated SSH tunnel outside PHOENIX (for example, forward local port 18790 to remote loopback port 18789) and enter 18790 in the selector. PHOENIX continues to call only loopback, does not manage SSH keys, and never disables TLS/host identity checks. Use a dedicated least-privilege OpenClaw agent. The native chat composer remains unchanged; the direct conversation currently lives in the connector panel. Native Nexus routing, WebSocket pairing/history and cross-client synchronization remain separate work.

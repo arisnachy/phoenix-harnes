@@ -178,6 +178,12 @@ type PluginInventoryMcpRegistryRemote = {
     }
   }>>
   openClawRuntimeState(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRuntimeSnapshot>>
+  openClawConversation(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawConversationSnapshot>>
+  configureOpenClawEngine(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawEngineConfig): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawConversationSnapshot>>
+  checkOpenClawEngine(): Promise<PluginInventoryRemoteResult<{ available: boolean }>>
+  sendOpenClawConversation(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawConversationSend): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawConversationSnapshot>>
+  newOpenClawConversation(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawConversationSnapshot>>
+  cancelOpenClawConversation(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawConversationSnapshot>>
   openClawPluginTools(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawRoutingSnapshot>>
   openClawGatewayCredential(): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialState>>
   configureOpenClawGatewayCredential(request: import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialRequest): Promise<PluginInventoryRemoteResult<import('@phoenix-ai/dsh-api-remotes/client').OpenClawGatewayCredentialState>>
@@ -329,6 +335,12 @@ function mcpRegistryClient(ctx: ClientContext): McpRegistryClient {
       await remote().openClawRuntimeState(),
     ),
     clawHubCatalog: async request => unwrapPluginInventory('clawHubCatalog', await remote().clawHubCatalog(request)),
+    openClawConversation: async () => unwrapPluginInventory('openClawConversation', await remote().openClawConversation()),
+    configureOpenClawEngine: async request => unwrapPluginInventory('configureOpenClawEngine', await remote().configureOpenClawEngine(request)),
+    checkOpenClawEngine: async () => unwrapPluginInventory('checkOpenClawEngine', await remote().checkOpenClawEngine()),
+    sendOpenClawConversation: async request => unwrapPluginInventory('sendOpenClawConversation', await remote().sendOpenClawConversation(request)),
+    newOpenClawConversation: async () => unwrapPluginInventory('newOpenClawConversation', await remote().newOpenClawConversation()),
+    cancelOpenClawConversation: async () => unwrapPluginInventory('cancelOpenClawConversation', await remote().cancelOpenClawConversation()),
     openClawPluginTools: async () => unwrapPluginInventory(
       'openClawPluginTools', await remote().openClawPluginTools(),
     ),
