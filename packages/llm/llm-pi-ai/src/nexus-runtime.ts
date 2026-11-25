@@ -4,13 +4,15 @@
  * before LLM preparation and durable assistant provenance are created.
  * @module @phoenix-ai/dsh-llm-pi-ai/nexus-runtime
  */
+import { dshHomePath } from '@phoenix-ai/dsh-home-paths'
+import { NexusReceiptStore } from './nexus-receipts.ts'
 import type { Context } from '@phoenix-ai/cordis'
 import { LlmAdapter, LlmError } from '@phoenix-ai/dsh-llm'
 import type { GenerateOptions, LlmModelInfo, StreamChunk, LlmCallConfig } from '@phoenix-ai/dsh-llm'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import {
-  NexusQuotaGovernor, chooseNexusRoute, nexusPriceClass, openRouterPriceEvidence,
-  type NexusModel, type NexusPriceEvidence, type NexusRoute,
+  chooseNexusRoute, nexusPriceClass, openRouterPriceEvidence,
+  type NexusModel, type NexusPriceEvidence, type NexusRoute, type NexusUsage,
 } from './nexus.ts'
 
 /** User-visible route, separate from the Codex-only Eclipse coordinator. */
@@ -194,7 +196,7 @@ interface NexusAgentEventBridge {
 }
 /** Only the authoritative session log is read; no mutable Agent internals. */
 interface NexusAgentHandle {
-  readonly session: { readonly events: readonly { readonly type: string; readonly data: unknown }[] }
+  readonly session: { readonly id: string; readonly events: readonly { readonly type: string; readonly data: unknown }[] }
 }
 
 interface NexusAgentRouteState {
@@ -217,7 +219,8 @@ export interface NexusRuntimeOptions {
  * @param options - Configured provider truth and native Codex token authority.
  */
 export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions): void {
-  const governor = new NexusQuotaGovernor()
+  const receipts = new NexusReceiptStore(dshHomePath('nexus-receipts-v1.json'))
+  const activeSessions = new Map<string, string>()
   const prices = new NexusOpenRouterPrices()
   const perAgent = new WeakMap<object, NexusAgentRouteState>()
   const blockedUntil = new Map<string, number>()
@@ -304,7 +307,10 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
   const agentEvents = ctx as unknown as NexusAgentEventBridge
   agentEvents.on('agent/request', async (payload, next): Promise<LlmCallConfig> => {
     const selected = await next()
-    if (selected.provider !== NEXUS_PROVIDER || selected.model !== NEXUS_MODEL) return selected
+    if (selected.provider !== NEXUS_PROVIDER || selected.model !== NEXUS_MODEL) {
+      activeSessions.delete(payload.agent.session.id)
+      return selected
+    }
     payload.signal.throwIfAborted()
     const now = Date.now()
     const agent = payload.agent
@@ -334,13 +340,22 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
         state.routed = undefined
       } else {
         const { serviceTier: _tier, reasoningEffort: _effort, ...base } = selected
+        activeSessions.set(agent.session.id, routeKey(route.provider, route.model))
         return { ...base, provider: route.provider, model: route.model }
       }
     }
     const text = nexusTurnText(agent.session.events, payload.turn)
     const complex = text.length === 0 || nexusRequiresStrongModel(text)
     const hasImage = nexusTurnHasHumanImage(agent.session.events, payload.turn)
-    const models = (await listAuthorizedModels(now)).filter(model =>
+    const observations = await receipts.read(now).catch(() => [])
+    const models = (await listAuthorizedModels(now)).map((model) => {
+      const samples = observations.filter(r => r.provider === model.provider && r.model === model.id)
+      if (samples.length === 0) return model
+      const failures = samples.filter(r => !r.succeeded).length
+      return { ...model, observations: samples.length,
+        errorRate: (failures + 1) / (samples.length + 5),
+        observedLatencyMs: samples.reduce((sum, r) => sum + r.latencyMs, 0) / samples.length }
+    }).filter(model =>
       !state.excluded.has(routeKey(model.provider, model.id))
       && (blockedUntil.get(routeKey(model.provider, model.id)) ?? 0) <= now)
     const free = chooseNexusRoute(models, {
@@ -377,6 +392,11 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       throw new LlmError('Nexus route authorization changed before dispatch', 'NEXUS_NO_ELIGIBLE_ROUTE')
     }
     state.routed = route
+    if (activeSessions.size >= 512) {
+      const oldest = activeSessions.keys().next().value
+      if (oldest !== undefined) activeSessions.delete(oldest)
+    }
+    activeSessions.set(agent.session.id, routeKey(route.provider, route.model))
     const { serviceTier: _tier, reasoningEffort: _effort, ...base } = selected
     return { ...base, provider: route.provider, model: route.model }
   })
@@ -402,18 +422,36 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
 
   ctx.on('llm/stream', (request, next) => {
     const upstream = next()
+    if (request.sessionId === undefined || request.purpose !== undefined
+      || activeSessions.get(request.sessionId) !== routeKey(request.provider, request.model)) return upstream
     return (async function* (): AsyncIterable<StreamChunk> {
-      for await (const chunk of upstream) {
-        if (chunk.type === 'usage') {
-          governor.record({
-            provider: request.provider, model: request.model,
-            timestamp: Date.now(),
-            inputTokens: chunk.usage.inputTokens + (chunk.usage.cacheReadTokens ?? 0)
-              + (chunk.usage.cacheWriteTokens ?? 0),
-            outputTokens: chunk.usage.outputTokens,
-          })
+      const started = Date.now()
+      let usage: NexusUsage | undefined
+      let succeeded = false
+      let terminal = false
+      try {
+        for await (const chunk of upstream) {
+          if (chunk.type === 'usage') {
+            usage = {
+              provider: request.provider, model: request.model, timestamp: Date.now(),
+              inputTokens: chunk.usage.inputTokens + (chunk.usage.cacheReadTokens ?? 0)
+                + (chunk.usage.cacheWriteTokens ?? 0),
+              outputTokens: chunk.usage.outputTokens,
+            }
+          } else if (chunk.type === 'finish') {
+            terminal = true
+            succeeded = chunk.reason.kind === 'stop' || chunk.reason.kind === 'tool-calls'
+          }
+          yield chunk
         }
-        yield chunk
+      } finally {
+        if (terminal && request.signal?.aborted !== true) {
+          await receipts.record({
+            provider: request.provider, model: request.model, timestamp: Date.now(),
+            inputTokens: usage?.inputTokens ?? 0, outputTokens: usage?.outputTokens ?? 0,
+            latencyMs: Math.max(0, Date.now() - started), succeeded,
+          }).catch(() => { ctx.logger.warn('Nexus receipt persistence failed; no balance was inferred') })
+        }
       }
     })()
   })
