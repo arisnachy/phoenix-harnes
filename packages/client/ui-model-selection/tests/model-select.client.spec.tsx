@@ -6,6 +6,7 @@ import { createSnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ComponentProps } from 'react'
 import type { ModelDirectoryState } from '../src/client/directory.ts'
 import { ModelSelect } from '../src/client/ModelSelect.tsx'
+import { isPhoenixAutoRouting, localModelBrandMark } from '../src/client/presentation.ts'
 import { en, es, zh } from '../src/client/locales.ts'
 import { zh as commonZh } from '@phoenix-ai/dsh-client-locale/src/locales/zh.ts'
 
@@ -771,5 +772,26 @@ describe('PHOENIX → ORIÓN model picker', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
     expect(screen.getByRole('menuitem', { name: 'PHOENIX' })).toBeTruthy()
     expect(screen.getByRole('menuitemradio', { name: 'ORIÓN' })).toBeTruthy()
+  })
+})
+
+
+describe('model presentation routing and local marks', () => {
+  it('keeps Eclipse independent from Orion and ordinary model names', () => {
+    expect(isPhoenixAutoRouting('PHOENIX-AUTO', 'Other')).toBe(true)
+    expect(isPhoenixAutoRouting('legacy', ' Phoenix Auto ')).toBe(true)
+    expect(isPhoenixAutoRouting('nexus-auto', 'ORIÓN')).toBe(false)
+    expect(isPhoenixAutoRouting('ordinary', 'Phoenix')).toBe(false)
+  })
+
+  it('uses the concrete local family rather than the shared provider mark', () => {
+    expect(localModelBrandMark('gemma-4', '')?.slug).toBe('google')
+    expect(localModelBrandMark('local', 'Gemini')?.slug).toBe('google')
+    expect(localModelBrandMark('qwen3.5', '')?.slug).toBe('qwen')
+    expect(localModelBrandMark('deepseek-r1', '')?.slug).toBe('deepseek')
+    expect(localModelBrandMark('llama-3', '')?.slug).toBe('meta')
+    expect(localModelBrandMark('mistral', '')?.slug).toBe('mistralai')
+    expect(localModelBrandMark('local', 'Mixtral')?.slug).toBe('mistralai')
+    expect(localModelBrandMark('custom', 'Unknown')).toBeUndefined()
   })
 })
