@@ -137,7 +137,7 @@ $priorOfflineRepair = [Environment]::GetEnvironmentVariable('PHOENIX_OFFLINE_STO
 try {
     # Keep one verified prior runtime; clear only surplus runtimes and idle stages.
     # The supervisor still protects active-runtime markers and other checkouts.
-    [Environment]::SetEnvironmentVariable('PHOENIX_UPDATE_RUNTIME_BACKUPS', '1', 'Process')
+    [Environment]::SetEnvironmentVariable('PHOENIX_UPDATE_RUNTIME_BACKUPS', '0', 'Process')
     [Environment]::SetEnvironmentVariable('PHOENIX_OFFLINE_STORAGE_REPAIR', '1', 'Process')
     Push-Location $repo
     try {
@@ -189,7 +189,7 @@ if ($legacyAfter.Count -gt 0) {
 }
 Write-Host ('[PHOENIX STORAGE] Remaining old non-Git workspaces: ' + @(Get-RetiredWorkspaces).Count)
 # Mirror the supervisor's configurable cap instead of hardcoding 3/3.
-$backupCount = 1
+$backupCount = 0
 $backupOverride = 0
 if ([int]::TryParse($priorBackups, [ref]$backupOverride)) {
     $backupCount = [Math]::Max(0, [Math]::Min(1, $backupOverride))
