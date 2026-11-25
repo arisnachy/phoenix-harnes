@@ -71,7 +71,7 @@ const configuredInactiveRuntimeBackups = Number.parseInt(
 )
 const MAX_INACTIVE_RUNTIME_BACKUPS = Number.isFinite(configuredInactiveRuntimeBackups)
   ? Math.max(0, Math.min(1, configuredInactiveRuntimeBackups))
-  : 1
+  : 0
 const configuredRuntimeDirectoryLimit = Number.parseInt(
   process.env.PHOENIX_UPDATE_RUNTIME_LIMIT ?? '',
   10,
@@ -605,6 +605,11 @@ function removeUpdaterRuntime(root, path, registeredWorktrees) {
 }
 
 function cleanupUpdaterRuntimeStorage(root, { ensureCapacity = false } = {}) {
+  // The live supervisor has the actual Host lifecycle and Windows process census.
+  // Never race its handoff janitor from the supervised watcher.
+  if (process.env.PHOENIX_UPDATE_SUPERVISED === '1') {
+    return { removed: 0, remaining: updaterRuntimeDirectories(root).length }
+  }
   const keep = new Set()
   const active = readActiveRuntime(root)
   if (active?.path !== undefined) keep.add(runtimePathKey(active.path))
@@ -614,15 +619,17 @@ function cleanupUpdaterRuntimeStorage(root, { ensureCapacity = false } = {}) {
   }
 
   const registered = updaterRegisteredWorktrees(root)
+  if (registered === undefined) return { removed: 0, remaining: updaterRuntimeDirectories(root).length }
   const inactive = updaterRuntimeDirectories(root)
-    .filter(path => !keep.has(runtimePathKey(path)))
+    .filter(path => !keep.has(runtimePathKey(path)) && !existsSync(join(path, '.phoenix-keep')))
     .sort((left, right) => updaterRuntimeMtimeMs(right) - updaterRuntimeMtimeMs(left))
 
   let retained = 0
   let removed = 0
   const rollbackCandidates = []
   for (const candidate of inactive) {
-    if (retained < MAX_INACTIVE_RUNTIME_BACKUPS) {
+    if (retained < Math.max(MAX_INACTIVE_RUNTIME_BACKUPS,
+      active !== undefined && !Number.isFinite(Date.parse(active.healthyAt ?? '')) ? 1 : 0)) {
       retained += 1
       rollbackCandidates.push(candidate)
       continue
@@ -778,6 +785,12 @@ function quarantineConflictingStagingPath(root, stage) {
   git(root, ['worktree', 'prune', '--expire', 'now'], { allowFailure: true })
   if (!existsSync(stage) || sameRepositoryWorktree(root, stage)) return
 
+  // Never turn repeated staging conflicts into an unlimited series of copies.
+  const prefix = `phoenix-stage-${stageIdentity(root)}-conflict-`.toLowerCase()
+  if (readdirSync(stageBaseDirectory(), { withFileTypes: true }).some(entry =>
+    entry.isDirectory() && entry.name.toLowerCase().startsWith(prefix))) {
+    throw new Error('PHOENIX staging quarantine already exists; run guarded storage repair before creating another copy.')
+  }
   const quarantine = `${stage}-conflict-${String(process.pid)}-${String(Date.now())}`
   try {
     renameSync(stage, quarantine)
@@ -809,6 +822,11 @@ function ensureStagingWorktree(root, target) {
     pruneStaleWorkspaceShells(stage)
     ensureStagingMaterialized(stage, target)
     return stage
+  }
+  const stageCount = readdirSync(stageBaseDirectory(), { withFileTypes: true }).filter(entry =>
+    entry.isDirectory() && /^phoenix-stage-[0-9a-f]{10}(?:-conflict-\d+-\d+)?$/iu.test(entry.name)).length
+  if (stageCount >= 6 || !updaterRuntimeDiskHasHeadroom()) {
+    throw new Error('PHOENIX staging storage capacity reached; no additional staging tree will be allocated.')
   }
   console.error(`[PHOENIX UPDATE] creating persistent staging worktree ${stage}`)
   git(root, ['worktree', 'add', '--detach', '--force', stage, target], { inherit: true })
