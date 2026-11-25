@@ -52,7 +52,10 @@ interface EffortChoice {
 
 /** Render a packaged provider mark or the local fallback for unknown ids. */
 function ProviderLogo({ providerId, providerName, modelId, modelName }: {
-  providerId: string; providerName: string; modelId?: string; modelName?: string
+  providerId: string
+  providerName: string
+  modelId?: string
+  modelName?: string
 }) {
   const local = providerId === 'phoenix-local'
   const orion = providerId === 'phoenix-nexus' && modelId === 'nexus-auto'
@@ -129,7 +132,7 @@ export function ModelSelect(
     const phoenixGroups = routed.filter(group => group.id === 'phoenix' || group.id === 'phoenix-nexus')
     if (phoenixGroups.length === 0) return routed
     let emittedPhoenix = false
-    return routed.flatMap(group => {
+    return routed.flatMap((group) => {
       if (group.id !== 'phoenix' && group.id !== 'phoenix-nexus') return [group]
       if (emittedPhoenix) return []
       emittedPhoenix = true
@@ -575,7 +578,8 @@ export function ModelSelect(
                                 && state.current.serviceTier !== undefined ? { serviceTier: state.current.serviceTier } : {},
                             }) }}
                           >
-                            <ProviderLogo providerId={model.routeProvider} providerName={group.name} modelId={model.id} modelName={model.name} />
+                            <ProviderLogo providerId={model.routeProvider} providerName={group.name}
+                              modelId={model.id} modelName={model.name} />
                             <span className={css.optionCopy}>
                               <span className={css.modelName}>{presentation.displayName}</span>
                               {presentation.description !== undefined && (
