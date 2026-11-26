@@ -341,6 +341,25 @@ describe('Web session model selection', () => {
     await ctx.fiber.dispose()
   })
 
+  it('keeps healthy models selectable when another model of the same provider fails metadata resolution', async () => {
+    const { ctx, sessionId } = await harness()
+    ctx.llm.registerAdapter(['partial'], new class extends CatalogAdapter {
+      override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+        return model === 'stale' ? Promise.reject(new Error('stale model')) : super.resolveModel(provider, model)
+      }
+    }('Partial Provider', [
+      { provider: 'partial', id: 'stale', name: 'Stale' },
+      { provider: 'partial', id: 'healthy', name: 'Healthy' },
+    ]))
+    const api = createApiProxy(ctx, { defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }), cwd: '/tmp' })
+    const catalog = expectValue(await api.sessions.models(request({ sessionId })))
+    expect(catalog.groups.find(group => group.id === 'partial')?.models.map(model => model.id)).toEqual(['healthy'])
+    expect(catalog.failures.find(failure => failure.id === 'partial')?.message).toContain('stale model')
+    const selected = expectValue(await api.sessions.selectModel(request({ sessionId, provider: 'partial', model: 'healthy' })))
+    expect(selected.selected).toMatchObject({ provider: 'partial', model: 'healthy' })
+    await ctx.fiber.dispose()
+  })
+
   it('adds Phoenix Auto to OpenAI Codex and selects it as a virtual Sol/Luna router', async () => {
     const { ctx, agent, sessionId } = await harness()
     registerCodex6(ctx)
