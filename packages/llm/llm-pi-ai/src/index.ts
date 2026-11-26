@@ -68,7 +68,7 @@ import type { PiAiProviderProfile, ResolvedPiAiProviderProfile } from './config.
 import { discoverModels } from './discovery.ts'
 import { installCodexAvatarTransform, installCodexImageGeneration } from './image-generation.ts'
 import { registerPiAiFlows } from './login.ts'
-import { GOOGLE_ACCOUNT_PROVIDER, registerGoogleAccountCli } from './antigravity-cli.ts'
+import { GOOGLE_ACCOUNT_PROVIDER, ANTIGRAVITY_MODEL_PROVIDER, isGoogleAccountRoute, parseGoogleModels, registerGoogleAccountCli, runGoogleCli } from './antigravity-cli.ts'
 import { GOOGLE_ANTIGRAVITY_PROVIDER } from './google-antigravity.ts'
 import { NvidiaLiveCatalog, NVIDIA_BUILD_BASE_URL, NVIDIA_MODEL_REFRESH_MS } from './nvidia-live-catalog.ts'
 import {
@@ -298,6 +298,7 @@ export function apply(ctx: Context, config: Config): void {
     const providers = { ...nvidiaCatalog.overlayProviders(codexCatalog.overlayProviders(raw.providers ?? {})) }
     // The native CLI owns this route; never register it as a generic API model.
     delete providers[GOOGLE_ACCOUNT_PROVIDER]
+    delete providers[ANTIGRAVITY_MODEL_PROVIDER]
     const next = resolveProfiles({
       ...providers,
       [PHOENIX_LOCAL_PROVIDER]: phoenixLocalProfile(),
@@ -403,6 +404,11 @@ export function apply(ctx: Context, config: Config): void {
     return resolveApiKey(provider, profile)
   }
   ctx.llm.registerModelDiscovery(NS, async (request) => {
+    if (isGoogleAccountRoute(request.provider)) {
+      const models = parseGoogleModels(await runGoogleCli(['models']))
+      if (models.length === 0) throw new LlmError('Antigravity CLI no informó modelos disponibles. Conecta tu cuenta Google primero.', 'NO_MODELS')
+      return models.map(id => ({ id, name: 'Gemini · ' + id }))
+    }
     if (request.provider === 'nvidia'
       && (request.baseURL === undefined || request.baseURL.replace(/[/]+$/u, '') === NVIDIA_BUILD_BASE_URL)) {
       await nvidiaCatalog.refresh(true)

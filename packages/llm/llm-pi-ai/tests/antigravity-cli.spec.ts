@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assertGoogleAccountSettings, googleAccountEnvironment, parseGoogleModels, parseGoogleResult, GOOGLE_ACCOUNT_PROVIDER } from '../src/antigravity-cli.ts'
+import { assertGoogleAccountSettings, googleAccountEnvironment, parseGoogleModels, parseGoogleResult, GOOGLE_ACCOUNT_PROVIDER, ANTIGRAVITY_MODEL_PROVIDER, GoogleAccountCliAdapter, isGoogleAccountRoute, registerGoogleAccountCli } from '../src/antigravity-cli.ts'
 
 describe('Google account Antigravity CLI adapter', () => {
   it('refuses explicit modelProvider and malformed settings without switching to API billing', () => {
@@ -12,6 +12,24 @@ describe('Google account Antigravity CLI adapter', () => {
   it('removes unrelated API credentials from the native CLI environment, including Windows casing', () => {
     expect(googleAccountEnvironment({ Path: 'bin', gemini_api_key: 'fake', GOOGLE_API_KEY: 'fake', AGY_ADC_AUTH: 'true', GOOGLE_APPLICATION_CREDENTIALS: 'fake', USERPROFILE: 'profile' })).toEqual({ Path: 'bin', USERPROFILE: 'profile' })
   })
+  it('registers both selector IDs with native adapters and exposes an OAuth wizard backed by the CLI', () => {
+    const registrations = new Map<string, GoogleAccountCliAdapter>()
+    const flows: Array<{ key: string; methods: ReadonlyArray<{ id: string }> }> = []
+    const ctx = {
+      llm: { registerAdapter: (routes: string[], adapter: GoogleAccountCliAdapter) => { for (const route of routes) registrations.set(route, adapter) } },
+      inject: (_services: string[], callback: (ctx: unknown) => void) => callback({ authorization: { registerFlow: (flow: typeof flows[number]) => flows.push(flow) } }),
+    }
+    registerGoogleAccountCli(ctx as never)
+    expect(registrations.get(ANTIGRAVITY_MODEL_PROVIDER)?.providerInfo().id).toBe('google-antigravity')
+    expect(registrations.get(GOOGLE_ACCOUNT_PROVIDER)?.providerInfo().id).toBe('google-account')
+    expect(flows).toHaveLength(1)
+    expect(flows[0]?.key).toBe('llm-pi-ai/google-account')
+    expect(flows[0]?.methods[0]?.id).toBe('oauth')
+    expect(isGoogleAccountRoute('google-antigravity')).toBe(true)
+    expect(isGoogleAccountRoute('google-account')).toBe(true)
+    expect(isGoogleAccountRoute('google')).toBe(false)
+  })
+
   it('uses an account route separate from Gemini API keys', () => {
     expect(GOOGLE_ACCOUNT_PROVIDER).toBe('google-account')
   })
