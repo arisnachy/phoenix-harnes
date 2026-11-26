@@ -2037,7 +2037,7 @@ export async function speakVoiceAssistantAttention(title: string, detail?: strin
   if (context === '') return false
   const personalContext = safeName === '' ? context : `${safeName}, ${context}`
   const realtime = codexRealtimeVoiceSession
-  if (voiceAssistantSnapshot.active && realtime !== undefined) {
+  if (voiceAssistantSnapshot.active && realtime !== undefined && !realtime.outputOnly) {
     const utterance: PendingCodexRealtimeUtterance = {
       sessionKey: realtime.key,
       key: `attention:${context}`,
