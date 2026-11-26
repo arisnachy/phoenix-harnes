@@ -30,7 +30,7 @@ import {
 import { isVisualOperation, restoreVisualBoard, readVisualBoard } from './AdaptiveVisualKit.ts'
 import { AdaptiveAppPreview } from './AdaptiveAppPreview.tsx'
 import { PhoenixSpace } from './PhoenixSpace.tsx'
-import type { AdaptiveLiveSnapshot } from './AdaptiveLiveSlots.ts'
+import { LIVING_PRESENCE_KEY, livingSeason, livingNeedsCompactSidebar, type AdaptiveLiveSnapshot, type LivingPresenceSnapshot } from './AdaptiveLiveSlots.ts'
 
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
@@ -190,6 +190,44 @@ export function AppFrame({
   })
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState(() => window.innerWidth)
+  const [livingEnabled, setLivingEnabled] = useState(() => {
+    try { return window.localStorage.getItem(LIVING_PRESENCE_KEY) === 'enabled' } catch { return false }
+  })
+  const [livingDate, setLivingDate] = useState(() => new Date())
+  const livingSnapshot = useRef<LivingPresenceSnapshot>({
+    enabled: false, season: 'none', compacted: false, recoveredPixels: 0, notice: 'disabled',
+  })
+  const toggleLiving = useCallback(() => {
+    const next = !livingEnabled
+    try { window.localStorage.setItem(LIVING_PRESENCE_KEY, next ? 'enabled' : 'disabled') } catch { /* session-only */ }
+    setLivingEnabled(next)
+  }, [livingEnabled])
+  useEffect(() => {
+    const sync = (event: StorageEvent): void => {
+      if (event.key !== LIVING_PRESENCE_KEY && event.key !== null) return
+      try { setLivingEnabled(window.localStorage.getItem(LIVING_PRESENCE_KEY) === 'enabled') }
+      catch { setLivingEnabled(false) }
+    }
+    window.addEventListener('storage', sync)
+    return () => window.removeEventListener('storage', sync)
+  }, [])
+  useEffect(() => {
+    if (!livingEnabled) return
+    let timer: number | undefined
+    const refresh = (): void => {
+      if (timer !== undefined) window.clearTimeout(timer)
+      const now = new Date()
+      setLivingDate(now)
+      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+      timer = window.setTimeout(refresh, Math.max(1000, tomorrow.getTime() - now.getTime() + 100))
+    }
+    refresh()
+    window.addEventListener('focus', refresh)
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer)
+      window.removeEventListener('focus', refresh)
+    }
+  }, [livingEnabled])
   const [adaptiveApp, setAdaptiveApp] = useState<string>('general')
   const [spaceOpen, setSpaceOpen] = useState(false)
   const [spaceHost,setSpaceHost]=useState<HTMLElement|null>(null)
@@ -505,6 +543,7 @@ export function AppFrame({
           })()
           window.dispatchEvent(new CustomEvent('phoenix:adaptive-self-inspect', {detail:{
             activeApp:adaptiveApp,
+            livingPresence:livingSnapshot.current,
             ...(adaptiveApp==='healthia'?{clinicalEditor:{section:healthiaSection,steps:CLINICAL_EDITOR_STEPS.map(x=>({id:x.id,label:x.label})),live:publicClinicalEditorState(clinicalEditorView),actions:Object.entries(CLINICAL_EDITOR_ACTIONS).map(([id,action])=>({id,label:action.label})),scope:'local-draft-actions',valuesExposed:false}}:{}),
             apps:customApps.slice(0,12).map(app => ({
               id:app.id,title:app.title,
@@ -594,7 +633,12 @@ export function AppFrame({
   // solver stays breakpoint-free: a narrow re-expand passes the preference
   // (or the default when the wide preference is closed) and the center
   // absorbs the squeeze.
-  const narrow = viewport < SIDEBAR_AUTO_COLLAPSE
+  const livingCompaction = livingNeedsCompactSidebar({
+    enabled: livingEnabled, viewport, sidebar: panels.sidebar,
+    details: detailsSession === undefined ? 0 : panels.details,
+    visualWork: adaptiveActive || spaceOpen, cordisOwnsLayout: panels.workspaceCordis,
+  })
+  const narrow = viewport < SIDEBAR_AUTO_COLLAPSE || livingCompaction
   useEffect(() => { actions.setNarrow(narrow) }, [actions, narrow])
   const cordisOnLeft = panels.workspaceCordis && panels.workspaceCordisSide === 'left'
   const sidebarCollapsed = cordisOnLeft || (narrow ? !panels.narrowExpanded : panels.sidebar === 0)
@@ -626,6 +670,14 @@ export function AppFrame({
   const overlayStableChatAxisOffset = sidebarCollapsed
     ? 0
     : Math.max(0, (cols.sidebar - SIDEBAR_COLLAPSED) / 2)
+  const season = livingSeason(livingDate, livingEnabled)
+  const compacted = livingCompaction && sidebarCollapsed && viewport >= SIDEBAR_AUTO_COLLAPSE
+  const presence: LivingPresenceSnapshot = {
+    enabled: livingEnabled, season, compacted,
+    recoveredPixels: compacted ? Math.max(0, panels.sidebar - cols.sidebar) : 0,
+    notice: !livingEnabled ? 'disabled' : compacted ? 'workspace-compacted' : season === 'christmas' ? 'christmas' : 'ready',
+  }
+  livingSnapshot.current = presence
   const colsRef = useRef(cols)
   colsRef.current = cols
 
@@ -667,6 +719,8 @@ export function AppFrame({
         {renderSlot('sidebar', {
           collapsed: sidebarCollapsed,
           width: cols.sidebar,
+          livingPresence: presence,
+          toggleLivingPresence: toggleLiving,
         })}
       </div>
       <>
