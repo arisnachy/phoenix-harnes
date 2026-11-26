@@ -15,21 +15,26 @@ describe('Google account Antigravity CLI adapter', () => {
       provider: ANTIGRAVITY_MODEL_PROVIDER, model: 'gemini-4-hydrogen-low',
       system: 'Eres Kira.',
       messages: [
-        { role: 'user', content: [{ type: 'text', text: 'hola' }] },
+        { role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'hola' }] },
         { role: 'assistant', content: [{ type: 'text', text: '¡Hola!' }] },
-        { role: 'user', content: [{ type: 'text', text: '¿Qué modelo eres?' }] },
+        { role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'puedes leerme' }] },
+        { role: 'user', source: { kind: 'plugin', plugin: '@phoenix-ai/dsh-system-prompt' }, content: [{ type: 'text', text: 'Contexto interno de Phoenix.' }] },
+        { role: 'user', source: { kind: 'skill-catalog' }, content: [{ type: 'text', text: 'Catálogo de habilidades.' }] },
       ],
     } as GenerateOptions
     const execute = vi.fn(async (_args: readonly string[], input?: string) => {
       const event = JSON.parse(input ?? '')
       expect(event.message.content).toEqual([{ type: 'text', text: buildPrompt(request) }])
       const text = event.message.content[0].text as string
-      expect(text.startsWith('TURNO ACTUAL DE PHOENIX (responde a este contenido):\n¿Qué modelo eres?')).toBe(true)
+      expect(text.startsWith('TURNO ACTUAL DE PHOENIX (responde a este contenido):\npuedes leerme')).toBe(true)
       expect(text).toContain('Eres Kira.')
       expect(text).toContain('USER:\nhola')
       expect(text).toContain('ASSISTANT:\n¡Hola!')
       expect(text).toContain('gemini-4-hydrogen-low')
-      expect(text.endsWith('USER:\n¿Qué modelo eres?')).toBe(true)
+      expect(text).toContain('CONTEXTO INTERNO DE PHOENIX:\nContexto interno de Phoenix.\n\nCatálogo de habilidades.')
+      expect(text).not.toContain('USER:\nContexto interno de Phoenix.')
+      expect(text).not.toContain('USER:\nCatálogo de habilidades.')
+      expect(text.endsWith('USER:\npuedes leerme')).toBe(true)
       return JSON.stringify({ event: 'result', result: { status: 'SUCCESS', response: 'Gemini' } })
     })
     const adapter = new GoogleAccountCliAdapter(ANTIGRAVITY_MODEL_PROVIDER, execute)
