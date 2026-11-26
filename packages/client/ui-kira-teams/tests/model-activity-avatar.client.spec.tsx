@@ -2,6 +2,7 @@ import { Children, isValidElement, type ReactElement, type ReactNode } from 'rea
 import { describe, expect, it } from 'vitest'
 import {
   ModelActivityAvatar,
+  ModelEngineBadge,
   modelEngineMark,
   modelEngineFamily,
   agentAvatarKind,
@@ -9,6 +10,7 @@ import {
   portraitSrcForKind,
 } from '../src/client/ModelActivityAvatar.tsx'
 import { KIRA_MODERN_STILL_PORTRAITS } from '../src/client/KiraModernStillPortraits.ts'
+import { engineProviderMark } from '../src/client/model-provider-mark.ts'
 
 describe('modelAvatarKind', () => {
   it.each([
@@ -29,6 +31,7 @@ describe('model engine glyphs', () => {
     expect(modelEngineMark('gpt-6-luna-max')).toBe('☾')
     expect(modelEngineMark('gpt-6-astra')).toBe('★')
     expect(modelEngineMark('deepseek-v4', 'deepseek')).toBe('ϟ')
+    expect(modelEngineMark('nexus-auto', 'phoenix-nexus')).toBe('✦')
     expect(modelEngineMark('some-other-model')).toBeUndefined()
     expect(modelEngineFamily('gpt-6-luna', 'openai-codex')).toBe('luna')
     expect(modelEngineFamily('gpt-6-astra', 'openai-codex')).toBe('astra')
@@ -54,6 +57,20 @@ describe('model engine glyphs', () => {
       .some(child => child.props['data-engine-mark'] !== undefined)).toBe(false)
   })
 })
+
+  it('marks only the ORIÓN synthetic engine with the belt and keeps real providers honest', () => {
+    const orion = ModelEngineBadge({ model: 'nexus-auto', provider: 'phoenix-nexus', placement: 'header' })
+    expect(orion?.props['data-provider-mark']).toBe('orion')
+    expect(orion?.props['data-engine-mark']).toBe('✦')
+    expect(orion?.props['aria-label']).toContain('ORIÓN')
+
+    const real = ModelEngineBadge({ model: 'gpt-6-luna', provider: 'openai-codex', placement: 'header' })
+    expect(real?.props['data-provider-mark']).not.toBe('orion')
+    expect(real?.props['data-engine-mark']).toBe('☾')
+    const unknown = ModelEngineBadge({ model: 'other-llm', provider: 'unrecognized-provider' })
+    expect(unknown?.props['data-provider-mark']).toBeUndefined()
+    expect(unknown?.props['aria-label']).not.toContain('ORIÓN')
+  })
 
 describe('agentAvatarKind', () => {
   it('keeps the exact approved 20-portrait roster aligned with the visible KIRA codename', () => {
@@ -172,5 +189,18 @@ describe('approved 21 modern static characters', () => {
     for (const kind of Object.keys(KIRA_MODERN_STILL_PORTRAITS) as Array<keyof typeof KIRA_MODERN_STILL_PORTRAITS>) {
       expect(portraitSrcForKind(kind)).toBe(KIRA_MODERN_STILL_PORTRAITS[kind])
     }
+  })
+})
+
+describe('Nexus observed provider icons', () => {
+  it('shows the actual provider on all observed non-Codex team models', () => {
+    for (const provider of ['openai-codex', 'openrouter', 'deepseek', 'nvidia',
+      'anthropic', 'google', 'ollama', 'opencode', 'qwen']) {
+      expect(engineProviderMark(provider)?.path.length).toBeGreaterThan(20)
+    }
+    expect(engineProviderMark('custom-provider')).toBeUndefined()
+    const badge = ModelEngineBadge({ model: 'deepseek-v4', provider: 'deepseek', placement: 'header' })
+    expect(badge?.props['data-provider-mark']).toBe('deepseek')
+    expect(badge?.props['data-engine-model']).toBe('deepseek-v4')
   })
 })

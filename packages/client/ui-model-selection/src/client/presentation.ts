@@ -23,7 +23,12 @@ import {
   siZdotai,
 } from 'simple-icons'
 
-/** Fénix Eclipse is the display name; phoenix-auto remains the stable orchestration route ID. */
+/**
+ * Fénix Eclipse is the display name; phoenix-auto remains the stable orchestration route ID.
+ * @param modelId - Stable model identifier.
+ * @param modelName - Adapter-provided model label.
+ * @returns Whether the model represents the Eclipse orchestration route.
+ */
 export function isPhoenixAutoRouting(modelId: string, modelName: string): boolean {
   return modelId.toLowerCase() === 'phoenix-auto'
     || /^phoenix[\s-]+auto$/iu.test(modelName.trim())
@@ -187,7 +192,12 @@ export function providerInitial(providerName: string): string {
   return providerName.match(/[\p{L}\p{N}]/u)?.[0]?.toUpperCase() ?? '?'
 }
 
-/** Resolve known local model families independently of the shared local route. */
+/**
+ * Resolve known local model families independently of the shared local route.
+ * @param modelId - Stable local model identifier.
+ * @param modelName - Adapter-provided model label.
+ * @returns The packaged family mark, or undefined for an unknown family.
+ */
 export function localModelBrandMark(modelId: string, modelName: string): ProviderMark | undefined {
   const label = `${modelId} ${modelName}`.toLowerCase()
   if (/gemma|gemini/u.test(label)) return providerMark(['gemma'], siGoogle)

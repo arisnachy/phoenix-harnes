@@ -9,7 +9,7 @@
  * Scope disposal drops the directory (HMR safety).
  */
 import { Context } from '@phoenix-ai/cordis'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createScope } from '@phoenix-ai/dsh-client-runtime/client'
 import type { SessionId } from '@phoenix-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@phoenix-ai/dsh-client-locale/client'
@@ -221,11 +221,10 @@ describe('ui-model-selection dual entry', () => {
 
     b.ctx.emit('connection/reset')
     expect(face.directory.getSnapshot()).toMatchObject({ current: null, status: 'loading' })
-    await Promise.resolve()
-    expect(face.directory.getSnapshot()).toMatchObject({
+    await vi.waitFor(() => expect(face.directory.getSnapshot()).toMatchObject({
       current: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
       status: 'ready',
-    })
+    }))
   })
 
   it('scope disposal drops the directory; a reborn scope gets a fresh one', async () => {

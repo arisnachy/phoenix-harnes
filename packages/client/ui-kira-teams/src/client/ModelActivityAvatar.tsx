@@ -3,6 +3,7 @@ import type { SubagentActivityProjection } from '@phoenix-ai/dsh-subagent'
 import { LIVING_TEAM_KINDS, readTeamPortrait, subscribeTeamProfiles, type LivingTeamKind } from './team-customization.ts'
 import type { KiraPortraitKey } from './KiraAgentPortraits.ts'
 import { KIRA_MODERN_STILL_PORTRAITS } from './KiraModernStillPortraits.ts'
+import { engineProviderMark } from './model-provider-mark.ts'
 import css from './ModelActivityAvatar.module.css'
 /** Deprecated animation props remain accepted for existing callers; portraits stay still. */
 type AvatarExpression = 'neutral' | 'warm' | 'focused' | 'happy' | 'concerned' | 'confident'
@@ -89,7 +90,8 @@ export function modelEngineFamily(model: string | undefined, provider?: string):
 }
 
 /** A small, consistent icon across the Lead and all real Team workers. */
-export function modelEngineMark(model: string | undefined, provider?: string): '☀' | '☾' | '★' | 'ϟ' | undefined {
+export function modelEngineMark(model: string | undefined, provider?: string): '☀' | '☾' | '★' | 'ϟ' | '✦' | undefined {
+  if (provider === 'phoenix-nexus' && model === 'nexus-auto') return '✦'
   const family = modelEngineFamily(model, provider)
   if (family === 'sol') return '☀'
   if (family === 'luna') return '☾'
@@ -124,11 +126,11 @@ const MODEL_ENGINE_LABEL: Readonly<Record<ModelEngineFamily, string>> = {
   sol: 'Sol',
   luna: 'Luna',
   astra: 'Astra',
-  other: 'Orión',
+  other: 'Modelo',
 }
 
 /** Display verified model provenance outside the portrait in message headers.
- * Other providers are visibly called Orión, while the tooltip retains their actual identity.
+ * The header shows the exact serving model; the family label remains in the tooltip.
  */
 export function ModelEngineBadge({ model, provider, placement = 'avatar' }: {
   model?: string | undefined
@@ -137,7 +139,9 @@ export function ModelEngineBadge({ model, provider, placement = 'avatar' }: {
 }) {
   const family = modelEngineFamily(model, provider)
   if (family === undefined || model === undefined) return null
-  const label = MODEL_ENGINE_LABEL[family]
+  const isOrion = provider === 'phoenix-nexus' && model === 'nexus-auto'
+  const providerMark = family === 'other' && provider !== undefined ? engineProviderMark(provider) : undefined
+  const label = isOrion ? 'ORIÓN' : family === 'other' ? model : MODEL_ENGINE_LABEL[family]
   const provenance = `${provider ?? 'modelo observado'} · ${model}`
   return <span
     className={`${css.engineBadge} ${placement === 'header' ? css.headerEngineBadge : ''}`}
@@ -146,10 +150,23 @@ export function ModelEngineBadge({ model, provider, placement = 'avatar' }: {
     data-engine-model={model}
     data-engine-mark={modelEngineMark(model, provider)}
     data-engine-family={family}
+    data-provider-mark={isOrion ? 'orion' : providerMark?.slug}
   >
-    <ModelBadgeIcon family={family} />
+    {isOrion ? (
+      <svg viewBox="0 0 24 24" width={13} height={13} fill="none" aria-hidden="true" data-orion-mark="belt">
+        <path d="M4.5 18.5 11.8 12.1 19.5 5.6" stroke="#64B7FF" strokeWidth="1.8" />
+        <circle cx="4.5" cy="18.5" r="2.2" fill="#8FD4FF" />
+        <circle cx="11.8" cy="12.1" r="2.6" fill="#EABF6A" />
+        <circle cx="19.5" cy="5.6" r="2.2" fill="#8FD4FF" />
+      </svg>
+    ) : providerMark === undefined ? <ModelBadgeIcon family={family} /> : (
+      <svg viewBox="0 0 24 24" width={13} height={13} aria-hidden="true"
+        style={{ color: `#${providerMark.hex}` }}>
+        <path d={providerMark.path} fill="currentColor" />
+      </svg>
+    )}
     <span className={css.engineMarkText}>{modelEngineMark(model, provider)}</span>
-    {placement === 'header' && <span className={css.engineName}>{label}</span>}
+    {placement === 'header' && <span className={css.engineName}>{model}</span>}
   </span>
 }
 
