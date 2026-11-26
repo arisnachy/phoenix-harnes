@@ -85,6 +85,28 @@ describe('Google account Antigravity CLI adapter', () => {
     await expect(stream[Symbol.asyncIterator]().next()).rejects.toThrow(/respuesta estructurada/u)
   })
 
+  it.each([
+    'Puedo crear páginas.\n{"kind":"final","text":"Puedo crear páginas."}',
+    '\x60\x60\x60json\n{"kind":"final","text":"Puedo crear páginas."}\n\x60\x60\x60',
+    'Saludo preliminar.\n{"kind":"tools","calls":[{"name":"phoenix_canvas","arguments":"{}"}]}',
+    'Puedo crear páginas.',
+  ])('recovers a conversational reply with tools enabled (%s)', async response => {
+    const request: GenerateOptions = {
+      provider: ANTIGRAVITY_MODEL_PROVIDER,
+      model: 'gemini-4-hydrogen-low',
+      messages: [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'que puedes crear' }] })],
+      tools: [{ name: 'phoenix_canvas', description: 'Publish HTML', parameters: { type: 'object' } }],
+    }
+    const result = (text: string) => JSON.stringify({ event: 'result', result: { status: 'SUCCESS', response: text } })
+    const execute = vi.fn(async () => result('{"kind":"final","text":"Puedo crear páginas."}'))
+      .mockResolvedValueOnce(result(response))
+    const chunks = []
+    for await (const chunk of new GoogleAccountCliAdapter(ANTIGRAVITY_MODEL_PROVIDER, execute).stream(request)) chunks.push(chunk)
+    expect(chunks).toContainEqual({ type: 'text-delta', index: 0, text: 'Puedo crear páginas.' })
+    expect(chunks.some(chunk => chunk.type === 'tool-call-delta')).toBe(false)
+    expect(execute).toHaveBeenCalledTimes(response.includes('kind":"final') ? 1 : 2)
+  })
+
   it('refuses explicit modelProvider and malformed settings without switching to API billing', () => {
     expect(() => assertGoogleAccountSettings({})).not.toThrow()
     expect(() => assertGoogleAccountSettings({ modelProvider: 'gemini' })).toThrow(/modelProvider/u)
