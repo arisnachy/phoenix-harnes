@@ -2,7 +2,7 @@ import { parseCanvasSpec, type CanvasSpec } from './GenerativeCanvas.tsx'
 
 /**
  * Provider-neutral, presentation-only fallback. Read one unambiguous two-column
- * time series from ordinary Markdown, retaining the original table in the chat.
+ * time series or category comparison from ordinary Markdown, retaining the original table in the chat.
  * Do not infer units, numbers, missing points, provenance or verification.
  * @param markdown - Complete visible assistant text.
  * @returns A validated native bar chart, or null when the data is ambiguous.
@@ -20,7 +20,7 @@ export function responseTableChart(markdown: string): CanvasSpec | null {
     const header = cells(lines[i] ?? '')
     const divider = cells(lines[i + 1] ?? '')
     if (!header || !divider || !divider.every(cell => /^:?-{3,}:?$/u.test(cell))) continue
-    if (!/^(?:año|year|mes|month|fecha|date|per[ií]odo|period|trimestre|quarter)$/iu.test(header[0] ?? '')) continue
+    if (!/^(?:año|year|mes|month|fecha|date|per[ií]odo|period|trimestre|quarter|categor[ií]a|category|grupo|group|regi[oó]n|region|pa[ií]s|country|producto|product|servicio|service|departamento|department)$/iu.test(header[0] ?? '')) continue
     const title = header[1] ?? ''
     if (!title || title.length > 100 || /[<>{}\[\]*]/u.test(title)) continue
     const points: Array<{ label: string; value: number }> = []
@@ -37,7 +37,7 @@ export function responseTableChart(markdown: string): CanvasSpec | null {
       labels.add(label)
       points.push({ label, value: Number(raw) })
     }
-    if ((lines[j] ?? '').trim().startsWith('|') || points.length < 3) continue
+    if ((lines[j] ?? '').trim().startsWith('|') || points.length < 2) continue
     return parseCanvasSpec({
       component: 'ui_canvas', version: 1,
       props: { title, children: [{ type: 'chart', points }] },

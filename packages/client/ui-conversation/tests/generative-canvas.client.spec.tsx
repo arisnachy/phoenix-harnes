@@ -359,7 +359,7 @@ describe('universal response presentation', () => {
   it('does not invent points or interpret ambiguous units, code, duplicate periods or partial rows', () => {
     const header = '| Year | Visits |\n| --- | --- |\n'
     for (const rows of [
-      '| 2024 | 12 |\n| 2025 | 18 |',
+      '| 2024 | 12 |',
       '| 2024 | 12 |\n| 2025 | 18 |\n| 2026 | 1,500 |',
       '| 2024 | 12 |\n| 2025 | 18 |\n| 2025 | 20 |',
       '| 2024 | 12 |\n| 2025 | 18 |\n| 2026 | 20 |\n| 2027 | N/A |',
@@ -389,4 +389,9 @@ it('upgrades a finalized plain assistant answer to a chart while keeping its Mar
   expect(screen.getByText('Evolución de consultas.')).not.toBeNull()
   rerender(<AssistantMarkdown {...props} streaming={false} interrupted />)
   expect(screen.queryByRole('img', { name: 'Gráfico de barras' })).toBeNull()
+})
+
+it('charts explicit category comparisons without manufacturing values', () => {
+  const spec = responseTableChart('| Categoría | Total |\n| --- | --- |\n| A | 12 |\n| B | 18 |')
+  expect(spec?.props.children).toEqual([{ type: 'chart', points: [{ label: 'A', value: 12 }, { label: 'B', value: 18 }] }])
 })
