@@ -33,6 +33,11 @@ import {
   isPhoenixAutoRouting, localModelBrandMark, presentModel, providerBrandMark, providerInitial, type ModelPresentation,
 } from './presentation.ts'
 import css from './ModelSelect.module.css'
+import { OrionMark } from './OrionMark.tsx'
+
+/** Accent-insensitive catalog search (ORION and ORIÓN are equivalent). */
+const foldSearchText = (value: string): string =>
+  value.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase()
 
 /** Which pane the dropdown shows: the two-row root or one drilled-in list. */
 type Pane = 'root' | 'model' | 'effort' | 'speed'
@@ -47,15 +52,19 @@ interface EffortChoice {
 
 /** Render a packaged provider mark or the local fallback for unknown ids. */
 function ProviderLogo({ providerId, providerName, modelId, modelName }: {
-  providerId: string; providerName: string; modelId?: string; modelName?: string
+  providerId: string
+  providerName: string
+  modelId?: string
+  modelName?: string
 }) {
   const local = providerId === 'phoenix-local'
-  const phoenix = providerId === 'phoenix-nexus'
+  const orion = providerId === 'phoenix-nexus' && modelId === 'nexus-auto'
+  const phoenix = providerId === 'phoenix-nexus' || providerId === 'phoenix'
   const mark = local ? localModelBrandMark(modelId ?? '', modelName ?? '')
     : phoenix ? undefined : providerBrandMark(providerId, providerName)
   return (
-    <span className={css.providerLogo} role="img" aria-label={`${local ? modelName ?? 'PHOENIX' : providerName} logo`}>
-      {mark === undefined
+    <span className={css.providerLogo} role="img" aria-label={`${orion ? 'ORIÓN' : local ? modelName ?? 'PHOENIX' : providerName} logo`}>
+      {orion ? <OrionMark /> : mark === undefined
         ? local || phoenix ? <PhoenixLogo size={20} /> : <span className={css.providerLogoFallback} aria-hidden="true">{providerInitial(providerName)}</span>
         : (
           <svg
@@ -113,35 +122,55 @@ export function ModelSelect(
   const itemRefs = useRef<(HTMLElement | null)[]>([])
   const id = useId()
 
-  const choices = useMemo(() => state.groups.flatMap(group =>
+  // A single PHOENIX section combines native virtual routes visually. The
+  // adapter provider id is retained per row: this never rewrites Host routing.
+  const catalogGroups = useMemo(() => {
+    const routed = state.groups.map(group => ({
+      ...group,
+      models: group.models.map(model => ({ ...model, routeProvider: group.id })),
+    }))
+    const phoenixGroups = routed.filter(group => group.id === 'phoenix' || group.id === 'phoenix-nexus')
+    if (phoenixGroups.length === 0) return routed
+    let emittedPhoenix = false
+    return routed.flatMap((group) => {
+      if (group.id !== 'phoenix' && group.id !== 'phoenix-nexus') return [group]
+      if (emittedPhoenix) return []
+      emittedPhoenix = true
+      return [{ ...group, id: 'phoenix', name: 'PHOENIX',
+        models: phoenixGroups.flatMap(phoenixGroup => phoenixGroup.models) }]
+    })
+  }, [state.groups])
+  const choices = useMemo(() => catalogGroups.flatMap(group =>
     group.models.map(model => ({
       group,
       model,
       selection: {
-        provider: group.id,
+        provider: model.routeProvider,
         model: model.id,
         ...model.reasoning?.defaultEffort === undefined
           ? {}
           : { reasoningEffort: model.reasoning.defaultEffort },
       } satisfies ModelSelection,
-    }))), [state.groups])
-  const normalizedQuery = modelQuery.trim().toLocaleLowerCase()
-  const visibleGroups = useMemo(() => state.groups.map((group) => {
-    const providerMatches = group.name.toLocaleLowerCase().includes(normalizedQuery)
-      || group.id.toLocaleLowerCase().includes(normalizedQuery)
+    }))), [catalogGroups])
+  const normalizedQuery = foldSearchText(modelQuery.trim())
+  const visibleGroups = useMemo(() => catalogGroups.map((group) => {
+    const providerMatches = foldSearchText(group.name).includes(normalizedQuery)
+      || foldSearchText(group.id).includes(normalizedQuery)
     return {
       ...group,
       models: normalizedQuery === '' || providerMatches
         ? group.models
         : group.models.filter((model) => {
-          const displayName = isPhoenixAutoRouting(model.id, model.name)
-            ? t('trigger.auto')
-            : presentModel(model.name, model.description).displayName
-          return [model.id, model.name, displayName]
-            .some(value => value.toLocaleLowerCase().includes(normalizedQuery))
+          const displayName = model.routeProvider === 'phoenix-nexus' && model.id === 'nexus-auto'
+            ? t('trigger.orion')
+            : isPhoenixAutoRouting(model.id, model.name)
+              ? t('trigger.auto')
+              : presentModel(model.name, model.description).displayName
+          return [model.id, model.name, displayName, model.routeProvider]
+            .some(value => foldSearchText(value).includes(normalizedQuery))
         }),
     }
-  }).filter(group => group.models.length > 0), [state.groups, normalizedQuery, t])
+  }).filter(group => group.models.length > 0), [catalogGroups, normalizedQuery, t])
   const selectedIndex = state.current === null
     ? -1
     : choices.findIndex(c => c.selection.provider === state.current?.provider && c.selection.model === state.current.model)
@@ -350,15 +379,21 @@ export function ModelSelect(
   // The current host selection is authoritative even while the provider
   // catalog is loading, empty, or temporarily unavailable. Do not erase the
   // model's visible identity and make the control look like it disappeared.
-  const displayedRoute = state.current
+  // Once a fresh catalog is ready, a genuinely removed model needs reselection.
+  // During reconnect/loading/error the last host identity remains visible.
+  const displayedRoute = state.status === 'ready' && currentChoice === undefined ? null : state.current
   const modelLabel = currentChoice === undefined
     ? displayedRoute === null
       ? t('trigger.fallback')
-      : isPhoenixAutoRouting(displayedRoute.model, displayedRoute.model)
-        ? t('trigger.auto')
+      : displayedRoute.provider === 'phoenix-nexus' && displayedRoute.model === 'nexus-auto'
+        ? t('trigger.orion')
+        : isPhoenixAutoRouting(displayedRoute.model, displayedRoute.model)
+          ? t('trigger.auto')
         : presentModel(displayedRoute.model).displayName
-    : isPhoenixAutoRouting(currentChoice.model.id, currentChoice.model.name)
-      ? t('trigger.auto')
+    : currentChoice.model.routeProvider === 'phoenix-nexus' && currentChoice.model.id === 'nexus-auto'
+      ? t('trigger.orion')
+      : isPhoenixAutoRouting(currentChoice.model.id, currentChoice.model.name)
+        ? t('trigger.auto')
       : currentChoice.group.id === 'phoenix-local' ? currentChoice.model.name : presentModel(currentChoice.model.name).displayName
   const visibleEffort = effortLabel ?? displayedRoute?.reasoningEffort
   const triggerAria = displayedRoute === null
@@ -375,9 +410,9 @@ export function ModelSelect(
 
   const defaultExpandedGroupId = (): string | undefined => {
     const current = state.current
-    const holder = state.groups.find(group =>
-      current !== null && group.models.some(model => model.id === current.model))
-    return holder?.id ?? state.groups[0]?.id
+    const holder = catalogGroups.find(group =>
+      current !== null && group.models.some(model => model.id === current.model && model.routeProvider === current.provider))
+    return holder?.id ?? catalogGroups[0]?.id
   }
 
   const groupExpanded = (groupId: string): boolean => {
@@ -413,7 +448,9 @@ export function ModelSelect(
           }
         }}
       >
-        {(displayedRoute?.provider === 'phoenix-local' || displayedRoute?.provider === 'phoenix-nexus') && <PhoenixLogo size={17} />}
+        {displayedRoute?.provider === 'phoenix-nexus' && displayedRoute.model === 'nexus-auto'
+          ? <OrionMark size={17} active />
+          : (displayedRoute?.provider === 'phoenix-local' || displayedRoute?.provider === 'phoenix') && <PhoenixLogo size={17} />}
         <span className={css.triggerLabel}>{modelLabel}</span>
         {visibleEffort !== undefined && <span className={css.triggerEffort}>{visibleEffort}</span>}
         {codexSpeedAvailable && activeSpeed === 'fast' && <span className={css.triggerEffort}>{speedLabel}</span>}
@@ -515,13 +552,15 @@ export function ModelSelect(
                         onClick={() => { toggleGroup(group.id) }}
                       >
                         <IconChevronRightOutline14 className={clsx(css.groupChevron, expanded && css.groupChevronOpen)} />
-                        {(group.id === 'phoenix-local' || group.id === 'phoenix-nexus') && <PhoenixLogo size={18} />}
+                        {(group.id === 'phoenix-local' || group.id === 'phoenix') && <PhoenixLogo size={18} />}
                         <span className={css.groupName}>{group.id === 'phoenix-local' ? group.name.replace(/^🔥\s*/u, '') : group.name}</span>
                         <span className={css.groupCount} aria-hidden="true">{group.models.length}</span>
                       </button>
                       {expanded && group.models.map((model) => {
-                        const selected = state.current?.provider === group.id && state.current.model === model.id
-                        const presentation: ModelPresentation = isPhoenixAutoRouting(model.id, model.name)
+                        const selected = state.current?.provider === model.routeProvider && state.current.model === model.id
+                        const presentation: ModelPresentation = model.routeProvider === 'phoenix-nexus' && model.id === 'nexus-auto'
+                          ? { displayName: t('trigger.orion'), description: t('trigger.orionDetail') }
+                          : isPhoenixAutoRouting(model.id, model.name)
                           ? { displayName: t('trigger.auto'), description: t('trigger.autoDetail') }
                           : group.id === 'phoenix-local'
                             ? { displayName: model.name, ...(model.description === undefined ? {} : { description: model.description }) }
@@ -534,14 +573,15 @@ export function ModelSelect(
                             aria-label={presentation.displayName}
                             aria-checked={selected}
                             className={clsx(css.option, css.modelOption, selected && css.selected)}
-                            key={model.id}
+                            key={`${model.routeProvider}/${model.id}`}
                             disabled={busy}
-                            onClick={() => { choose({ provider: group.id, model: model.id,
-                              ...group.id === 'openai-codex' && state.current?.provider === 'openai-codex'
+                            onClick={() => { choose({ provider: model.routeProvider, model: model.id,
+                              ...model.routeProvider === 'openai-codex' && state.current?.provider === 'openai-codex'
                                 && state.current.serviceTier !== undefined ? { serviceTier: state.current.serviceTier } : {},
                             }) }}
                           >
-                            <ProviderLogo providerId={group.id} providerName={group.name} modelId={model.id} modelName={model.name} />
+                            <ProviderLogo providerId={model.routeProvider} providerName={group.name}
+                              modelId={model.id} modelName={model.name} />
                             <span className={css.optionCopy}>
                               <span className={css.modelName}>{presentation.displayName}</span>
                               {presentation.description !== undefined && (

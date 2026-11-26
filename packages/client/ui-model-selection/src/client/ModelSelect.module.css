@@ -619,3 +619,27 @@
     transition: none;
   }
 }
+
+/* ORIÓN's own three-star belt, distinct from the gold PHOENIX provider mark. */
+.orionMark,
+.orionSelected {
+  display: block;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.orionSelected {
+  filter: drop-shadow(0 0 3px rgb(100 183 255 / 40%));
+  animation: orionBeltGlow 2.8s ease-in-out infinite;
+}
+
+@keyframes orionBeltGlow {
+  0%, 100% { filter: drop-shadow(0 0 2px rgb(100 183 255 / 30%)); }
+  50% { filter: drop-shadow(0 0 5px rgb(100 183 255 / 70%)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orionSelected {
+    animation: none;
+  }
+}

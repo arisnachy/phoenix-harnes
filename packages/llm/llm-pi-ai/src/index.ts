@@ -80,7 +80,7 @@ import {
 } from './opencode-free.ts'
 
 export * from './nexus.ts'
-export { NEXUS_PROVIDER, NEXUS_MODEL, NexusSelectorAdapter, nexusCodexFallback, nexusCodexHasReserve, nexusRequiresStrongModel } from './nexus-runtime.ts'
+export { NEXUS_PROVIDER, NEXUS_MODEL, ORION_PROVIDER, ORION_MODEL, NexusSelectorAdapter, nexusCodexFallback, nexusCodexHasReserve, nexusRequiresStrongModel } from './nexus-runtime.ts'
 export { PiAiAdapter } from './adapter.ts'
 export type { PiAiAdapterOptions } from './adapter.ts'
 export { Config } from './config.ts'
