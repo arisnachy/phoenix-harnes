@@ -113,3 +113,22 @@ describe('AutonomousMemoryCurator', () => {
     expect(store.writes).toHaveLength(0)
   })
 })
+
+
+describe('guided and isolated learning', () => {
+  it('recognizes explicit user teaching in Spanish and English', () => {
+    expect(classifyAutonomousMemory('Aprende que los informes deben incluir fuentes.')).toMatchObject({ guided: true })
+    expect(classifyAutonomousMemory('Remember that reports should include sources.')).toMatchObject({ guided: true })
+    expect(classifyAutonomousMemory('Aprende que solo esta vez debes omitir la tabla.')).toBeUndefined()
+  })
+
+  it('does not supersede a different session or unrelated correction in the same project', async () => {
+    const store = new Store()
+    const curator = new AutonomousMemoryCurator(store)
+    const base = { projectId: 'phoenix', occurredAt: 1000 }
+    await curator.observeUserMessage({ ...base, sessionId: 'a', eventSeq: 1, text: 'Prefiero que siempre incluyas fuentes.' })
+    await curator.observeUserMessage({ ...base, sessionId: 'b', eventSeq: 2, text: 'Corrijo eso: usa el nuevo flujo.' })
+    await curator.observeUserMessage({ ...base, sessionId: 'a', eventSeq: 3, text: 'Eso está mal: el gráfico tiene otro color.' })
+    expect(new Set(store.writes.map(row => row.subject)).size).toBe(3)
+  })
+})

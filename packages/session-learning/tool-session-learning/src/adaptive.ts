@@ -9,6 +9,7 @@
 
 import type { Context } from '@phoenix-ai/cordis'
 import type { CognitiveMemoryHit, CognitiveMemoryRecord } from '@phoenix-ai/dsh-session-learning'
+import { isHumanTaskMessage } from './team-learning-context.ts'
 
 const ADAPTIVE_SUBJECT_PREFIX = 'phoenix.learning.strategy.'
 const STATE_VERSION = 1 as const
@@ -214,7 +215,7 @@ export class AdaptiveLearningEngine {
     const key = strategyKey(strategy)
     const subject = `${ADAPTIVE_SUBJECT_PREFIX}${key}`
     const previous = this.states(input.projectId === undefined ? {} : { projectId: input.projectId })
-      .find(state => state.key === key)
+      .find(state => state.key === key && state.projectId === input.projectId)
     const next = applyOutcome(previous, {
       ...input,
       strategy,
@@ -267,7 +268,8 @@ function applyOutcome(previous: AdaptiveLearningState | undefined, input: Outcom
   confidence = Math.min(1, confidence)
 
   const quarantined = corrections > 0 || (failures >= 2 && failures >= successes)
-  const promotable = confirmations >= 2 && successes > 0 && successes >= failures
+  const promotable = (input.verified === true && input.outcome === 'success' || previous?.status === 'active')
+    && confirmations >= 2 && successes > 0 && successes >= failures
   const status: AdaptiveLearningStatus = quarantined ? 'quarantined' : promotable ? 'active' : 'candidate'
   const expiresAt = input.ttlMs === undefined
     ? previous?.expiresAt
@@ -373,7 +375,7 @@ export function installAdaptiveLearning(ctx: Context): AdaptiveLearningEngine {
     const data = event.data as unknown
     const occurredAt = typeof event.time === 'number' ? event.time : Date.now()
     const eventSeq = typeof event.seq === 'number' ? event.seq : 0
-    const projectId = ctx.learningMemory.currentProjectId()
+    const projectId = ctx.learningMemory.projectIdForSession(sessionId)
 
     const run = async (): Promise<void> => {
       if (eventType === 'goal/false-pass') {
@@ -411,21 +413,31 @@ export function installAdaptiveLearning(ctx: Context): AdaptiveLearningEngine {
 
       if (eventType === 'tool/call' && isRecord(data) && typeof data.name === 'string' && data.name.trim() !== '') {
         const strategy = `Use tool ${data.name.trim().slice(0, 160)}`
-        pendingTools.set(sessionId, strategy)
+        if (typeof data.callId !== 'string') return
+        pendingTools.set(JSON.stringify([sessionId, data.callId]), strategy)
+        if (pendingTools.size > 512) {
+          const oldest = pendingTools.keys().next().value
+          if (oldest !== undefined) pendingTools.delete(oldest)
+        }
         lastStrategies.set(sessionId, strategy)
         return
       }
 
       if (eventType === 'tool/result') {
-        const strategy = pendingTools.get(sessionId)
+        const message = isRecord(data) && isRecord(data.message) ? data.message : undefined
+        const source = isRecord(message?.source) ? message.source : undefined
+        if (typeof source?.callId !== 'string') return
+        const key = JSON.stringify([sessionId, source.callId])
+        const strategy = pendingTools.get(key)
         if (strategy === undefined) return
-        pendingTools.delete(sessionId)
+        pendingTools.delete(key)
         const failed = toolResultFailed(data)
         await engine.recordOutcome({
           strategy,
           evidence: failed ? 'The tool returned an error result.' : 'The tool completed without an error result.',
           outcome: failed ? 'failure' : 'success',
-          verified: !failed,
+          // Transport success is not independent task verification.
+          verified: false,
           sessionId,
           eventSeq,
           sourceEventType: eventType,
@@ -436,6 +448,7 @@ export function installAdaptiveLearning(ctx: Context): AdaptiveLearningEngine {
       }
 
       if (eventType === 'user/message') {
+        if (!isHumanTaskMessage(session, data)) return
         const text = messageText(data)
         const strategy = lastStrategies.get(sessionId)
         if (strategy !== undefined && text !== undefined && isExplicitCorrection(text)) {
