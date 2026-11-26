@@ -243,11 +243,12 @@ declare module '@phoenix-ai/cordis' {
      * @param payload.agent - the agent making the model call.
      * @param payload.turn - the open turn number.
      * @param payload.step - the step whose request this is.
+     * @param payload.approximateInputTokens - size estimate of the projected request, not a billing measurement.
      * @param payload.signal - the current turn's explicit abort signal.
      * Scope-filtered dispatch (`@phoenix-ai/dsh-scope`): agent-scoped listeners receive only that agent.
      * @mode waterfall
     */
-    'agent/request'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; signal: AbortSignal }, next: () => Promise<LlmCallConfig>): Promise<LlmCallConfig>
+    'agent/request'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; signal: AbortSignal; approximateInputTokens?: number }, next: () => Promise<LlmCallConfig>): Promise<LlmCallConfig>
     /**
      * Handle one failed model-request attempt before the loop retries or closes
      * its step. A listener returns `{ kind: 'retry' }` without calling `next()`
