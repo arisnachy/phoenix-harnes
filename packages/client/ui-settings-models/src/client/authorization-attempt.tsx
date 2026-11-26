@@ -77,7 +77,7 @@ export function useAuthorizationAttempt(
   reserveOAuthPopup: () => void
   closeOAuthPopup: () => void
   begin: (key: string, method?: string) => void
-  submitAnswer: () => void
+  submitAnswer: (value?: string) => void
   cancel: () => void
 } {
   const [attempt, setAttempt] = useState<AuthorizationAttempt | undefined>()
@@ -341,11 +341,11 @@ export function useAuthorizationAttempt(
     })
   }
 
-  const submitAnswer = (): void => {
+  const submitAnswer = (value = answer): void => {
     if (api === undefined || attempt?.prompt === undefined) return
     // Keep client configuration in Phoenix until the provider supplies a URL.
     if (oauthAttemptRef.current) reserveOAuthPopup()
-    void api.answer({ attemptId: attempt.id, promptId: attempt.prompt.promptId, value: answer }).then((response) => {
+    void api.answer({ attemptId: attempt.id, promptId: attempt.prompt.promptId, value }).then((response) => {
       if (!response.result.ok) {
         setFailure(response.result.error.message)
         return
@@ -402,7 +402,7 @@ export function AuthorizationAttemptProgress(props: {
   attempt: AuthorizationAttempt | undefined
   answer: string
   setAnswer: (value: string) => void
-  submitAnswer: () => void
+  submitAnswer: (value?: string) => void
   cancel: () => void
   t: (key: keyof typeof en) => string
 }): ReactNode {
@@ -446,7 +446,14 @@ export function AuthorizationAttemptProgress(props: {
         <p><a href={safeOAuthConsentUrl(attempt.url)} target="_blank" rel="noreferrer">{props.t('openAuthorizationPage')}</a></p>
       )}
       {attempt.code === undefined ? null : <p>{`${props.t('authorizationCode')}: ${attempt.code}`}</p>}
-      {attempt.prompt === undefined ? null : (
+      {attempt.prompt === undefined ? null : attempt.prompt.kind === 'select' && attempt.prompt.options?.some(option => option.id === 'agy-install') ? (
+        <div className={styles['authorizationPrompt']}>
+          <p>{attempt.prompt.message}</p>
+          {attempt.prompt.options.map(option => (
+            <button key={option.id} type="button" className={styles['secondaryButton']} onClick={() => props.submitAnswer(option.id)}>{option.label}</button>
+          ))}
+        </div>
+      ) : (
         <div className={styles['authorizationPrompt']}>
           <label>
             <span>{attempt.prompt.message}</span>
@@ -471,7 +478,7 @@ export function AuthorizationAttemptProgress(props: {
                 />
               )}
           </label>
-          <button type="button" className={styles['secondaryButton']} onClick={props.submitAnswer}>{props.t('continueAuthorization')}</button>
+          <button type="button" className={styles['secondaryButton']} onClick={() => props.submitAnswer()}>{props.t('continueAuthorization')}</button>
         </div>
       )}
       {attempt.status === 'pending'
