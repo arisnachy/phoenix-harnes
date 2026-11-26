@@ -17,7 +17,7 @@ function driverDone(agent: Agent): Promise<void> {
   return (agent as Agent & { done: Promise<void> }).done
 }
 
-async function harness(adapter: MockAdapter, persona = '', maxStepsPerTurn?: number) {
+async function harness(adapter: MockAdapter, persona = '', maxStepsPerTurn?: number, autoContinueProviders = ['openrouter', 'deepseek', 'qwen']) {
   const ctx = new Context()
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(SessionStore)
@@ -26,7 +26,7 @@ async function harness(adapter: MockAdapter, persona = '', maxStepsPerTurn?: num
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentLoop, {
     agents: [],
-    autoContinueProviders: ['openrouter', 'deepseek', 'qwen'],
+    autoContinueProviders,
     ...maxStepsPerTurn === undefined ? {} : { maxStepsPerTurn },
   })
   ctx.llm.registerAdapter(['mock'], adapter)
@@ -1157,6 +1157,28 @@ describe('agent loop', () => {
     await waitForIdle(ctx, agent)
 
     expect(reasons).toEqual([{ kind: 'aborted', reason: { kind: 'user' } }])
+  })
+
+  it('continues a new provider through the universal policy and respects an explicit user cap', async () => {
+    const adapter = new MockAdapter([
+      maxTokensResponse('first half'), textResponse('second half'), maxTokensResponse('limited'),
+    ])
+    const ctx = await harness(adapter, '', undefined, ['*'])
+    ctx.llm.registerAdapter(['custom-provider'], adapter)
+    const agent = ctx.agentLoop.create(SessionId('universal-recovery'), {
+      provider: 'custom-provider', model: 'custom-model',
+    })
+    send(agent, 'write a detailed answer')
+    await waitForIdle(ctx, agent)
+    expect(adapter.requests).toHaveLength(2)
+    const capped = ctx.agentLoop.create(SessionId('explicit-output-cap'), {
+      provider: 'custom-provider', model: 'custom-model', maxTokens: 64,
+    })
+    send(capped, 'write a detailed answer')
+    await waitForIdle(ctx, capped)
+    expect(adapter.requests).toHaveLength(3)
+    const end = capped.session.events.findLast(e => e.type === 'turn/end')
+    expect(end?.type === 'turn/end' ? end.data.reason : undefined).toEqual({ kind: 'max-tokens' })
   })
 
   it('automatically continues OpenRouter max-token output and closes completed', async () => {

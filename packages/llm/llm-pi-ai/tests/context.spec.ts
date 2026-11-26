@@ -848,3 +848,18 @@ describe('Phoenix Local agent discovery context', () => {
     expect(options.messages).toHaveLength(4)
   })
 })
+
+describe('adaptive final response reserve', () => {
+  it('reserves extra room for explicitly detailed work without exceeding model or caller limits', () => {
+    const detailed = request([createUserMessage({
+      source: { kind: 'user' }, content: [{ type: 'text', text: 'Prepara un informe detallado' }],
+    })])
+    const simple = request([createUserMessage({
+      source: { kind: 'user' }, content: [{ type: 'text', text: 'Hola' }],
+    })])
+    expect(fitGenerateOptionsToContext(detailed, 65_536, 16_384).inputBudgetTokens).toBe(53_248)
+    expect(fitGenerateOptionsToContext(simple, 65_536, 16_384).inputBudgetTokens).toBe(57_344)
+    expect(fitGenerateOptionsToContext(detailed, 65_536, 256).inputBudgetTokens).toBe(61_184)
+    expect(fitGenerateOptionsToContext(detailed, 4096, 16_384).inputBudgetTokens).toBe(2560)
+  })
+})
