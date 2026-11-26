@@ -1065,7 +1065,8 @@ function cleanupObsoleteRuntimes(extraKeep = [], {
 // all future updates. Only when the hard cap is reached, sacrifice an inactive
 // backup (oldest first). The running runtime, active marker, runtime held by
 // a different checkout, and the intended candidate remain protected.
-function reclaimInactiveBackupForCapacity(nextRuntime) {
+function reclaimInactiveBackupForCapacity(nextRuntime, { liveMigration = false } = {}) {
+  if (liveMigration && !liveStorageMigrationAllowed()) return
   const keep = new Set([runtimeRoot, nextRuntime, root, supervisorSourceRoot].map(runtimePathKey))
   const active = readActiveRuntimeRecord()
   if (active?.path) keep.add(runtimePathKey(active.path))
@@ -1083,6 +1084,9 @@ function reclaimInactiveBackupForCapacity(nextRuntime) {
       const references = windowsProcessReferences([candidate])
       if (references === undefined || references.has(runtimePathKey(candidate))) continue
     }
+    // Recheck the live lease and ownership after the process census, just before deletion.
+    if (liveMigration && !liveStorageMigrationAllowed()) return
+    if (runtimeProtectedByOwningCheckout(candidate)) continue
     if (!removeManagedWorktree(candidate, registered, true)) continue
     console.error(`[PHOENIX UPDATE] reclaimed inactive rollback runtime to stay within storage limit: ${candidate}`)
   }
@@ -2243,6 +2247,15 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint, 
 
 if (process.argv.includes('--live-storage-migration')) {
   if (!liveStorageMigrationAllowed()) process.exit(0)
+  const capacityIndex = process.argv.indexOf('--capacity-target')
+  if (capacityIndex !== -1) {
+    const target = process.argv[capacityIndex + 1]
+    if (typeof target !== 'string' || !/^[a-f0-9]{40}$/iu.test(target)) process.exit(2)
+    // Only the owning checkout's obsolete runtime slots; no stage, user
+    // workspace or other checkout is removed by this capacity repair.
+    reclaimInactiveBackupForCapacity(persistentRuntime(target), { liveMigration: true })
+    process.exit(0)
+  }
   cleanupObsoleteRuntimes([supervisorSourceRoot], {
     reapDormantStage: true,
     liveMigration: true,
