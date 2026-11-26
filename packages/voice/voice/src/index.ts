@@ -16,6 +16,10 @@ import z from '@phoenix-ai/schemastery'
 import { SessionId } from '@phoenix-ai/dsh-session'
 import { createAssistantMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
 import type {
+  VoiceAgentRealtimeAction,
+  VoiceAgentRealtimeCommand,
+  VoiceAgentRealtimeCompletion,
+  VoiceAgentRealtimeResult,
   VoiceConversationCancelReceipt,
   VoiceConversationCancelRequest,
   VoiceConversationRealtimeStartReceipt,
@@ -426,6 +430,8 @@ export class VoiceRuntime extends TypertRemoteService {
   private readonly conversationSpeech = new Map<string, ConversationSpeechChannel>()
   private readonly realtimeTranscriptTurns = new Map<string, RealtimeTranscriptTurn>()
   private codexRealtime: CodexRealtimeBridge | undefined
+  private readonly agentRealtimeClients = new Map<string, number>()
+  private readonly agentRealtimeCommands = new Map<string, { command: VoiceAgentRealtimeCommand; result: VoiceAgentRealtimeResult }>()
 
   constructor(ctx: Context, config: VoiceRuntimeConfig = {}) {
     super(ctx, 'voice')
@@ -552,13 +558,14 @@ export class VoiceRuntime extends TypertRemoteService {
         assistantName: identity.name,
         assistantGender: identity.gender,
         onTranscript: (transcript) => {
-          this.appendRealtimeTranscript(key, model, transcript)
+          if (request.outputOnly !== true) this.appendRealtimeTranscript(key, model, transcript)
         },
       })
       return {
         accepted: true,
         threadId: result.threadId,
         answerSdp: result.answerSdp,
+        voiceGender: identity.gender,
       }
     } catch (error) {
       const message = String(error)
@@ -575,6 +582,70 @@ export class VoiceRuntime extends TypertRemoteService {
         detail: codexRealtimeFailureDetail(error),
       }
     }
+  }
+
+  /** Request speaker-only control from the actual calling conversation, never a raw thread id. */
+  agentRealtimeControl(key: string, action: VoiceAgentRealtimeAction, text?: string): VoiceAgentRealtimeResult {
+    const now = Date.now()
+    if (!this.config.enabled || !this.config.codexRealtime) return { state: 'failed', reason: 'disabled' }
+    if (!/^[A-Za-z0-9_:-]{1,128}$/u.test(key)
+      || !['open', 'close', 'speak', 'authorize'].includes(action)) return { state: 'failed', reason: 'invalid' }
+    const spoken = action === 'speak' ? displayOutputToVoiceText(text ?? '', 300) : ''
+    if (action === 'speak' && spoken === '') return { state: 'failed', reason: 'empty-text' }
+    if (now - (this.agentRealtimeClients.get(key) ?? 0) > 5000) return { state: 'failed', reason: 'no-foreground-client' }
+    const current = this.agentRealtimeCommands.get(key)
+    if (current !== undefined && current.command.expiresAt > now
+      && (current.result.state === 'queued' || current.result.state === 'claimed')) {
+      return { state: 'failed', reason: 'control-busy' }
+    }
+    if (this.agentRealtimeCommands.size >= 128 && !this.agentRealtimeCommands.has(key)) {
+      const oldest = this.agentRealtimeCommands.keys().next().value
+      if (oldest !== undefined) this.agentRealtimeCommands.delete(oldest)
+    }
+    const command: VoiceAgentRealtimeCommand = { id: randomUUID(), action,
+      gender: realtimeAssistantIdentity(this.ctx).gender, expiresAt: now + 90_000,
+      ...(spoken === '' ? {} : { text: spoken }) }
+    const result: VoiceAgentRealtimeResult = { state: 'queued', id: command.id }
+    this.agentRealtimeCommands.set(key, { command, result })
+    return result
+  }
+
+  /** Read only the most recent control receipt, distinguishing admission from playback. */
+  agentRealtimeControlStatus(key: string): VoiceAgentRealtimeResult {
+    const entry = this.agentRealtimeCommands.get(key)
+    if (entry === undefined) return { state: 'failed', reason: 'no-control-request' }
+    if (entry.command.expiresAt <= Date.now()
+      && (entry.result.state === 'queued' || entry.result.state === 'claimed')) {
+      entry.result = { state: 'failed', id: entry.command.id, reason: 'control-expired' }
+    }
+    return entry.result
+  }
+
+  /** Poll from the active conversation surface. Claim once; old clients cannot replay a command. */
+  @Remote('conversationAgentRealtimePoll')
+  conversationAgentRealtimePoll(key: string): VoiceAgentRealtimeCommand | null {
+    if (!this.config.enabled || !this.config.codexRealtime || !/^[A-Za-z0-9_:-]{1,128}$/u.test(key)) return null
+    if (this.agentRealtimeClients.size >= 128 && !this.agentRealtimeClients.has(key)) {
+      const oldest = this.agentRealtimeClients.keys().next().value
+      if (oldest !== undefined) this.agentRealtimeClients.delete(oldest)
+    }
+    this.agentRealtimeClients.set(key, Date.now())
+    const entry = this.agentRealtimeCommands.get(key)
+    if (entry === undefined || this.agentRealtimeControlStatus(key).state !== 'queued') return null
+    entry.result = { state: 'claimed', id: entry.command.id }
+    return entry.command
+  }
+
+  /** Acknowledge the claimed command from its owning client, not from another conversation. */
+  @Remote('conversationAgentRealtimeComplete')
+  conversationAgentRealtimeComplete(receipt: VoiceAgentRealtimeCompletion): boolean {
+    const entry = this.agentRealtimeCommands.get(receipt.key)
+    if (entry === undefined || entry.command.id !== receipt.id
+      || this.agentRealtimeControlStatus(receipt.key).state !== 'claimed') return false
+    entry.result = { id: receipt.id, state: receipt.accepted === true ? 'completed' : 'failed',
+      ...(typeof receipt.reason === 'string' ? { reason: receipt.reason.slice(0, 180) } : {}),
+      ...(typeof receipt.provider === 'string' ? { provider: receipt.provider.slice(0, 80) } : {}) }
+    return true
   }
 
   /**
@@ -796,6 +867,8 @@ export class VoiceRuntime extends TypertRemoteService {
       for (const controller of channel.controllers) controller.abort('voice stopped')
     }
     this.conversationSpeech.clear()
+    this.agentRealtimeClients.clear()
+    this.agentRealtimeCommands.clear()
     for (const key of [...this.realtimeTranscriptTurns.keys()]) {
       this.closeRealtimeTranscriptTurn(key, 'interrupted')
     }
