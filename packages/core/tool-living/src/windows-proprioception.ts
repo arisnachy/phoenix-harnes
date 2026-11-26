@@ -50,7 +50,7 @@ function runProbe(): Promise<unknown> {
 /** One shared refresh, off the Host event loop. Never return old data as current. */
 export class WindowsProprioception {
   private cached?: Snapshot
-  private pending?: Promise<Snapshot | undefined>
+  private pending: Promise<Snapshot | undefined> | undefined
   constructor(private readonly os = platform(), private readonly run: Runner = runProbe,
     private readonly clock: () => number = Date.now) {}
 
