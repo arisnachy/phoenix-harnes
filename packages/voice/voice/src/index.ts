@@ -587,9 +587,13 @@ export class VoiceRuntime extends TypertRemoteService {
   /** Request speaker-only control from the actual calling conversation, never a raw thread id. */
   agentRealtimeControl(key: string, action: VoiceAgentRealtimeAction, text?: string): VoiceAgentRealtimeResult {
     const now = Date.now()
-    if (!this.config.enabled || !this.config.codexRealtime) return { state: 'failed', reason: 'disabled' }
+    const ui = ['ui-inspect', 'ui-compact', 'ui-expand', 'ui-highlight-sidebar', 'ui-highlight-composer', 'ui-highlight-details', 'ui-clear-highlight'].includes(action)
+    if (!ui && (!this.config.enabled || !this.config.codexRealtime)) return { state: 'failed', reason: 'disabled' }
     if (!/^[A-Za-z0-9_:-]{1,128}$/u.test(key)
-      || !['open', 'close', 'speak', 'authorize'].includes(action)) return { state: 'failed', reason: 'invalid' }
+      || (!ui && !['open', 'close', 'speak', 'authorize'].includes(action))) return { state: 'failed', reason: 'invalid' }
+    if (ui && action !== 'ui-inspect' && !/^[0-9:]{1,64}$/u.test(text ?? '')) {
+      return { state: 'failed', reason: 'fresh-ui-revision-required' }
+    }
     const spoken = action === 'speak' ? displayOutputToVoiceText(text ?? '', 300) : ''
     if (action === 'speak' && spoken === '') return { state: 'failed', reason: 'empty-text' }
     if (now - (this.agentRealtimeClients.get(key) ?? 0) > 5000) return { state: 'failed', reason: 'no-foreground-client' }
@@ -604,16 +608,16 @@ export class VoiceRuntime extends TypertRemoteService {
     }
     const command: VoiceAgentRealtimeCommand = { id: randomUUID(), action,
       gender: realtimeAssistantIdentity(this.ctx).gender, expiresAt: now + 90_000,
-      ...(spoken === '' ? {} : { text: spoken }) }
+      ...(ui && action !== 'ui-inspect' ? { text: text! } : spoken === '' ? {} : { text: spoken }) }
     const result: VoiceAgentRealtimeResult = { state: 'queued', id: command.id }
     this.agentRealtimeCommands.set(key, { command, result })
     return result
   }
 
   /** Read only the most recent control receipt, distinguishing admission from playback. */
-  agentRealtimeControlStatus(key: string): VoiceAgentRealtimeResult {
+  agentRealtimeControlStatus(key: string, family?: 'ui' | 'voice'): VoiceAgentRealtimeResult {
     const entry = this.agentRealtimeCommands.get(key)
-    if (entry === undefined) return { state: 'failed', reason: 'no-control-request' }
+    if (entry === undefined || (family !== undefined && (entry.command.action.startsWith('ui-') ? 'ui' : 'voice') !== family)) return { state: 'failed', reason: 'no-control-request' }
     if (entry.command.expiresAt <= Date.now()
       && (entry.result.state === 'queued' || entry.result.state === 'claimed')) {
       entry.result = { state: 'failed', id: entry.command.id, reason: 'control-expired' }
@@ -624,7 +628,7 @@ export class VoiceRuntime extends TypertRemoteService {
   /** Poll from the active conversation surface. Claim once; old clients cannot replay a command. */
   @Remote('conversationAgentRealtimePoll')
   conversationAgentRealtimePoll(key: string): VoiceAgentRealtimeCommand | null {
-    if (!this.config.enabled || !this.config.codexRealtime || !/^[A-Za-z0-9_:-]{1,128}$/u.test(key)) return null
+    if (!/^[A-Za-z0-9_:-]{1,128}$/u.test(key)) return null
     if (this.agentRealtimeClients.size >= 128 && !this.agentRealtimeClients.has(key)) {
       const oldest = this.agentRealtimeClients.keys().next().value
       if (oldest !== undefined) this.agentRealtimeClients.delete(oldest)

@@ -598,6 +598,30 @@ describe('AppFrame — guard branches', () => {
   })
 })
 
+describe('Living native presentation controls', () => {
+  it('inspects the foreground session and highlights only a real target with a fresh revision', () => {
+    const { frame } = mountFrame()
+    const send = (action: string, revision?: string, key = 's-test') => {
+      const reply = vi.fn()
+      act(() => { window.dispatchEvent(new CustomEvent('phoenix:agent-ui-control', {
+        detail: { key, action, revision, expiresAt: Date.now() + 10_000, reply },
+      })) })
+      return reply
+    }
+    const inspected = send('ui-inspect')
+    expect(inspected).toHaveBeenCalledTimes(1)
+    const result = inspected.mock.calls[0]![0]
+    expect(result.accepted).toBe(true)
+    const revision = JSON.parse(result.reason).revision
+    expect(send('ui-highlight-sidebar', 'stale').mock.calls[0]![0].accepted).toBe(false)
+    expect(send('ui-highlight-sidebar', revision, 'other-session')).not.toHaveBeenCalled()
+    expect(send('ui-highlight-sidebar', revision).mock.calls[0]![0].accepted).toBe(true)
+    expect(frame.dataset.livingHighlight).toBe('sidebar')
+    act(() => { vi.advanceTimersByTime(12_001) })
+    expect(frame.dataset.livingHighlight).toBeUndefined()
+  })
+})
+
 describe('AppFrame — unmount with an in-flight resize frame', () => {
   it('cancels the pending rAF on unmount (no post-unmount setState)', () => {
     const { unmount } = mountFrame()

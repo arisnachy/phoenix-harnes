@@ -93,7 +93,7 @@ export interface VoiceConversationRealtimeStopReceipt {
 }
 
 /** Session-scoped, single-claim command for the foreground voice client. */
-export type VoiceAgentRealtimeAction = 'open' | 'close' | 'speak' | 'authorize'
+export type VoiceAgentRealtimeAction = 'open' | 'close' | 'speak' | 'authorize' | 'ui-inspect' | 'ui-compact' | 'ui-expand' | 'ui-highlight-sidebar' | 'ui-highlight-composer' | 'ui-highlight-details' | 'ui-clear-highlight'
 export interface VoiceAgentRealtimeCommand {
   readonly id: string
   readonly action: VoiceAgentRealtimeAction

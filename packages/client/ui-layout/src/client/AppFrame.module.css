@@ -308,3 +308,11 @@
   .centerCol > [data-space-with-chat='true']{flex:0 0 52%;width:100%;height:52%;border-right:0;border-bottom:1px solid var(--dsw-alias-border-l1)}
   .centerCol:has(> [data-space-with-chat='true']) > .conversationPane{flex:1 1 48%;width:100%}
 }
+
+/* Agent highlights never intercept a click or change layout dimensions. */
+.frame[data-living-highlight="sidebar"] .sidebarCol,
+.frame[data-living-highlight="details"] .detailsCol,
+.frame[data-living-highlight="composer"] :global([data-composer-card]) {
+  outline: 2px solid var(--dsw-specific-phoenix-accent);
+  outline-offset: -3px;
+}

@@ -5,6 +5,7 @@ import { inspectCodexQuota } from './codex-quota.ts'
 import { runEvolution, summarizeEvolutionEvents } from './evolution.ts'
 import { AMPLIFIER_OPERATIONS, runAmplifier } from './amplifier.ts'
 import { saveNumericRecipe, runStoredNumericRecipe, type RecipeContext } from './amplifier-memory.ts'
+import { SessionToolFactory } from './session-tool-factory.ts'
 import { livingActionSafety } from './living-action-safety.ts'
 import { assessSelfInitiative, SELF_GOALS } from './self-initiative.ts'
 import { inspectSystemEnvironment, searchLocalApps } from './system-proprioception.ts'
@@ -282,6 +283,7 @@ function assertTargetReached(snapshot: LivingCreationSnapshot): void {
 
 /** Register the universal living-creation policy and model controls. */
 export function apply(ctx: Context): void {
+  const sessionTools = new SessionToolFactory()
   ctx.systemPrompt.section({name:'phoenix:codex-quota-awareness',order:114,text:'For Codex quota questions or costly multi-step work, use codex_quota_inspect to read the real native 5h and 7d remaining percentages, reset countdowns, freshness and pacing. Percent is not a token count. Treat forecastRecommendation and per-window forecast as estimates, not quotas or guarantees. A measured rate requires comparable samples from the same account and reset window; a window average is a weaker estimate. Reduce avoidable consumption when reserveAtRisk is true, without skipping necessary verification. Unknown, stale or expired telemetry is not a refreshed allowance. When conservation is needed, use deterministic tools, bounded context, concise plans and batch independent work; retain necessary verification and difficult-task quality. Do not repeatedly poll or switch a manually selected model/provider, change paid service tier, or claim guaranteed seven-day capacity.'})
   ctx.tools.register(defineTool({
     name:'codex_quota_inspect',
@@ -306,6 +308,20 @@ export function apply(ctx: Context): void {
     isConcurrencySafe:()=>true,
     execute(args){return Promise.resolve(JSON.stringify(runAmplifier(args.operation,args.input_json)))},
     presentCall:()=>({card:'generic',title:'PHOENIX · Intelligence Amplifier',kind:'read' as const}),
+  }))
+
+  ctx.systemPrompt.section({name:'phoenix:tool-factory',order:118,text:'When no existing tool fits a useful numerical task, create a session-local deterministic tool with phoenix_tool_factory and three to eight distinct passing fixtures. Discover and reuse existing session tools using list before creating duplicates. You can create/run/remove them without extra approval because they have no shell, filesystem, network or external permissions. Explain results with existing interactive graphics when useful. For durable cross-session promotion use phoenix_recipe and its approval workflow. Arbitrary executable skills must still use existing sandbox and authorization.'})
+  ctx.tools.register(defineTool({
+    name:'phoenix_tool_factory',
+    description:'Create and reuse temporary fixture-tested numerical tools in the current session. create input_json={id,title,program:{inputs:[id],steps:[{id,dependsOn,output,expression}]},fixtures:[{inputs,expected}]}; run={id,inputs}; list={}; remove={id}. Expressions use numbers, {var:id}, or {op:add|sub|mul|div|min|max,args:[expr,expr]}. No eval, code installation, I/O, credentials or clinical data. Fixtures are supplied by the caller, not independent semantic validation. Tools expire after 24 hours or host restart. Persistent recipes require phoenix_recipe.',
+    parameters:{operation:{type:'string',required:true,enum:['create','run','list','remove']},input_json:{type:'string',required:true}},
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>false,
+    execute(args,exec){
+      if(!exec.agent||exec.agent.session.header.origin==='subagent')throw Error('FACTORY_OWNER_REQUIRED')
+      return Promise.resolve(JSON.stringify(sessionTools.execute(String(exec.agent.session.id),args.operation,args.input_json)))
+    },
+    presentCall:()=>({card:'generic',title:'PHOENIX · Herramienta creada y verificada',kind:'other' as const}),
   }))
 
   ctx.tools.register(defineTool({
