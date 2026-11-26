@@ -1151,7 +1151,7 @@ describe('staging quarantine recovery', () => {
     expect(branch).toContain('preparedTarget = undefined')
     expect(branch).toContain('nextStageRetryAt = Date.now() + STORAGE_RETRY_MS')
     expect(branch.indexOf('writeState(root')).toBeLessThan(branch.indexOf('runLiveStorageMigration(root)'))
-    expect(updater).toContain('!manualRefreshRequested && blockedStageTarget === inspection.target')
+    expect(updater).toContain('!manualRefreshRequested && Date.now() < nextStageRetryAt')
   })
 
   it('accelerates only a proven own orphan, never foreign metadata or a live registration', () => {
@@ -1161,11 +1161,12 @@ describe('staging quarantine recovery', () => {
     let metadataExists = false
     let keep = false
     let linkedFile = true
+    let symlink = false
     const candidate = '/base/phoenix-stage-1234567890-conflict-1-2'
     const api = runInNewContext(supervisor.slice(start, end) + '\n({ownedOrphanedStageQuarantine})', {
       root: '/repo', runtimePathKey: (p:string) => p, join: (...p:string[]) => p.join('/'), resolve: (_a:string,b:string) => b, dirname: (p:string) => p.slice(0,p.lastIndexOf('/')),
       existsSync: (p:string) => p.endsWith('.phoenix-keep') ? keep : metadataExists,
-      lstatSync: () => ({isDirectory: () => true, isFile: () => linkedFile}),
+      lstatSync: () => ({isDirectory: () => true, isFile: () => linkedFile, isSymbolicLink: () => symlink}),
       readFileSync: () => pointer, absoluteGitPath: () => '/repo/.git',
       gitValue: () => '/repo/.git', detachedWorktreeMetadata: () => true,
     }) as {ownedOrphanedStageQuarantine: (p:string, registered?:Set<string>) => boolean}
@@ -1181,7 +1182,49 @@ describe('staging quarantine recovery', () => {
     pointer = 'gitdir: /other/.git/worktrees/old'
     expect(api.ownedOrphanedStageQuarantine(candidate, new Set())).toBe(false)
     pointer = 'gitdir: /repo/.git/worktrees/old'
+    symlink = true
+    expect(api.ownedOrphanedStageQuarantine(candidate, new Set())).toBe(false)
+    symlink = false
     linkedFile = false
     expect(api.ownedOrphanedStageQuarantine(candidate, new Set())).toBe(false)
+  })
+
+  it('recovers the canonical orphan only when a quarantine exists and preserves busy or unverified stages', () => {
+    const start = supervisor.indexOf('function cleanupBlockingStageQuarantines(')
+    const end = supervisor.indexOf('function cleanupObsoleteRuntimes(', start)
+    const canonical = '/base/phoenix-stage-1234567890'
+    const quarantine = canonical + '-conflict-1-2'
+    let stages = [canonical, quarantine]
+    let lease = true
+    let proven = new Set(stages)
+    let busy = new Set<string>()
+    const removed: string[] = []
+    const api = runInNewContext(supervisor.slice(start, end) + '\n({cleanupBlockingStageQuarantines})', {
+      root: '/repo', supervisorSourceRoot: '/active', runtimeRoot: '/active',
+      process: { env: {} }, readActiveRuntimeRecord: () => ({ path: '/active' }),
+      runtimePathKey: (p: string) => p, persistentStage: () => canonical,
+      liveStorageMigrationAllowed: () => lease, registeredWorktreePaths: () => new Set(),
+      stageDirectoriesForCleanup: () => stages,
+      ownedOrphanedStageQuarantine: (p: string) => proven.has(p),
+      windowsProcessReferences: () => busy,
+      runtimeProtectedByOwningCheckout: () => false, stageProtectedByOwningCheckout: () => false,
+      removeOrphanedManagedDirectory: (p: string) => { removed.push(p); return true },
+      console: { error: () => {} },
+    }) as { cleanupBlockingStageQuarantines: () => void }
+    api.cleanupBlockingStageQuarantines()
+    expect(removed).toEqual([canonical, quarantine])
+    removed.length = 0
+    stages = [canonical]
+    api.cleanupBlockingStageQuarantines()
+    expect(removed).toEqual([])
+    stages = [canonical, quarantine]
+    busy = new Set([canonical])
+    proven = new Set([canonical])
+    api.cleanupBlockingStageQuarantines()
+    expect(removed).toEqual([])
+    lease = false
+    busy.clear()
+    api.cleanupBlockingStageQuarantines()
+    expect(removed).toEqual([])
   })
 })
