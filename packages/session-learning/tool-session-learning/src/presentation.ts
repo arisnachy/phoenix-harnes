@@ -1,6 +1,7 @@
 /** Model-safe formatting for memory search results. */
 
 import type { CognitiveMemoryHit, CognitiveMemoryRecord, MemoryRecord } from '@phoenix-ai/dsh-session-learning'
+import { fingerprintTask, taskSimilarity } from './task-context.ts'
 
 type PresentableMemory = MemoryRecord | CognitiveMemoryRecord | CognitiveMemoryHit
 
@@ -127,4 +128,28 @@ export function formatMemorySearchResult(records: readonly MemoryRecord[] | read
       }
     }),
   })
+}
+
+
+/**
+ * Gate automatic application of user-authored guidance by provenance, scope,
+ * relevance and confidence; stored text never grants permissions.
+ * @param record - candidate cognitive record.
+ * @param query - current human task.
+ * @param sessionId - owning conversation.
+ * @param projectId - current project, if established.
+ * @returns Whether the bounded record may be offered as contextual evidence.
+ */
+export function isRelevantUserGuidance(
+  record: Pick<CognitiveMemoryRecord, 'status' | 'kind' | 'confidence' | 'summary' | 'projectId' | 'sessionId' | 'provenance'>,
+  query: string, sessionId: string, projectId?: string,
+): boolean {
+  if (record.status !== 'active' || record.confidence < 0.9) return false
+  if (record.kind !== 'preference' && record.kind !== 'lesson') return false
+  if (!['autonomous/user-preference', 'autonomous/user-correction'].includes(record.provenance.sourceEventType)) return false
+  if (record.projectId !== projectId || projectId === undefined && record.sessionId !== sessionId) return false
+  const task = fingerprintTask(query)
+  const lesson = fingerprintTask(record.summary)
+  const overlap = task.tokens.filter(token => lesson.tokens.includes(token)).length
+  return overlap >= 2 && taskSimilarity(task, lesson) >= 0.35
 }
