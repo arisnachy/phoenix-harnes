@@ -16,6 +16,7 @@ function occurrences(text, needle) {
 // replacement string expanded to the entire original file suffix, truncating
 // a regex and duplicating the remainder of this PowerShell repair script.
 test('storage repair has one complete guarded execution path', () => {
+  assert.ok(contents.includes(String.raw`$quarantinePattern = '^' + [regex]::Escape($currentStage) + '-conflict-\d+-\d+$'`))
   assert.match(contents, /^\$legacyPattern = '.*\)\$'$/m)
   assert.equal(occurrences(contents, 'if (-not $Apply) {'), 1)
   assert.equal(occurrences(contents, 'Get-NetTCPConnection -LocalPort 3080'), 1)
