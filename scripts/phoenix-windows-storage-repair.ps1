@@ -223,4 +223,30 @@ if ($after.Count -ge $configuredLimit) {
     Write-Warning ('Capacity is STILL blocked (' + $after.Count + '/' + $configuredLimit + '). Restart Windows, then run -Apply BEFORE starting Phoenix; never force-delete an active runtime.')
     throw 'Phoenix cleanup could not free runtime capacity; no unsafe deletion was attempted.'
 }
+# Runtime slots are not the only gate: the old watcher refused to prepare
+# when an unverifiable canonical stage and an existing quarantine coexist.
+# Do not report a complete recovery unless that separate gate is clear.
+$stagePath = Join-Path $storageRoot $currentStage
+$quarantinePattern = '^' + [regex]::Escape($currentStage) + '-conflict-\d+-\d+
+
+$quarantines = @($legacyAfter | Where-Object { $_.Name -match $quarantinePattern })
+if ($quarantines.Count -gt 0 -and (Test-Path -LiteralPath $stagePath -PathType Container)) {
+    $stageCommon = & git -C $stagePath rev-parse --git-common-dir 2>$null
+    $stageGitExit = $LASTEXITCODE
+    $stageOwned = $false
+    if ($stageGitExit -eq 0 -and -not [string]::IsNullOrWhiteSpace([string]($stageCommon | Select-Object -First 1))) {
+        $stageCommon = [string]($stageCommon | Select-Object -First 1)
+        $stageCommonPath = if ([System.IO.Path]::IsPathRooted($stageCommon)) {
+            [System.IO.Path]::GetFullPath($stageCommon)
+        } else {
+            [System.IO.Path]::GetFullPath((Join-Path $stagePath $stageCommon))
+        }
+        $stageOwned = $stageCommonPath.Equals($commonPath, [StringComparison]::OrdinalIgnoreCase)
+    }
+    if (-not $stageOwned) {
+        Write-Warning ('Runtime capacity recovered (' + $after.Count + '/' + $configuredLimit + '), but staging quarantine STILL blocks updates.')
+        $quarantines | Select-Object Name, LastWriteTime | Format-Table -AutoSize
+        throw 'PHOENIX staging remains blocked; protected or unverified directories were preserved. Use the managed startup updater if the source checkout is clean and managed.'
+    }
+}
 Write-Host ('[PHOENIX STORAGE] Capacity recovered (' + $after.Count + '/' + $configuredLimit + '). You can restart Phoenix.')
