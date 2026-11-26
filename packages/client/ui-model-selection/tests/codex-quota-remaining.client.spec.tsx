@@ -473,3 +473,28 @@ describe('CodexQuotaRemaining', () => {
     expect(await screen.findByText('75%')).toBeTruthy()
   })
 })
+
+
+describe('Antigravity sidebar quota', () => {
+  it('renders native independent windows alongside Codex without guessing unknown quota', async () => {
+    const now = Date.now()
+    const auth = { list: vi.fn(async () => ({
+      result: { ok: true, value: { entries: [
+        { key: 'subagent-codex/account', telemetry: { kind: 'account', provider: 'Codex', primaryLimit: { usedPercent: 20, windowDurationMins: 300 } } },
+        { key: 'llm-pi-ai/google-account', stored: { kind: 'grant' }, telemetry: { kind: 'account', provider: 'Google Antigravity CLI', quotaGroups: [
+          { name: 'Gemini', buckets: [
+            { id: 'gemini-5h', durationMinutes: 300, remainingPercent: 63, observedAt: now, resetsAt: Math.floor(now/1000)+3600 },
+            { id: 'gemini-weekly', durationMinutes: 10080, remainingPercent: 42, observedAt: now, resetsAt: Math.floor(now/1000)+86400 },
+            { id: 'other', remainingPercent: 99, observedAt: now-180000 },
+          ] },
+        ] } },
+      ] } },
+    })) }
+    render(<CodexQuotaRemaining {...propsFor(directory('google-antigravity').fake, auth)} wide={false} />)
+    expect(await screen.findByRole('group', { name: 'Google Antigravity usage limits' })).toBeTruthy()
+    expect(screen.getByText('63%')).toBeTruthy()
+    expect(screen.getByText('42%')).toBeTruthy()
+    expect(screen.getByText('80%')).toBeTruthy()
+    expect(screen.queryByText('99%')).toBeNull()
+  })
+})

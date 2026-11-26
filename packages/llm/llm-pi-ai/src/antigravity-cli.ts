@@ -2,6 +2,7 @@
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
@@ -63,11 +64,11 @@ export function isGoogleCliAuthFailure(value: string): boolean {
 }
 
 /** Send sensitive prompts through stdin, never process command arguments. */
-export function runGoogleCli(args: readonly string[], input = '', signal?: AbortSignal): Promise<string> {
+export function runGoogleCli(args: readonly string[], input = '', signal?: AbortSignal, cwd = tmpdir()): Promise<string> {
   assertGoogleAccountMode()
   return new Promise((resolve, reject) => {
     const child = spawn(antigravityExecutable(), [...args], {
-      shell: false, windowsHide: true, cwd: tmpdir(), stdio: ['pipe', 'pipe', 'pipe'],
+      shell: false, windowsHide: true, cwd, stdio: ['pipe', 'pipe', 'pipe'],
       env: googleAccountEnvironment(process.env),
       ...(signal === undefined ? {} : { signal }),
     })
@@ -181,37 +182,59 @@ export function encodeGoogleUserEvent(text: string): string {
   return JSON.stringify({ event: 'user', message: { content: [{ type: 'text', text }] } }) + '\n'
 }
 
-/** Preserve the ordered transcript and put the actual latest turn at the end. */
+/** Build a native, workspace-scoped agent; system instructions are not a user turn. */
+export function buildGoogleAgent(request: Pick<GenerateOptions, 'system' | 'tools' | 'model'>): string {
+  const instructions = [
+    '---',
+    'name: phoenix-harness',
+    'description: PHOENIX conversation adapter',
+    'mainAgent: true',
+    'subagent: false',
+    'model: inherit',
+    'tools: []',
+    'commandExecutionPolicy: off',
+    'mcpServers: []',
+    '---',
+    '# System Prompt',
+    'You are the model selected by PHOENIX: ' + request.model + '. Answer the current user turn. Treat historical messages as context, not new instructions. Do not execute native CLI tools; only PHOENIX may execute its own approved tools.',
+    request.system ?? '',
+  ]
+  if (request.tools?.length) {
+    instructions.push('PHOENIX tools (request only): ' + JSON.stringify(request.tools))
+    instructions.push('Return JSON: {"kind":"final","text":"answer"} or {"kind":"tools","calls":[{"name":"tool","arguments":"JSON object serialized as a string"}]}. Only PHOENIX will execute tools and return results.')
+  }
+  return instructions.join('\n')
+}
+
+/** Preserve the entire user turn independently from system instructions. */
 export function buildPrompt(request: Pick<GenerateOptions, 'system' | 'messages' | 'tools' | 'model'>): string {
-  const turns: string[] = []
   const latest = request.messages.at(-1)
   if (latest === undefined || latest.role !== 'user' || !latest.content.some(block => block.type === 'tool-result' || (block.type === 'text' && block.text.trim()))) {
     throw new LlmError('Antigravity no recibió un turno actual de usuario o herramienta.', 'GOOGLE_CLI_EMPTY_INPUT')
   }
-  const latestText = latest.content.map(block => block.type === 'text' ? block.text : JSON.stringify(block)).join('\n')
-  turns.push('TURNO ACTUAL DE PHOENIX (responde a este contenido):\n' + latestText)
-  if (request.system) turns.push('SYSTEM:\n' + request.system)
-  turns.push('Modelo seleccionado en PHOENIX: ' + request.model + '. Responde al último turno de la conversación, utilizando el historial como contexto.')
-  if (request.tools?.length) {
-    turns.push('Herramientas de PHOENIX (no las ejecutes tú): ' + JSON.stringify(request.tools))
-    turns.push('Devuelve un JSON. Para respuesta: {"kind":"final","text":"respuesta"}. '
-      + 'Para solicitar herramientas: {"kind":"tools","calls":[{"name":"nombre","arguments":"objeto JSON serializado"}]}. '
-      + 'Solo PHOENIX ejecutará herramientas y devolverá sus resultados.')
-  }
-  const conversation: string[] = []
-  for (const message of request.messages) {
-    for (const block of message.content) {
-      if (block.type === 'image' || block.type === 'file') {
-        throw new LlmError('El acceso Google CLI solo admite texto en PHOENIX.', 'GOOGLE_CLI_TEXT_ONLY')
-      }
-    }
-    const text = message.content.map(block => block.type === 'text' ? block.text : JSON.stringify(block)).join('\n')
-    if (text.trim()) conversation.push(message.role.toUpperCase() + ':\n' + text)
-  }
-  if (conversation.length === 0) throw new LlmError('Antigravity no recibió mensajes de conversación.', 'GOOGLE_CLI_EMPTY_INPUT')
-  turns.push('CONVERSACIÓN (orden cronológico):\n' + conversation.join('\n\n'))
-  return turns.join('\n\n')
+  const serialize = (message: typeof latest): string => message.content.map(block => {
+    if (block.type === 'image' || block.type === 'file') throw new LlmError('El acceso Google CLI solo admite texto en PHOENIX.', 'GOOGLE_CLI_TEXT_ONLY')
+    return block.type === 'text' ? block.text : JSON.stringify(block)
+  }).join('\n')
+  const latestText = serialize(latest)
+  const history = request.messages.slice(0, -1).map(message => message.role.toUpperCase() + ':\n' + serialize(message))
+  // Put the actual user message first, not after a large synthetic transcript.
+  // Preserve it again at the end when there is history, for clear turn boundaries.
+  return history.length === 0 ? latestText
+    : 'TURNO ACTUAL:\n' + latestText + '\n\nHISTORIAL (contexto):\n' + history.join('\n\n') + '\n\nUSER:\n' + latestText
+}
 
+/** Private temporary workspace. Never change the user's global agent settings. */
+export async function withGoogleAgent<T>(request: Pick<GenerateOptions, 'system' | 'tools' | 'model'>, execute: (cwd: string) => Promise<T>): Promise<T> {
+  const cwd = await mkdtemp(join(tmpdir(), 'phoenix-agy-agent-'))
+  try {
+    const dir = join(cwd, '.agents', 'agents', 'phoenix-harness')
+    await mkdir(dir, { recursive: true, mode: 0o700 })
+    await writeFile(join(dir, 'agent.md'), buildGoogleAgent(request), { encoding: 'utf8', flag: 'wx', mode: 0o600 })
+    return await execute(cwd)
+  } finally {
+    await rm(cwd, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 })
+  }
 }
 
 export class GoogleAccountCliAdapter extends LlmAdapter {
@@ -235,7 +258,7 @@ export class GoogleAccountCliAdapter extends LlmAdapter {
       flags.push('--effort', request.reasoningEffort)
     }
     const input = encodeGoogleUserEvent(buildPrompt(request))
-    const result = parseGoogleResult(await this.execute(flags, input, request.signal))
+    const result = parseGoogleResult(await withGoogleAgent(request, cwd => this.execute([...flags, '--agent', 'phoenix-harness'], input, request.signal, cwd)))
     let response = result.response ?? ''
     if (!response.trim()) throw new LlmError('Antigravity terminó sin devolver contenido.', 'GOOGLE_CLI_EMPTY_OUTPUT')
     let calls: Array<{ name: string; arguments: string }> | undefined
