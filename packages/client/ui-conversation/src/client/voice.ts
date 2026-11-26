@@ -762,6 +762,10 @@ function finishNativeUtterance(session: CodexRealtimeVoiceSession, utterance: Pe
   session.audioDrainTimer = window.setTimeout(() => {
     if (codexRealtimeVoiceSession !== session || session.activeUtterance !== undefined) return
     muteCodexRealtimeAudio(session, 'authorized-audio-drained')
+    if (session.outputOnly && utterance.key.startsWith('agent:')) {
+      void stopCodexRealtimeVoice()
+      return
+    }
     publishVoiceIdle()
   }, CODEX_VOICE_AUDIO_DRAIN_MS)
 }
@@ -1413,10 +1417,12 @@ export function watchAgentCodexRealtime(sessionKey: string): () => void {
     if (disposed || polling || document.visibilityState === 'hidden' || remote?.conversationAgentRealtimePoll === undefined
       || remote.conversationAgentRealtimeComplete === undefined || codexRealtimeVoiceStarting) return
     polling = true
+    let claimedId: string | undefined
     try {
       const response = await remote.conversationAgentRealtimePoll(sessionKey)
       if (!response.ok || response.value === null) return
       const command = response.value
+      claimedId = command.id
       const complete = async (accepted: boolean, reason?: string, provider?: string): Promise<void> => {
         await remote.conversationAgentRealtimeComplete?.({ key: sessionKey, id: command.id, accepted,
           ...(reason === undefined ? {} : { reason }), ...(provider === undefined ? {} : { provider }) })
@@ -1450,28 +1456,52 @@ export function watchAgentCodexRealtime(sessionKey: string): () => void {
         await complete(false, 'control-expired')
         return
       }
-      if (command.action === 'open') { await complete(true, 'session-negotiated', 'codex-live'); return }
       const text = conversationalSpeechText(command.text ?? '')
-      const deadline = Math.min(command.expiresAt, Date.now() + 12_000)
+      const deadline = Math.min(command.expiresAt, Date.now() + 25_000)
       while (!disposed && Date.now() < deadline) {
         const session = codexRealtimeVoiceSession
         if (session?.key !== sessionKey) break
-        if (session.events.readyState === 'open' && session.activeUtterance === undefined) {
+        if (session.events.readyState === 'open' && session.peer.connectionState === 'connected' && session.activeUtterance === undefined) {
+          if (command.action === 'open') { await complete(true, 'voice-channel-connected', 'codex-live'); return }
           const admitted = await new Promise<boolean | undefined>(resolve => {
             const timer = window.setTimeout(() => resolve(undefined), 10_000)
             const sent = sendCodexRealtimeUtterance(session, { sessionKey, key: 'agent:' + command.id,
               echoText: text, instructions: text, onAdmission: accepted => { window.clearTimeout(timer); resolve(accepted) } })
             if (!sent) { window.clearTimeout(timer); resolve(false) }
           })
-          await complete(admitted === true, admitted === true ? 'speech-accepted'
-            : admitted === undefined ? 'speech-admission-unknown' : 'speech-rejected', 'codex-live')
+          if (admitted !== true) {
+            await complete(false, admitted === undefined ? 'speech-admission-unknown' : 'speech-rejected', 'codex-live')
+            if (session.outputOnly && codexRealtimeVoiceSession === session) await stopCodexRealtimeVoice()
+            return
+          }
+          // appendSpeech acceptance only confirms submission. Require browser
+          // playback and inbound audio transport before acknowledging delivery.
+          const audioDeadline = Math.min(command.expiresAt, Date.now() + 20_000)
+          while (!disposed && codexRealtimeVoiceSession === session && Date.now() < audioDeadline) {
+            if (session.audio.dataset.phoenixAudioPlayback === 'blocked') {
+              await complete(false, 'browser-audio-blocked', 'codex-live')
+              return
+            }
+            if ((session.audioInboundBytes ?? 0) > (session.audioRequestInboundBytes ?? 0)
+              && session.audio.dataset.phoenixAudioPlayback === 'playing' && !session.audio.muted) {
+              await complete(true, 'audio-transport-received', 'codex-live')
+              return
+            }
+            await new Promise<void>(resolve => window.setTimeout(resolve, 200))
+          }
+          await complete(false, codexRealtimeVoiceSession === session ? 'no-audio-transport' : 'voice-transport-lost', 'codex-live')
+          if (session.outputOnly && codexRealtimeVoiceSession === session) await stopCodexRealtimeVoice()
           return
         }
         await new Promise<void>(resolve => window.setTimeout(resolve, 200))
       }
       await complete(false, 'voice-channel-not-ready')
+      if (codexRealtimeVoiceSession?.key === sessionKey && codexRealtimeVoiceSession.outputOnly) await stopCodexRealtimeVoice()
     } catch {
-      // An unacknowledged claim expires; never report fabricated playback.
+      if (claimedId !== undefined) {
+        await remote.conversationAgentRealtimeComplete?.({ key: sessionKey, id: claimedId, accepted: false,
+          reason: 'voice-control-execution-failed' }).catch(() => undefined)
+      }
     } finally { polling = false }
   }
   const timer = window.setInterval(() => { void poll() }, 1000)
