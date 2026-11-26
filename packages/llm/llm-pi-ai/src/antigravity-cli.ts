@@ -10,6 +10,7 @@ import { CallId, LlmAdapter, LlmError } from '@phoenix-ai/dsh-llm'
 import type { GenerateOptions, LlmModelInfo, StreamChunk } from '@phoenix-ai/dsh-llm'
 import { antigravityExecutable, antigravityInstalled, ensureAntigravityInstalled, installAntigravity } from './antigravity-install.ts'
 import { relayGoogleCliLogin } from './antigravity-login.ts'
+import { createAntigravityQuotaReader } from './antigravity-quota.ts'
 
 export const GOOGLE_ACCOUNT_PROVIDER = 'google-account'
 export const ANTIGRAVITY_MODEL_PROVIDER = 'google-antigravity'
@@ -73,7 +74,13 @@ export function runGoogleCli(args: readonly string[], input = '', signal?: Abort
     let output = ''
     let errorText = ''
     let done = false
-    const deadline = setTimeout(() => { child.kill() }, 180_000)
+    const streaming = args.includes('--input-format') && args.includes('stream-json') && input !== ''
+    let terminalSeen = false
+    let pendingLine = ''
+    const deadline = setTimeout(() => {
+      finish(new LlmError('Antigravity agotó el tiempo de respuesta.', 'TIMEOUT'))
+      child.kill()
+    }, 180_000)
     deadline.unref()
     const finish = (error?: Error): void => {
       if (done) return
@@ -86,6 +93,20 @@ export function runGoogleCli(args: readonly string[], input = '', signal?: Abort
     child.stderr.setEncoding('utf8')
     child.stdout.on('data', (data: string) => {
       output += data
+      if (streaming && !terminalSeen) {
+        pendingLine += data
+        const lines = pendingLine.split('\n')
+        pendingLine = lines.pop() ?? ''
+        for (const line of lines) {
+          try {
+            if (JSON.parse(line).event === 'result') {
+              terminalSeen = true
+              child.stdin.end()
+              break
+            }
+          } catch { /* diagnostics are not terminal events */ }
+        }
+      }
       if (output.length > 8 * 1024 * 1024) {
         child.kill()
         finish(new LlmError('Google CLI output too large', 'GOOGLE_CLI_OUTPUT'))
@@ -105,11 +126,20 @@ export function runGoogleCli(args: readonly string[], input = '', signal?: Abort
           authFailure ? 'AUTH_REQUIRED' : 'GOOGLE_CLI_FAILED',
         ))
       }
+      else if (streaming && !terminalSeen) finish(new LlmError('Antigravity cerró sin confirmar el turno completo.', 'GOOGLE_CLI_PROTOCOL'))
       else finish()
       clearTimeout(deadline)
     })
-    child.stdin.on('error', () => { /* Process close reports the failure. */ })
-    child.stdin.end(input)
+    child.stdin.on('error', () => {
+      if (!terminalSeen && !done) {
+        finish(new LlmError('No se pudo entregar el mensaje completo a Antigravity.', 'TRANSPORT'))
+        child.kill()
+      }
+    })
+    // NDJSON is a live session: do not send EOF until the terminal result.
+    // Explicit UTF-8 also preserves accents and non-ASCII text on Windows.
+    if (streaming) child.stdin.write(Buffer.from(input, 'utf8'))
+    else child.stdin.end(input)
   })
 }
 
@@ -154,6 +184,12 @@ export function encodeGoogleUserEvent(text: string): string {
 /** Preserve the ordered transcript and put the actual latest turn at the end. */
 export function buildPrompt(request: Pick<GenerateOptions, 'system' | 'messages' | 'tools' | 'model'>): string {
   const turns: string[] = []
+  const latest = request.messages.at(-1)
+  if (latest === undefined || latest.role !== 'user' || !latest.content.some(block => block.type === 'tool-result' || (block.type === 'text' && block.text.trim()))) {
+    throw new LlmError('Antigravity no recibió un turno actual de usuario o herramienta.', 'GOOGLE_CLI_EMPTY_INPUT')
+  }
+  const latestText = latest.content.map(block => block.type === 'text' ? block.text : JSON.stringify(block)).join('\n')
+  turns.push('TURNO ACTUAL DE PHOENIX (responde a este contenido):\n' + latestText)
   if (request.system) turns.push('SYSTEM:\n' + request.system)
   turns.push('Modelo seleccionado en PHOENIX: ' + request.model + '. Responde al último turno de la conversación, utilizando el historial como contexto.')
   if (request.tools?.length) {
@@ -260,16 +296,19 @@ export function registerGoogleAccountCli(ctx: Context): void {
   ctx.llm.registerAdapter([ANTIGRAVITY_MODEL_PROVIDER], new GoogleAccountCliAdapter(ANTIGRAVITY_MODEL_PROVIDER))
   // Preserve conversations saved using the temporary native route identifier.
   ctx.llm.registerAdapter([GOOGLE_ACCOUNT_PROVIDER], new GoogleAccountCliAdapter(GOOGLE_ACCOUNT_PROVIDER))
+  const readQuota = createAntigravityQuotaReader(runGoogleCli)
   ctx.inject(['authorization', 'credentials'], (authorized) => {
     authorized.authorization.registerFlow({
       key: GOOGLE_ACCOUNT_KEY,
       label: 'Google Antigravity CLI (cuenta Google)',
       methods: [{ id: 'cli', label: 'Instalar y conectar cuenta Google' }],
-      async inspect() {
-        if (!await antigravityInstalled().catch(() => false)) return undefined
+      async inspect(signal) {
         const stored = await authorized.credentials.readRecord(GOOGLE_ACCOUNT_KEY)
-        return stored === undefined ? undefined : {
+        if (stored === undefined) return undefined
+        const groups = await readQuota(signal).catch(() => undefined)
+        return {
           kind: 'account', provider: 'Google Antigravity CLI', accountType: 'google-native-cli',
+          ...groups === undefined ? {} : { quotaGroups: groups },
         }
       },
       async run(session) {
