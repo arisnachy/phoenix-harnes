@@ -18,11 +18,16 @@ interface AccountTelemetry {
   provider: string
   primaryLimit?: RateLimitWindow
   secondaryLimit?: RateLimitWindow
+  quotaGroups?: AntigravityGroup[]
 }
+
+interface AntigravityBucket { id: string; observedAt: number; durationMinutes?: number; remainingPercent?: number; resetsAt?: number; disabled?: boolean }
+interface AntigravityGroup { name: string; buckets: AntigravityBucket[] }
 
 interface AuthorizationEntry {
   key: string
   label?: string
+  stored?: { kind: string }
   telemetry?: AccountTelemetry
 }
 
@@ -147,6 +152,7 @@ export function CodexQuotaRemaining({
     () => quota === undefined ? undefined : true,
   )
   const [clockMs, setClockMs] = useState(() => Date.now())
+  const [agy, setAgy] = useState<{ groups: AntigravityGroup[] } | undefined>(undefined)
   const authorizationRef = useRef(authorization)
   authorizationRef.current = authorization
 
@@ -170,8 +176,10 @@ export function CodexQuotaRemaining({
           schedule(QUOTA_STARTUP_RETRY_MS)
           return
         }
-        const accountEntries = (response.result.value.entries as AuthorizationEntry[])
-          .filter(isOpenAIAccount)
+        const entries = response.result.value.entries as AuthorizationEntry[]
+        const agyEntry = entries.find(entry => entry.key === 'llm-pi-ai/google-account' && (entry.stored?.kind === 'grant' || entry.telemetry?.provider === 'Google Antigravity CLI'))
+        setAgy(agyEntry === undefined ? undefined : { groups: agyEntry.telemetry?.quotaGroups ?? [] })
+        const accountEntries = entries.filter(isOpenAIAccount)
         if (accountEntries.length === 0) {
           // Authorization registration is asynchronous during page/Host startup.
           // An empty catalog is therefore not proof of logout: preserve the last
@@ -217,12 +225,13 @@ export function CodexQuotaRemaining({
   }, [cacheKey])
 
   useEffect(() => {
-    if (quota === undefined) return
+    if (quota === undefined && agy === undefined) return
     setClockMs(Date.now())
     const timer = window.setInterval(() => { setClockMs(Date.now()) }, 1_000)
     return () => { window.clearInterval(timer) }
-  }, [quota])
+  }, [quota, agy])
 
+  const renderCodex = () => {
   if (quota === undefined) {
     // A known Codex account whose native telemetry is still warming (for
     // example while Codex performs a state-db backfill) keeps a quiet visible
@@ -341,6 +350,34 @@ export function CodexQuotaRemaining({
           </span>
         </span>
       ))}
+    </span>
+  )
+  }
+  const codex = renderCodex()
+  if (agy === undefined) return codex
+  const windows = agy.groups.flatMap(group => group.buckets.map(bucket => ({ group: group.name, bucket })))
+  return (
+    <span style={{ display: 'flex', flexDirection: 'column', alignItems: wide ? 'flex-end' : 'center', gap: 4, minWidth: 0 }}>
+      {codex}
+      <span className={wide ? css.root : css.railRoot} role="group" aria-label="Google Antigravity usage limits"
+        style={wide ? { height: 'auto', maxWidth: '100%', flexWrap: 'wrap', gap: 4 } : { gap: 5 }}>
+        <span className={css.railLabel} title="Google Antigravity">AGY</span>
+        {windows.length === 0 ? <span className={css.railValue} title="Cuota de Google Antigravity no disponible">—</span> : windows.map(({ group, bucket }) => {
+          const label = bucket.durationMinutes === 300 ? '5h' : bucket.durationMinutes === 10080 ? '7d' : '·'
+          const fresh = Number.isFinite(bucket.observedAt) && bucket.observedAt <= clockMs && clockMs - bucket.observedAt <= 120_000
+            && typeof bucket.resetsAt === 'number' && bucket.resetsAt * 1000 > clockMs && bucket.disabled !== true
+          const valid = typeof bucket.remainingPercent === 'number' && Number.isFinite(bucket.remainingPercent) && bucket.remainingPercent >= 0 && bucket.remainingPercent <= 100
+          const value = fresh && valid ? String(Math.round(bucket.remainingPercent!)) + '%' : '—'
+          const reset = fresh && bucket.resetsAt !== undefined ? formatResetCountdown(bucket.resetsAt, clockMs) : undefined
+          return <span key={group + '/' + bucket.id} className={wide ? css.copy : css.railWindow}
+            title={group + ' · ' + bucket.id + ' · ' + value + (reset === undefined ? '' : ' · ↻ ' + reset)}
+            aria-label={'Antigravity ' + group + ' ' + label + ' ' + value}>
+            <span className={css.railLabel}>{label}</span>
+            <strong className={css.railValue}>{value}</strong>
+            {reset === undefined ? null : <span className={css.railReset}>↻ {reset}</span>}
+          </span>
+        })}
+      </span>
     </span>
   )
 }
