@@ -5,7 +5,7 @@ import {
   nexusTurnText, nexusTurnHasHumanImage,
   nexusReadNativeCodexQuota, nexusCodexFreshReserve, nexusEconomyEffort, nexusAdaptiveEffort,
   nexusExactResponseTarget, nexusExactResponseQuality, installNexusRuntime,
-  nexusNumericResponseTarget, nexusNumericResponseQuality, nexusOperatorPolicy, nexusQuotaView,
+  nexusNumericResponseTarget, nexusNumericResponseQuality, nexusOperatorPolicy, nexusQuotaView, nexusRequiredContext,
 } from '../src/nexus-runtime.ts'
 
 describe('ORIÓN synthetic model route', () => {
@@ -139,7 +139,7 @@ describe('Nexus installed runtime failover', () => {
         listModels: async (provider: string) => provider === 'openrouter'
           ? [{ id: 'fixture/free', name: 'Free' }]
           : [{ id: 'gpt-6-luna', name: 'Luna' }],
-        resolveModelInfo: async () => ({ reasoning: { efforts: [{ id: 'low' }] } }),
+        resolveModelInfo: async () => ({ context: { contextWindow: 128000 }, reasoning: { efforts: [{ id: 'low' }] } }),
       },
     }
     const profiles = new Map([['openrouter', {}], ['openai-codex', {}]])
@@ -148,7 +148,7 @@ describe('Nexus installed runtime failover', () => {
       { type: 'user/message', data: { source: { kind: 'user' },
         content: [{ type: 'text', text: 'Hola' }] } },
     ] } }
-    const payload = { agent, turn: 1, step: 1, signal: new AbortController().signal }
+    const payload = { agent, turn: 1, step: 1, signal: new AbortController().signal, approximateInputTokens: 4000 }
     const selected = { provider: NEXUS_PROVIDER, model: NEXUS_MODEL }
     type Route = { provider: string; model: string; reasoningEffort?: string }
     type Failure = typeof payload & { provider: string; failure: { code: string } }
@@ -202,6 +202,7 @@ describe('Nexus installed runtime failover', () => {
       expect(await route(payload, async () => selected)).toMatchObject({
         provider: 'openrouter', model: 'fixture/free',
       })
+      await expect(route({ ...payload, agent: { session: { ...agent.session, id: 'large-context' } }, approximateInputTokens: 50000 }, async () => selected)).rejects.toThrow('no verified free model')
       expect(await fail({ ...payload, provider: 'openrouter', failure: { code: 'RATE_LIMIT' } },
         async () => undefined)).toEqual({ kind: 'retry' })
       await expect(route(payload, async () => selected)).rejects.toMatchObject({ code: 'NEXUS_NO_ELIGIBLE_ROUTE' })
@@ -253,5 +254,16 @@ describe('Nexus native account snapshot', () => {
     })
     expect(view.exactTokenBalance).toBeNull()
     expect(nexusQuotaView(undefined, now).fiveHours).toEqual({ status: 'unknown' })
+  })
+})
+
+
+describe('Nexus live context budget', () => {
+  it('reserves output and estimation margin for actual request size', () => {
+    expect(nexusRequiredContext(4000)).toBe(7048)
+    expect(nexusRequiredContext(50000, 4096)).toBe(66596)
+    expect(nexusRequiredContext(undefined)).toBeUndefined()
+    expect(nexusRequiredContext(-1)).toBeUndefined()
+    expect(nexusRequiredContext(1000, 0)).toBeUndefined()
   })
 })
