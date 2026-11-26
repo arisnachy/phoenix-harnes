@@ -437,6 +437,14 @@ export function AuthorizationAttemptProgress(props: {
       </div>
     )
   }
+  const antigravity = attempt.key === 'llm-pi-ai/google-account' || attempt.key === 'llm-pi-ai/google-antigravity'
+  const legacyPrompt = antigravity && /^(?:INSTALAR|VERIFICAR)$/iu.test(attempt.prompt?.placeholder ?? '')
+  if (legacyPrompt) {
+    return <div role="alert" className={styles['error']}>
+      <p>El servicio activo de PHOENIX todavía utiliza la autenticación anterior. Cancela este intento y reinicia PHOENIX después de aplicar la actualización. No pegues el código en este campo.</p>
+      <button type="button" className={styles['secondaryButton']} onClick={props.cancel}>{props.t('cancel')}</button>
+    </div>
+  }
   return (
     <>
       {attempt.message === undefined
@@ -472,13 +480,14 @@ export function AuthorizationAttemptProgress(props: {
                 <input
                   type={attempt.prompt.kind === 'secret' ? 'password' : 'text'}
                   autoComplete="off"
+                  autoFocus={antigravity && attempt.prompt.kind === 'secret'}
                   value={props.answer}
                   placeholder={attempt.prompt.placeholder}
                   onChange={(event) => { props.setAnswer(event.target.value) }}
                 />
               )}
           </label>
-          <button type="button" className={styles['secondaryButton']} onClick={() => props.submitAnswer()}>{props.t('continueAuthorization')}</button>
+          <button type="button" className={styles['secondaryButton']} disabled={antigravity && props.answer.trim() === ''} onClick={() => props.submitAnswer()}>{antigravity && attempt.prompt.kind === 'secret' ? 'Completar autenticación' : props.t('continueAuthorization')}</button>
         </div>
       )}
       {attempt.status === 'pending'

@@ -25,6 +25,12 @@ export function googleCliConsentUrl(output: string): string | undefined {
   return undefined
 }
 
+/** Some CLI versions open the browser themselves and only print a code prompt. */
+export function googleCliRequestsCode(output: string): boolean {
+  const cleaned = output.replace(/\u001b\[[0-?]*[ -/]*[@-~]/gu, '').slice(-4096)
+  return /(?:paste|enter|provide|input|type|pega|introduce|ingresa)[^\r\n]{0,120}(?:authorization|authentication|verification|oauth|auth|autorizaci[oó]n|verificaci[oó]n)?\s*(?:code|c[oó]digo)|(?:authorization|authentication|verification|oauth|auth)\s+code\s*:/iu.test(cleaned)
+}
+
 /** Keep stdin open until the code is submitted to this same login process. */
 export function relayGoogleCliLogin(child: ChildProcessWithoutNullStreams, interaction: LoginInteraction): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -53,10 +59,10 @@ export function relayGoogleCliLogin(child: ChildProcessWithoutNullStreams, inter
       output = (output + chunk).slice(-64 * 1024)
       // Wait for a terminated URL so a split stdout chunk cannot truncate PKCE parameters.
       const url = googleCliConsentUrl(output.slice(0, Math.max(output.lastIndexOf('\n'), output.lastIndexOf('\r')) + 1))
-      if (url === undefined) return
+      if (url === undefined && !googleCliRequestsCode(output)) return
       prompted = true
       output = ''
-      interaction.notify({ message: 'Inicia sesión en Google. Copia el código que aparece en la página de Antigravity y pégalo aquí.', url })
+      interaction.notify({ message: 'Inicia sesión en Google. Copia el código que aparece en la página de Antigravity y pégalo aquí.', ...url === undefined ? {} : { url } })
       void interaction.prompt({
         kind: 'secret', message: 'Código de autorización de Google Antigravity',
         placeholder: 'Pega el código de Google aquí', signal: promptAbort.signal,
