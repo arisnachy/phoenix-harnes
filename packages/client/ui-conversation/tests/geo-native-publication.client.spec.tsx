@@ -53,6 +53,16 @@ describe('native geographic map delivery and recovery',()=>{
     expect(action).toHaveBeenCalledWith(expect.stringContaining('phoenix_geo_map'),'draft')
     expect(action.mock.calls[0]?.[0]).toContain('no inventes provincias')
   })
+  it('does not treat a generic interactive webpage as a published map',()=>{
+    render(<AssistantMarkdown
+      blocks={[{kind:'text',text:'¡Listo! Ya creé una página web responsiva e interactiva en index.html con un panel interactivo y desplazamiento suave.'}] as unknown as ComponentProps<typeof AssistantMarkdown>['blocks']}
+      streaming={false}
+      renderMessageImages={()=>null}
+      t={((key:string)=>key) as unknown as ComponentProps<typeof AssistantMarkdown>['t']}
+    />)
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByText(/afirma que publicó un mapa/u)).toBeNull()
+  })
   it('keeps fictional-map recovery routed to the narrative engine',()=>{
     const action=vi.fn()
     const blocks=[{kind:'text',text:'El mapa de Isla Bruma quedó publicado.'}]

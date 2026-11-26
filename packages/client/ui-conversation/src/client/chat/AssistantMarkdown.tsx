@@ -16,6 +16,10 @@ import { GenerativeUi, splitGenerativeUiText } from './GenerativeUi.tsx'
 import type { CanvasAction } from './GenerativeCanvas.tsx'
 import { PlainOutputFormatter, splitPlainOutputText } from './PlainOutputFormatter.tsx'
 
+const mapPublicationVerb = '(?:cre[eé]|publiqu[eé]|publicad[oa]|qued[oó] publicad[oa]|fue publicad[oa]|est[aá] publicad[oa]|listo)'
+const mapTerm = '(?:\\bmapa(?:\\s+(?:interactiv[oa]|geográfic[oa]|cartográfic[oa]))?\\b|\\batlas\\b|\\bcartograf(?:ía|ico)\\b|\\bvisor\\s+(?:geográfic[oa]|cartográfic[oa])\\b)'
+const mapPublicationClaim = new RegExp(`${mapTerm}.{0,120}${mapPublicationVerb}|${mapPublicationVerb}.{0,120}${mapTerm}`, 'i')
+
 export interface AssistantMarkdownProps {
   blocks: readonly AssistantBlock[]
   streaming: boolean
@@ -142,8 +146,12 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
   }
   // A prose success claim does NOT prove native map delivery. Warn visibly when
   // the response contains no renderable map contract (no auto-fabricated map).
+  // Require an explicit map term near the publication claim.
+  // Generic web copy such as "creé una página interactiva" must not trigger
+  // a missing-map recovery notice merely because it contains "creé" and
+  // "interactiva" in the same sentence.
   const claimsPublishedMap = !streaming && blocks.some(block => block.kind === 'text'
-    && /(?:cre[eé]|publiqu[eé]|publicad[oa]|qued[oó] publicad[oa]|mapa interactivo).{0,140}(?:mapa|atlas|artefacto|interactiv[oa]|publicad[oa])|(?:mapa|atlas).{0,90}(?:qued[oó] publicad[oa]|fue publicad[oa]|est[aá] publicad[oa])/i.test(block.text))
+    && mapPublicationClaim.test(block.text))
   const containsNativeMap = blocks.some(block => block.kind === 'text'
     && splitGenerativeUiText(block.text, { streaming: false }).some(segment => segment.kind === 'ui'
       && (segment.block.component === 'scene_map' || segment.block.component === 'geo_map')))
