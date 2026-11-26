@@ -28,7 +28,7 @@ export function sportsClientBundleReady(root){
     // still render the obsolete per-game "Registrar mi apuesta" form. A valid
     // bundle must carry the receipt-linked tracker introduced in November 2026.
     const required=['sports_game_card','sports_ticket_card','sports_ticket_bundle_card','sports-evidence',
-      'Seguimiento automático del boleto']
+      'data-ticket-reference']
     return required.every(contract=>client.includes(contract))
       && !client.includes('Registrar mi apuesta para seguir el objetivo')
   } catch {return false}
@@ -73,7 +73,7 @@ export function verifyFrontend({
     if(status!==0)throw new Error('Falló '+['pnpm',...args].join(' ')+'. No iniciaré la versión antigua del frontend. Verifica la compilación y las dependencias.')
   }
   if(!existsSync(index))throw new Error('Vite finalizó sin generar apps/web/dist/index.html; no iniciaré una interfaz desactualizada.')
-  if(!sportsClientBundleReady(root))throw new Error('El plugin cliente de conversación no contiene sports_game_card/sports_ticket_card. El build del plugin falló o usó otro paquete; no iniciaré el UI antiguo.')
+  if(!sportsClientBundleReady(root))throw new Error('El plugin cliente de conversación no contiene las tarjetas deportivas y el seguimiento por referencia del boleto requeridos por esta versión.')
   if(readRevision(root)!==revision)throw new Error('El checkout cambió durante la compilación. Vuelve a ejecutar pnpm phoenix.')
   const marker=join(dirname(index),STAMP)
   mkdirSync(dirname(marker),{recursive:true})
