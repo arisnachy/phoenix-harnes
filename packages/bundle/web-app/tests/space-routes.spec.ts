@@ -140,3 +140,28 @@ it('requires explicit reconciliation and preserves independent concurrent metada
   expect(merged.json).toMatchObject({item:{title:'Remote title',content:'Local text',revision:3}})
   expect((await request(h,path+'/reconcile','POST',{...draft,content:'Conflicting text',confirm:true})).status).toBe(409)
 })
+
+it('exports editable Word from saved documents and respects distribution policy',async()=>{
+  const h=setup().handler!
+  const created=await request(h,'/space-api/items','POST',{
+    kind:'document',space:'personal',title:'Informe',mime:'text/markdown',
+    content:'# Informe\n\n## Resultados\n**Salud** & educación\n- Acción',
+  })
+  expect(created.status).toBe(201)
+  const id=(created.json as {item:{id:string}}).item.id
+  const path='/space-api/items/'+id
+  const result=await request(h,path+'/export?format=docx')
+  expect(result.status).toBe(200)
+  expect(result.headers['content-type']).toContain('wordprocessingml')
+  expect(result.data.readUInt32LE(0)).toBe(0x04034b50)
+  const body=result.data.toString('utf8')
+  expect(body).toContain('word/document.xml')
+  expect(body).toContain('word/styles.xml')
+  expect(body).toContain('w:val="Heading1"')
+  expect(body).toContain('w:val="Heading2"')
+  expect(body).toContain('<w:b/>')
+  expect(body).toContain('&amp; educación')
+  expect(body).toContain('• Acción')
+  expect((await request(h,path+'/distribution','PUT',{revision:1,restricted:true,confirm:true})).status).toBe(200)
+  expect((await request(h,path+'/export?format=docx')).status).toBe(403)
+})

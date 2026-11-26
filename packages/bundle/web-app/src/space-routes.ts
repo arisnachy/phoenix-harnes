@@ -4,7 +4,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-host-webserver'
 import { parseSpaceClipboard, syntheticSpaceDataset } from './space-workflows.ts'
 import { PhoenixSpaceStore } from './space-store.ts'
-import { exportPptx, exportXlsx, exportStaticSpaceApp } from './space-office.ts'
+import { exportDocx, exportPptx, exportXlsx, exportStaticSpaceApp } from './space-office.ts'
 import { mkdirSync, writeFileSync, mkdtempSync } from 'node:fs'
 import { join, extname } from 'node:path'
 import openNative from 'open'
@@ -221,6 +221,11 @@ export function registerSpaceRoutes(ctx:Context):void {
         }
         if(operation==='export'&&method==='GET'&&!item.deleted){
           const format=url.searchParams.get('format')
+          if(format==='docx'&&item.kind==='document'&&item.bytes===0&&['text/markdown','text/plain'].includes(item.mime)){
+            download(res,exportDocx(item.content),
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document',item.title+'.docx')
+            return
+          }
           if(format==='pptx'&&item.kind==='slides'){
             download(res,exportPptx(item.content),
               'application/vnd.openxmlformats-officedocument.presentationml.presentation',item.title+'.pptx')
