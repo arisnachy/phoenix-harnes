@@ -145,35 +145,48 @@ export function parseGoogleResult(value: string): GoogleCliResult {
   return result
 }
 
-function buildPrompt(request: GenerateOptions): string {
+/** Encode the documented stream-json user event, not a bare content string. */
+export function encodeGoogleUserEvent(text: string): string {
+  if (text.trim() === '') throw new LlmError('Antigravity no recibió contenido de texto.', 'GOOGLE_CLI_EMPTY_INPUT')
+  return JSON.stringify({ event: 'user', message: { content: [{ type: 'text', text }] } }) + '\n'
+}
+
+/** Preserve the ordered transcript and put the actual latest turn at the end. */
+export function buildPrompt(request: Pick<GenerateOptions, 'system' | 'messages' | 'tools' | 'model'>): string {
   const turns: string[] = []
   if (request.system) turns.push('SYSTEM:\n' + request.system)
-  for (const message of request.messages) {
-    for (const block of message.content) {
-      if (block.type === 'image' || block.type === 'file') {
-        throw new LlmError('El acceso Google CLI solo admite texto en PHOENIX.', 'GOOGLE_CLI_TEXT_ONLY')
-      }
-    }
-    turns.push(message.role.toUpperCase() + ':\n' + JSON.stringify(message.content))
-  }
+  turns.push('Modelo seleccionado en PHOENIX: ' + request.model + '. Responde al último turno de la conversación, utilizando el historial como contexto.')
   if (request.tools?.length) {
     turns.push('Herramientas de PHOENIX (no las ejecutes tú): ' + JSON.stringify(request.tools))
     turns.push('Devuelve un JSON. Para respuesta: {"kind":"final","text":"respuesta"}. '
       + 'Para solicitar herramientas: {"kind":"tools","calls":[{"name":"nombre","arguments":"objeto JSON serializado"}]}. '
       + 'Solo PHOENIX ejecutará herramientas y devolverá sus resultados.')
   }
+  const conversation: string[] = []
+  for (const message of request.messages) {
+    for (const block of message.content) {
+      if (block.type === 'image' || block.type === 'file') {
+        throw new LlmError('El acceso Google CLI solo admite texto en PHOENIX.', 'GOOGLE_CLI_TEXT_ONLY')
+      }
+    }
+    const text = message.content.map(block => block.type === 'text' ? block.text : JSON.stringify(block)).join('\n')
+    if (text.trim()) conversation.push(message.role.toUpperCase() + ':\n' + text)
+  }
+  if (conversation.length === 0) throw new LlmError('Antigravity no recibió mensajes de conversación.', 'GOOGLE_CLI_EMPTY_INPUT')
+  turns.push('CONVERSACIÓN (orden cronológico):\n' + conversation.join('\n\n'))
   return turns.join('\n\n')
+
 }
 
 export class GoogleAccountCliAdapter extends LlmAdapter {
-  constructor(private readonly route: string = ANTIGRAVITY_MODEL_PROVIDER) { super() }
+  constructor(private readonly route: string = ANTIGRAVITY_MODEL_PROVIDER, private readonly execute = runGoogleCli) { super() }
 
   override providerInfo(): { id: string; name: string } {
     return { id: this.route, name: 'Google Antigravity CLI (cuenta Google)' }
   }
   override async listModels(): Promise<readonly LlmModelInfo[]> {
     try {
-      const slugs = parseGoogleModels(await runGoogleCli(['models']))
+      const slugs = parseGoogleModels(await this.execute(['models']))
       return slugs.map(id => ({ provider: this.route, id, name: 'Gemini · ' + id, inputModalities: ['text'] as const }))
     } catch { return [] }
   }
@@ -185,9 +198,10 @@ export class GoogleAccountCliAdapter extends LlmAdapter {
     if (request.reasoningEffort === 'low' || request.reasoningEffort === 'medium' || request.reasoningEffort === 'high') {
       flags.push('--effort', request.reasoningEffort)
     }
-    const input = JSON.stringify({ event: 'user', message: { content: buildPrompt(request) } }) + '\n'
-    const result = parseGoogleResult(await runGoogleCli(flags, input, request.signal))
+    const input = encodeGoogleUserEvent(buildPrompt(request))
+    const result = parseGoogleResult(await this.execute(flags, input, request.signal))
     let response = result.response ?? ''
+    if (!response.trim()) throw new LlmError('Antigravity terminó sin devolver contenido.', 'GOOGLE_CLI_EMPTY_OUTPUT')
     let calls: Array<{ name: string; arguments: string }> | undefined
     if (request.tools?.length) {
       let decoded: unknown
@@ -288,11 +302,12 @@ export function registerGoogleAccountCli(ctx: Context): void {
         session.notify({ message: 'Comprobando automáticamente los modelos y la respuesta de tu cuenta…' })
         const first = parseGoogleModels(await runGoogleCli(['models'], '', session.signal))[0]
         if (first === undefined) throw new LlmError('No se encontraron modelos de cuenta', 'NO_MODELS')
-        const test = JSON.stringify({ event: 'user', message: { content: 'Responde solo OK.' } }) + '\n'
+        const challenge = 'PHOENIX-' + randomUUID()
+        const test = encodeGoogleUserEvent('Responde exclusivamente con este texto exacto, sin formato: ' + challenge)
         const verified = parseGoogleResult(await runGoogleCli([
           '--input-format', 'stream-json', '--output-format', 'stream-json', '--model', first, '--sandbox', '--mode', 'default', '--disable-slash-commands',
         ], test, session.signal))
-        if (!verified.response?.trim()) throw new LlmError('No respondió el modelo', 'AUTH_UNVERIFIED')
+        if (verified.response?.trim() !== challenge) throw new LlmError('Antigravity respondió, pero no confirmó la recepción exacta del mensaje de prueba.', 'AUTH_UNVERIFIED')
         await authorized.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, async () => ({
           kind: 'grant', payload: { kind: 'native-cli-session-marker', verifiedAt: new Date().toISOString() },
         }))
