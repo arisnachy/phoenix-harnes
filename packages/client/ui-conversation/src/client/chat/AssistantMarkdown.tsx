@@ -13,7 +13,8 @@ import type { MarkdownFileMentions } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ChatNodeOwnerProps, ChatViewSlotProps } from '../contract/slots.ts'
 import css from './AssistantMarkdown.module.css'
 import { GenerativeUi, splitGenerativeUiText } from './GenerativeUi.tsx'
-import type { CanvasAction } from './GenerativeCanvas.tsx'
+import { GenerativeCanvas, type CanvasAction } from './GenerativeCanvas.tsx'
+import { responseTableChart } from './ResponseTableChart.ts'
 import { PlainOutputFormatter, splitPlainOutputText } from './PlainOutputFormatter.tsx'
 
 export interface AssistantMarkdownProps {
@@ -49,6 +50,8 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
   })
   if (!hasVisible) return null
   const rendered: ReactNode[] = []
+  let hasNativeUi = false
+  const visibleText: string[] = []
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i]
     if (block === undefined) continue
@@ -72,11 +75,13 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
           text += next.text
           i += 1
         }
+        visibleText.push(text)
         const segments = splitGenerativeUiText(text, { streaming })
         for (let index = 0; index < segments.length; index++) {
           const segment = segments[index]
           if (!segment) continue
           if (segment.kind === 'ui') {
+            hasNativeUi = true
             rendered.push(<GenerativeUi key={first+':ui:'+index} block={segment.block}
               onAction={onUiAction} allowArtifactAuto={allowArtifactAuto===true&&!streaming&&!interrupted} allowArtifactOpen={allowArtifactOpen===true&&!interrupted} {...(conversationId === undefined ? {} : { conversationId })} />)
             continue
@@ -139,6 +144,12 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
           />,
         )
     }
+  }
+  // Upgrade a strict numeric Markdown time series even when the selected model
+  // cannot emit native UI. Keep the source text and avoid duplicate charts.
+  if (!streaming && !interrupted && !hasNativeUi) {
+    const chart = responseTableChart(visibleText.join('\n'))
+    if (chart) rendered.push(<GenerativeCanvas key="response-table-chart" spec={chart} />)
   }
   // A prose success claim does NOT prove native map delivery. Warn visibly when
   // the response contains no renderable map contract (no auto-fabricated map).
