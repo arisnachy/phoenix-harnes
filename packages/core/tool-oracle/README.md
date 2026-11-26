@@ -2,16 +2,6 @@
 
 Model-facing, offline mathematical nucleus for bounded scientific forecasts and causal what-if scenarios. It **does not** claim to predict every possible future. Kira may invoke the tools after fetching evidence with existing research tools. The research and source-backed forecasting tools use the existing PHOENIX web provider. Source discovery/retrieval is not independent scientific authentication.
 
-## Model Experience
-
-- oracle_scientific_forecast receives a JSON object containing a required source and mode.
-- free-fall calculates time for an ideal body initially at rest, ignoring drag.
-- rgb-light performs explicitly linear additive RGB channel mixing, **not** pigment mixing.
-- time-series takes equispaced numeric history, an integer horizon (1–30 steps), stepHours, lastObservedAt and unit; compares persistence with linear drift using walk-forward tests and an empirical 80% nominal interval. The model selection and interval are **not an independent holdout**.
-- causal-scenario evaluates a user-supplied acyclic graph of linear structural equations and optionally a do-style intervention. Coefficients are **not** learned or causally identified.
-- oracle_audit_prediction accepts numeric observed outcomes after the target horizon; returns an absolute error, labeled as **unverified report**, never certified truth.
-- oracle_forecast_scorecard reads local append-only records.
-
 ## Example
 
 Use oracle_scientific_forecast with inputJson:
@@ -24,7 +14,6 @@ Model-supplied sources are **not verified**; do not pass personal health records
 ## Checks
 
 node --experimental-strip-types --test packages/core/tool-oracle/tests/*.mjs
-
 
 ## Investigación universal y porcentaje fundamentado
 - `oracle_research_forecast(question,targetAt)` usa el proveedor web real de PHOENIX para investigar cualquier pregunta sobre un acontecimiento futuro: aporta fuentes, fechas y tareas de verificación. No autentica fuentes ni inventa probabilidades.
@@ -50,7 +39,6 @@ The additional `oracle_forecast_public_event_csv` tool accepts a HTTPS CSV with 
 
 For one-off events, questions without repeatable historical outcomes, or cases with insufficient/poorly calibrated data, ORÁCULO explicitly abstains from printing a numeric probability.
 
-
 ## ORÁCULO · Universal scientific intelligence and elegant charts
 
 The universal research router (`oracle_plan_research`) builds an inspectable plan for any arbitrary future hypothesis: observable event, horizon, scientific domain, evidence requirements, model route and explicit missing information. It does **not** invent outcome rates, physical laws or scientific certainty. `oracle_research_forecast` shows freshness, source diversity and evidence-risk diagnostics, based only on unverified search metadata.
@@ -73,6 +61,16 @@ A user question is not assumed to have a meaningful probability. One-off geopoli
 - Source agreement/contradiction panel, version library and due-outcome review queue.
 
 All first-party UI is schema-bounded and rendered through PHOENIX GenerativeCanvas; untrusted source HTML is never executed.
+
+## Model Experience
+
+- oracle_scientific_forecast receives a JSON object containing a required source and mode.
+- free-fall calculates time for an ideal body initially at rest, ignoring drag.
+- rgb-light performs explicitly linear additive RGB channel mixing, **not** pigment mixing.
+- time-series takes equispaced numeric history, an integer horizon (1–30 steps), stepHours, lastObservedAt and unit; compares persistence with linear drift using walk-forward tests and an empirical 80% nominal interval. The model selection and interval are **not an independent holdout**.
+- causal-scenario evaluates a user-supplied acyclic graph of linear structural equations and optionally a do-style intervention. Coefficients are **not** learned or causally identified.
+- oracle_audit_prediction accepts numeric observed outcomes after the target horizon; returns an absolute error, labeled as **unverified report**, never certified truth.
+- oracle_forecast_scorecard reads local append-only records.
 
 ## Known Limitations and Deferred Work
 

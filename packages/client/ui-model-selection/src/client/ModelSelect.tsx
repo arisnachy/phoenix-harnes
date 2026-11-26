@@ -50,11 +50,13 @@ function ProviderLogo({ providerId, providerName, modelId, modelName }: {
   providerId: string; providerName: string; modelId?: string; modelName?: string
 }) {
   const local = providerId === 'phoenix-local'
-  const mark = local ? localModelBrandMark(modelId ?? '', modelName ?? '') : providerBrandMark(providerId, providerName)
+  const phoenix = providerId === 'phoenix-nexus'
+  const mark = local ? localModelBrandMark(modelId ?? '', modelName ?? '')
+    : phoenix ? undefined : providerBrandMark(providerId, providerName)
   return (
     <span className={css.providerLogo} role="img" aria-label={`${local ? modelName ?? 'PHOENIX' : providerName} logo`}>
       {mark === undefined
-        ? local ? <PhoenixLogo size={20} /> : <span className={css.providerLogoFallback} aria-hidden="true">{providerInitial(providerName)}</span>
+        ? local || phoenix ? <PhoenixLogo size={20} /> : <span className={css.providerLogoFallback} aria-hidden="true">{providerInitial(providerName)}</span>
         : (
           <svg
             className={css.providerLogoMark}
@@ -411,7 +413,7 @@ export function ModelSelect(
           }
         }}
       >
-        {displayedRoute?.provider === 'phoenix-local' && <PhoenixLogo size={17} />}
+        {(displayedRoute?.provider === 'phoenix-local' || displayedRoute?.provider === 'phoenix-nexus') && <PhoenixLogo size={17} />}
         <span className={css.triggerLabel}>{modelLabel}</span>
         {visibleEffort !== undefined && <span className={css.triggerEffort}>{visibleEffort}</span>}
         {codexSpeedAvailable && activeSpeed === 'fast' && <span className={css.triggerEffort}>{speedLabel}</span>}
@@ -513,7 +515,7 @@ export function ModelSelect(
                         onClick={() => { toggleGroup(group.id) }}
                       >
                         <IconChevronRightOutline14 className={clsx(css.groupChevron, expanded && css.groupChevronOpen)} />
-                        {group.id === 'phoenix-local' && <PhoenixLogo size={18} />}
+                        {(group.id === 'phoenix-local' || group.id === 'phoenix-nexus') && <PhoenixLogo size={18} />}
                         <span className={css.groupName}>{group.id === 'phoenix-local' ? group.name.replace(/^🔥\s*/u, '') : group.name}</span>
                         <span className={css.groupCount} aria-hidden="true">{group.models.length}</span>
                       </button>

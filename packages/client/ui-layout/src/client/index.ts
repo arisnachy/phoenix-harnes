@@ -42,6 +42,13 @@ declare module '@phoenix-ai/dsh-client-ui-slots' {
      * surfaces and Cordis rich content share this rail and may stack vertically.
      */
     'shell.workspace': { kind: 'list'; scope: 'root' }
+    /**
+     * Register a single owner for a specialized scene/GLTF workspace surface.
+     * Pass SpaceSpecializedProps with the format, data and title of the scene;
+     * the component receives those values and replaces the previous root
+     * registration for this slot. With no registration the slot stays empty,
+     * leaving the conversation and surrounding layout unchanged.
+     */
     'space.specialized': { kind: 'single'; scope: 'root'; owner: SpaceSpecializedProps }
   }
 }

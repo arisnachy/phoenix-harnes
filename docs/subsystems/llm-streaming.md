@@ -505,6 +505,8 @@ interface GenerateOptions {
   model: string
   /** Adapter-owned reasoning effort selected for this exact model. */
   reasoningEffort?: ReasoningEffortId
+  /** Opt-in Codex response latency tier; absent means provider default. */
+  serviceTier?: 'default' | 'fast'
   /**
    * Ordered conversation messages, exactly as the provider sees them (after
    * the `system` slot). A loop-built request assembles them as
@@ -651,6 +653,8 @@ interface LlmCallConfig {
   provider: string
   model: string
   reasoningEffort?: ReasoningEffortId
+  /** Opt-in Codex serving speed (not a reasoning effort or model id). */
+  serviceTier?: 'default' | 'fast'
   temperature?: number
   maxTokens?: number
   stop?: string[]

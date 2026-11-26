@@ -5,6 +5,7 @@ import AttachmentStore, {
   AttachmentId,
   ImageVariantId,
   isImageAdmissionError,
+  isFileAdmissionError,
   type ImageAttachmentRef,
   type ImageMediaType,
   type ImageRequestPolicy,
@@ -157,5 +158,19 @@ describe('isImageAdmissionError', () => {
     expect(isImageAdmissionError(new AttachmentError('corrupt object', 'ATTACHMENT_CORRUPT'))).toBe(false)
     expect(isImageAdmissionError(new AttachmentError('disk failed', 'ATTACHMENT_WRITE_FAILED'))).toBe(false)
     expect(isImageAdmissionError(new Error('unknown failure'))).toBe(false)
+  })
+})
+
+
+describe('isFileAdmissionError', () => {
+  it('accepts only caller-correctable file admission errors', () => {
+    expect(isFileAdmissionError(new AttachmentError('invalid file', 'INVALID_FILE'))).toBe(true)
+    expect(isFileAdmissionError(Object.assign(new Error('foreign policy error'), { code: 'FILE_TOO_LARGE' }))).toBe(true)
+    expect(isFileAdmissionError(new AttachmentError('invalid image', 'INVALID_IMAGE'))).toBe(false)
+    expect(isFileAdmissionError(new AttachmentError('storage fault', 'ATTACHMENT_WRITE_FAILED'))).toBe(false)
+    expect(isFileAdmissionError(new Error('no code'))).toBe(false)
+    expect(isFileAdmissionError(Object.assign(new Error('invalid code'), { code: 7 }))).toBe(false)
+    expect(isFileAdmissionError({ code: 'INVALID_FILE' })).toBe(false)
+    expect(isFileAdmissionError(null)).toBe(false)
   })
 })
