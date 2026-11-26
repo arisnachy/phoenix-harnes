@@ -66,7 +66,7 @@ export function livingNeedsCompactSidebar(input: {
     || ![viewport, sidebar, details].every(Number.isFinite)
     || viewport <= 0 || details < 0) return false
   const target = visualWork ? 900 : 640
-  return (visualWork || details > 0) && viewport - sidebar - details < target
+  return viewport - sidebar - details < target
 }
 
 /** Bounded presentation metadata for the existing sidebar and self-inspection. */
@@ -76,4 +76,6 @@ export interface LivingPresenceSnapshot {
   readonly compacted: boolean
   readonly recoveredPixels: number
   readonly notice: 'workspace-compacted' | 'christmas' | 'ready' | 'disabled'
+  /** Resolved frame widths, never settings values, user content or privileges. */
+  readonly geometry?: { readonly viewport: number; readonly sidebar: number; readonly center: number; readonly details: number; readonly visualWork: boolean; readonly manualExpansion: boolean }
 }
