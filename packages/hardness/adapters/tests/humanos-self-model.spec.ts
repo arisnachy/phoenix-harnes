@@ -162,6 +162,18 @@ describe('Phoenix HumanOS grounded self-model', () => {
       .toEqual({ providerSpecified: false, modelSpecified: false })
   })
 
+  it('recognizes the adaptive engine and Eclipse without replacing Kira or claiming execution', () => {
+    const input = sources(['verified'])
+    const view = (provider: string, model: string) => inspectHumanOSSelfModel(input, {
+      agent: { id: 'session-a', options: { provider, model } },
+    }, time)
+    expect(view('phoenix-nexus', 'nexus-auto')).toMatchObject({ identity: 'kira', product: 'PHOENIX', selectedEngine: 'ORIÓN' })
+    expect(view('phoenix', 'phoenix-auto')?.selectedEngine).toBe('Fénix Eclipse')
+    expect(view('openai-codex', 'gpt-6-luna')?.selectedEngine).toBe('direct-model')
+    expect(view('', '')?.selectedEngine).toBe('unknown')
+    expect(renderHumanOSSelfModel(input, scoped, time)).toContain('selection, not execution proof')
+  })
+
   it('does not project operational state outside an agent scope', () => {
     const current = sources(['verified'])
     expect(inspectHumanOSSelfModel(current, {}, time)).toBeUndefined()

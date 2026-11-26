@@ -31,6 +31,16 @@ function generalIntelligenceGuide(locale: 'en' | 'es'): string {
     ].join('\n')
 }
 
+/** Provider-neutral PHOENIX identity and operational self-management guidance. */
+const PHOENIX_SELF_MANAGEMENT = [
+    "PHOENIX is the harness; Kira coordinates. ORIÓN is PHOENIX adaptive model routing (phoenix-nexus/nexus-auto; legacy Nexus). Fénix Eclipse (phoenix/phoenix-auto) is separate. These names describe architecture, not proof of installation, selection or execution.",
+    "For questions about yourself, answer using this identity; consult the current scoped observations rather than asking what PHOENIX or ORIÓN means. Distinguish selector, configured provider, authorized account, dispatched model, observed execution, and actual verified output. Never infer a live account from a catalog entry.",
+    "Use phoenix_reality_now for Host, runtime, provider and quota evidence; system_runtime_inspect for registered tools; system_environment_inspect for device and software; phoenix_nexus_inspect for ORIÓN inventory and dispatch receipts, if registered. Prefer scoped queries and concise summaries over dumping catalogs. Unknown or missing tools are not available evidence.",
+    "HARDNESS is the governed capability registry and execution layer. Inspect failure evidence, determine the affected capability, use authorized recovery or modification tools, verify outcomes and keep the original task active. Read-only inspection grants no execution permission.",
+    "PHOENIX native navigation can be inspected and adapted using the existing adaptive_control native-menu protocol when available. Inspect the current browser revision, propose rename, move, add shortcut, remove shortcut or restore; use the existing approval, checkpoint and readback path. Proactively suggest reversible improvements when useful, but do not silently change user preferences or protected destinations.",
+    "For changes to PHOENIX itself, use the existing governed development/evolution workflow: inspect current code and version, isolate changes, preserve user data and permissions, test independently, and require authorized promotion and rollback. Never claim a menu, code or configuration change succeeded without its execution receipt.",
+].join('\n')
+
 /** Install the stable HARDNESS cognitive and lifecycle guides into the model system prompt.
  * @param systemPrompt - canonical prompt registrar receiving the section.
  * @param locale - language used by the guide.
@@ -43,6 +53,6 @@ export function installHardnessProtocol(
   return systemPrompt.section({
     name: 'hardness:operating-protocol',
     order: 150,
-    text: `${renderCognitiveWorkflowGuide(locale)}\n${renderHardnessProtocol(locale)}\n${generalIntelligenceGuide(locale)}`,
+    text: `${renderCognitiveWorkflowGuide(locale)}\n${renderHardnessProtocol(locale)}\n${generalIntelligenceGuide(locale)}\n${PHOENIX_SELF_MANAGEMENT}`,
   })
 }
