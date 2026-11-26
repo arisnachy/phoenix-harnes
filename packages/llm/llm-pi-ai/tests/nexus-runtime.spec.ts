@@ -49,6 +49,11 @@ describe('ORIÓN synthetic model route', () => {
     expect(nexusCodexHasReserve({ primaryUsedPercent: 40, secondaryUsedPercent: 75 })).toBe(true)
     expect(nexusRequiresStrongModel('Hola')).toBe(false)
     expect(nexusRequiresStrongModel('Implementar una aplicación clínica')).toBe(true)
+    for (const instruction of ['Revisa los correos', 'Responde los pendientes', 'qué pasó', 'busca eso', 'no funciona', 'sí', 'síguelo', 'check email', 'fix it', '']) {
+      expect(nexusRequiresStrongModel(instruction)).toBe(true)
+    }
+    expect(nexusRequiresStrongModel('Calcula 2 + 2')).toBe(false)
+    expect(nexusRequiresStrongModel('Responde exactamente "OK"')).toBe(false)
   })
 })
 
@@ -202,6 +207,16 @@ describe('Nexus installed runtime failover', () => {
       expect(await route(payload, async () => selected)).toMatchObject({
         provider: 'openrouter', model: 'fixture/free',
       })
+      // A tool continuation must not keep using an unqualified free model.
+      const continuationAgent = { session: { ...agent.session, id: 'continuation-fixture' } }
+      const continuation = { ...payload, agent: continuationAgent }
+      expect(await route(continuation, async () => selected)).toMatchObject({ provider: 'openrouter' })
+      await expect(route({ ...continuation, step: 2 }, async () => selected)).rejects.toMatchObject({ code: 'NEXUS_NO_ELIGIBLE_ROUTE' })
+      const emailAgent = { session: { ...agent.session, id: 'email-fixture', events: [
+        { type: 'turn/start', data: { turn: 1 } },
+        { type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Revisa los correos' }] } },
+      ] } }
+      await expect(route({ ...payload, agent: emailAgent }, async () => selected)).rejects.toMatchObject({ code: 'NEXUS_NO_ELIGIBLE_ROUTE' })
       await expect(route({ ...payload, agent: { session: { ...agent.session, id: 'large-context' } }, approximateInputTokens: 50000 }, async () => selected)).rejects.toThrow('no verified free model')
       expect(await fail({ ...payload, provider: 'openrouter', failure: { code: 'RATE_LIMIT' } },
         async () => undefined)).toEqual({ kind: 'retry' })

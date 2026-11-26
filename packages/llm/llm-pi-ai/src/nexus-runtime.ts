@@ -270,12 +270,12 @@ export function nexusCodexFallback(ids: readonly string[], complex: boolean): st
  * @returns Whether the request needs a stronger route.
  */
 export function nexusRequiresStrongModel(text: string): boolean {
-  return text.length > 380
-    || /^(?:contin[uú]a|sigue|hazlo|dale|termina|completa|arr[eé]glalo|continue|finish|do it|go ahead)(?:\b|$)/iu.test(text.trim())
-    || /\b(?:m[eé]dic\p{L}*|cl[ií]nic\p{L}*|tratamiento|receta|farmac\p{L}*|jur[ií]dic\p{L}*|financ\p{L}*)\b/iu.test(text)
-    || /\b(?:implement|refactor|debug|repair|analy[sz]e|develop|deploy|execute|diagnos|clinical|medical|legal|security)\b/iu.test(text)
-    || /\b(?:research|audit|architecture|build|program|code|script|arregl\p{L}*|desarroll\p{L}*|implement\p{L}*)\b/iu.test(text)
-    || /\b(?:repar\p{L}*|diagnostic\p{L}*|investig\p{L}*|analiz\p{L}*|c[oó]digo|aplicaci[oó]n|sistema|seguridad)\b/iu.test(text)
+  // Open-ended work is not low risk merely because the prompt is short.
+  // Only standalone social greetings and independently checkable contracts
+  // qualify for an unbenchmarked free model.
+  return !/^(?:hola|hello|hi|hey|buenos días|buenas tardes|buenas noches|good morning|good evening)[!.?]*$/iu.test(text.trim())
+    && nexusExactResponseTarget(text) === undefined
+    && nexusNumericResponseTarget(text) === undefined
 }
 
 /**
@@ -647,8 +647,9 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     }
     perAgent.set(agent, state)
     const text = nexusTurnText(agent.session.events, payload.turn)
-    const complex = text.length === 0 || nexusRequiresStrongModel(text)
     const hasImage = nexusTurnHasHumanImage(agent.session.events, payload.turn)
+    // Continuations and tool-result steps must not silently downgrade to free chat.
+    const complex = payload.turn !== 1 || payload.step !== 1 || hasImage || nexusRequiresStrongModel(text)
     const requiredContext = nexusRequiredContext(payload.approximateInputTokens, selected.maxTokens)
     if (requiredContext === undefined) {
       throw new LlmError('Nexus cannot route without a valid current request context estimate', 'NEXUS_NO_ELIGIBLE_ROUTE')
@@ -692,7 +693,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       } else {
         const inventory = await listAuthorizedModels(now)
         const model = inventory.find(item => item.provider === route.provider && item.id === route.model)
-        eligible = eligible && model !== undefined && model.online && model.supportsTools === true
+        eligible = eligible && !complex && model !== undefined && model.online && model.supportsTools === true
           && (!hasImage || model.supportsImages === true)
           && model.contextWindow !== undefined && model.contextWindow >= requiredContext
           && nexusPriceClass(model, Date.now()) === 'verified-free'
@@ -751,6 +752,12 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     }
     // Free routes are a last resort, and unbenchmarked free routes are not safe for complex work.
     if (route === undefined && !complex) route = free
+    if (route === undefined && complex) {
+      throw new LlmError(
+        'ORIÓN: no hay una ruta de suscripción autorizada con capacidad y cuota disponibles para continuar esta tarea. Selecciona un modelo adecuado; no se sustituirá por un chat gratuito sin validar.',
+        'NEXUS_NO_ELIGIBLE_ROUTE',
+      )
+    }
     if (route === undefined) {
       throw new LlmError(
         'ORIÓN no encontró un modelo gratuito verificado compatible ni una ruta Codex con reserva de cuota. Selecciona un modelo manualmente o conecta un proveedor gratuito compatible.',
