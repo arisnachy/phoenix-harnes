@@ -181,10 +181,16 @@ export function encodeGoogleUserEvent(text: string): string {
   return JSON.stringify({ event: 'user', message: { content: [{ type: 'text', text }] } }) + '\n'
 }
 
+function isInternalContext(message: GenerateOptions['messages'][number]): boolean {
+  const sourceKind: string | undefined = message.source?.kind
+  return sourceKind === 'skill-catalog'
+    || (message.source?.kind === 'plugin' && message.source.plugin === '@phoenix-ai/dsh-system-prompt')
+}
+
 /** Preserve the ordered transcript and put the actual latest turn at the end. */
 export function buildPrompt(request: Pick<GenerateOptions, 'system' | 'messages' | 'tools' | 'model'>): string {
   const turns: string[] = []
-  const latest = request.messages.at(-1)
+  const latest = request.messages.findLast(message => !isInternalContext(message))
   if (latest === undefined || latest.role !== 'user' || !latest.content.some(block => block.type === 'tool-result' || (block.type === 'text' && block.text.trim()))) {
     throw new LlmError('Antigravity no recibió un turno actual de usuario o herramienta.', 'GOOGLE_CLI_EMPTY_INPUT')
   }
@@ -199,6 +205,7 @@ export function buildPrompt(request: Pick<GenerateOptions, 'system' | 'messages'
       + 'Solo PHOENIX ejecutará herramientas y devolverá sus resultados.')
   }
   const conversation: string[] = []
+  const internalContext: string[] = []
   for (const message of request.messages) {
     for (const block of message.content) {
       if (block.type === 'image' || block.type === 'file') {
@@ -206,9 +213,12 @@ export function buildPrompt(request: Pick<GenerateOptions, 'system' | 'messages'
       }
     }
     const text = message.content.map(block => block.type === 'text' ? block.text : JSON.stringify(block)).join('\n')
-    if (text.trim()) conversation.push(message.role.toUpperCase() + ':\n' + text)
+    if (!text.trim()) continue
+    if (isInternalContext(message)) internalContext.push(text)
+    else conversation.push(message.role.toUpperCase() + ':\n' + text)
   }
   if (conversation.length === 0) throw new LlmError('Antigravity no recibió mensajes de conversación.', 'GOOGLE_CLI_EMPTY_INPUT')
+  if (internalContext.length > 0) turns.push('CONTEXTO INTERNO DE PHOENIX:\n' + internalContext.join('\n\n'))
   turns.push('CONVERSACIÓN (orden cronológico):\n' + conversation.join('\n\n'))
   return turns.join('\n\n')
 
