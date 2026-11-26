@@ -176,3 +176,15 @@ describe('habit learning policy', () => {
     expect(assessment.mode).toBe('reuse')
   })
 })
+
+
+describe('quality and resource metacognition', () => {
+  it('returns a mature habit to review when the latest attempt lacks quality proof', () => {
+    const state = aggregate('habitual', { recentRuns: [run(), run({ verified: false, qualityPassed: false })] })
+    expect(assessHabitExperience(state)).toMatchObject({ mode: 'review', optimizationCandidate: false })
+  })
+  it('detects token regression even when wall time and tool friction stay stable', () => {
+    const state = aggregate('validated', { recentRuns: [run({ totalTokens: 1000 }), run({ totalTokens: 1000 }), run({ totalTokens: 1800 }), run({ totalTokens: 1800 })] })
+    expect(assessHabitExperience(state)).toMatchObject({ mode: 'review', driftDetected: true })
+  })
+})
