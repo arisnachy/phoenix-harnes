@@ -30,6 +30,24 @@ export const fastsdRoot = () => legacyFastsdRoot() + '-flux2'
 const readyFile = () => join(fastsdRoot(), '.phoenix-fastsd-ready')
 const verifiedFile = () => join(fastsdRoot(), '.phoenix-flux2-verified')
 const migratedFile = () => join(fastsdRoot(), '.phoenix-flux2-migrated')
+function claimMigration() {
+  mkdirSync(fastsdRoot(), { recursive: true })
+  const lock = join(fastsdRoot(), '.phoenix-flux2-migration.lock')
+  try { writeFileSync(lock, String(process.pid), { flag: 'wx' }) }
+  catch (error) {
+    if (error.code !== 'EEXIST') throw error
+    let owner
+    try { owner = Number(readFileSync(lock, 'utf8')) } catch { return undefined }
+    if (!Number.isSafeInteger(owner) || owner <= 0) return undefined
+    try { process.kill(owner, 0); return undefined } catch (failure) {
+      if (failure.code !== 'ESRCH') return undefined
+    }
+    try { rmSync(lock); writeFileSync(lock, String(process.pid), { flag: 'wx' }) } catch { return undefined }
+  }
+  return () => {
+    try { if (readFileSync(lock, 'utf8') === String(process.pid)) rmSync(lock) } catch { /* already released */ }
+  }
+}
 function ready() {
   try { return readFileSync(readyFile(), 'utf8').trim() === FASTSD_REVISION } catch { return false }
 }
@@ -59,7 +77,7 @@ function retireLegacyModel() {
 const portValue = Number(process.env.PHOENIX_FASTSD_PORT ?? 18765)
 const PORT = Number.isInteger(portValue) && portValue > 1024 && portValue <= 65535 ? portValue : 18765
 const ORIGIN = 'http://127.0.0.1:' + PORT
-const TIMEOUT_MS = 13 * 60_000
+const TIMEOUT_MS = 25 * 60_000
 let backend
 let idleTimer
 let backendStart
@@ -196,7 +214,7 @@ async function generate(prompt, options) {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(request),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: AbortSignal.timeout(options?.migrationOnly === true ? 60 * 60_000 : TIMEOUT_MS),
   })
   if (!response.ok) throw new Error('FastSD respondió HTTP ' + response.status)
   const result = await response.json()
@@ -293,12 +311,14 @@ const entry = process.argv[1] && resolve(process.argv[1]) === THIS
 if (entry) {
   if (process.argv.includes('--migrate-only')) {
     // Only existing installations migrate automatically; new users keep on-demand setup.
+    let releaseMigration
     try {
       if (process.env.PHOENIX_FASTSD_AUTOINSTALL !== '0' && process.env.PHOENIX_FASTSD_ENABLE !== '0'
         && existsSync(join(legacyFastsdRoot(), '.phoenix-fastsd-ready'))) {
-        if (existsSync(verifiedFile())) {
+        releaseMigration = claimMigration()
+        if (releaseMigration && existsSync(verifiedFile())) {
           if (!existsSync(migratedFile())) retireLegacyModel()
-        } else {
+        } else if (releaseMigration) {
           await generate('A simple blue ceramic cup on a wooden table, soft daylight, photograph', { migrationOnly: true })
         }
         process.stdout.write(JSON.stringify({ ok: true, model: FASTSD_MODEL }) + '\n')
@@ -308,6 +328,7 @@ if (entry) {
       process.exitCode = 1
     } finally {
       if (backend?.exitCode === null) backend.kill()
+      releaseMigration?.()
     }
   } else if (process.argv.includes('--generate-once')) {
     // This isolated worker is invoked before Kira assembles any model context.
