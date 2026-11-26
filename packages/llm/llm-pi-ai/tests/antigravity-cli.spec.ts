@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assertGoogleAccountSettings, googleAccountEnvironment, parseGoogleModels, parseGoogleResult, GOOGLE_ACCOUNT_PROVIDER, ANTIGRAVITY_MODEL_PROVIDER, GoogleAccountCliAdapter, isGoogleAccountRoute, registerGoogleAccountCli } from '../src/antigravity-cli.ts'
+import { assertGoogleAccountSettings, googleAccountEnvironment, parseGoogleModels, parseGoogleResult, isGoogleCliAuthFailure, GOOGLE_ACCOUNT_PROVIDER, ANTIGRAVITY_MODEL_PROVIDER, GoogleAccountCliAdapter, isGoogleAccountRoute, registerGoogleAccountCli } from '../src/antigravity-cli.ts'
 
 describe('Google account Antigravity CLI adapter', () => {
   it('refuses explicit modelProvider and malformed settings without switching to API billing', () => {
@@ -12,7 +12,7 @@ describe('Google account Antigravity CLI adapter', () => {
   it('removes unrelated API credentials from the native CLI environment, including Windows casing', () => {
     expect(googleAccountEnvironment({ Path: 'bin', gemini_api_key: 'fake', GOOGLE_API_KEY: 'fake', AGY_ADC_AUTH: 'true', GOOGLE_APPLICATION_CREDENTIALS: 'fake', USERPROFILE: 'profile' })).toEqual({ Path: 'bin', USERPROFILE: 'profile' })
   })
-  it('registers both selector IDs with native adapters and exposes an OAuth wizard backed by the CLI', () => {
+  it('registers both selector IDs with native adapters and exposes a native CLI wizard without a browser OAuth timeout', () => {
     const registrations = new Map<string, GoogleAccountCliAdapter>()
     const flows: Array<{ key: string; methods: ReadonlyArray<{ id: string }> }> = []
     const ctx = {
@@ -24,10 +24,17 @@ describe('Google account Antigravity CLI adapter', () => {
     expect(registrations.get(GOOGLE_ACCOUNT_PROVIDER)?.providerInfo().id).toBe('google-account')
     expect(flows).toHaveLength(1)
     expect(flows[0]?.key).toBe('llm-pi-ai/google-account')
-    expect(flows[0]?.methods[0]?.id).toBe('oauth')
+    expect(flows[0]?.methods.map(method => method.id)).toEqual(['cli'])
     expect(isGoogleAccountRoute('google-antigravity')).toBe(true)
     expect(isGoogleAccountRoute('google-account')).toBe(true)
     expect(isGoogleAccountRoute('google')).toBe(false)
+  })
+
+  it('classifies API-key and native authentication errors without leaking provider text', () => {
+    expect(isGoogleCliAuthFailure('API key is invalid')).toBe(true)
+    expect(isGoogleCliAuthFailure('authentication required')).toBe(true)
+    expect(isGoogleCliAuthFailure('model overloaded')).toBe(false)
+    expect(() => parseGoogleResult(JSON.stringify({ event: 'result', result: { status: 'ERROR', error: 'API key is invalid: fake-secret' } }))).toThrow(/rechazó la sesión/u)
   })
 
   it('uses an account route separate from Gemini API keys', () => {
@@ -61,7 +68,7 @@ describe('Google account Antigravity CLI adapter', () => {
 
   it('does not treat failures or missing native result as authenticated responses', () => {
     expect(() => parseGoogleResult('{"event":"result","result":{"status":"ERROR","error":"authentication required"}}'))
-      .toThrow(/authentication required/u)
+      .toThrow(/rechazó la sesión/u)
     expect(() => parseGoogleResult('{"event":"step_update"}'))
       .toThrow(/sin respuesta/u)
   })
