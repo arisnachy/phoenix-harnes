@@ -52,6 +52,7 @@ function isProtectedUpdateStateDuringNetworkRetry(state) {
   return ['preparing', 'ready', 'restarting', 'applying'].includes(state?.status)
     || (state?.status === 'error'
       && ['health-check', 'supervisor-timeout'].includes(state.phase))
+    || (state?.status === 'paused' && state.phase === 'staging-storage')
 }
 // A locked Windows orphan can survive indefinitely. Do not re-run the same
 // expensive cleanup and print the same capacity warning on every network poll.
@@ -790,6 +791,18 @@ function ensureStagingMaterialized(stage, target) {
   console.error('[PHOENIX UPDATE] staging worktree materialization repaired successfully.')
 }
 
+function stagingStorageError(message) {
+  return Object.assign(new Error(message), { code: 'PHOENIX_STAGING_STORAGE' })
+}
+
+function stagingQuarantineBlocks(root) {
+  const stage = stageDirectory(root)
+  if (!existsSync(stage) || sameRepositoryWorktree(root, stage)) return false
+  const prefix = `phoenix-stage-${stageIdentity(root)}-conflict-`.toLowerCase()
+  return readdirSync(stageBaseDirectory(), { withFileTypes: true }).some(entry =>
+    entry.isDirectory() && entry.name.toLowerCase().startsWith(prefix))
+}
+
 function quarantineConflictingStagingPath(root, stage) {
   // This exact path is reserved for the current checkout by stageIdentity().
   // A leftover directory can survive a checkout move or a broken worktree
@@ -804,13 +817,13 @@ function quarantineConflictingStagingPath(root, stage) {
   const prefix = `phoenix-stage-${stageIdentity(root)}-conflict-`.toLowerCase()
   if (readdirSync(stageBaseDirectory(), { withFileTypes: true }).some(entry =>
     entry.isDirectory() && entry.name.toLowerCase().startsWith(prefix))) {
-    throw new Error('PHOENIX staging quarantine already exists; run guarded storage repair before creating another copy.')
+    throw stagingStorageError('PHOENIX staging quarantine already exists; guarded storage repair is required before creating another copy.')
   }
   const quarantine = `${stage}-conflict-${String(process.pid)}-${String(Date.now())}`
   try {
     renameSync(stage, quarantine)
   } catch (error) {
-    throw new Error(
+    throw stagingStorageError(
       `PHOENIX staging path is occupied by an unverifiable directory and could not be moved aside: ${stage}: `
       + `${error instanceof Error ? error.message : String(error)}`,
     )
@@ -829,7 +842,7 @@ function ensureStagingWorktree(root, target) {
   }
   if (existsSync(stage)) {
     if (!sameRepositoryWorktree(root, stage)) {
-      throw new Error(`PHOENIX staging path remains unverifiable after repair: ${stage}`)
+      throw stagingStorageError(`PHOENIX staging path remains unverifiable after repair: ${stage}`)
     }
     console.error(`[PHOENIX UPDATE] reusing persistent staging worktree ${stage}`)
     git(stage, ['reset', '--hard', target], { inherit: true })
@@ -841,7 +854,7 @@ function ensureStagingWorktree(root, target) {
   const stageCount = readdirSync(stageBaseDirectory(), { withFileTypes: true }).filter(entry =>
     entry.isDirectory() && /^phoenix-stage-[0-9a-f]{10}(?:-conflict-\d+-\d+)?$/iu.test(entry.name)).length
   if (stageCount >= 6 || !updaterRuntimeDiskHasHeadroom()) {
-    throw new Error('PHOENIX staging storage capacity reached; no additional staging tree will be allocated.')
+    throw stagingStorageError('PHOENIX staging storage capacity reached; no additional staging tree will be allocated.')
   }
   console.error(`[PHOENIX UPDATE] creating persistent staging worktree ${stage}`)
   git(root, ['worktree', 'add', '--detach', '--force', stage, target], { inherit: true })
@@ -1357,6 +1370,8 @@ async function watch(root, parentPid) {
   let lastNetworkWarningAt = Number.NEGATIVE_INFINITY
   let blockedStorageTarget
   let nextStorageRetryAt = 0
+  let blockedStageTarget
+  let nextStageRetryAt = 0
   let nextLiveStorageMigrationAt = Date.now() + 30_000
   cleanupUpdaterRuntimeStorage(root)
   recoverStaleStagingIndexLock(root)
@@ -1476,6 +1491,12 @@ async function watch(root, parentPid) {
         case 'isolate':
         case 'apply':
         case 'replace': {
+          // A failed staging allocation is separate from the isolated runtime cap.
+          // Keep the current Host and do not rerun preparation on every poll.
+          if (!manualRefreshRequested && blockedStageTarget === inspection.target && Date.now() < nextStageRetryAt) break
+          if (stagingQuarantineBlocks(root)) {
+            throw stagingStorageError('An earlier staging quarantine is blocking the canonical staging directory.')
+          }
           if (process.env.PHOENIX_UPDATE_SUPERVISED === '1') {
             // A clean, fast-forwardable release checkout can use the verified
             // staged activator in place if Windows has locked all spare runtime
@@ -1537,6 +1558,8 @@ async function watch(root, parentPid) {
               console.error(`[PHOENIX UPDATE] new stable version ${inspection.target.slice(0, 12)} detected.`)
             }
             const staged = stageCandidate(root, inspection)
+            blockedStageTarget = undefined
+            nextStageRetryAt = 0
             if (staged.prepared) {
               preparedTarget = inspection.target
             } else {
@@ -1603,6 +1626,29 @@ async function watch(root, parentPid) {
           throw new Error(`unhandled stable update action ${JSON.stringify(action)}`)
       }
     } catch (error) {
+      if (error?.code === 'PHOENIX_STAGING_STORAGE') {
+        pending = undefined
+        preparedTarget = undefined
+        clearPrepared(root)
+        blockedStageTarget = inspection.target
+        nextStageRetryAt = Date.now() + STORAGE_RETRY_MS
+        writeState(root, {
+          status: 'paused',
+          phase: 'staging-storage',
+          ...updateFacts(inspection),
+          detail: 'Staging storage is blocked. Guarded repair will run while PHOENIX remains online. Protected or locked directories are retained; Retry requests another attempt.',
+        })
+        console.error('[PHOENIX UPDATE] staging storage blocked; attempting guarded live repair before another preparation.')
+        runLiveStorageMigration(root)
+        nextLiveStorageMigrationAt = Date.now() + STORAGE_RETRY_MS
+        if (!stagingQuarantineBlocks(root)) {
+          // The blocker may have been a global stage cap or disk capacity;
+          // keep the retry delay instead of spinning on that other condition.
+          console.error('[PHOENIX UPDATE] staging quarantine no longer blocks the canonical path; the next controlled retry will revalidate all storage guards.')
+        }
+        await waitForPollOrParentExit(root, parentPid, pollInterval())
+        continue
+      }
       console.error(`[PHOENIX UPDATE] watcher check failed safely: ${error instanceof Error ? error.message : String(error)}`)
       writeState(root, {
         status: 'error',
