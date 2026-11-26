@@ -41,6 +41,8 @@ export interface UserProfileSettings {
   assistantGenderSource?: AssistantGenderSource
   /** Provider route order shown by model selectors; absent means directory order. */
   modelProviderOrder?: string[]
+  /** Routes hidden from manual model selection. */
+  hiddenModelProviders?: string[]
   preferredName?: string
   profession?: string
   professionalTitle?: string
@@ -62,6 +64,7 @@ export interface UserProfileUpdate {
   assistantGender?: AssistantGender | null
   assistantGenderSource?: AssistantGenderSource | null
   modelProviderOrder?: string[] | null
+  hiddenModelProviders?: string[] | null
   preferredName?: string | null
   profession?: string | null
   professionalTitle?: string | null

@@ -4,7 +4,7 @@ import type { ModelProviderGroup } from './api/index.ts'
 
 /** User-profile service projection needed by the optional ordering preference. */
 interface ProviderOrderSource {
-  get(): { profile: { modelProviderOrder?: readonly string[] } }
+  get(): { profile: { modelProviderOrder?: readonly string[]; hiddenModelProviders?: readonly string[] } }
 }
 
 /** Read a valid, unique provider order without making it a routing whitelist.
@@ -15,6 +15,11 @@ export function readProviderOrder(source: ProviderOrderSource | undefined): stri
   const order = source?.get().profile.modelProviderOrder
   if (order === undefined) return []
   return [...new Set(order.filter(provider => typeof provider === 'string' && provider.trim() !== ''))]
+}
+
+/** Read routes removed from the manual selector. */
+export function readHiddenModelProviders(source: ProviderOrderSource | undefined): string[] {
+  return [...new Set(source?.get().profile.hiddenModelProviders ?? [])]
 }
 
 /**
@@ -28,10 +33,31 @@ export function readProviderOrder(source: ProviderOrderSource | undefined): stri
 export function orderModelProviderGroups(
   groups: readonly ModelProviderGroup[],
   providerOrder: readonly string[],
+  hiddenProviders: readonly string[] = [],
 ): ModelProviderGroup[] {
   const effectiveOrder = providerOrder.length === 0 ? ['openai-codex'] : providerOrder
   const rank = new Map(effectiveOrder.map((provider, index) => [provider, index]))
-  return groups
+  const hidden = new Set([...hiddenProviders, 'chatgpt-web'])
+  const unique = new Map<string, ModelProviderGroup>()
+  for (const group of groups) {
+    if (hidden.has(group.id)) continue
+    const prior = unique.get(group.id)
+    const models = new Map((prior?.models ?? []).map(model => [model.id, model]))
+    for (const model of group.models) if (!models.has(model.id)) models.set(model.id, model)
+    unique.set(group.id, { ...(prior ?? group), models: [...models.values()] })
+  }
+  const canonical = unique.get('google-antigravity')
+  const seen = new Set<string>()
+  const entries = [...unique.values()].filter(group => {
+    if (!/antigravity/i.test(group.name) || !/cli/i.test(group.name)) return true
+    const key = JSON.stringify(group.models.map(model => model.id).sort())
+    if (canonical !== undefined && group.id !== canonical.id
+      && key === JSON.stringify(canonical.models.map(model => model.id).sort())) return false
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+  return entries
     .map((group, index) => ({ group, index }))
     .sort((left, right) => (rank.get(left.group.id) ?? effectiveOrder.length + left.index)
       - (rank.get(right.group.id) ?? effectiveOrder.length + right.index))

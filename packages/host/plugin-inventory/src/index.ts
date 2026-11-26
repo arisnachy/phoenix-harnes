@@ -233,9 +233,9 @@ export class PluginInventoryGateway extends TypertRemoteService {
     }, 'existing MCP dependency recovery')
     void ctx.effect(async () => {
       try {
-        await this.chatGptWeb.restore()
+        await this.chatGptWeb.disable()
       } catch (error: unknown) {
-        ctx.logger.error('chatgpt-web: persisted bridge could not be restored')
+        ctx.logger.error('chatgpt-web: retired bridge cleanup failed')
         ctx.logger.error(error)
       }
       return () => undefined
@@ -1077,7 +1077,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
    */
   @Remote('enableChatGptWeb')
   async enableChatGptWeb(): Promise<ChatGptWebSnapshot> {
-    return this.chatGptWeb.enable()
+    return this.chatGptWeb.disable()
   }
 
   /**
