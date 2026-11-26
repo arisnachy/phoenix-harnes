@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
+import { readFile, access } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { GenerateOptions } from '@phoenix-ai/dsh-llm'
-import { encodeGoogleUserEvent, buildPrompt, assertGoogleAccountSettings, googleAccountEnvironment, parseGoogleModels, parseGoogleResult, isGoogleCliAuthFailure, GOOGLE_ACCOUNT_PROVIDER, ANTIGRAVITY_MODEL_PROVIDER, GoogleAccountCliAdapter, isGoogleAccountRoute, registerGoogleAccountCli } from '../src/antigravity-cli.ts'
+import { encodeGoogleUserEvent, buildPrompt, buildGoogleAgent, assertGoogleAccountSettings, googleAccountEnvironment, parseGoogleModels, parseGoogleResult, isGoogleCliAuthFailure, GOOGLE_ACCOUNT_PROVIDER, ANTIGRAVITY_MODEL_PROVIDER, GoogleAccountCliAdapter, isGoogleAccountRoute, registerGoogleAccountCli } from '../src/antigravity-cli.ts'
 
 describe('Google account Antigravity CLI adapter', () => {
   it('uses documented typed content, preserves Unicode and newlines, and rejects empty prompts', () => {
@@ -20,15 +22,21 @@ describe('Google account Antigravity CLI adapter', () => {
         { role: 'user', content: [{ type: 'text', text: '¿Qué modelo eres?' }] },
       ],
     } as GenerateOptions
-    const execute = vi.fn(async (_args: readonly string[], input?: string) => {
+    let workspace = ''
+    const execute = vi.fn(async (args: readonly string[], input?: string, _signal?: AbortSignal, cwd?: string) => {
+      expect(args).toContain('--agent')
+      expect(args).toContain('phoenix-harness')
+      expect(cwd).toBeDefined()
+      workspace = cwd!
+      expect(await readFile(join(workspace, '.agents', 'agents', 'phoenix-harness', 'agent.md'), 'utf8')).toBe(buildGoogleAgent(request))
       const event = JSON.parse(input ?? '')
       expect(event.message.content).toEqual([{ type: 'text', text: buildPrompt(request) }])
       const text = event.message.content[0].text as string
-      expect(text.startsWith('TURNO ACTUAL DE PHOENIX (responde a este contenido):\n¿Qué modelo eres?')).toBe(true)
-      expect(text).toContain('Eres Kira.')
+      expect(text.startsWith('TURNO ACTUAL:\n¿Qué modelo eres?')).toBe(true)
+      expect(text).not.toContain('Eres Kira.')
       expect(text).toContain('USER:\nhola')
       expect(text).toContain('ASSISTANT:\n¡Hola!')
-      expect(text).toContain('gemini-4-hydrogen-low')
+      expect(buildGoogleAgent(request)).toContain('gemini-4-hydrogen-low')
       expect(text.endsWith('USER:\n¿Qué modelo eres?')).toBe(true)
       return JSON.stringify({ event: 'result', result: { status: 'SUCCESS', response: 'Gemini' } })
     })
@@ -36,7 +44,17 @@ describe('Google account Antigravity CLI adapter', () => {
     const chunks = []
     for await (const chunk of adapter.stream(request)) chunks.push(chunk)
     expect(execute).toHaveBeenCalledTimes(1)
+    await expect(access(workspace)).rejects.toThrow()
     expect(chunks).toContainEqual({ type: 'text-delta', index: 0, text: 'Gemini' })
+  })
+
+  it('keeps a huge system prompt and tool schemas out of the user's message without dropping instructions', () => {
+    const system = 'system-instruction '.repeat(10000) + 'stop or reduce proactively'
+    const request = { model: 'gemini-4-hydrogen-high', system, messages: [{ role: 'user', content: [{ type: 'text', text: '¿Qué modelo eres?' }] }] } as GenerateOptions
+    expect(buildPrompt(request)).toBe('¿Qué modelo eres?')
+    expect(buildGoogleAgent(request)).toContain(system)
+    expect(buildGoogleAgent(request)).toContain('tools: []')
+    expect(JSON.parse(encodeGoogleUserEvent(buildPrompt(request))).message.content[0].text).toBe('¿Qué modelo eres?')
   })
 
   it('rejects missing conversation instead of generating an empty turn', () => {
