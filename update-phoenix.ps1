@@ -93,6 +93,22 @@ if (($null -eq $code -or $code -eq 0) -and (Test-Path -LiteralPath $shortcutRepa
   }
 }
 
+# Migrate installed local image engines after a successful managed update.
+# The worker verifies the new raster before retiring the old model; downloads
+# run in a detached user-scoped process and never block PHOENIX startup.
+$fluxWorker = Join-Path $root 'scripts\phoenix-fastsd-mcp.mjs'
+$fluxBase = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'PHOENIX' } else { Join-Path $HOME '.phoenix' }
+$fluxLegacy = if ($env:PHOENIX_FASTSD_HOME) { $env:PHOENIX_FASTSD_HOME } else { Join-Path $fluxBase 'fastsdcpu' }
+if (($null -eq $code -or $code -eq 0) -and $env:PHOENIX_FASTSD_AUTOINSTALL -ne '0' -and
+    $env:PHOENIX_FASTSD_ENABLE -ne '0' -and (Test-Path -LiteralPath $fluxWorker) -and
+    (Test-Path -LiteralPath (Join-Path $fluxLegacy '.phoenix-fastsd-ready')) -and
+    -not (Test-Path -LiteralPath (Join-Path ($fluxLegacy + '-flux2') '.phoenix-flux2-migrated'))) {
+  try {
+    New-Item -ItemType Directory -Force -Path $fluxBase | Out-Null
+    Start-Process -FilePath (Get-Command node).Source -ArgumentList @(('"' + $fluxWorker + '"'), '--migrate-only') -WindowStyle Hidden -RedirectStandardOutput (Join-Path $fluxBase 'flux2-migration.log') -RedirectStandardError (Join-Path $fluxBase 'flux2-migration-error.log')
+  } catch { Write-Warning 'FLUX.2 migration deferred; existing model files retained.' }
+}
+
 # Preserve the semantic exit code from the Node updater. The desktop launcher
 # uses 12 for unrecoverable rollback failure and 13 for a known-stale runtime.
 if ($null -ne $code -and $code -ne 0) { exit $code }
