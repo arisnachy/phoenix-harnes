@@ -1246,6 +1246,10 @@ function imageArtifactMeta(value: unknown): Record<string, unknown> {
   }
 }
 
+// An explicit provider content-policy rejection is not a backend outage.
+// Preserve the provider's decision rather than routing around it.
+class ImageContentPolicyRefusal extends Error {}
+
 function imageFailureError(kind: CodexImageFailureKind, combined: string): Error {
   switch (kind) {
     case 'quota':
@@ -1318,6 +1322,9 @@ async function generateWithCodexProvider(
     }
 
     const combined = `${run.stdout}\n${run.stderr}`.trim()
+    if (/\b(?:content_policy_violation|content_policy_rejection|moderation_blocked|safety_policy_violation)\b/iu.test(combined)) {
+      throw new ImageContentPolicyRefusal('image_generation: Codex rejected the request under its content policy.')
+    }
     if (run.exitCode !== 0) throw imageFailureError(classifyCodexImageFailure(combined), combined)
 
     const generated = await waitForFreshImage(watched, signal)
@@ -1714,7 +1721,7 @@ export function installCodexImageGeneration(ctx: Context): void {
           else image = await generateWithFreeProvider(ctx, visualArgs, styledPrompt, exec.signal)
         } catch (error) {
           exec.signal.throwIfAborted()
-          if (requestedBackend !== 'auto') throw error
+          if (error instanceof ImageContentPolicyRefusal || requestedBackend !== 'auto') throw error
           failures.push(`${backend}: ${error instanceof Error ? error.message : String(error)}`)
           continue
         }
