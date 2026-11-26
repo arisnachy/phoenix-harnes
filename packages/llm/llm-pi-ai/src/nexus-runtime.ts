@@ -141,30 +141,36 @@ export function nexusQuotaView(quota: NexusCodexQuota | undefined, now: number):
     exactTokenBalance: null }
 }
 
-function pacedWindow(used: number | undefined, reset: number | undefined, now: number, duration: number): boolean {
-  if (used === undefined || reset === undefined || !Number.isFinite(reset)) return false
+function pacedWindowPressure(used: number | undefined, reset: number | undefined, now: number, duration: number): number {
+  if (used === undefined || !Number.isFinite(used) || used < 0 || reset === undefined || !Number.isFinite(reset)) return Number.POSITIVE_INFINITY
   // Account receipts can express UNIX timestamps in seconds or milliseconds.
   const resetMs = reset < 100_000_000_000 ? reset * 1_000 : reset
   const remainingMs = resetMs - now
-  if (remainingMs <= 0 || remainingMs > duration) return false
+  if (remainingMs <= 0 || remainingMs > duration) return Number.POSITIVE_INFINITY
   const elapsedFraction = 1 - remainingMs / duration
   // A small burst is permitted, without allowing an early window to be exhausted.
   const allowedPercent = Math.min(90, 10 + elapsedFraction * 85)
-  return used < allowedPercent
+  return used / allowedPercent
+}
+
+/** Relative consumption pressure against both elapsed-time budgets. */
+export function nexusCodexPacePressure(quota: NexusCodexQuota | undefined, now: number): number {
+  if (quota === undefined) return Number.POSITIVE_INFINITY
+  return Math.max(pacedWindowPressure(quota.primaryUsedPercent, quota.resetPrimaryAt, now, 5 * HOUR_MS),
+    pacedWindowPressure(quota.secondaryUsedPercent, quota.resetSecondaryAt, now, 7 * 24 * HOUR_MS))
 }
 
 /**
  * Admit ordinary subscription work only when both native windows have usable
  * reset timestamps and consumption is within a conservative elapsed-time budget.
- * Difficult work may use the separate hard reserve, never an unknown quota.
+ * All automatic work respects both windows; no complexity-based quota bypass.
  * @param quota - native window observations.
  * @param now - current time in milliseconds.
  * @returns Whether ordinary work fits both windows.
  */
 export function nexusCodexWithinPace(quota: NexusCodexQuota | undefined, now: number): boolean {
   return quota !== undefined && nexusCodexHasReserve(quota)
-    && pacedWindow(quota.primaryUsedPercent, quota.resetPrimaryAt, now, 5 * HOUR_MS)
-    && pacedWindow(quota.secondaryUsedPercent, quota.resetSecondaryAt, now, 7 * 24 * HOUR_MS)
+    && nexusCodexPacePressure(quota, now) < 1
 }
 
 
@@ -230,6 +236,18 @@ export function nexusEconomyEffort<T extends string>(supported:readonly T[],comp
   return undefined
 }
 
+/** Select an advertised reasoning effort according to task complexity and quota pressure. */
+export function nexusAdaptiveEffort<T extends string>(supported: readonly T[], complex: boolean, pressure: number): T | undefined {
+  const order = complex
+    ? (pressure >= 0.75 ? ['medium', 'high', 'xhigh', 'max'] : ['high', 'medium', 'xhigh', 'max'])
+    : ['low', 'minimal', 'off', 'none', 'medium']
+  for (const desired of order) {
+    const match = supported.find(id => id.toLowerCase() === desired)
+    if (match !== undefined) return match
+  }
+  return undefined
+}
+
 /**
  * Select the latest real Codex model in one family, never inventing a model ID.
  * @param ids - available model IDs.
@@ -237,9 +255,10 @@ export function nexusEconomyEffort<T extends string>(supported:readonly T[],comp
  * @returns An advertised model ID, when present.
  */
 export function nexusCodexFallback(ids: readonly string[], complex: boolean): string | undefined {
-  const candidates = ids.filter(id => complex
-    ? /^gpt-\d+(?:\.\d+)?-(?:astra|sol)(?:$|-)/iu.test(id)
-    : /^gpt-\d+(?:\.\d+)?-luna(?:$|-)/iu.test(id))
+  const strong = ids.filter(id => /^gpt-\d+(?:\.\d+)?-(?:astra|sol)(?:$|-)/iu.test(id))
+  const fast = ids.filter(id => /^gpt-\d+(?:\.\d+)?-luna(?:$|-)/iu.test(id))
+  const preferred = complex ? strong : fast
+  const candidates = preferred.length > 0 ? preferred : complex ? fast : strong
   const collator = new Intl.Collator('en', { numeric: true })
   candidates.sort((left, right) => collator.compare(right, left))
   return candidates[0]
@@ -623,9 +642,13 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     const buildRoute=async(route:NexusRoute):Promise<LlmCallConfig>=>{
       const { serviceTier: _tier, reasoningEffort: _effort, ...base }=selected
       let reasoningEffort:LlmCallConfig['reasoningEffort']
-      if (!complex && !hasImage) {
-        const info=await ctx.llm.resolveModelInfo(route.provider,route.model,payload.signal).catch(()=>undefined)
-        reasoningEffort=nexusEconomyEffort(info?.reasoning?.efforts.map(e=>e.id)??[],false)
+      const info = await ctx.llm.resolveModelInfo(route.provider, route.model, payload.signal).catch(() => undefined)
+      const supported = info?.reasoning?.efforts.map(e => e.id) ?? []
+      if (route.provider === 'openai-codex') {
+        const pressure = nexusCodexPacePressure(await getQuota(Date.now(), payload.signal), Date.now())
+        reasoningEffort = nexusAdaptiveEffort(supported, complex || hasImage, pressure)
+      } else if (!complex && !hasImage) {
+        reasoningEffort = nexusEconomyEffort(supported, false)
       }
       const active = activeSessions.get(agent.session.id)
       if (active !== undefined && reasoningEffort !== undefined) active.effort = String(reasoningEffort)
@@ -641,7 +664,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       if (route.provider === 'openai-codex') {
         const quota = await getQuota(now, payload.signal)
         eligible = eligible && nexusCodexFreshReserve(quota, Date.now())
-          && (complex || nexusCodexWithinPace(quota, Date.now())) && await options.nativeCodexAuthorized()
+          && nexusCodexWithinPace(quota, Date.now()) && await options.nativeCodexAuthorized()
       } else {
         const inventory = await listAuthorizedModels(now)
         const model = inventory.find(item => item.provider === route.provider && item.id === route.model)
@@ -686,8 +709,8 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       allowPaid: false,
       allowLocal: false,
     }, Date.now())
-    let route = complex ? undefined : free
-    if (complex || free === undefined) {
+    let route: NexusRoute | undefined
+    {
       // A native ChatGPT/Codex seat is a user-existing subscription, not a new
       // API-key billing route. It remains bounded by the reported quota.
       const quota = await getQuota(now, payload.signal)
@@ -695,12 +718,14 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
         && (!hasImage || model.supportsImages === true)
         && !state.excluded.has(routeKey(model.provider, model.id))).map(model => model.id)
       const candidate = nexusCodexFallback(ids, complex)
-      const withinBudget = nexusCodexFreshReserve(quota,Date.now()) && (complex || nexusCodexWithinPace(quota,Date.now()))
+      const withinBudget = nexusCodexFreshReserve(quota,Date.now()) && nexusCodexWithinPace(quota,Date.now())
       if (candidate !== undefined && withinBudget && await options.nativeCodexAuthorized()) {
         route = { provider: 'openai-codex', model: candidate, priceClass: 'unknown',
-          reason: 'existing authorized Codex subscription; model quality or tool requirements' }
+          reason: 'subscription-first: authorized Codex account within both quota budgets' }
       }
     }
+    // Free routes are a last resort, and unbenchmarked free routes are not safe for complex work.
+    if (route === undefined && !complex) route = free
     if (route === undefined) {
       throw new LlmError(
         'ORIÓN no encontró un modelo gratuito verificado compatible ni una ruta Codex con reserva de cuota. Selecciona un modelo manualmente o conecta un proveedor gratuito compatible.',
