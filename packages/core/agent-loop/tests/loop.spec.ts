@@ -26,6 +26,7 @@ async function harness(adapter: MockAdapter, persona = '', maxStepsPerTurn?: num
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentLoop, {
     agents: [],
+    autoContinueProviders: ['openrouter', 'deepseek', 'qwen'],
     ...maxStepsPerTurn === undefined ? {} : { maxStepsPerTurn },
   })
   ctx.llm.registerAdapter(['mock'], adapter)
@@ -1181,8 +1182,8 @@ describe('agent loop', () => {
     expect((() => { const ending = agent.session.events.findLast(e => e.type === 'turn/end'); return ending?.type === 'turn/end' ? ending.data.reason : undefined })()).toEqual({ kind: 'completed' })
   })
 
-  it('never auto-continues Codex even behind OpenRouter', async () => {
-    const adapter = new MockAdapter([maxTokensResponse('truncated')])
+  it('recovers a genuine Codex output limit even behind OpenRouter', async () => {
+    const adapter = new MockAdapter([maxTokensResponse('truncated'), textResponse('finished')])
     const ctx = await harness(adapter)
     ctx.llm.registerAdapter(['openrouter'], adapter)
     const agent = ctx.agentLoop.create(SessionId('openrouter-codex-no-continue'), {
@@ -1190,8 +1191,8 @@ describe('agent loop', () => {
     })
     send(agent, 'write a long answer')
     await waitForIdle(ctx, agent)
-    expect(adapter.requests).toHaveLength(1)
-    expect((() => { const ending = agent.session.events.findLast(e => e.type === 'turn/end'); return ending?.type === 'turn/end' ? ending.data.reason : undefined })()).toEqual({ kind: 'max-tokens' })
+    expect(adapter.requests).toHaveLength(2)
+    expect((() => { const ending = agent.session.events.findLast(e => e.type === 'turn/end'); return ending?.type === 'turn/end' ? ending.data.reason : undefined })()).toEqual({ kind: 'completed' })
   })
 
   it('bounds output-limit continuations and refuses identical consecutive segments', async () => {
@@ -1765,9 +1766,12 @@ describe('agent loop', () => {
 })
 
 
-it('restricts output-limit retries to opted-in non-Codex provider routes', () => {
+it('supports universal output-limit recovery with explicit provider opt-outs', () => {
   expect(shouldAutoContinueOutputLimit('deepseek', 'deepseek-chat', ['deepseek'])).toBe(true)
-  expect(shouldAutoContinueOutputLimit('codex', 'gpt-6', ['codex'])).toBe(false)
-  expect(shouldAutoContinueOutputLimit('gateway', 'codex/gpt-6', ['gateway'])).toBe(false)
+  expect(shouldAutoContinueOutputLimit('codex', 'gpt-6', ['codex'])).toBe(true)
+  expect(shouldAutoContinueOutputLimit('custom', 'model', ['*'])).toBe(true)
+  expect(shouldAutoContinueOutputLimit('phoenix-local', 'gemma', ['*'])).toBe(true)
+  expect(shouldAutoContinueOutputLimit('codex', 'gpt-6', [])).toBe(false)
+  expect(shouldAutoContinueOutputLimit('gateway', 'codex/gpt-6', ['gateway'])).toBe(true)
   expect(shouldAutoContinueOutputLimit('gateway', 'gpt-6', ['deepseek'])).toBe(false)
 })
