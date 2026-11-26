@@ -373,3 +373,20 @@ describe('universal response presentation', () => {
     expect(splitGenerativeUiText(input.slice(0, -10)).some(segment => segment.kind === 'ui')).toBe(false)
   })
 })
+
+it('upgrades a finalized plain assistant answer to a chart while keeping its Markdown table', () => {
+  const text = 'Evolución de consultas.\n\n| Mes | Consultas |\n| --- | --- |\n| Ene | 12 |\n| Feb | 18 |\n| Mar | 15 |'
+  const props = {
+    blocks: [{ kind: 'text' as const, text }],
+    renderMessageImages: () => null,
+    t: ((key: string) => key) as ChatViewSlotProps['t'],
+  }
+  const { rerender } = render(<AssistantMarkdown {...props} streaming />)
+  expect(screen.queryByRole('img', { name: 'Gráfico de barras' })).toBeNull()
+  rerender(<AssistantMarkdown {...props} streaming={false} />)
+  expect(screen.getByRole('table')).not.toBeNull()
+  expect(screen.getByRole('img', { name: 'Gráfico de barras' })).not.toBeNull()
+  expect(screen.getByText('Evolución de consultas.')).not.toBeNull()
+  rerender(<AssistantMarkdown {...props} streaming={false} interrupted />)
+  expect(screen.queryByRole('img', { name: 'Gráfico de barras' })).toBeNull()
+})
