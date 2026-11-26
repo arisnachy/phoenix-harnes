@@ -1342,7 +1342,6 @@ async function watch(root, parentPid) {
   let lastNetworkWarningAt = Number.NEGATIVE_INFINITY
   let blockedStorageTarget
   let nextStorageRetryAt = 0
-  let blockedStageTarget
   let nextStageRetryAt = 0
   let nextLiveStorageMigrationAt = Date.now() + 30_000
   cleanupUpdaterRuntimeStorage(root)
@@ -1465,9 +1464,9 @@ async function watch(root, parentPid) {
         case 'replace': {
           // A failed staging allocation is separate from the isolated runtime cap.
           // Keep the current Host and do not rerun preparation on every poll.
-          if (!manualRefreshRequested && blockedStageTarget === inspection.target && Date.now() < nextStageRetryAt) break
+          if (!manualRefreshRequested && Date.now() < nextStageRetryAt) break
           if (stagingQuarantineBlocks(root)) {
-            throw stagingStorageError('An earlier staging quarantine is blocking the canonical staging directory.')
+            throw stagingStorageError(`An earlier staging quarantine is blocking the canonical staging directory: ${stageDirectory(root)}`)
           }
           if (process.env.PHOENIX_UPDATE_SUPERVISED === '1') {
             // A clean, fast-forwardable release checkout can use the verified
@@ -1530,7 +1529,6 @@ async function watch(root, parentPid) {
               console.error(`[PHOENIX UPDATE] new stable version ${inspection.target.slice(0, 12)} detected.`)
             }
             const staged = stageCandidate(root, inspection)
-            blockedStageTarget = undefined
             nextStageRetryAt = 0
             if (staged.prepared) {
               preparedTarget = inspection.target
@@ -1602,15 +1600,14 @@ async function watch(root, parentPid) {
         pending = undefined
         preparedTarget = undefined
         clearPrepared(root)
-        blockedStageTarget = inspection.target
         nextStageRetryAt = Date.now() + STORAGE_RETRY_MS
         writeState(root, {
           status: 'paused',
           phase: 'staging-storage',
           ...updateFacts(inspection),
-          detail: 'Staging storage is blocked. Guarded repair will run while PHOENIX remains online. Protected or locked directories are retained; Retry requests another attempt.',
+          detail: `Staging storage is blocked: ${error.message}. Guarded repair will run while PHOENIX remains online. Protected or locked directories are retained; Retry requests another attempt.`,
         })
-        console.error('[PHOENIX UPDATE] staging storage blocked; attempting guarded live repair before another preparation.')
+        console.error(`[PHOENIX UPDATE] staging storage blocked; attempting guarded live repair before another preparation: ${error.message}`)
         runLiveStorageMigration(root)
         nextLiveStorageMigrationAt = Date.now() + STORAGE_RETRY_MS
         if (!stagingQuarantineBlocks(root)) {
