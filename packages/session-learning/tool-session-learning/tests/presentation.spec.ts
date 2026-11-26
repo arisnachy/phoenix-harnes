@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatMemorySearchResult, formatRecentMemoryContext } from '../src/presentation.ts'
+import { formatMemorySearchResult, formatRecentMemoryContext, isRelevantUserGuidance } from '../src/presentation.ts'
 
 describe('memory_search presentation', () => {
   it('returns provenance and confidence without exposing ledger internals', () => {
@@ -136,5 +136,27 @@ describe('automatic memory context', () => {
 
     expect(context).toContain('"origin":"user_guidance"')
     expect(context).not.toContain('autonomous/user-preference')
+  })
+})
+
+
+describe('automatic user guidance relevance', () => {
+  const record = {
+    status: 'active' as const, kind: 'preference' as const, confidence: 0.98,
+    summary: 'Aprende que informes clinicos incluyen fuentes verificadas',
+    projectId: 'clinic', sessionId: 'session-1',
+    provenance: { sourceEventType: 'autonomous/user-preference' } as Parameters<typeof isRelevantUserGuidance>[0]['provenance'],
+  }
+  it('applies matching user guidance in the same project, not another project or unrelated task', () => {
+    expect(isRelevantUserGuidance(record, 'Crear informes clinicos', 'session-2', 'clinic')).toBe(true)
+    expect(isRelevantUserGuidance(record, 'Crear informes clinicos', 'session-2', 'other')).toBe(false)
+    expect(isRelevantUserGuidance(record, 'Comprar zapatos', 'session-1', 'clinic')).toBe(false)
+    expect(isRelevantUserGuidance({ ...record, status: 'forgotten' }, 'Crear informes clinicos', 'session-1', 'clinic')).toBe(false)
+    expect(isRelevantUserGuidance({ ...record, confidence: 0.5 }, 'Crear informes clinicos', 'session-1', 'clinic')).toBe(false)
+  })
+  it('keeps unassigned project memories isolated to their conversation', () => {
+    const { projectId: _projectId, ...unassigned } = record
+    expect(isRelevantUserGuidance(unassigned, 'Crear informes clinicos', 'session-1')).toBe(true)
+    expect(isRelevantUserGuidance(unassigned, 'Crear informes clinicos', 'session-2')).toBe(false)
   })
 })
