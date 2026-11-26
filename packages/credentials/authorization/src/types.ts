@@ -143,6 +143,8 @@ export interface AuthorizationAccountTelemetry {
   plan?: string
   primaryLimit?: AuthorizationRateLimitWindow
   secondaryLimit?: AuthorizationRateLimitWindow
+  /** Provider-reported shared quota groups; omitted when not available. */
+  quotaGroups?: Array<{ name: string; buckets: Array<{ id: string; observedAt: number; durationMinutes?: number; remainingPercent?: number; resetsAt?: number; disabled?: boolean }> }>
   credits?: AuthorizationCreditsTelemetry
   usage?: AuthorizationUsageTelemetry
   /** Optional provider-native connector catalog, already sanitized. */

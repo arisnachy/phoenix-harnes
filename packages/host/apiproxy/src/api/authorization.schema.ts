@@ -51,6 +51,7 @@ const authorizationTelemetrySchema = z.object({
   plan: z.string().optional(),
   primaryLimit: rateLimitWindowSchema.optional(),
   secondaryLimit: rateLimitWindowSchema.optional(),
+  quotaGroups: z.array(z.object({ name: z.string().max(128), buckets: z.array(z.object({ id: z.string().max(100), observedAt: z.number().nonnegative(), durationMinutes: z.number().positive().optional(), remainingPercent: z.number().min(0).max(100).optional(), resetsAt: z.number().nonnegative().optional(), disabled: z.boolean().optional() })).max(32) })).max(32).optional(),
   credits: creditsTelemetrySchema.optional(),
   usage: usageTelemetrySchema.optional(),
   connectors: z.array(connectorTelemetrySchema).optional(),
