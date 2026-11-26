@@ -11,6 +11,7 @@
  * @module dsh-agent-loop/tool-calls
  */
 
+import { createHash } from 'node:crypto'
 import type { Context } from '@phoenix-ai/cordis'
 import { assertNever, createToolResultMessage, type ToolCallBlock } from '@phoenix-ai/dsh-llm'
 import { createUserMessage } from '@phoenix-ai/dsh-llm/message'
@@ -24,10 +25,14 @@ interface PlannedCall {
 }
 
 /** Settled dispatch awaiting model-order finalization. */
-interface Slot {
+type Slot = {
   exec: ToolRunContext
   result: ToolExecutionResult
   needsPost: boolean
+  synthetic?: false
+} | {
+  result: ToolExecutionResult
+  synthetic: true
 }
 
 /** One scheduler group outcome, including a drained cancellation. */
@@ -44,6 +49,50 @@ const TOOL_FAILURE_RECOVERY_PROMPT = (toolName: string): string =>
   + 'Inspect the exact tool result, diagnose the cause, inspect available alternatives, change strategy and continue '
   + 'working toward the objective. Do not request approval for routine recovery. Do not claim completion until the '
   + 'objective and its acceptance evidence are verified.'
+
+
+// Bounded per-turn observations: unrelated tool outcomes cannot erase a failing fingerprint.
+const REPEATED_TOOL_FAILURE = 'PHOENIX_REPEATED_TOOL_FAILURE'
+const MAX_IDENTICAL_FAILURES = 3
+const MAX_TRACKED_FAILURES = 128
+const failureStreaks = new WeakMap<Session, { turn: number; counts: Map<string, number> }>()
+
+function callFingerprint(block: ToolCallBlock): string {
+  return createHash('sha256').update(block.name).update('\0').update(block.arguments).digest('hex')
+}
+
+function recordToolOutcome(session: Session, turn: number, block: ToolCallBlock, result: ToolExecutionResult): void {
+  let state = failureStreaks.get(session)
+  if (!result.isError) {
+    if (state?.turn === turn) state.counts.delete(callFingerprint(block))
+    return
+  }
+  const code = result.error.info?.code
+  if (code === TOOL_ABORTED || code === TOOL_ABORTED_BEFORE_DISPATCH || code === REPEATED_TOOL_FAILURE) return
+  if (state?.turn !== turn) {
+    state = { turn, counts: new Map() }
+    failureStreaks.set(session, state)
+  }
+  const key = callFingerprint(block)
+  const count = state.counts.get(key) ?? 0
+  // Refresh recency and evict the oldest fingerprint if the bounded map is full.
+  state.counts.delete(key)
+  if (state.counts.size >= MAX_TRACKED_FAILURES) {
+    const oldest = state.counts.keys().next()
+    if (!oldest.done) state.counts.delete(oldest.value)
+  }
+  state.counts.set(key, Math.min(MAX_IDENTICAL_FAILURES, count + 1))
+}
+
+function repeatedFailure(session: Session, turn: number, block: ToolCallBlock): boolean {
+  const state = failureStreaks.get(session)
+  return state !== undefined && state.turn === turn
+    && (state.counts.get(callFingerprint(block)) ?? 0) >= MAX_IDENTICAL_FAILURES
+}
+
+const REPEATED_FAILURE_GUIDANCE = 'The same tool and arguments failed three times in this turn. '
+  + 'PHOENIX did not dispatch this repeated attempt. Change inputs, inspect the cause, use an authorized alternative, '
+  + 'or report the exact unresolved blocker. Do not claim success or blindly retry.'
 
 /**
  * Schedule one assistant step's tool calls by their live concurrency mode.
@@ -160,16 +209,21 @@ async function runGroup(
       if (call === undefined) break
       const callSeq = callSeqs[committed]
       if (callSeq === undefined) break
-      const result = slot.needsPost
-        ? await ctx.tools[TOOL_RUNTIME_SCHEDULER].finalize(slot.exec, slot.result)
-        : ctx.tools[TOOL_RUNTIME_SCHEDULER].finish(slot.exec, slot.result)
+      let result = slot.result
+      if (!slot.synthetic) {
+        result = slot.needsPost
+          ? await ctx.tools[TOOL_RUNTIME_SCHEDULER].finalize(slot.exec, slot.result)
+          : ctx.tools[TOOL_RUNTIME_SCHEDULER].finish(slot.exec, slot.result)
+      }
       appendToolResult(session, turn, step, call.block, result, callSeq)
+      recordToolOutcome(session, turn, call.block, result)
       for (const context of result.additionalContexts ?? []) acceptContext(context)
       concluded ||= result.concludesTurn === true
       if (!concluded && result.isError && result.error.info?.code !== TOOL_ABORTED
         && result.error.info?.code !== TOOL_ABORTED_BEFORE_DISPATCH) {
         acceptContext(createUserMessage({
-          content: [{ type: 'text', text: TOOL_FAILURE_RECOVERY_PROMPT(call.block.name) }],
+          content: [{ type: 'text', text: result.error.info?.code === REPEATED_TOOL_FAILURE
+            ? REPEATED_FAILURE_GUIDANCE : TOOL_FAILURE_RECOVERY_PROMPT(call.block.name) }],
           source: { kind: 'plugin', plugin: 'agent-loop' },
         }))
       }
@@ -184,6 +238,16 @@ async function runGroup(
     const call = group[index]!
     callSeqs[index] = appendToolCall(session, turn, step, call.block)
     started++
+    if (repeatedFailure(session, turn, call.block)) {
+      const result: ToolExecutionResult = {
+        content: [{ type: 'text', text: REPEATED_FAILURE_GUIDANCE }],
+        isError: true,
+        error: { message: REPEATED_FAILURE_GUIDANCE, info: { name: 'RepeatedToolFailure', code: REPEATED_TOOL_FAILURE } },
+      }
+      // Already recorded the call; commit a truthful synthetic result in model order.
+      slots[index] = { result, synthetic: true }
+      return
+    }
     const prepared = await ctx.tools[TOOL_RUNTIME_SCHEDULER].prepare(call.exec)
     throwSchedulerFailure()
     switch (prepared.kind) {

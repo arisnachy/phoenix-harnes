@@ -71,7 +71,7 @@ const configuredInactiveRuntimeBackups = Number.parseInt(
 )
 const MAX_INACTIVE_RUNTIME_BACKUPS = Number.isFinite(configuredInactiveRuntimeBackups)
   ? Math.max(0, Math.min(1, configuredInactiveRuntimeBackups))
-  : 1
+  : 0
 const configuredRuntimeDirectoryLimit = Number.parseInt(
   process.env.PHOENIX_UPDATE_RUNTIME_LIMIT ?? '',
   10,
@@ -589,20 +589,10 @@ function updaterRegisteredWorktrees(root) {
   return paths
 }
 
-function removeOrphanedUpdaterRuntime(path) {
-  try {
-    rmSync(path, { recursive: true, force: true, maxRetries: 2, retryDelay: 250 })
-    return !existsSync(path)
-  } catch {
-    return false
-  }
-}
-
 function removeUpdaterRuntime(root, path, registeredWorktrees) {
   const key = runtimePathKey(path)
-  if (registeredWorktrees !== undefined && !registeredWorktrees.has(key)) {
-    return removeOrphanedUpdaterRuntime(path)
-  }
+  if (registeredWorktrees === undefined || !registeredWorktrees.has(key)
+    || existsSync(join(path, '.phoenix-keep')) || !sameRepositoryWorktree(root, path)) return false
 
   const removed = git(root, ['-c', 'core.longpaths=true', 'worktree', 'remove', '--force', path], {
     allowFailure: true,
@@ -610,14 +600,16 @@ function removeUpdaterRuntime(root, path, registeredWorktrees) {
   if (removed.ok || !existsSync(path)) return true
 
   const refreshed = updaterRegisteredWorktrees(root)
-  if (/(?:is )?not a working tree/iu.test(removed.stderr)
-    || (refreshed !== undefined && !refreshed.has(key))) {
-    return removeOrphanedUpdaterRuntime(path)
-  }
+  if (refreshed !== undefined && !refreshed.has(key)) return false
   return false
 }
 
 function cleanupUpdaterRuntimeStorage(root, { ensureCapacity = false } = {}) {
+  // The live supervisor has the actual Host lifecycle and Windows process census.
+  // Never race its handoff janitor from the supervised watcher.
+  if (process.env.PHOENIX_UPDATE_SUPERVISED === '1') {
+    return { removed: 0, remaining: updaterRuntimeDirectories(root).length }
+  }
   const keep = new Set()
   const active = readActiveRuntime(root)
   if (active?.path !== undefined) keep.add(runtimePathKey(active.path))
@@ -627,15 +619,17 @@ function cleanupUpdaterRuntimeStorage(root, { ensureCapacity = false } = {}) {
   }
 
   const registered = updaterRegisteredWorktrees(root)
+  if (registered === undefined) return { removed: 0, remaining: updaterRuntimeDirectories(root).length }
   const inactive = updaterRuntimeDirectories(root)
-    .filter(path => !keep.has(runtimePathKey(path)))
+    .filter(path => !keep.has(runtimePathKey(path)) && !existsSync(join(path, '.phoenix-keep')))
     .sort((left, right) => updaterRuntimeMtimeMs(right) - updaterRuntimeMtimeMs(left))
 
   let retained = 0
   let removed = 0
   const rollbackCandidates = []
   for (const candidate of inactive) {
-    if (retained < MAX_INACTIVE_RUNTIME_BACKUPS) {
+    if (retained < Math.max(MAX_INACTIVE_RUNTIME_BACKUPS,
+      active !== undefined && !Number.isFinite(Date.parse(active.healthyAt ?? '')) ? 1 : 0)) {
       retained += 1
       rollbackCandidates.push(candidate)
       continue
@@ -806,6 +800,12 @@ function quarantineConflictingStagingPath(root, stage) {
   git(root, ['worktree', 'prune', '--expire', 'now'], { allowFailure: true })
   if (!existsSync(stage) || sameRepositoryWorktree(root, stage)) return
 
+  // Never turn repeated staging conflicts into an unlimited series of copies.
+  const prefix = `phoenix-stage-${stageIdentity(root)}-conflict-`.toLowerCase()
+  if (readdirSync(stageBaseDirectory(), { withFileTypes: true }).some(entry =>
+    entry.isDirectory() && entry.name.toLowerCase().startsWith(prefix))) {
+    throw new Error('PHOENIX staging quarantine already exists; run guarded storage repair before creating another copy.')
+  }
   const quarantine = `${stage}-conflict-${String(process.pid)}-${String(Date.now())}`
   try {
     renameSync(stage, quarantine)
@@ -837,6 +837,11 @@ function ensureStagingWorktree(root, target) {
     pruneStaleWorkspaceShells(stage)
     ensureStagingMaterialized(stage, target)
     return stage
+  }
+  const stageCount = readdirSync(stageBaseDirectory(), { withFileTypes: true }).filter(entry =>
+    entry.isDirectory() && /^phoenix-stage-[0-9a-f]{10}(?:-conflict-\d+-\d+)?$/iu.test(entry.name)).length
+  if (stageCount >= 6 || !updaterRuntimeDiskHasHeadroom()) {
+    throw new Error('PHOENIX staging storage capacity reached; no additional staging tree will be allocated.')
   }
   console.error(`[PHOENIX UPDATE] creating persistent staging worktree ${stage}`)
   git(root, ['worktree', 'add', '--detach', '--force', stage, target], { inherit: true })
@@ -1321,6 +1326,25 @@ async function finishAfterParentExit(root, pending, preparedTarget) {
   }
 }
 
+// The watcher is replaced with each active runtime; the supervisor may not
+// be. Run the new janitor from this release so legacy installations migrate
+// automatically, with no manual PowerShell step or dependency on the network.
+function runLiveStorageMigration(root) {
+  if (process.platform !== 'win32' || process.env.PHOENIX_UPDATE_SUPERVISED !== '1') return
+  const runtime = process.env.PHOENIX_RUNTIME_ROOT?.trim()
+  if (!runtime) return
+  const helper = join(runtime, 'scripts', 'phoenix-windows-supervisor.mjs')
+  if (!existsSync(helper)) return
+  const state = durableUpdateState(root)
+  if (!state || !['current', 'updated', 'checking', 'paused', 'available'].includes(state.status)) return
+  const result = spawnSync(process.execPath, [helper, '--live-storage-migration'], {
+    cwd: root, env: process.env, windowsHide: true, stdio: 'inherit', timeout: 120_000,
+  })
+  if (result.error || result.status !== 0) {
+    console.error('[PHOENIX STORAGE] automatic migration deferred; retrying on a later idle sweep.')
+  }
+}
+
 async function watch(root, parentPid) {
   if (UPDATE_MODE === 'off') return
 
@@ -1331,6 +1355,7 @@ async function watch(root, parentPid) {
   let lastNetworkWarningAt = Number.NEGATIVE_INFINITY
   let blockedStorageTarget
   let nextStorageRetryAt = 0
+  let nextLiveStorageMigrationAt = Date.now() + 30_000
   cleanupUpdaterRuntimeStorage(root)
   recoverStaleStagingIndexLock(root)
   clearRefreshRequest(root)
@@ -1346,6 +1371,10 @@ async function watch(root, parentPid) {
   }
 
   while (parentAlive(parentPid)) {
+    if (Date.now() >= nextLiveStorageMigrationAt) {
+      nextLiveStorageMigrationAt = Date.now() + STORAGE_RETRY_MS
+      runLiveStorageMigration(root)
+    }
     const manualRefreshRequested = existsSync(refreshRequestPath(root))
     clearRefreshRequest(root)
     // This check is independent of network availability. If the supervisor

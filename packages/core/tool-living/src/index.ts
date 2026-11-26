@@ -1,6 +1,7 @@
 /** Model-facing controls and standing policy for Universal Living Creations. @module @phoenix-ai/dsh-tool-living */
 
 import { randomBytes } from 'node:crypto'
+import { inspectCodexQuota } from './codex-quota.ts'
 import { runEvolution, summarizeEvolutionEvents } from './evolution.ts'
 import { AMPLIFIER_OPERATIONS, runAmplifier } from './amplifier.ts'
 import { saveNumericRecipe, runStoredNumericRecipe, type RecipeContext } from './amplifier-memory.ts'
@@ -281,6 +282,21 @@ function assertTargetReached(snapshot: LivingCreationSnapshot): void {
 
 /** Register the universal living-creation policy and model controls. */
 export function apply(ctx: Context): void {
+  ctx.systemPrompt.section({name:'phoenix:codex-quota-awareness',order:114,text:'For Codex quota questions or costly multi-step work, use codex_quota_inspect to read the real native 5h and 7d remaining percentages, reset countdowns, freshness and pacing. Percent is not a token count. Treat forecastRecommendation and per-window forecast as estimates, not quotas or guarantees. A measured rate requires comparable samples from the same account and reset window; a window average is a weaker estimate. Reduce avoidable consumption when reserveAtRisk is true, without skipping necessary verification. Unknown, stale or expired telemetry is not a refreshed allowance. When conservation is needed, use deterministic tools, bounded context, concise plans and batch independent work; retain necessary verification and difficult-task quality. Do not repeatedly poll or switch a manually selected model/provider, change paid service tier, or claim guaranteed seven-day capacity.'})
+  ctx.tools.register(defineTool({
+    name:'codex_quota_inspect',
+    description:'Read native Codex account five-hour and seven-day usage percentages, remaining time and reset timestamps with freshness, forecast basis, estimated reserve/exhaustion time and conservation guidance. No tokens, credentials, email, exact unreported balance or authorization change.',
+    parameters:{},
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    async execute(_args,exec){
+      let auth:Parameters<typeof inspectCodexQuota>[0]
+      try{auth=(ctx as unknown as {get(name:string):unknown}).get('authorization') as typeof auth}catch{/* optional service */}
+      return JSON.stringify(await inspectCodexQuota(auth,exec.signal))
+    },
+    presentCall:()=>({card:'generic',title:'PHOENIX · Cuotas Codex 5h / 7d',kind:'read' as const}),
+  }))
+
   ctx.systemPrompt.section({name:'phoenix:intelligence-amplifier',order:119,text:'When explicit structured verification is useful, use phoenix_amplifier to evaluate arithmetic and constraints (logos), run bounded deterministic numeric recipes (compression), validate dependency plans (compile), check supplied evidence expiry and disagreements (epistemic), compare declared structural scenarios (counterfactual), test relation mappings (analogy), assess practice evidence (mentor), check translation glossary/placeholders (babel), review proposed side effects (sentinel), and inspect schema changes (morphogenesis). This is an offline deterministic verifier, not a source of facts, a translator, a causal discovery engine, or permission to act. Use only non-sensitive explicit inputs; do not send credentials, patient data or hidden reasoning. Existing tools, native approvals and revision checks remain authoritative. For reusable numeric DAGs, test with recipe-test, then save only when the user approves through phoenix_recipe; reuse the exact saved id and current numeric inputs. No automatic promotion. Do not call it on ordinary chat or claim model-level capability gains without measured benchmarks.'})
   ctx.tools.register(defineTool({
     name:'phoenix_amplifier',

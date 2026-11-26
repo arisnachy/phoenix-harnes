@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import type { ClawHubCatalogItem, ClawHubFamily, ClawHubState, OpenClawRoutingSnapshot, OpenClawRoutedTool, OpenClawGatewayCredentialState } from '@phoenix-ai/dsh-api-remotes/client'
 import type { ConnectorKey } from './connectors-locales.ts'
 import type { McpRegistryClient } from './AuthorizationPanel.tsx'
+import { OpenClawEnginePanel } from './OpenClawEnginePanel.tsx'
 import { CONNECTOR_CATALOG } from './connector-catalog.ts'
 import css from './ConnectorsSection.module.css'
 
@@ -291,6 +292,7 @@ export function ClawHubConnectorStore({ registry, t, connectedIds }: ClawHubConn
         </div>
         <p className={css.safetyNote}>{t('storeGatewaySecurity')}</p>
       </div>
+      <OpenClawEnginePanel registry={registry} />
       <div className={css.block} aria-label={t('storeRoutingTitle')}>
         <div className={css.heading}>
           <div>
