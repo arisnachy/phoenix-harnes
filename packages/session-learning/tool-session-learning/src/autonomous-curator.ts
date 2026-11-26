@@ -1,6 +1,7 @@
 /** Conservative autonomous curation of durable, user-authored learning. */
 
 const MAX_TEXT_CHARS = 2_048
+const MAX_RECENT_SESSIONS = 256
 
 /** Durable memory categories that Phoenix may infer from explicit user language. */
 export type AutonomousMemoryKind = 'preference' | 'correction'
@@ -11,6 +12,7 @@ export interface AutonomousMemoryCandidate {
   readonly summary: string
   readonly confidence: number
   readonly importance: number
+  readonly guided?: true
 }
 
 /** One durable cognitive-memory write emitted by the autonomous curator. */
@@ -61,7 +63,9 @@ export function classifyAutonomousMemory(text: string): AutonomousMemoryCandidat
   const durable = /\b(?:quiero que siempre|prefiero que|de ahora en adelante|a partir de ahora|cada vez que|siempre que|nunca quiero que|i prefer|from now on|every time|whenever|always)\b/iu.test(folded)
   const correction = /\b(?:corrijo|correccion|eso esta mal|eso es incorrecto|te dije que no|no debe ser asi|no deberia ser asi|estas dando (?:muchas|demasiadas) vueltas|sin resultados|termina la tarea antes de narrar|no me preguntes|no preguntes|de ahora en adelante|from now on|that is wrong|that's wrong|incorrect|correction)\b/iu.test(folded)
   const transient = /\b(?:esta vez|solo esta vez|por ahora|ahora mismo|temporalmente|this time|just this time|for now|temporarily)\b/iu.test(folded)
-  if (transient && !durable) return undefined
+  if (transient) return undefined
+  const guided = /^(?:phoenix[,:]?\s+)?(?:aprende que|aprende esto:|recuerda que|memoriza que|te enseño que|te enseno que|learn that|learn this:|remember that|i want to teach you)\s+\S/iu.test(folded)
+  if (guided) return { kind: 'preference', summary, confidence: 0.98, importance: 0.98, guided: true }
   if (correction) return { kind: 'correction', summary, confidence: 0.96, importance: 0.96 }
   if (durable) return { kind: 'preference', summary, confidence: 0.93, importance: 0.93 }
   return undefined
@@ -87,7 +91,10 @@ export class AutonomousMemoryCurator {
       : 'autonomous/user-correction'
     const scope = memoryScope(input)
     const generatedSubject = `phoenix.learning.autonomous.${candidate.kind}.${memoryKey(candidate.summary)}`
-    const subject = candidate.kind === 'correction'
+    // Only an explicit reference to the preceding lesson in this conversation
+    // can supersede it. A general correction must retain its own subject.
+    const refersToPrior = /^(?:corrijo (?:eso|esto)|corrige (?:eso|esto)|correction to (?:that|the previous lesson)|that previous preference)\b/iu.test(fold(candidate.summary))
+    const subject = candidate.kind === 'correction' && refersToPrior
       ? this.lastDurableSubject.get(scope) ?? generatedSubject
       : generatedSubject
     await this.store.remember({
@@ -107,13 +114,18 @@ export class AutonomousMemoryCurator {
       value: JSON.stringify({ version: 1, ...candidate }),
       ...input.projectId === undefined ? {} : { projectId: input.projectId },
     })
+    this.lastDurableSubject.delete(scope)
     this.lastDurableSubject.set(scope, subject)
+    if (this.lastDurableSubject.size > MAX_RECENT_SESSIONS) {
+      const oldest = this.lastDurableSubject.keys().next().value
+      if (oldest !== undefined) this.lastDurableSubject.delete(oldest)
+    }
     return candidate
   }
 }
 
 function memoryScope(input: AutonomousUserMessage): string {
-  return input.projectId === undefined ? `session:${input.sessionId}` : `project:${input.projectId}`
+  return JSON.stringify([input.projectId ?? null, input.sessionId])
 }
 
 function normalize(value: string): string {
