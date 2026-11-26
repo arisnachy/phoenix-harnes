@@ -31,6 +31,18 @@ describe('human conversational contract', () => {
     expect(prompt).toContain('do not trigger patient records for hypothetical academic explanations')
   })
 
+  it('requires substantive presentation for every model and routing mode', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const prompt = renderPrompt(await ctx.systemPrompt.assemble())
+    expect(prompt).toContain('Universal adaptive response contract for every PHOENIX model, provider, agent and routing mode')
+    expect(prompt).toContain('Never replace required substance with a short summary')
+    expect(prompt).toContain('including without tools')
+    expect(prompt).toContain('preserve the full answer in Markdown')
+    const fast = renderPrompt(await ctx.systemPrompt.assemble({ omitTools: true, omitRuntimeContext: true }))
+    expect(fast).toContain('only for genuinely simple social turns')
+  })
+
   it('keeps the mature conversation guidance opt-in at the system-prompt registry', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)

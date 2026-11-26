@@ -6,6 +6,8 @@ import type { ChatViewSlotProps } from '../src/client/contract/slots.ts'
 import { GenerativeCanvas, parseCanvasSpec } from '../src/client/chat/GenerativeCanvas.tsx'
 import { GenerativeUi, parseGenerativeUiBlock, splitGenerativeUiText } from '../src/client/chat/GenerativeUi.tsx'
 
+import { responseTableChart } from '../src/client/chat/ResponseTableChart.ts'
+
 afterEach(cleanup)
 
 function sample() {
@@ -345,4 +347,51 @@ describe('automatic icon placement in compact intelligent cards', () => {
     expect(container.querySelectorAll('[data-tone="research"]').length).toBeGreaterThan(0)
     expect(screen.getByText('Pacientes atendidos')).not.toBeNull()
   })
+})
+
+describe('universal response presentation', () => {
+  it('creates a native chart from a complete plain Markdown time series without changing the source', () => {
+    const spec = responseTableChart('| Mes | Consultas |\n| --- | --- |\n| Ene | 12 |\n| Feb | 18 |\n| Mar | 15 |')
+    expect(spec?.props.children).toEqual([{ type: 'chart', points: [
+      { label: 'Ene', value: 12 }, { label: 'Feb', value: 18 }, { label: 'Mar', value: 15 },
+    ] }])
+  })
+  it('does not invent points or interpret ambiguous units, code, duplicate periods or partial rows', () => {
+    const header = '| Year | Visits |\n| --- | --- |\n'
+    for (const rows of [
+      '| 2024 | 12 |',
+      '| 2024 | 12 |\n| 2025 | 18 |\n| 2026 | 1,500 |',
+      '| 2024 | 12 |\n| 2025 | 18 |\n| 2025 | 20 |',
+      '| 2024 | 12 |\n| 2025 | 18 |\n| 2026 | 20 |\n| 2027 | N/A |',
+    ]) expect(responseTableChart(header + rows)).toBeNull()
+    expect(responseTableChart('\x60\x60\x60md\n' + header + '| 2024 | 12 |\n| 2025 | 18 |\n| 2026 | 20 |\n\x60\x60\x60')).toBeNull()
+  })
+  it('recovers a fully valid final canvas with only its closing fence missing', () => {
+    const input = '\x60\x60\x60generative-ui\n' + JSON.stringify(sample())
+    expect(splitGenerativeUiText(input, { streaming: true })).toEqual([])
+    expect(splitGenerativeUiText(input).some(segment => segment.kind === 'ui')).toBe(true)
+    expect(splitGenerativeUiText(input.slice(0, -10)).some(segment => segment.kind === 'ui')).toBe(false)
+  })
+})
+
+it('upgrades a finalized plain assistant answer to a chart while keeping its Markdown table', () => {
+  const text = 'Evolución de consultas.\n\n| Mes | Consultas |\n| --- | --- |\n| Ene | 12 |\n| Feb | 18 |\n| Mar | 15 |'
+  const props = {
+    blocks: [{ kind: 'text' as const, text }],
+    renderMessageImages: () => null,
+    t: ((key: string) => key) as ChatViewSlotProps['t'],
+  }
+  const { rerender } = render(<AssistantMarkdown {...props} streaming />)
+  expect(screen.queryByRole('img', { name: 'Gráfico de barras' })).toBeNull()
+  rerender(<AssistantMarkdown {...props} streaming={false} />)
+  expect(screen.getByRole('table')).not.toBeNull()
+  expect(screen.getByRole('img', { name: 'Gráfico de barras' })).not.toBeNull()
+  expect(screen.getByText('Evolución de consultas.')).not.toBeNull()
+  rerender(<AssistantMarkdown {...props} streaming={false} interrupted />)
+  expect(screen.queryByRole('img', { name: 'Gráfico de barras' })).toBeNull()
+})
+
+it('charts explicit category comparisons without manufacturing values', () => {
+  const spec = responseTableChart('| Categoría | Total |\n| --- | --- |\n| A | 12 |\n| B | 18 |')
+  expect(spec?.props.children).toEqual([{ type: 'chart', points: [{ label: 'A', value: 12 }, { label: 'B', value: 18 }] }])
 })
