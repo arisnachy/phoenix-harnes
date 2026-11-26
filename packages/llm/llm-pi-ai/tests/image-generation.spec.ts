@@ -482,7 +482,7 @@ describe('Codex image generation bridge', () => {
             })()
             return { done, collected: {
               stdout: { readFrom: () => ({ text: local ? JSON.stringify({
-                ok: true, markdown: invalid ? '![x](/private.jpg)' : '![Imagen generada localmente](/local-images/' + id + '.jpg)',
+                ok: true, model: 'rupeshs/flux2-klein-4b-int4-ov', markdown: invalid ? '![x](/private.jpg)' : '![Imagen generada localmente](/local-images/' + id + '.jpg)',
               }) : '' }) },
               stderr: { readFrom: () => ({ text: local ? '' : policyRejected ? 'content_policy_violation' : 'image_generation unavailable' }) },
             } }
@@ -497,7 +497,7 @@ describe('Codex image generation bridge', () => {
       } }
       const result = await tool.execute({ prompt: 'A forest at sunrise' }, execution)
       expect(calls).toEqual(['codex', 'fastsd'])
-      expect(result).toMatchObject({ provider: 'local', model: 'rupeshs/sd-turbo-openvino',
+      expect(result).toMatchObject({ provider: 'local', model: 'rupeshs/flux2-klein-4b-int4-ov',
         attachment: { attachmentId: 'fastsd-image', width: 512, height: 512 } })
       expect(await readFile((result as { path: string }).path)).toEqual(jpeg)
       expect(saveImage).toHaveBeenCalledOnce()

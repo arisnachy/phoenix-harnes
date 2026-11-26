@@ -231,7 +231,7 @@ export const imageGenerationToolDescription =
   + 'When a user supplies an X-ray, ECG, clinical photograph, imaging study or diagnostic report and requests an explanatory image/3D model, first read the original source with a capable vision/document route and answer its actual findings and any written impression in text; separate directly observed evidence, reported diagnosis, provisional hypothesis and limitations. Never substitute generic normal anatomy for the requested abnormality, hallucinate a patient-specific lesion or advertise a 3D reconstruction of a single projection. A conceptual 3D atlas must be labelled illustrative and must match the supported findings. If the source is unreadable, state the specific limitation instead of silently generating a patient-diagnosis illustration. '
   + 'SOURCE-EXACT MEDICAL IMAGE CONTRACT: when an actual clinical image is supplied in the current turn, bind its image attachment as image-to-image reference. Preserve visibly observed vascular branching, organ silhouettes, imaging plane, sidedness and original label abbreviations; do not invent invisible nerves, microvessels, or millimetric measurements without calibrated DICOM metadata. Separate source-observed features from atlas-only inferred anatomy, which must appear in a separately labelled educational panel. Never fall back to a text-only generator when original study pixels were requested. A generative illustration is not pixel-perfect diagnostic reconstruction. '
   + 'For game work, use it for production sprites, character sheets, tiles, backgrounds, portraits, textures, and other raster assets when appropriate; prefer transparent backgrounds for sprite/character assets when supported, then inspect the generated local path with read_image before shipping or importing it. '
-  + 'Normally use backend=auto. Auto is independent of the active text-model provider: it tries the locally authenticated OpenAI Codex/ChatGPT built-in image generator first, then a configured local image endpoint or native FastSD CPU with no hosted quota (text-to-image only, actual 512×512 JPEG), then configured allocation-backed providers: Cloudflare Workers AI first and Hugging Face free credits second. '
+  + 'Normally use backend=auto. Auto is independent of the active text-model provider: it tries the locally authenticated OpenAI Codex/ChatGPT built-in image generator first, then a configured local image endpoint or native FLUX.2 Klein CPU with no hosted quota (text-to-image only, actual 512×512 JPEG), then configured allocation-backed providers: Cloudflare Workers AI first and Hugging Face free credits second. '
   + 'Do not claim that only an external connector such as Higgsfield is available until image_generation itself has actually been attempted. Do not silently switch to a separately billed OpenAI API. '
   + 'When the user explicitly opted in to use their original profile photograph, auto attempts genuine image-to-image via Codex, then a configured local loopback /images/edits endpoint. Never use text-only free providers to invent the user\'s face. '
   + 'If a real raster backend is unavailable, fail loudly instead of fabricating a vector/HTML substitute. '
@@ -615,7 +615,7 @@ async function generateWithNativeFastSd(
       const outcome = await handle.done
       signal.throwIfAborted()
       const output = handle.collected.stdout?.readFrom(0).text ?? ''
-      let receipt: { ok?: unknown; markdown?: unknown; error?: unknown } | null
+      let receipt: { ok?: unknown; markdown?: unknown; error?: unknown; model?: unknown } | null
       try {
         receipt = JSON.parse(output) as typeof receipt
       } catch {
@@ -628,7 +628,7 @@ async function generateWithNativeFastSd(
       const id = typeof receipt.markdown === 'string'
         ? /^!\[Imagen generada localmente\]\(\/local-images\/([a-f0-9]{32})\.jpg\)$/u.exec(receipt.markdown)?.[1]
         : undefined
-      if (id === undefined) throw new Error('image_generation: invalid FastSD image receipt')
+      if (id === undefined || receipt.model !== 'rupeshs/flux2-klein-4b-int4-ov') throw new Error('image_generation: invalid FastSD image receipt')
       const file = join(outputRoot, id + '.jpg')
       const info = await lstat(file)
       if (!info.isFile() || info.isSymbolicLink() || info.size < 32 || info.size > FASTSD_MAX_IMAGE_BYTES) {
@@ -641,7 +641,7 @@ async function generateWithNativeFastSd(
       }
       signal.throwIfAborted()
       const { path, attachment } = await persistProviderRaster(ctx, data, 'image/jpeg', 'fastsd')
-      return { provider: 'local' as const, model: 'rupeshs/sd-turbo-openvino', path, attachment }
+      return { provider: 'local' as const, model: 'rupeshs/flux2-klein-4b-int4-ov', path, attachment }
     } finally {
       await rm(outputRoot, { recursive: true, force: true })
     }
