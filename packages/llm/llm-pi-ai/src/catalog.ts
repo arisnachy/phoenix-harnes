@@ -12,8 +12,9 @@
  * @module dsh-llm-pi-ai/catalog
  */
 
-import { builtinProviders, getBuiltinModels, getBuiltinProviders } from '@earendil-works/pi-ai/providers/all'
+import { builtinProviders, getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import type { BuiltinProvider } from '@earendil-works/pi-ai/providers/all'
+import { GOOGLE_ANTIGRAVITY_PROVIDER, googleAntigravityProvider } from './google-antigravity.ts'
 import type {
   AnthropicMessagesCompat,
   Api,
@@ -236,7 +237,12 @@ let providerIndex: Map<string, Provider> | undefined
  * @returns the catalog provider index.
  */
 function catalogProviders(): Map<string, Provider> {
-  providerIndex ??= new Map(builtinProviders().map(provider => [provider.id, provider]))
+  if (providerIndex === undefined) {
+    providerIndex = new Map(builtinProviders().map(provider => [provider.id, provider]))
+    if (!providerIndex.has(GOOGLE_ANTIGRAVITY_PROVIDER)) {
+      providerIndex.set(GOOGLE_ANTIGRAVITY_PROVIDER, googleAntigravityProvider())
+    }
+  }
   return providerIndex
 }
 
@@ -254,7 +260,7 @@ export function catalogProvider(provider: string): Provider | undefined {
  * @returns the catalog provider ids.
  */
 export function catalogProviderIds(): readonly string[] {
-  return getBuiltinProviders()
+  return [...catalogProviders().keys()]
 }
 
 /**
@@ -263,11 +269,12 @@ export function catalogProviderIds(): readonly string[] {
  * @returns catalog models by id; empty for a route pi-ai does not ship.
  */
 export function catalogModels(provider: string): Map<string, Model<Api>> {
-  if (!catalogProviders().has(provider)) return new Map()
-  const models = normalizeVendorCatalog(
-    provider,
-    getBuiltinModels(provider as BuiltinProvider),
-  )
+  const entry = catalogProviders().get(provider)
+  if (entry === undefined) return new Map()
+  const rawModels = entry.id === GOOGLE_ANTIGRAVITY_PROVIDER
+    ? [...entry.getModels()]
+    : getBuiltinModels(provider as BuiltinProvider)
+  const models = normalizeVendorCatalog(provider, rawModels)
   return new Map(models.map(model => [model.id, model]))
 }
 

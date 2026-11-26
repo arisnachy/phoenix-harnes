@@ -1,0 +1,6 @@
+.field { display: grid; gap: 5px; margin: 8px 0; font-size: 12px; }
+.field input, .field select, .input { color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 8px; padding: 8px; font: inherit; min-width: 0; }
+.transcript { display: grid; gap: 10px; max-height: 320px; overflow: auto; margin: 12px 0; }
+.transcript article { padding: 10px; border-radius: 8px; background: var(--dsw-specific-selector); overflow-wrap: anywhere; }
+.transcript p { white-space: pre-wrap; margin: 4px 0 0; }
+.input { box-sizing: border-box; width: 100%; min-height: 74px; resize: vertical; }

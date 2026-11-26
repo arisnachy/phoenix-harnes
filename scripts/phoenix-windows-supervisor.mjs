@@ -9,6 +9,7 @@
  */
 
 import { createHash } from 'node:crypto'
+import { retireIntegratedWorkspaces } from './phoenix-retire-integrated-workspaces.mjs'
 import { spawn, spawnSync } from 'node:child_process'
 import {
   existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, statfsSync, unlinkSync, writeFileSync,
@@ -82,7 +83,7 @@ const UPDATE_STORAGE_RETENTION_MS = Math.max(
 )
 // Runtimes are full dependency/build copies and can exceed a gigabyte each.
 // Time-based retention allowed a burst of stable updates to fill ~/p before
-// the grace period elapsed. Keep only one inactive runtime as rollback cushion;
+// the grace period elapsed. Keep no inactive runtime by default after health;
 // active runtimes, the currently executing runtime, and owning-checkout leases
 // are protected separately below.
 const configuredInactiveRuntimeBackups = Number.parseInt(
@@ -91,7 +92,7 @@ const configuredInactiveRuntimeBackups = Number.parseInt(
 )
 const MAX_INACTIVE_RUNTIME_BACKUPS = Number.isFinite(configuredInactiveRuntimeBackups)
   ? Math.max(0, Math.min(1, configuredInactiveRuntimeBackups))
-  : 1
+  : 0
 // Absolute circuit breaker: even if Windows temporarily locks stale worktrees,
 // PHOENIX must never keep allocating full runtime copies until the drive fills.
 // Default capacity is active + candidate + configured rollback cushion.
@@ -656,9 +657,11 @@ function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePat
   // to treat as orphaned managed storage only after the caller has already
   // applied active-runtime protection and retention-age checks.
   const key = runtimePathKey(path)
-  if (registeredWorktrees !== undefined && !registeredWorktrees.has(key)) {
-    return removeOrphanedManagedDirectory(path, reportBusy)
+  if (registeredWorktrees === undefined || existsSync(join(path, '.phoenix-keep'))) return false
+  if (!registeredWorktrees.has(key)) {
+    return detachedWorktreeMetadata(path) && removeOrphanedManagedDirectory(path, reportBusy)
   }
+  if (!sameRepository(path)) return false
 
   // Runtime worktrees contain very deep pnpm/node_modules paths. On Windows,
   // Git must opt into Win32 long-path handling or cleanup can fail with
@@ -679,8 +682,8 @@ function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePat
   // it before declaring the directory "in use". If Git itself says the path is
   // not a worktree, treat it as orphaned managed storage and remove it directly.
   const refreshedWorktrees = registeredWorktreePaths()
-  const becameOrphaned = /(?:is )?not a working tree/iu.test(detail)
-    || (refreshedWorktrees !== undefined && !refreshedWorktrees.has(key))
+  const becameOrphaned = refreshedWorktrees !== undefined && !refreshedWorktrees.has(key)
+    && detachedWorktreeMetadata(path)
   if (becameOrphaned) {
     return removeOrphanedManagedDirectory(path, reportBusy)
   }
@@ -866,7 +869,7 @@ function windowsProcessReferences(paths) {
   return new Set(result.stdout.split(/\r?\n/u).filter(Boolean).map(runtimePathKey))
 }
 
-function cleanupDetachedLegacyStorage(keep, reportBusy = false) {
+function cleanupDetachedLegacyStorage(keep, reportBusy = false, liveMigration = false) {
   if (!reportBusy && Date.now() < nextDetachedStorageSweepAt) return
   nextDetachedStorageSweepAt = Date.now() + DETACHED_STORAGE_SWEEP_INTERVAL_MS
   const registered = registeredWorktreePaths()
@@ -884,6 +887,7 @@ function cleanupDetachedLegacyStorage(keep, reportBusy = false) {
     return
   }
   for (const { path: candidate, kind } of candidates) {
+    if (liveMigration && !liveStorageMigrationAllowed()) return
     const key = runtimePathKey(candidate)
     const retiredOwner = retiredOwners.get(key)
     if (busyPaths.has(key) || keep.has(key)
@@ -903,43 +907,94 @@ function cleanupDetachedLegacyStorage(keep, reportBusy = false) {
   }
 }
 
+// Called by the updater loaded from the NEW runtime, even when the long-lived
+// supervisor is still executing an older release. Require a healthy current
+// Host and an idle update transaction before touching any disposable storage.
+function liveStorageMigrationAllowed() {
+  if (process.platform !== 'win32' || process.env.PHOENIX_UPDATE_SUPERVISED !== '1'
+    || !officialPhoenixRemote()) return false
+  const expected = process.env.PHOENIX_RUNTIME_ROOT?.trim()
+  if (!expected || runtimePathKey(expected) !== runtimePathKey(supervisorSourceRoot)) return false
+  try {
+    const heartbeatPath = gitControlPath(SUPERVISOR_HEARTBEAT_FILE)
+    const heartbeat = JSON.parse(readFileSync(heartbeatPath, 'utf8'))
+    const age = Date.now() - Date.parse(heartbeat.at)
+    if (heartbeat.schema !== 1 || !Number.isFinite(age) || age < 0 || age > 30_000
+      || !Number.isInteger(heartbeat.hostPid) || heartbeat.hostPid <= 0
+      || !Number.isInteger(heartbeat.supervisorPid) || heartbeat.supervisorPid <= 0
+      || runtimePathKey(heartbeat.runtimeRoot) !== runtimePathKey(expected)) return false
+    process.kill(heartbeat.hostPid, 0)
+    process.kill(heartbeat.supervisorPid, 0)
+    const state = readUpdateState()
+    if (!state || !['current', 'updated', 'checking', 'paused', 'available'].includes(state.status)) return false
+    for (const marker of [PREPARED_FILE, RESTART_REQUEST_FILE, HOST_RESTART_REQUEST_FILE]) {
+      const path = gitControlPath(marker)
+      if (!path || existsSync(path)) return false
+    }
+    const activePath = activeRuntimePath()
+    if (!activePath) return false
+    const active = readActiveRuntimeRecord()
+    if (active) {
+      if (runtimePathKey(active.path) !== runtimePathKey(expected)
+        || !Number.isFinite(Date.parse(active.healthyAt ?? ''))
+        || gitValue(expected, ['rev-parse', 'HEAD']) !== active.target) return false
+    } else if (existsSync(activePath) || runtimePathKey(expected) !== runtimePathKey(root)) return false
+    return sameRepository(expected)
+  } catch {
+    return false
+  }
+}
+
 function cleanupObsoleteRuntimes(extraKeep = [], {
   reportBusy = false,
   releaseRollback = false,
   reapDormantStage = false,
+  liveMigration = false,
 } = {}) {
-  const keep = new Set(extraKeep.filter(Boolean).map(runtimePathKey))
+  if (liveMigration && !liveStorageMigrationAllowed()) return
+  const keep = new Set([root, supervisorSourceRoot, ...extraKeep.filter(Boolean)].map(runtimePathKey))
   const active = readActiveRuntimeRecord()
   if (active?.path !== undefined) keep.add(runtimePathKey(active.path))
   if (runtimeRoot !== root) keep.add(runtimePathKey(runtimeRoot))
   const inheritedRuntimeRoot = process.env.PHOENIX_RUNTIME_ROOT?.trim()
-  if (inheritedRuntimeRoot !== undefined && inheritedRuntimeRoot.length > 0) {
+  if (inheritedRuntimeRoot !== undefined && inheritedRuntimeRoot.length > 0
+    && runtimePathKey(inheritedRuntimeRoot) === runtimePathKey(runtimeRoot)) {
     keep.add(runtimePathKey(inheritedRuntimeRoot))
   }
 
   const registeredWorktrees = registeredWorktreePaths()
+  if (registeredWorktrees === undefined) return // Never delete without Git ownership evidence.
   let removedRuntimes = 0
   let removedStages = 0
 
   const inactiveRuntimes = runtimeDirectoriesForCleanup()
     .filter((candidate) => {
       const key = runtimePathKey(candidate)
-      return !keep.has(key) && !runtimeProtectedByOwningCheckout(candidate)
+      return !keep.has(key) && !existsSync(join(candidate, '.phoenix-keep'))
+        && !runtimeProtectedByOwningCheckout(candidate)
     })
     .sort((left, right) => managedDirectoryMtimeMs(right) - managedDirectoryMtimeMs(left))
 
   // Once a replacement Host has passed its healthy checkpoint, an optional
   // rollback copy is no longer necessary by default. An explicit backup
-  // preference remains respected. The checkpoint caller must opt into this:
-  // pre-health and in-flight update paths always preserve the rollback cushion.
-  const inactiveBackupLimit = releaseRollback ? 0 : MAX_INACTIVE_RUNTIME_BACKUPS
+  // preference remains respected:
+  // pre-health and in-flight update paths retain a rollback cushion.
+  const inactiveBackupLimit = releaseRollback ? 0 : Math.max(MAX_INACTIVE_RUNTIME_BACKUPS,
+    active !== undefined && !Number.isFinite(Date.parse(active.healthyAt ?? '')) ? 1 : 0)
   let retainedInactiveRuntimes = 0
   for (const candidate of inactiveRuntimes) {
+    if (liveMigration && !liveStorageMigrationAllowed()) return
     if (retainedInactiveRuntimes < inactiveBackupLimit) {
       retainedInactiveRuntimes += 1
       continue
     }
 
+    if (process.platform === 'win32') {
+      const references = windowsProcessReferences([candidate])
+      if (references === undefined || references.has(runtimePathKey(candidate))) continue
+    }
+    if (liveMigration && !liveStorageMigrationAllowed()) return
+    if (runtimeProtectedByOwningCheckout(candidate)) continue
     if (!removeManagedWorktree(candidate, registeredWorktrees, reportBusy)) continue
     removedRuntimes += 1
     console.error(`[PHOENIX UPDATE] removed obsolete isolated runtime: ${candidate}`)
@@ -947,12 +1002,14 @@ function cleanupObsoleteRuntimes(extraKeep = [], {
 
   const currentStage = runtimePathKey(persistentStage())
   for (const candidate of stageDirectoriesForCleanup()) {
+    if (liveMigration && !liveStorageMigrationAllowed()) return
     const key = runtimePathKey(candidate)
     // Never touch the current stage while the update watcher can reuse it.
     // Only the normal shutdown (after the watcher stopped) or an explicitly
     // validated offline repair can retire this expensive build cache.
     // A still-prepared target / in-progress build is protected in all modes.
     if (key === currentStage && !reapDormantStage) continue
+    if (keep.has(key) || existsSync(join(candidate, '.phoenix-keep'))) continue
     // The ordinary janitor may remove only this checkout's registered stages.
     // Detached old identities go through the age/process-checked legacy path.
     if (!sameRepository(candidate)) continue
@@ -966,6 +1023,8 @@ function cleanupObsoleteRuntimes(extraKeep = [], {
         if (references === undefined || references.has(key)) continue
       }
     } else if (managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS) continue
+    if (liveMigration && !liveStorageMigrationAllowed()) return
+    if (stageProtectedByOwningCheckout(candidate)) continue
     if (!removeManagedWorktree(candidate, registeredWorktrees, reportBusy)) continue
     removedStages += 1
     console.error(`[PHOENIX UPDATE] removed stale updater staging worktree: ${candidate}`)
@@ -989,7 +1048,17 @@ function cleanupObsoleteRuntimes(extraKeep = [], {
       + `inactive runtime backups kept: ${String(retainedInactiveRuntimes)}.`,
     )
   }
-  cleanupDetachedLegacyStorage(keep, reportBusy)
+  if (!liveMigration || liveStorageMigrationAllowed()) cleanupDetachedLegacyStorage(keep, reportBusy, liveMigration)
+  // This additional migration is intentionally separate from disposable
+  // runtimes: old development worktrees require proof of integration and
+  // absence of user files. Run it only during the guarded idle transaction.
+  if (liveMigration && liveStorageMigrationAllowed()) {
+    retireIntegratedWorkspaces({
+      root, base: runtimeBaseDirectory(), keep, pathKey: runtimePathKey,
+      registered: registeredWorktreePaths(), processReferences: windowsProcessReferences,
+      leaseValid: liveStorageMigrationAllowed,
+    })
+  }
 }
 
 // A busy orphan must not make the optional rollback cushion permanently block
@@ -997,17 +1066,23 @@ function cleanupObsoleteRuntimes(extraKeep = [], {
 // backup (oldest first). The running runtime, active marker, runtime held by
 // a different checkout, and the intended candidate remain protected.
 function reclaimInactiveBackupForCapacity(nextRuntime) {
-  const keep = new Set([runtimeRoot, nextRuntime, root].map(runtimePathKey))
+  const keep = new Set([runtimeRoot, nextRuntime, root, supervisorSourceRoot].map(runtimePathKey))
   const active = readActiveRuntimeRecord()
   if (active?.path) keep.add(runtimePathKey(active.path))
   const inherited = process.env.PHOENIX_RUNTIME_ROOT?.trim()
-  if (inherited) keep.add(runtimePathKey(inherited))
+  if (inherited && runtimePathKey(inherited) === runtimePathKey(runtimeRoot)) keep.add(runtimePathKey(inherited))
   const registered = registeredWorktreePaths()
   const inactive = runtimeDirectoriesForCleanup()
-    .filter(path => !keep.has(runtimePathKey(path)) && !runtimeProtectedByOwningCheckout(path))
+    .filter(path => !keep.has(runtimePathKey(path)) && !existsSync(join(path, '.phoenix-keep'))
+      && !runtimeProtectedByOwningCheckout(path))
     .sort((left, right) => managedDirectoryMtimeMs(left) - managedDirectoryMtimeMs(right))
   for (const candidate of inactive) {
     if (runtimeDirectoriesForCleanup().length < MAX_RUNTIME_DIRECTORIES) break
+    if (registered === undefined) break
+    if (process.platform === 'win32') {
+      const references = windowsProcessReferences([candidate])
+      if (references === undefined || references.has(runtimePathKey(candidate))) continue
+    }
     if (!removeManagedWorktree(candidate, registered, true)) continue
     console.error(`[PHOENIX UPDATE] reclaimed inactive rollback runtime to stay within storage limit: ${candidate}`)
   }
@@ -1027,9 +1102,17 @@ function cleanupFailedPreparedRuntime(target) {
   if (!existsSync(candidate)
     || key === runtimePathKey(runtimeRoot)
     || key === runtimePathKey(root)
+    || key === runtimePathKey(supervisorSourceRoot)
+    || existsSync(join(candidate, '.phoenix-keep'))
     || (active?.path !== undefined && key === runtimePathKey(active.path))
     || runtimeProtectedByOwningCheckout(candidate)) return
-  if (removeManagedWorktree(candidate, registeredWorktreePaths(), true)) {
+  const registered = registeredWorktreePaths()
+  if (registered === undefined) return
+  if (process.platform === 'win32') {
+    const references = windowsProcessReferences([candidate])
+    if (references === undefined || references.has(key)) return
+  }
+  if (removeManagedWorktree(candidate, registered, true)) {
     console.error(`[PHOENIX UPDATE] removed failed isolated runtime before it consumed another storage slot: ${candidate}`)
   }
 }
@@ -2158,6 +2241,15 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint, 
   }
 }
 
+if (process.argv.includes('--live-storage-migration')) {
+  if (!liveStorageMigrationAllowed()) process.exit(0)
+  cleanupObsoleteRuntimes([supervisorSourceRoot], {
+    reapDormantStage: true,
+    liveMigration: true,
+  })
+  process.exit(0)
+}
+
 if (process.argv.includes('--cleanup-storage')) {
   recoverStaleStagingIndexLock()
   // An explicit offline repair verifies there is no Phoenix/Host/watch process.
@@ -2427,8 +2519,7 @@ while (true) {
       // run it only when a background update isn't compiling a new runtime.
       if (readUpdateState()?.status !== 'preparing' || !watcherSupervisor?.isActive()) {
         // A healthy Host is the earliest safe checkpoint for reclaiming the
-        // consumed staging tree. Keep exactly one previous healthy runtime for
-        // rollback instead of deleting every backup after each activation.
+        // consumed staging tree. Retain a rollback copy only if configured.
         cleanupObsoleteRuntimes([], { reapDormantStage: true })
       }
     } catch (error) {

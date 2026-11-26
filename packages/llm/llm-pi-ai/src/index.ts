@@ -61,7 +61,7 @@ import { deepEqualJson, installSettingsSection, settingsNamespace } from '@phoen
 import { PiAiAdapter, type PhoenixLocalModelMetadata } from './adapter.ts'
 import { installNexusRuntime } from './nexus-runtime.ts'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
-import { catalogProviderIds } from './catalog.ts'
+import { catalogProvider, catalogProviderIds } from './catalog.ts'
 import { CODEX_PROVIDER, CodexLiveCatalog } from './codex-live-catalog.ts'
 import { codexNativeAccessToken } from './codex-auth.ts'
 import { assertServiceable, CHATGPT_WEB_PROVIDER, chatgptWebDefaults, Config, DEFAULT_PHOENIX_LOCAL_STREAM_IDLE_TIMEOUT_MS, resolveProfiles } from './config.ts'
@@ -69,6 +69,8 @@ import type { PiAiProviderProfile, ResolvedPiAiProviderProfile } from './config.
 import { discoverModels } from './discovery.ts'
 import { installCodexAvatarTransform, installCodexImageGeneration } from './image-generation.ts'
 import { registerPiAiFlows } from './login.ts'
+import { GOOGLE_ACCOUNT_PROVIDER, registerGoogleAccountCli } from './antigravity-cli.ts'
+import { GOOGLE_ANTIGRAVITY_PROVIDER } from './google-antigravity.ts'
 import { NvidiaLiveCatalog, NVIDIA_BUILD_BASE_URL, NVIDIA_MODEL_REFRESH_MS } from './nvidia-live-catalog.ts'
 import {
   OPENCODE_FREE_PROVIDER,
@@ -100,6 +102,11 @@ export {
   chatgptWebDefaults,
 } from './config.ts'
 export { recordKeyFor } from './auth.ts'
+export {
+  GOOGLE_ANTIGRAVITY_DEFAULT_MODELS,
+  GOOGLE_ANTIGRAVITY_DISPLAY_NAME,
+  GOOGLE_ANTIGRAVITY_PROVIDER,
+} from './google-antigravity.ts'
 export { supportedProtocols } from './provider.ts'
 export {
   OPENCODE_FREE_BASE_URL,
@@ -235,7 +242,10 @@ function directoryEntries(
     })
   }
   for (const provider of knownRoutes) {
-    declare(provider, provider === CHATGPT_WEB_PROVIDER ? chatgptWebDefaults().displayName : provider)
+    const defaultName = provider === CHATGPT_WEB_PROVIDER
+      ? chatgptWebDefaults().displayName
+      : catalogProvider(provider)?.name ?? provider
+    declare(provider, defaultName)
   }
   for (const [provider, profile] of profiles) {
     if (provider === PHOENIX_LOCAL_PROVIDER || provider === OPENCODE_FREE_PROVIDER) continue
@@ -255,6 +265,8 @@ export function apply(ctx: Context, config: Config): void {
     })
     return
   }
+
+  registerGoogleAccountCli(ctx)
 
   const EMPTY_NEXUS_POLICIES = Object.freeze([])
   const openCodeCatalog = createOpenCodeFreeCatalog()
@@ -287,7 +299,9 @@ export function apply(ctx: Context, config: Config): void {
       && memoized !== undefined
     ) return memoized
 
-    const providers = nvidiaCatalog.overlayProviders(codexCatalog.overlayProviders(raw.providers ?? {}))
+    const providers = { ...nvidiaCatalog.overlayProviders(codexCatalog.overlayProviders(raw.providers ?? {})) }
+    // The native CLI owns this route; never register it as a generic API model.
+    delete providers[GOOGLE_ACCOUNT_PROVIDER]
     const next = resolveProfiles({
       ...providers,
       [PHOENIX_LOCAL_PROVIDER]: phoenixLocalProfile(),
@@ -310,6 +324,8 @@ export function apply(ctx: Context, config: Config): void {
     // itself for the current ChatGPT access JWT; never consult OPENAI_API_KEY
     // or a stale apiKeyEnv for this route. Codex owns login and refresh.
     if (provider === CODEX_PROVIDER) return codexNativeAccessToken()
+    // A configured API-key reference must never override the direct OAuth grant.
+    if (provider === GOOGLE_ANTIGRAVITY_PROVIDER) return undefined
     const ref = profile.apiKeyEnv
     if (ref === undefined) return undefined
     const credentials = ctx.get('credentials')
@@ -421,6 +437,7 @@ export function apply(ctx: Context, config: Config): void {
     registeredFacts = facts
   }
   ensureRegistrationFacts()
+
   const inspectNexus = installNexusRuntime(ctx, {
     profiles,
     freeRoutePolicies: () => current().nexusFreeRoutes ?? EMPTY_NEXUS_POLICIES,
