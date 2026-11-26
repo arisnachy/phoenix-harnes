@@ -401,7 +401,7 @@ async function buildModelCatalog(ctx: Context): Promise<{
   const catalog = await Promise.all(ctx.llm.listProviders().map(async (provider) => {
     try {
       const models = await ctx.llm.listModels(provider.id)
-      const entries = await Promise.all(models.map(async (model) => {
+      const outcomes = await Promise.allSettled(models.map(async (model) => {
         const resolved = await ctx.llm.resolveModelInfo(provider.id, model.id)
         const reasoning: ModelReasoning | undefined = resolved.reasoning === undefined
           ? undefined
@@ -424,6 +424,14 @@ async function buildModelCatalog(ctx: Context): Promise<{
           ...reasoning === undefined ? {} : { reasoning },
         }
       }))
+      // A single stale model must not hide every other model of this provider.
+      const entries = outcomes.flatMap(outcome => outcome.status === 'fulfilled' ? [outcome.value] : [])
+      const rejected = outcomes.filter(outcome => outcome.status === 'rejected')
+      if (entries.length === 0 && rejected.length > 0) throw rejected[0]!.reason
+      const warning: ModelCatalogFailure | undefined = rejected.length === 0 ? undefined : {
+        id: provider.id, name: provider.name,
+        message: `${rejected.length} model(s) unavailable: ${String(rejected[0]!.reason)}`,
+      }
       const hasPhoenixAutoPair = provider.id === 'openai-codex'
         && entries.some(model => model.id === PHOENIX_CODEX_AUTO_PLANNER_MODEL)
         && entries.some(model => model.id === PHOENIX_CODEX_AUTO_WORKER_MODEL)
@@ -438,7 +446,7 @@ async function buildModelCatalog(ctx: Context): Promise<{
           }, ...entries]
           : entries,
       }
-      return { kind: 'group' as const, group }
+      return { kind: 'group' as const, group, warning }
     } catch (error: unknown) {
       const failure: ModelCatalogFailure = {
         id: provider.id,
@@ -452,7 +460,7 @@ async function buildModelCatalog(ctx: Context): Promise<{
   const profile = ctx.get('userProfile', false) as { get(): { profile: { modelProviderOrder?: readonly string[] } } } | undefined
   return {
     groups: orderModelProviderGroups(groups, readProviderOrder(profile)),
-    failures: catalog.flatMap(item => item.kind === 'failure' ? [item.failure] : []),
+    failures: catalog.flatMap(item => item.kind === 'failure' ? [item.failure] : item.warning === undefined ? [] : [item.warning]),
   }
 }
 
@@ -2692,8 +2700,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const { sessionId } = request.payload
         const found = await agentFor(sessionId)
         if ('error' in found) return err(request, found.error)
-        const current = selectionFor(found.agent).current
         const { groups, failures } = await buildModelCatalog(ctx)
+        const current = selectionFor(found.agent).current
         const routable = routeServed(current.provider)
         return ok(request, { current: { ...current }, routable, groups, failures })
       },
