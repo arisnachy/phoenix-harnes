@@ -954,7 +954,7 @@ function ownedOrphanedStageQuarantine(path, registered) {
     || existsSync(join(path, '.phoenix-keep'))) return false
   try {
     const dotGit = join(path, '.git')
-    if (!lstatSync(path).isDirectory() || !lstatSync(dotGit).isFile()) return false
+    if (!lstatSync(path).isDirectory() || lstatSync(path).isSymbolicLink() || !lstatSync(dotGit).isFile()) return false
     const match = /^gitdir:\s*(.+)\s*$/imu.exec(readFileSync(dotGit, 'utf8'))
     const common = absoluteGitPath(root, gitValue(root, ['rev-parse', '--git-common-dir']))
     if (!match || !common) return false
@@ -971,20 +971,25 @@ function cleanupBlockingStageQuarantines() {
   if (!liveStorageMigrationAllowed()) return
   const keep = new Set([root, supervisorSourceRoot, runtimeRoot,
     readActiveRuntimeRecord()?.path, process.env.PHOENIX_RUNTIME_ROOT].filter(Boolean).map(runtimePathKey))
-  const prefix = persistentStage().toLowerCase() + '-conflict-'
+  const canonical = runtimePathKey(persistentStage())
+  const prefix = canonical.toLowerCase() + '-conflict-'
   const registered = registeredWorktreePaths()
   if (registered === undefined) return
-  for (const candidate of stageDirectoriesForCleanup()) {
+  const stages = stageDirectoriesForCleanup()
+  const hasQuarantine = stages.some(candidate => runtimePathKey(candidate).toLowerCase().startsWith(prefix))
+  for (const candidate of stages) {
     const key = runtimePathKey(candidate)
-    if (!key.toLowerCase().startsWith(prefix) || keep.has(key)
-      || !ownedOrphanedStageQuarantine(candidate, registered)) continue
+    // A broken canonical linked worktree can itself block recovery. Reclaim
+    // it only with the same ownership evidence as an orphaned quarantine.
+    if ((!key.toLowerCase().startsWith(prefix) && !(key === canonical && hasQuarantine))
+      || keep.has(key) || !ownedOrphanedStageQuarantine(candidate, registered)) continue
     const busy = windowsProcessReferences([candidate])
     if (busy === undefined || busy.has(key) || !liveStorageMigrationAllowed()) continue
     const refreshed = registeredWorktreePaths()
     if (!ownedOrphanedStageQuarantine(candidate, refreshed)
       || runtimeProtectedByOwningCheckout(candidate) || stageProtectedByOwningCheckout(candidate)) continue
     if (removeOrphanedManagedDirectory(candidate, true)) {
-      console.error('[PHOENIX STORAGE] reclaimed verified orphan staging quarantine: ' + candidate)
+      console.error('[PHOENIX STORAGE] reclaimed verified orphan staging directory: ' + candidate)
     }
   }
 }
@@ -2277,7 +2282,10 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint, 
 }
 
 if (process.argv.includes('--live-storage-migration')) {
-  if (!liveStorageMigrationAllowed()) process.exit(0)
+  if (!liveStorageMigrationAllowed()) {
+    console.error('[PHOENIX STORAGE] live repair deferred: current Host ownership, health or idle transaction could not be verified.')
+    process.exit(3)
+  }
   const capacityIndex = process.argv.indexOf('--capacity-target')
   if (capacityIndex !== -1) {
     const target = process.argv[capacityIndex + 1]
