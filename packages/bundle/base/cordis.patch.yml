@@ -85,7 +85,7 @@
     - id: tool-sports
       name: '@phoenix-ai/dsh-tool-sports'
 
-    # ORÁCULO scientific prediction and research; owner-local forecast ledger.
+    # ORÁCULO scientific forecasting and research, records live in owner-local home.
     - id: tool-oracle
       name: '@phoenix-ai/dsh-tool-oracle'
       config:
