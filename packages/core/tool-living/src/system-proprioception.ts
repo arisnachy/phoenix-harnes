@@ -11,7 +11,7 @@ import process from 'node:process'
 
 const PROGRAMS = [
   'git','node','pnpm','python','py','ollama','winget','wsl','docker',
-  'code','blender','ffmpeg','pwsh','powershell','dotnet','curl','kubectl',
+  'code','blender','ffmpeg','pwsh','powershell','dotnet','curl','kubectl','winapp','odr','whisper-cli','tesseract','foundry',
 ] as const
 const GUI_APPS = [
   { id:'vscode', pattern:'Visual Studio Code' },
@@ -25,12 +25,13 @@ const GUI_APPS = [
   { id:'chrome', pattern:'Google Chrome' },
   { id:'edge', pattern:'Microsoft Edge' },
   { id:'firefox', pattern:'Firefox' },
+  { id:'copilot', pattern:'Copilot' },
 ] as const
 
 // The PowerShell code is a constant shipped with PHOENIX, never model-authored.
 const POWERSHELL_PROBE = `
 $ErrorActionPreference = 'SilentlyContinue'
-$commands = @('git','node','pnpm','python','py','ollama','winget','wsl','docker','code','blender','ffmpeg','pwsh','powershell','dotnet','curl','kubectl')
+$commands = @('git','node','pnpm','python','py','ollama','winget','wsl','docker','code','blender','ffmpeg','pwsh','powershell','dotnet','curl','kubectl','winapp','odr','whisper-cli','tesseract','foundry')
 $found = @{}
 foreach ($command in $commands) {
   $found[$command] = [bool](Get-Command -Name $command -ErrorAction SilentlyContinue)
@@ -50,7 +51,7 @@ $wanted = @{
   vscode = 'Visual Studio Code'; blender = 'Blender'; excel = 'Excel';
   word = 'Word'; powerpoint = 'PowerPoint'; powerbi = 'Power BI';
   'docker-desktop' = 'Docker Desktop'; 'windows-terminal' = 'Windows Terminal';
-  chrome = 'Google Chrome'; edge = 'Microsoft Edge'; firefox = 'Firefox'
+  chrome = 'Google Chrome'; edge = 'Microsoft Edge'; firefox = 'Firefox'; copilot = 'Copilot'
 }
 $apps = @{}
 foreach ($key in $wanted.Keys) {
@@ -59,7 +60,19 @@ foreach ($key in $wanted.Keys) {
     $_.IndexOf($needle,[System.StringComparison]::OrdinalIgnoreCase) -ge 0
   }).Count -gt 0)
 }
+$native = @{}
+try {
+  Add-Type -AssemblyName UIAutomationClient -ErrorAction Stop
+  $native['uia'] = $null -ne [System.Windows.Automation.AutomationElement]::RootElement
+} catch { $native['uia'] = $null }
+try {
+  $api = [Windows.Foundation.Metadata.ApiInformation,Windows.Foundation,ContentType=WindowsRuntime]
+  $native['app-actions'] = $api::IsTypePresent('Windows.AI.Actions.Hosting.ActionCatalog')
+  $native['windows-ocr'] = $api::IsTypePresent('Windows.Media.Ocr.OcrEngine')
+  $native['windows-ml'] = $api::IsTypePresent('Windows.AI.MachineLearning.LearningModel')
+} catch { }
 @{
+  native = $native
   osCaption = [string]$os.Caption
   build = [string]$os.BuildNumber
   systemType = [int]$system.PCSystemType
@@ -73,6 +86,8 @@ foreach ($key in $wanted.Keys) {
 `
 
 export type ToolState = 'detected' | 'not-detected' | 'not-checked'
+const NATIVE_WINDOWS = ['uia','app-actions','windows-ocr','windows-ml'] as const
+
 export type PermissionState = 'requires-tool-authorization'
 export interface LocalCapability {
   readonly id: string
@@ -90,6 +105,13 @@ export interface SystemSelfSnapshot {
   readonly host: { readonly nodeVersion: string; readonly processAlive: true; readonly hostHealth: 'self-report-only' }
   readonly commands: readonly LocalCapability[]
   readonly guiApps: readonly { readonly id: string; readonly detection: ToolState; readonly launchPermission: PermissionState }[]
+  readonly windowsNative: {
+    readonly policy: 'local-only-no-billing'
+    readonly apiPresence: readonly { readonly id: string; readonly state: ToolState }[]
+    readonly agentLaunchers: 'package-identity-and-registration-unverified'
+    readonly copilot: 'manual-only-no-automated-consumer-access'
+    readonly execution: 'not-granted-by-inventory'
+  }
   readonly permissions: { readonly commandExecution: 'not-granted-by-inventory'; readonly clinicalAccess: 'not-granted-by-inventory'; readonly remoteAPIs: 'not-granted-by-inventory' }
   readonly limitations: readonly string[]
 }
@@ -99,7 +121,7 @@ type ProbeRunner = (command: string, args: readonly string[], options: Record<st
 type RawProbe = {
   osCaption?: unknown; build?: unknown; systemType?: unknown; chassis?: unknown
   batteryPresent?: unknown; memoryBytes?: unknown; gpuNames?: unknown
-  commands?: unknown; apps?: unknown
+  commands?: unknown; apps?: unknown; native?: unknown
 }
 const safeName = (v: unknown): string | null =>
   typeof v === 'string' && v.length > 0
@@ -160,6 +182,7 @@ export function inspectSystemEnvironment(options: {
   const build = boundedInt(raw.build)
   const commands = isRecord(raw.commands) ? raw.commands : {}
   const apps = isRecord(raw.apps) ? raw.apps : {}
+  const native = isRecord(raw.native) ? raw.native : {}
   const measuredMemory = Number(raw.memoryBytes)
   const gpuNames = Array.isArray(raw.gpuNames) ? raw.gpuNames.map(safeName)
     .filter((x):x is string => x !== null).slice(0,6) : []
@@ -190,6 +213,15 @@ export function inspectSystemEnvironment(options: {
       id,detection:reason !== null ? 'not-checked' : apps[id] === true ? 'detected' : 'not-detected',
       launchPermission:'requires-tool-authorization',
     })),
+    windowsNative:{
+      policy:'local-only-no-billing',
+      apiPresence:NATIVE_WINDOWS.map(id=>({
+        id,state:reason!==null ? 'not-checked' : native[id]===true ? 'detected' : native[id]===false ? 'not-detected' : 'not-checked',
+      })),
+      agentLaunchers:'package-identity-and-registration-unverified',
+      copilot:'manual-only-no-automated-consumer-access',
+      execution:'not-granted-by-inventory',
+    },
     permissions:{
       commandExecution:'not-granted-by-inventory',
       clinicalAccess:'not-granted-by-inventory',
@@ -197,6 +229,8 @@ export function inspectSystemEnvironment(options: {
     },
     limitations:[
       'Command presence is not application health or permission.',
+      'Windows API presence is not a successful invocation; Agent Launchers requires package identity and registration.',
+      'Use existing authorized tools for local operations; never activate billing or automate personal Copilot.',
       'Start-menu detection is incomplete and does not prove program launchability.',
       'No credentials, device IDs, complete process lists or private documents were inspected.',
       'Use the supervised Host and existing authorized tools before taking any action.',
