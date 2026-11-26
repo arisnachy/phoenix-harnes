@@ -1301,7 +1301,7 @@ async function finishAfterParentExit(root, pending, preparedTarget) {
 // The watcher is replaced with each active runtime; the supervisor may not
 // be. Run the new janitor from this release so legacy installations migrate
 // automatically, with no manual PowerShell step or dependency on the network.
-function runLiveStorageMigration(root) {
+function runLiveStorageMigration(root, capacityTarget) {
   if (process.platform !== 'win32' || process.env.PHOENIX_UPDATE_SUPERVISED !== '1') return
   const runtime = process.env.PHOENIX_RUNTIME_ROOT?.trim()
   if (!runtime) return
@@ -1309,7 +1309,9 @@ function runLiveStorageMigration(root) {
   if (!existsSync(helper)) return
   const state = durableUpdateState(root)
   if (!state || !['current', 'updated', 'checking', 'paused', 'available'].includes(state.status)) return
-  const result = spawnSync(process.execPath, [helper, '--live-storage-migration'], {
+  const args = [helper, '--live-storage-migration']
+  if (capacityTarget !== undefined) args.push('--capacity-target', capacityTarget)
+  const result = spawnSync(process.execPath, args, {
     cwd: root, env: process.env, windowsHide: true, stdio: 'inherit', timeout: 120_000,
   })
   if (result.error || result.status !== 0) {
@@ -1467,20 +1469,34 @@ async function watch(root, parentPid) {
             // Avoid touching a known busy runtime on every channel poll.
             // Changes to the candidate SHA bypass this wait; an unchanged
             // target is retried after a bounded five-minute pause.
-            if (blockedStorageTarget === inspection.target && Date.now() < nextStorageRetryAt) break
+            if (!manualRefreshRequested && blockedStorageTarget === inspection.target && Date.now() < nextStorageRetryAt) break
             if (!updaterRuntimeStorageHasCapacity(root, inspection.target)) {
               pending = undefined
               preparedTarget = undefined
-              blockedStorageTarget = inspection.target
-              nextStorageRetryAt = Date.now() + STORAGE_RETRY_MS
               clearPrepared(root)
               writeState(root, {
                 status: 'paused',
                 phase: 'storage',
                 ...updateFacts(inspection),
-                detail: 'Runtime storage is at its directory or free-disk safety limit. PHOENIX kept the current Host online. Inspect .dsh, p and pnpm with scripts/phoenix-storage-audit.mjs --diagnose; a later storage check will retry.'
+                detail: 'PHOENIX is attempting a guarded live storage repair while the current Host remains online.',
               })
-              break
+              console.error('[PHOENIX UPDATE] storage capacity blocked; attempting guarded live repair now.')
+              runLiveStorageMigration(root, inspection.target)
+              nextLiveStorageMigrationAt = Date.now() + STORAGE_RETRY_MS
+              // Never equate a successful helper exit with reclaimed storage.
+              // The same real directory and disk guards must pass again.
+              if (!updaterRuntimeStorageHasCapacity(root, inspection.target)) {
+                blockedStorageTarget = inspection.target
+                nextStorageRetryAt = Date.now() + STORAGE_RETRY_MS
+                writeState(root, {
+                  status: 'paused',
+                  phase: 'storage',
+                  ...updateFacts(inspection),
+                  detail: 'Live storage repair could not safely release enough capacity. PHOENIX remains online and will retry automatically. A locked or protected runtime or low disk space may require attention; Retry attempts repair immediately.',
+                })
+                break
+              }
+              console.error('[PHOENIX UPDATE] storage capacity recovered; resuming update without stopping the current Host.')
             }
             blockedStorageTarget = undefined
             nextStorageRetryAt = 0
