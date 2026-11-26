@@ -1,7 +1,47 @@
-import { describe, expect, it } from 'vitest'
-import { assertGoogleAccountSettings, googleAccountEnvironment, parseGoogleModels, parseGoogleResult, isGoogleCliAuthFailure, GOOGLE_ACCOUNT_PROVIDER, ANTIGRAVITY_MODEL_PROVIDER, GoogleAccountCliAdapter, isGoogleAccountRoute, registerGoogleAccountCli } from '../src/antigravity-cli.ts'
+import { describe, expect, it, vi } from 'vitest'
+import type { GenerateOptions } from '@phoenix-ai/dsh-llm'
+import { encodeGoogleUserEvent, buildPrompt, assertGoogleAccountSettings, googleAccountEnvironment, parseGoogleModels, parseGoogleResult, isGoogleCliAuthFailure, GOOGLE_ACCOUNT_PROVIDER, ANTIGRAVITY_MODEL_PROVIDER, GoogleAccountCliAdapter, isGoogleAccountRoute, registerGoogleAccountCli } from '../src/antigravity-cli.ts'
 
 describe('Google account Antigravity CLI adapter', () => {
+  it('uses documented typed content, preserves Unicode and newlines, and rejects empty prompts', () => {
+    expect(JSON.parse(encodeGoogleUserEvent('hola\n¿Qué modelo eres?'))).toEqual({
+      event: 'user', message: { content: [{ type: 'text', text: 'hola\n¿Qué modelo eres?' }] },
+    })
+    expect(() => encodeGoogleUserEvent(' ')).toThrow(/contenido/u)
+  })
+
+  it('sends the complete conversation and latest user turn through the actual adapter', async () => {
+    const request = {
+      provider: ANTIGRAVITY_MODEL_PROVIDER, model: 'gemini-4-hydrogen-low',
+      system: 'Eres Kira.',
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'hola' }] },
+        { role: 'assistant', content: [{ type: 'text', text: '¡Hola!' }] },
+        { role: 'user', content: [{ type: 'text', text: '¿Qué modelo eres?' }] },
+      ],
+    } as GenerateOptions
+    const execute = vi.fn(async (_args: readonly string[], input?: string) => {
+      const event = JSON.parse(input ?? '')
+      expect(event.message.content).toEqual([{ type: 'text', text: buildPrompt(request) }])
+      const text = event.message.content[0].text as string
+      expect(text).toContain('Eres Kira.')
+      expect(text).toContain('USER:\nhola')
+      expect(text).toContain('ASSISTANT:\n¡Hola!')
+      expect(text).toContain('gemini-4-hydrogen-low')
+      expect(text.endsWith('USER:\n¿Qué modelo eres?')).toBe(true)
+      return JSON.stringify({ event: 'result', result: { status: 'SUCCESS', response: 'Gemini' } })
+    })
+    const adapter = new GoogleAccountCliAdapter(ANTIGRAVITY_MODEL_PROVIDER, execute)
+    const chunks = []
+    for await (const chunk of adapter.stream(request)) chunks.push(chunk)
+    expect(execute).toHaveBeenCalledTimes(1)
+    expect(chunks).toContainEqual({ type: 'text-delta', index: 0, text: 'Gemini' })
+  })
+
+  it('rejects missing conversation instead of generating an empty turn', () => {
+    expect(() => buildPrompt({ model: 'gemini-a', messages: [] })).toThrow(/mensajes/u)
+  })
+
   it('refuses explicit modelProvider and malformed settings without switching to API billing', () => {
     expect(() => assertGoogleAccountSettings({})).not.toThrow()
     expect(() => assertGoogleAccountSettings({ modelProvider: 'gemini' })).toThrow(/modelProvider/u)
