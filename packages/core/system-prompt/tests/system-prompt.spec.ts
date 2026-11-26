@@ -30,7 +30,7 @@ describe('SystemPrompt', () => {
       expect(IDENTITY).toContain('silent behavior constraints')
       expect(IDENTITY).toContain('generative-ui')
       expect(IDENTITY).toContain('ui_canvas')
-      expect(IDENTITY).toContain('By default, embed one complete fenced generative-ui block AFTER a brief human explanation')
+      expect(IDENTITY).toContain('Place complete validated generative-ui blocks beside the relevant explanation')
       expect(IDENTITY).toContain('never fictitious live statistics')
       expect(IDENTITY).toContain('Never preface a reply by saying you are using or following a conversation guide')
       expect(IDENTITY).toContain('dry wit, mild sarcasm or irony')

@@ -104,7 +104,7 @@ describe('interactive scales and spreadsheet', () => {
     expect((screen.getByRole('textbox', { name: 'D4' }) as HTMLInputElement).value).toBe('540')
     fireEvent.change(screen.getByRole('textbox', { name: 'B2' }), { target: { value: '4' } })
     expect((screen.getByRole('textbox', { name: 'D4' }) as HTMLInputElement).value).toBe('840')
-    fireEvent.click(screen.getByRole('button', { name: /Deshacer/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer modificación', exact: true }))
     expect((screen.getByRole('textbox', { name: 'D4' }) as HTMLInputElement).value).toBe('540')
   })
 
