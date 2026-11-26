@@ -1,6 +1,5 @@
 /** Account-backed Gemini model route through the official Antigravity CLI. No token extraction. */
-import { execFile, spawn } from 'node:child_process'
-import { promisify } from 'node:util'
+import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
@@ -10,6 +9,7 @@ import { credentialKey } from '@phoenix-ai/dsh-credentials'
 import { CallId, LlmAdapter, LlmError } from '@phoenix-ai/dsh-llm'
 import type { GenerateOptions, LlmModelInfo, StreamChunk } from '@phoenix-ai/dsh-llm'
 import { antigravityExecutable, antigravityInstalled, ensureAntigravityInstalled, installAntigravity } from './antigravity-install.ts'
+import { relayGoogleCliLogin } from './antigravity-login.ts'
 
 export const GOOGLE_ACCOUNT_PROVIDER = 'google-account'
 export const ANTIGRAVITY_MODEL_PROVIDER = 'google-antigravity'
@@ -55,19 +55,6 @@ export function googleAccountEnvironment(env: NodeJS.ProcessEnv): NodeJS.Process
   return Object.fromEntries(Object.entries(env).filter(([key]) => !['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'AGY_ADC_AUTH', 'GOOGLE_APPLICATION_CREDENTIALS'].includes(key.toUpperCase())))
 }
 
-
-/** Open the official interactive login in a visible Windows console, not an OAuth web popup. */
-export async function launchGoogleCliLogin(signal?: AbortSignal): Promise<boolean> {
-  if (process.platform !== 'win32') return false
-  const powershell = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
-  const script = "$ErrorActionPreference = 'Stop'; Start-Process -FilePath $env:PHOENIX_AGY_LOGIN_EXE -ArgumentList @('acp','--login')"
-  await promisify(execFile)(powershell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], {
-    cwd: tmpdir(), windowsHide: true, timeout: 15_000,
-    env: { ...googleAccountEnvironment(process.env), PHOENIX_AGY_LOGIN_EXE: antigravityExecutable() },
-    ...signal === undefined ? {} : { signal },
-  })
-  return true
-}
 
 /** Classify provider diagnostics without exposing arbitrary CLI output or credentials. */
 export function isGoogleCliAuthFailure(value: string): boolean {
@@ -277,26 +264,28 @@ export function registerGoogleAccountCli(ctx: Context): void {
         await ensureAntigravityInstalled({
           installed: () => antigravityInstalled(session.signal),
           consent: async () => {
-            const answer = await session.prompt({ kind: 'text', message: 'Antigravity CLI no está instalada. PHOENIX descargará y ejecutará el instalador oficial de Google en tu cuenta de usuario. Escribe INSTALAR para autorizarlo.', placeholder: 'INSTALAR', signal: session.signal })
-            return answer.trim().toUpperCase() === 'INSTALAR'
+            const answer = await session.prompt({
+              kind: 'select', message: 'Antigravity CLI no está instalada. ¿Autorizar la instalación oficial de Google para tu usuario?',
+              options: [{ id: 'agy-install', label: 'Instalar Antigravity CLI' }, { id: 'agy-cancel', label: 'Cancelar' }], signal: session.signal,
+            })
+            return answer === 'agy-install'
           },
           install: async () => {
             session.notify({ message: 'Instalando Antigravity CLI desde Google…' })
             await installAntigravity(session.signal)
           },
         })
-        const exe = antigravityExecutable()
-        const launched = await launchGoogleCliLogin(session.signal).catch(() => false)
-        session.notify({
-          message: launched
-            ? 'Se solicitó abrir la terminal oficial de Google. Completa el inicio de sesión en esa ventana y vuelve aquí para verificar.'
-            : 'CLI instalada. Abre una terminal, ejecuta ' + exe + ' acp --login (en PowerShell usa & y comillas si la ruta tiene espacios). Completa el inicio de sesión y vuelve aquí. Nunca pegues tokens ni contraseñas.',
+        session.notify({ message: 'Abriendo autenticación oficial de Google…' })
+        const login = spawn(antigravityExecutable(), ['acp', '--login'], {
+          shell: false, windowsHide: true, cwd: tmpdir(), stdio: ['pipe', 'pipe', 'pipe'],
+          env: googleAccountEnvironment(process.env),
         })
-        const answer = await session.prompt({
-          kind: 'text', message: 'Escribe VERIFICAR tras completar el inicio de sesión local.',
-          placeholder: 'VERIFICAR', signal: session.signal,
+        await relayGoogleCliLogin(login, {
+          signal: session.signal,
+          notify: notice => session.notify(notice),
+          prompt: prompt => session.prompt(prompt),
         })
-        if (answer.trim().toUpperCase() !== 'VERIFICAR') throw new LlmError('Autenticación no confirmada', 'AUTH_REQUIRED')
+        session.notify({ message: 'Comprobando automáticamente los modelos y la respuesta de tu cuenta…' })
         const first = parseGoogleModels(await runGoogleCli(['models'], '', session.signal))[0]
         if (first === undefined) throw new LlmError('No se encontraron modelos de cuenta', 'NO_MODELS')
         const test = JSON.stringify({ event: 'user', message: { content: 'Responde solo OK.' } }) + '\n'
