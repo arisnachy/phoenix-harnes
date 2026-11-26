@@ -282,6 +282,28 @@ export interface ResolvedPiAiProviderProfile
   configuredMaxTokens: ReadonlyMap<string, number>
 }
 
+/** Explicit operator attestation of a zero-overage, zero-cost provider model. */
+export interface NexusFreeRoutePolicy {
+  /** Exact provider identifier of the authorized route; never inferred from display text. */
+  provider: string
+  /** Exact model identifier whose billing and tool capabilities were independently verified. */
+  model: string
+  /** HTTPS endpoint to which this attestation is bound, not a general provider-wide grant. */
+  baseURL: string
+  /** Unix epoch milliseconds at which the operator verified this particular route. */
+  verifiedAt: number
+  /** Unix epoch milliseconds after which this attestation must be rejected. */
+  expiresAt: number
+  /** Explicit operator confirmation that every applicable charge dimension is zero. */
+  allChargesZero: boolean
+  /** Explicit operator confirmation that this route cannot incur paid overage. */
+  noOverage: boolean
+  /** Explicit operator confirmation that this exact model supports tool calls. */
+  supportsTools: boolean
+  /** Verified positive context capacity in tokens for preflight admission checks. */
+  contextWindow: number
+}
+
 /** Plugin configuration: the provider routes this instance owns. */
 export interface Config {
   /**
@@ -297,6 +319,8 @@ export interface Config {
    * and registers them the moment a settings section supplies profiles.
    */
   providers?: Record<string, PiAiProviderProfile>
+  /** Optional bounded attestations for additional providers; never inferred from a model name. */
+  nexusFreeRoutes?: NexusFreeRoutePolicy[]
 }
 
 const thinkingBudgets = z.object({
@@ -414,6 +438,12 @@ const profile = z.object({
 export const Config: z<Config> = z.object({
   imageOnly: z.boolean().default(false),
   providers: z.dict(profile).default({}),
+  nexusFreeRoutes: z.array(z.object({
+    provider: z.string().required(), model: z.string().required(), baseURL: z.string().required(),
+    verifiedAt: z.number().step(1).min(0).required(), expiresAt: z.number().step(1).min(0).required(),
+    allChargesZero: z.boolean().required(), noOverage: z.boolean().required(),
+    supportsTools: z.boolean().required(), contextWindow: z.number().step(1).min(1).required(),
+  })).default([]),
 })
 
 /**
