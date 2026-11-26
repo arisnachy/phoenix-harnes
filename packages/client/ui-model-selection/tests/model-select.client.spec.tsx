@@ -6,6 +6,7 @@ import { createSnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ComponentProps } from 'react'
 import type { ModelDirectoryState } from '../src/client/directory.ts'
 import { ModelSelect } from '../src/client/ModelSelect.tsx'
+import { isPhoenixAutoRouting, localModelBrandMark } from '../src/client/presentation.ts'
 import { en, es, zh } from '../src/client/locales.ts'
 import { zh as commonZh } from '@phoenix-ai/dsh-client-locale/src/locales/zh.ts'
 
@@ -701,6 +702,44 @@ describe('Phoenix Local installed model branding', () => {
     expect(qwen.querySelector('svg[data-provider-mark="qwen"]')).not.toBeNull()
     expect(gemma.getAttribute('aria-checked')).toBe('true')
     fireEvent.click(qwen)
-    await waitFor(() => expect(select).toHaveBeenCalledWith({ provider: 'phoenix-local', model: 'ollama:qwen3.5:2b' }))
+    await waitFor(() => { expect(select).toHaveBeenCalledWith({ provider: 'phoenix-local', model: 'ollama:qwen3.5:2b' }) })
+  })
+})
+
+describe('Nexus provider identity in model picker', () => {
+  it('shows Nexus as a separate selectable route with the PHOENIX emblem', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      current: { provider: 'phoenix-nexus', model: 'nexus-auto' },
+      groups: [{ id: 'phoenix-nexus', name: 'PHOENIX Nexus',
+        models: [{ id: 'nexus-auto', name: 'PHOENIX Nexus' }] }],
+    }))
+    render(<ModelSelect locked={false} available directory={directory}
+      load={vi.fn()} select={vi.fn().mockResolvedValue(true)} t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: /PHOENIX Nexus/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    const group = screen.getByRole('menuitem', { name: 'PHOENIX Nexus' })
+    expect(group.querySelector('img[src="/phoenix-emblem.png"]')).not.toBeNull()
+    expect(screen.getByRole('menuitemradio', { name: 'PHOENIX Nexus' })).toBeTruthy()
+  })
+})
+
+
+describe('model presentation routing and local marks', () => {
+  it('keeps Eclipse independent from Orion and ordinary model names', () => {
+    expect(isPhoenixAutoRouting('PHOENIX-AUTO', 'Other')).toBe(true)
+    expect(isPhoenixAutoRouting('legacy', ' Phoenix Auto ')).toBe(true)
+    expect(isPhoenixAutoRouting('nexus-auto', 'ORIÓN')).toBe(false)
+    expect(isPhoenixAutoRouting('ordinary', 'Phoenix')).toBe(false)
+  })
+
+  it('uses the concrete local family rather than the shared provider mark', () => {
+    expect(localModelBrandMark('gemma-4', '')?.slug).toBe('google')
+    expect(localModelBrandMark('local', 'Gemini')?.slug).toBe('google')
+    expect(localModelBrandMark('qwen3.5', '')?.slug).toBe('qwen')
+    expect(localModelBrandMark('deepseek-r1', '')?.slug).toBe('deepseek')
+    expect(localModelBrandMark('llama-3', '')?.slug).toBe('meta')
+    expect(localModelBrandMark('mistral', '')?.slug).toBe('mistralai')
+    expect(localModelBrandMark('local', 'Mixtral')?.slug).toBe('mistralai')
+    expect(localModelBrandMark('custom', 'Unknown')).toBeUndefined()
   })
 })
