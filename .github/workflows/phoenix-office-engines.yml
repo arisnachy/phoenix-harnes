@@ -1,0 +1,23 @@
+name: PHOENIX Office engines
+on:
+  pull_request:
+    paths:
+      - 'scripts/phoenix-office.py'
+      - 'scripts/phoenix-office-test.py'
+      - 'scripts/requirements-office.txt'
+      - '.github/workflows/phoenix-office-engines.yml'
+permissions:
+  contents: read
+jobs:
+  office:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r scripts/requirements-office.txt
+      - run: python scripts/phoenix-office-test.py
