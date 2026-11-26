@@ -269,7 +269,7 @@ export function synapseQuotaWindows(provider: SynapseProvider, raw: unknown, now
 /** Native accounts only; unknown shared groups fail closed. No paid API fallback. */
 async function readSynapseResources(ctx: Context, signal: AbortSignal): Promise<SynapseResource[]> {
   const { authorization, llm } = synapseServices(ctx)
-  return Promise.all((['openai-codex', 'google-antigravity'] as const).map(async provider => {
+  return Promise.all((['openai-codex', 'google-antigravity'] as const).map(async (provider): Promise<SynapseResource> => {
     const unknown: SynapseResource = { provider, status: 'unknown', models: [], windows: [] }
     const key = provider === 'openai-codex' ? 'subagent-codex/account' : 'llm-pi-ai/google-account'
     try {
