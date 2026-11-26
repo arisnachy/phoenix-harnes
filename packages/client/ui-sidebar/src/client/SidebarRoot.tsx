@@ -51,6 +51,8 @@ export function SidebarRoot({
   t,
   renderSlot,
   taskConnection,
+  livingPresence,
+  toggleLivingPresence,
 }: SidebarRootComponentProps) {
   // Match rendered controls to the actual sidebar width immediately.
   // The old 150ms settle timer blocked the rail and retained costly wide rows.
@@ -226,6 +228,7 @@ export function SidebarRoot({
     <div
       ref={column}
       data-app-palette={adaptive.app.startsWith('app-') ? adaptive.palette : undefined}
+      data-living-season={livingPresence?.season === 'christmas' ? 'christmas' : undefined}
       className={clsx(
         css.root, collapsed && css.collapsed, collapsed && everWide.current && css.railIn,
         !pointerInside && css.quietBars,
@@ -383,6 +386,27 @@ export function SidebarRoot({
 
       {/* Footer actions stack above Settings in both sidebar widths. */}
       <div className={css.footArea}>
+        {livingPresence && toggleLivingPresence && (
+          <div className={css.livingPresence}>
+            <button type="button" className={css.livingToggle} aria-pressed={livingPresence.enabled}
+              aria-label={livingPresence.enabled ? 'Desactivar PHOENIX Living' : 'Activar PHOENIX Living'}
+              title={livingPresence.enabled ? 'Desactivar adaptaciones automáticas de presentación' : 'Activar adaptaciones reversibles y decoración de temporada'}
+              onClick={toggleLivingPresence}>
+              <span aria-hidden="true">{livingPresence.season === 'christmas' ? '✧' : '✦'}</span>
+              {wide && <span>Living {livingPresence.enabled ? '· Activo' : '· Inactivo'}</span>}
+            </button>
+            {wide && livingPresence.enabled && livingPresence.notice !== 'ready' && (
+              <span className={css.livingNotice} role="status">
+                {livingPresence.notice === 'workspace-compacted'
+                  ? 'Liberé ' + livingPresence.recoveredPixels + ' px para trabajar. Puedes expandir el lateral.'
+                  : livingPresence.notice === 'christmas' ? '¡Felices fiestas! Preparé una decoración para nuestro espacio.' : ''}
+              </span>
+            )}
+            {!wide && livingPresence.compacted && <span className={css.livingRailNote} role="status"
+              aria-label={'Lateral compactado: ' + livingPresence.recoveredPixels + ' px recuperados'}
+              title={'Liberé ' + livingPresence.recoveredPixels + ' px. Expande el lateral cuando quieras.'}>↔</span>}
+          </div>
+        )}
         <div className={css.footerActions}>
           {renderSlot('sidebar.footer.action', { wide })}
         </div>
