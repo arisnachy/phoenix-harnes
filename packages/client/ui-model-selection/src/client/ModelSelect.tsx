@@ -298,7 +298,7 @@ export function ModelSelect(
   }
 
   const choose = (selection: ModelSelection): void => {
-    if (state.current?.provider === selection.provider && state.current.model === selection.model) {
+    if (rawState.current?.provider === selection.provider && rawState.current.model === selection.model) {
       close(true)
       return
     }
@@ -378,14 +378,15 @@ export function ModelSelect(
   const defaultExpandedGroupId = (): string | undefined => {
     const current = state.current
     const holder = state.groups.find(group =>
-      current !== null && group.models.some(model => model.id === current.model))
+      current !== null && group.id === current.provider && group.models.some(model => model.id === current.model))
     return holder?.id ?? state.groups[0]?.id
   }
 
   const groupExpanded = (groupId: string): boolean => {
     if (normalizedQuery !== '') return true
     const manual = groupToggles.get(groupId)
-    return manual ?? groupId === defaultExpandedGroupId()
+    return manual ?? (state.current?.provider === 'phoenix-nexus' && state.current.model === 'nexus-auto'
+      ? true : groupId === defaultExpandedGroupId())
   }
 
   const toggleGroup = (groupId: string): void => {

@@ -743,3 +743,23 @@ describe('model presentation routing and local marks', () => {
     expect(localModelBrandMark('custom', 'Unknown')).toBeUndefined()
   })
 })
+
+
+describe('ORIÓN exit to other providers', () => {
+  it('offers other provider models immediately and submits their exact wire route', async () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      current: { provider: 'phoenix-nexus', model: 'nexus-auto' },
+      groups: [
+        { id: 'phoenix-nexus', name: 'PHOENIX', models: [{ id: 'nexus-auto', name: 'ORIÓN' }] },
+        { id: 'deepseek-official', name: 'DeepSeek', models: [{ id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash' }] },
+        { id: 'openai-codex', name: 'OpenAI Codex', models: [{ id: 'gpt-6.2-sol', name: 'GPT-6.2 Sol' }] },
+      ],
+    }))
+    const select = vi.fn().mockResolvedValue(true)
+    render(<ModelSelect locked={false} available directory={directory} load={vi.fn()} select={select} t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: /ORIÓN/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /DeepSeek.*Flash/i }))
+    await waitFor(() => expect(select).toHaveBeenCalledWith({ provider: 'deepseek-official', model: 'deepseek-v4-flash' }))
+  })
+})

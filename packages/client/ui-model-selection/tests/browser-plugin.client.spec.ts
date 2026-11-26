@@ -54,7 +54,7 @@ const GROUPS = [{
 }]
 
 /** Boot the plugin over fake faces + a stateful fake host (current moves on selectModel). */
-async function bench() {
+async function bench(beforeSelect?: () => Promise<void>) {
   const ctx = new Context()
   let current: ModelSelection = { provider: 'deepseek-official', model: 'deepseek-v4-flash' }
   const calls = { models: 0, select: 0 }
@@ -65,8 +65,9 @@ async function bench() {
         result: { ok: true as const, value: { current, routable, groups: GROUPS, failures: [] } },
       })
     },
-    selectModel: (payload: { provider: string; model: string; reasoningEffort?: string }) => {
+    selectModel: async (payload: { provider: string; model: string; reasoningEffort?: string }) => {
       calls.select += 1
+      if (beforeSelect !== undefined) await beforeSelect()
       current = {
         provider: payload.provider,
         model: payload.model,
@@ -142,6 +143,23 @@ async function bench() {
 const projection = (id: string) => ({ sessionId: sid(id) })
 
 describe('ui-model-selection dual entry', () => {
+  it('waits for an in-flight manual switch before refreshing the directory', async () => {
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const b = await bench(() => gate)
+    b.mint('race')
+    b.setHostCurrent({ provider: 'phoenix-nexus', model: 'nexus-auto' })
+    const directory = b.ctx.modelDirectories.directoryFor(sid('race'))
+    await directory.load()
+    const switching = directory.select({ provider: 'deepseek-official', model: 'deepseek-v4-pro' })
+    const refreshing = directory.load()
+    expect(b.calls.models).toBe(1)
+    release()
+    await Promise.all([switching, refreshing])
+    expect(directory.store.getSnapshot().current).toMatchObject({ provider: 'deepseek-official', model: 'deepseek-v4-pro' })
+    await b.ctx.fiber.dispose()
+  })
+
   it('registers the /model contribution and the composer model seat', async () => {
     const b = await bench()
     expect(b.contribution().name).toBe('model')

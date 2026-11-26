@@ -49,6 +49,7 @@ export class ModelDirectory {
   /** Latest operation wins; an older response never overwrites a newer one. */
   private generation = 0
   private disposed = false
+  private pendingSelection: Promise<void> | undefined
 
   /**
    * @param sessions - the session wire face (captured from the plugin's root connection).
@@ -71,6 +72,15 @@ export class ModelDirectory {
    */
   async load(): Promise<SessionModels> {
     this.assertAvailable()
+    // A settings/adapter refresh can arrive while selectModel persists the new route.
+    // Read the directory only after that write settles, not from the old selection.
+    while (this.pendingSelection !== undefined) {
+      const pending = this.pendingSelection
+      await pending.catch(() => undefined)
+      if (this.pendingSelection === pending) this.pendingSelection = undefined
+    }
+    this.assertAvailable()
+    if (this.disposed) throw new Error('model directory disposed')
     const generation = ++this.generation
     this.store.update((s) => { s.status = 'loading'; s.error = null })
     const { result } = await this.sessions.models({ sessionId: this.sessionId })
@@ -107,6 +117,13 @@ export class ModelDirectory {
    * @param selection - provider, provider-owned model id, and optional adapter-owned effort.
  */
   async select(selection: ModelSelection): Promise<void> {
+    const operation = this.performSelection(selection)
+    this.pendingSelection = operation
+    try { await operation }
+    finally { if (this.pendingSelection === operation) this.pendingSelection = undefined }
+  }
+
+  private async performSelection(selection: ModelSelection): Promise<void> {
     this.assertAvailable()
     const generation = ++this.generation
     this.store.update((s) => { s.status = 'selecting'; s.error = null })
@@ -166,6 +183,7 @@ export class ModelDirectory {
   resetConnected(): void {
     if (this.disposed) return
     ++this.generation
+    this.pendingSelection = undefined
     this.store.update((s) => {
       s.current = null
       s.routable = null
