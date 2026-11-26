@@ -37,6 +37,13 @@ export type ComputerAction =
   | 'screenshot'
   | 'windows'
   | 'focus'
+  | 'uia_inspect'
+  | 'uia_invoke'
+  | 'uia_toggle'
+  | 'uia_select'
+  | 'uia_expand'
+  | 'uia_collapse'
+  | 'uia_set_value'
   | 'browser_open'
   | 'browser_close'
   | 'browser_back'
@@ -71,6 +78,10 @@ export interface BrowserFormValue {
 /** Model-facing arguments for one desktop operation. */
 export interface ComputerToolArgs {
   action: ComputerAction
+  /** Runtime ID from the last scoped UI Automation inspection. */
+  element?: string
+  /** Internal process identity from the Host receipt; never a model parameter. */
+  uiaIdentity?: string
   /**
    * Optional top-level window selector. Supported forms are a title or title
    * substring, pid:1234, and hwnd:0x123ABC. focus requires this field.
@@ -99,6 +110,7 @@ interface ComputerInvocation {
   argv: readonly string[]
   env: Readonly<Record<string, string>>
   stdin: string
+  timeoutMs?: number
 }
 
 interface DesktopImageAttachment {
@@ -159,6 +171,11 @@ interface DesktopBrowserCommand {
 }
 
 /** Whether this action must travel over the native Phoenix Desktop browser channel. */
+/** Semantic UI Automation actions never fall through to pointer input. */
+export function isUiaAction(action: ComputerAction): boolean {
+  return action.startsWith('uia_')
+}
+
 function isEmbeddedBrowserAction(action: ComputerAction): action is EmbeddedBrowserAction {
   return action === 'browser_open'
     || action === 'browser_close'
@@ -587,7 +604,7 @@ export function desktopPreviewCommandForAction(
     type: 'phoenix.desktop.preview',
     ...(args.target === undefined ? {} : { target: normalizedDesktopTarget(args.target)! }),
     sessionId,
-    observe: args.action === 'screenshot' || args.action === 'windows',
+    observe: args.action === 'screenshot' || args.action === 'windows' || args.action === 'uia_inspect',
   }
 }
 
@@ -610,7 +627,7 @@ async function prepareDesktopLivePreview(
   } catch (error) {
     // Permission/pause failures are authoritative. Do not bypass the user's
     // explicit native pause or an ongoing desktop session by using PowerShell.
-    if (error instanceof Error && /paused by user|occupied by another session/iu.test(error.message)) {
+    if ((isUiaAction(args.action) && args.action !== 'uia_inspect') || (error instanceof Error && /paused by user|occupied by another session/iu.test(error.message))) {
       throw error
     }
     if (desktopControlConnectionWasNeverEstablished(error)) {
@@ -675,7 +692,7 @@ export function assertComputerActionAllowed(mode: ComputerMode, action: Computer
   if (mode === 'off') {
     throw new Error('Computer Use is disabled by the current permission mode.')
   }
-  const observationOnly = action === 'screenshot' || action === 'windows' || action === 'browser_inspect'
+  const observationOnly = action === 'screenshot' || action === 'windows' || action === 'browser_inspect' || action === 'uia_inspect'
   if (mode === 'observe' && !observationOnly) {
     throw new Error(`Computer action "${action}" requires interact permission; current mode is observe.`)
   }
@@ -739,7 +756,27 @@ const KEY_COMBO = /^[A-Za-z0-9_+\-]+$/u
  */
 export function validateComputerArgs(args: ComputerToolArgs): void {
   validateTarget(args.target, args.action === 'focus')
+  if (isUiaAction(args.action)) {
+    if (!args.target || !/^hwnd:0x[0-9a-f]{1,16}$/iu.test(args.target)) {
+      throw new TypeError('UI Automation requires an exact hwnd:0x selector from computer windows')
+    }
+    if (args.action !== 'uia_inspect' && (!args.element || args.element.length > 256
+      || !/^-?\d+(?:,-?\d+){0,31}$/u.test(args.element))) {
+      throw new TypeError('UI Automation requires an element runtime ID from the last inspection')
+    }
+    if (args.action === 'uia_set_value' && (args.text === undefined || args.text.length > 4096 || args.text.includes('\0'))) {
+      throw new TypeError('UI Automation set_value requires text of at most 4096 characters')
+    }
+  }
   switch (args.action) {
+    case 'uia_inspect':
+    case 'uia_invoke':
+    case 'uia_toggle':
+    case 'uia_select':
+    case 'uia_expand':
+    case 'uia_collapse':
+    case 'uia_set_value':
+      return
     case 'screenshot':
     case 'windows':
     case 'focus':
@@ -1287,6 +1324,118 @@ $action = $env:PHX_ACTION
 $button = if ($env:PHX_BUTTON) { $env:PHX_BUTTON } else { 'left' }
 $target = $env:PHX_TARGET
 
+# Windows UI Automation: semantic controls, no screen pixels or field values in observations.
+if ($action -like 'uia_*') {
+  Add-Type -AssemblyName UIAutomationClient
+  Add-Type -AssemblyName UIAutomationTypes
+  [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+  $hwnd = [PhoenixDesktop]::ResolveWindow($target)
+  $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
+  if ($null -eq $root -or $root.Current.IsOffscreen) { throw 'UIA target is unavailable or offscreen' }
+  $rootPid = $root.Current.ProcessId
+  $processStart = [Diagnostics.Process]::GetProcessById($rootPid).StartTime.ToUniversalTime().Ticks
+  $identity = [string]$rootPid + ':' + [string]$processStart
+  $patterns = @{
+    invoke = [System.Windows.Automation.InvokePattern]::Pattern
+    toggle = [System.Windows.Automation.TogglePattern]::Pattern
+    select = [System.Windows.Automation.SelectionItemPattern]::Pattern
+    expand = [System.Windows.Automation.ExpandCollapsePattern]::Pattern
+    collapse = [System.Windows.Automation.ExpandCollapsePattern]::Pattern
+    set_value = [System.Windows.Automation.ValuePattern]::Pattern
+  }
+  function Get-UiaElements($parent) {
+    $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+    $queue = New-Object 'System.Collections.Generic.Queue[System.Windows.Automation.AutomationElement]'
+    $queue.Enqueue($parent)
+    $queued = 1
+    $visited = 0
+    while ($queue.Count -gt 0 -and $visited -lt 400) {
+      $node = $queue.Dequeue()
+      $visited++
+      if ($visited -gt 1) { Write-Output $node }
+      try {
+        $child = $walker.GetFirstChild($node)
+        while ($null -ne $child -and $queued -lt 400) {
+          $queue.Enqueue($child)
+          $queued++
+          if ($queued -ge 400) { break }
+          $child = $walker.GetNextSibling($child)
+        }
+      } catch {}
+    }
+  }
+  function Get-UiaRow($node) {
+    try {
+      $current = $node.Current
+      if ($current.IsPassword -or $current.IsOffscreen -or $current.ProcessId -ne $rootPid) { return }
+      $rid = ($node.GetRuntimeId() -join ',')
+      if (-not $rid -or $rid.Length -gt 256) { return }
+      $supported = @($node.GetSupportedPatterns() | ForEach-Object { $_.Id })
+      $ops = @($patterns.Keys | Where-Object { $supported -contains $patterns[$_].Id } | Sort-Object)
+      $role = [string]$current.ControlType.ProgrammaticName
+      if ($ops.Count -eq 0) { return }
+      $label = ''
+      if ($role -notmatch 'ControlType\.(Edit|Document|Text)$') {
+        $label = ([string]$current.Name -replace '[\x00-\x1f\x7f]', ' ').Trim()
+        if ($label.Length -gt 100) { $label = $label.Substring(0,100) }
+      }
+      $automationId = ([string]$current.AutomationId -replace '[\x00-\x1f\x7f]', ' ').Trim()
+      if ($automationId.Length -gt 100) { $automationId = $automationId.Substring(0,100) }
+      [pscustomobject]@{id=$rid; role=$role; name=$label; automationId=$automationId; enabled=[bool]$current.IsEnabled; actions=$ops}
+    } catch {}
+  }
+  $nodes = @(Get-UiaElements $root)
+  if ($action -eq 'uia_inspect') {
+    $rows = @($nodes | ForEach-Object { Get-UiaRow $_ } | Select-Object -First 121)
+    @{schema='phoenix.uia.v1'; identity=$identity; target=$target; controls=@($rows | Select-Object -First 120); truncated=($nodes.Count -ge 399 -or $rows.Count -gt 120); valuesExposed=$false} | ConvertTo-Json -Depth 6 -Compress
+    return
+  }
+  if ($env:PHX_UIA_IDENTITY -cne $identity) { throw 'UIA target process identity changed; inspect again' }
+  $selected = @($nodes | Where-Object { try { ($_.GetRuntimeId() -join ',') -ceq $env:PHX_UIA_ELEMENT } catch { $false } })
+  if ($selected.Count -ne 1) { throw 'UIA element disappeared or is ambiguous; inspect again' }
+  $node = $selected[0]
+  $row = Get-UiaRow $node
+  $operation = $action.Substring(4)
+  if ($null -eq $row -or -not $row.enabled -or $row.actions -notcontains $operation) { throw 'UIA element or pattern is not currently eligible' }
+  [PhoenixDesktop]::Guard($target)
+  if ($node.Current.IsPassword -or $node.Current.IsOffscreen -or -not $node.Current.IsEnabled -or $node.Current.ProcessId -ne $rootPid) { throw 'UIA element changed before dispatch' }
+  $pattern = $node.GetCurrentPattern($patterns[$operation])
+  $observed = $null
+  switch ($operation) {
+    'invoke' { ([System.Windows.Automation.InvokePattern]$pattern).Invoke() }
+    'toggle' {
+      $p = [System.Windows.Automation.TogglePattern]$pattern
+      $p.Toggle()
+      try { $observed = @{toggleState=[string]$p.Current.ToggleState} } catch {}
+    }
+    'select' {
+      $p = [System.Windows.Automation.SelectionItemPattern]$pattern
+      $p.Select()
+      try { $observed = @{selected=[bool]$p.Current.IsSelected} } catch {}
+    }
+    'expand' {
+      $p = [System.Windows.Automation.ExpandCollapsePattern]$pattern
+      $p.Expand()
+      try { $observed = @{expandState=[string]$p.Current.ExpandCollapseState} } catch {}
+    }
+    'collapse' {
+      $p = [System.Windows.Automation.ExpandCollapsePattern]$pattern
+      $p.Collapse()
+      try { $observed = @{expandState=[string]$p.Current.ExpandCollapseState} } catch {}
+    }
+    'set_value' {
+      $p = [System.Windows.Automation.ValuePattern]$pattern
+      if ($p.Current.IsReadOnly) { throw 'UIA value is read-only' }
+      $value = [string]$env:PHX_TEXT
+      $p.SetValue($value)
+      try { $observed = @{valueMatchesRequest=($p.Current.Value -ceq $value)} } catch {}
+    }
+    default { throw 'unsupported UIA pattern' }
+  }
+  @{schema='phoenix.uia.v1'; action=$action; target=$target; element=$env:PHX_UIA_ELEMENT; dispatched=$true; observed=$observed; applicationGoalVerified=$false; valuesExposed=$false} | ConvertTo-Json -Depth 5 -Compress
+  return
+}
+
 switch ($action) {
   'screenshot' {
     Add-Type -AssemblyName System.Windows.Forms
@@ -1460,11 +1609,14 @@ export function windowsComputerInvocation(args: ComputerToolArgs): ComputerInvoc
   if (args.button !== undefined) env.PHX_BUTTON = args.button
   if (args.text !== undefined) env.PHX_TEXT = args.text
   if (args.keys !== undefined) env.PHX_KEYS = args.keys
+  if (args.element !== undefined) env.PHX_UIA_ELEMENT = args.element
+  if (args.uiaIdentity !== undefined) env.PHX_UIA_IDENTITY = args.uiaIdentity
   return {
     file: 'powershell.exe',
     argv: ['-NoLogo', '-NoProfile', '-NonInteractive', '-STA', '-Command', stdinScriptCommand],
     env,
     stdin: WINDOWS_DRIVER,
+    ...(isUiaAction(args.action) ? { timeoutMs: 12_000 } : {}),
   }
 }
 
@@ -1502,7 +1654,7 @@ function executeComputerInvocation(invocation: ComputerInvocation, signal?: Abor
       encoding: 'utf8',
       windowsHide: true,
       maxBuffer: 64 * 1024 * 1024,
-      timeout: DESKTOP_ACTION_TIMEOUT_MS,
+      timeout: invocation.timeoutMs ?? DESKTOP_ACTION_TIMEOUT_MS,
       env: { ...process.env, ...invocation.env },
       ...signal === undefined ? {} : { signal },
     }, (error, stdout, stderr) => {
@@ -1557,6 +1709,14 @@ export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: 
   }
 
   const descriptor = await readDesktopControlDescriptorIfAvailable()
+  if (isUiaAction(args.action)) {
+    // The schema-2 resident broker has no semantic UIA protocol yet; do not
+    // bypass its native pause/ownership policy with a separate actuator.
+    if (descriptor?.schema === RESIDENT_DESKTOP_CONTROL_SCHEMA && args.action !== 'uia_inspect') {
+      throw new Error('UIA interaction is unavailable with this resident broker version; use its authorized native controls.')
+    }
+    return await executeComputerInvocation(windowsComputerInvocation(args), signal)
+  }
   if (descriptor?.schema === LEGACY_DESKTOP_CONTROL_SCHEMA
     && (args.action === 'windows' || (args.action === 'screenshot' && args.target === undefined))) {
     try {
@@ -1731,7 +1891,7 @@ export function computerActionNeedsApproval(
   sandboxMode: SandboxMode | undefined,
   action: ComputerAction,
 ): boolean {
-  if (action === 'screenshot' || action === 'windows' || action === 'browser_inspect') return false
+  if (action === 'screenshot' || action === 'windows' || action === 'browser_inspect' || action === 'uia_inspect') return false
   return computerModeForSandbox(sandboxMode) === 'interact' && sandboxMode !== 'danger-full-access'
 }
 
@@ -1862,6 +2022,8 @@ export function registerComputerTool(ctx: Context): void {
   const deploymentDefault = ctx.shell.sandboxMode
   // Weak keys keep window selectors session-owned without a global desktop lease leak.
   const selectedDesktopTargets = new WeakMap<object, string>()
+  // Semantic element receipts are scoped to a root conversation and expire.
+  const uiaReceipts = new WeakMap<object, { target: string; identity: string; elements: Set<string>; expiresAt: number }>()
 
   // Monotonic registry guard covers direct tool calls AND nested run_code
   // sub-dispatches, including external Chrome/Browser MCPs. No prompt-only lock.
@@ -1882,6 +2044,9 @@ export function registerComputerTool(ctx: Context): void {
       'Use phoenix_browser/chrome for approved form edits, clicks, and credentials; never downgrade credential actions.',
       'If navigation fails, report the actual controller error and continue with other authorized web tools.',
       'Native Windows windows/focus/click/type/key/scroll retain the fixed PowerShell fallback.',
+      'For native Windows apps, prefer semantic uia_inspect on an exact hwnd from windows, then uia_invoke/toggle/select/expand/collapse/set_value on a returned enabled element and supported pattern.',
+      'UIA mutations require foreground focus, a fresh same-session inspection, and normal permissions; re-inspect after every action. No password fields or field values are exposed.',
+      'UIA returns semantic receipts instead of automatic image attachments. Use screenshot when visual verification is needed; never equate dispatch with application-level success.',
     ].join(' '),
   })
 
@@ -1892,10 +2057,11 @@ export function registerComputerTool(ctx: Context): void {
       action: {
         type: 'string',
         required: true,
-        enum: ['screenshot', 'windows', 'focus', 'browser_open', 'browser_close', 'browser_back', 'browser_forward', 'browser_reload', 'browser_focus', 'browser_inspect', 'browser_fill_form', 'browser_click_text', 'browser_login', 'move', 'click', 'double_click', 'drag', 'type', 'key', 'scroll'],
+        enum: ['screenshot', 'windows', 'focus', 'uia_inspect', 'uia_invoke', 'uia_toggle', 'uia_select', 'uia_expand', 'uia_collapse', 'uia_set_value', 'browser_open', 'browser_close', 'browser_back', 'browser_forward', 'browser_reload', 'browser_focus', 'browser_inspect', 'browser_fill_form', 'browser_click_text', 'browser_login', 'move', 'click', 'double_click', 'drag', 'type', 'key', 'scroll'],
         description: 'Desktop operation. browser_inspect reads visible text/form metadata without values; browser_fill_form fills inspected indexes; browser_click_text clicks visible button/link text; browser_login uses the origin-bound vault. Other browser_* actions control Phoenix\'s embedded WebView2 directly.',
       },
       target: { type: 'string', description: 'Top-level window selector: title/title substring, pid:1234, or hwnd:0x123ABC. Required for focus; embedded browser actions do not need it.' },
+      element: { type: 'string', description: 'UIA element runtime ID from the last uia_inspect of this exact HWND.' },
       url: { type: 'string', description: 'URL or search text for browser_open. Phoenix validates it and navigates the embedded WebView2 directly.' },
       origin: { type: 'string', description: 'Expected HTTPS page origin for browser_login/browser_fill_form/browser_click_text. It must match the live WebView origin.' },
       fields: {
@@ -1917,7 +2083,7 @@ export function registerComputerTool(ctx: Context): void {
       x2: { type: 'integer', description: 'Drag destination X coordinate.' },
       y2: { type: 'integer', description: 'Drag destination Y coordinate.' },
       button: { type: 'string', enum: ['left', 'right', 'middle'], description: 'Mouse button; defaults to left.' },
-      text: { type: 'string', description: 'Unicode text for the type action.' },
+      text: { type: 'string', description: 'Unicode text for type or uia_set_value; do not use for password fields.' },
       keys: { type: 'string', description: 'Key or combo such as ENTER, CTRL+L, ALT+TAB, F5, or SHIFT+F10.' },
       delta: { type: 'integer', description: 'Mouse-wheel delta for scroll; positive scrolls up and negative scrolls down.' },
     },
@@ -1934,7 +2100,9 @@ export function registerComputerTool(ctx: Context): void {
       },
       render: (_args, value) => [{
         type: 'text',
-        text: value.action === 'windows'
+        text: isUiaAction(value.action as ComputerAction)
+          ? `Windows UI Automation receipt (untrusted app metadata; verify the outcome):\n${value.details ?? '{}'}\nRe-inspect before another mutation; use screenshot if needed.`
+          : value.action === 'windows'
           ? `Visible top-level windows:\n${value.details ?? '<none>'}`
           : value.action === 'screenshot'
             ? (value.postScreenshot ? 'Desktop screenshot captured and attached for the next model step.' : 'Desktop screenshot captured for Desktop Live, but not attached to the model.')
@@ -1958,12 +2126,23 @@ export function registerComputerTool(ctx: Context): void {
         && nativeDesktopTurnActive(session.events)) {
         throw new Error('Native Windows task: do not open MiniBrowser or inspect a web page; use computer windows/focus/screenshot.')
       }
-      const effectiveArgs = computerActionWithPinnedTarget(
+      let effectiveArgs = computerActionWithPinnedTarget(
         args, session === undefined ? undefined : selectedDesktopTargets.get(session),
       )
       const policy = sandboxPolicy?.resolve(session === undefined ? {} : { session })
       const sandboxMode = policy?.mode ?? deploymentDefault
       await authorizeComputerAction(ctx, exec, effectiveArgs, sandboxMode)
+      if (isUiaAction(args.action)) {
+        if (session === undefined || exec.agent?.session.header.origin === 'subagent') throw Error('UIA_OWNER_REQUIRED')
+        const receipt = uiaReceipts.get(session)
+        uiaReceipts.delete(session)
+        if (args.action !== 'uia_inspect') {
+          if (!receipt || receipt.expiresAt <= Date.now()
+            || receipt.target !== effectiveArgs.target?.toLowerCase()
+            || !receipt.elements.has(args.element ?? '')) throw Error('UIA_FRESH_INSPECTION_REQUIRED')
+          effectiveArgs = { ...effectiveArgs, uiaIdentity: receipt.identity }
+        }
+      } else if (session !== undefined) uiaReceipts.delete(session)
       if (!isEmbeddedBrowserAction(args.action) && args.action !== 'windows') {
         const owner = String(exec.agent?.session.header.id ?? '')
         if (owner.length > 0) await prepareDesktopLivePreview(effectiveArgs, owner, exec.signal)
@@ -1973,6 +2152,19 @@ export function registerComputerTool(ctx: Context): void {
         ? await runOriginBoundBrowserLogin(ctx, effectiveArgs, exec.signal)
         : await runWindowsComputerAction(effectiveArgs, exec.signal,
           session === undefined ? undefined : String(session.header.id))
+      if (args.action === 'uia_inspect' && session !== undefined) {
+        const receipt = JSON.parse(output) as { schema?: unknown; target?: unknown; identity?: unknown; controls?: unknown }
+        if (receipt.schema !== 'phoenix.uia.v1' || typeof receipt.target !== 'string'
+          || receipt.target.toLowerCase() !== effectiveArgs.target?.toLowerCase()
+          || typeof receipt.identity !== 'string' || !/^\d+:\d{1,20}$/u.test(receipt.identity)
+          || !Array.isArray(receipt.controls) || receipt.controls.length > 120) throw Error('UIA_INVALID_RECEIPT')
+        const elements = new Set<string>()
+        for (const row of receipt.controls) {
+          if (row && typeof row.id === 'string' && row.id.length <= 256
+            && /^-?\d+(?:,-?\d+){0,31}$/u.test(row.id) && row.enabled === true) elements.add(row.id)
+        }
+        uiaReceipts.set(session, { target: receipt.target.toLowerCase(), identity: receipt.identity, elements, expiresAt: Date.now() + 60_000 })
+      }
       if (session !== undefined && !isEmbeddedBrowserAction(args.action)
         && args.action !== 'windows' && args.action !== 'screenshot') {
         const observed = computerVerificationTarget({}, output)
