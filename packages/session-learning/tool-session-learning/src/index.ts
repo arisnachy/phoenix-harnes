@@ -17,7 +17,7 @@ import { assessHabitExperience, formatHabitGuidance, formatUnverifiedExperience 
 import { AutonomousMemoryCurator } from './autonomous-curator.ts'
 import { filterProceduralSearchHits, installProceduralLearning } from './procedural.ts'
 import { formatProceduralContext, formatRecoveryCandidates } from './procedural-presentation.ts'
-import { formatMemorySearchResult, formatRecentMemoryContext } from './presentation.ts'
+import { formatMemorySearchResult, formatRecentMemoryContext, isRelevantUserGuidance } from './presentation.ts'
 import { formatResolvedTaskReference, RecentTaskLedger } from './task-reference.ts'
 
 /** Cordis plugin name. */
@@ -290,6 +290,22 @@ export function apply(ctx: Context, config: Config): void {
         }
       }
       return formatRecentMemoryContext(selected)
+    },
+    interpolateVariables: false,
+  })
+  ctx.systemPrompt.context({
+    name: 'context:relevant-user-guidance',
+    order: 119,
+    text: (assembly) => {
+      const currentMessage = userTextForAssembly(assembly)
+      const sessionId = taskSession(assembly)
+      if (currentMessage === undefined || sessionId === undefined || requestsPriorMemory(currentMessage)) return ''
+      const projectId = projectForAssembly(assembly)
+      const hits = ctx.learningMemory.recallCognitive({
+        query: currentMessage, limit: 12, layers: ['semantic'],
+        ...projectId === undefined ? {} : { projectId },
+      }).filter(hit => isRelevantUserGuidance(hit.record, currentMessage, sessionId, projectId))
+      return formatRecentMemoryContext(hits.slice(0, 3))
     },
     interpolateVariables: false,
   })
