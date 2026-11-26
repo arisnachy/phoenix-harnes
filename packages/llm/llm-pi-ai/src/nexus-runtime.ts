@@ -257,13 +257,18 @@ export function nexusAdaptiveEffort<T extends string>(supported: readonly T[], c
  * @returns An advertised model ID, when present.
  */
 export function nexusCodexFallback(ids: readonly string[], complex: boolean): string | undefined {
-  const strong = ids.filter(id => /^gpt-\d+(?:\.\d+)?-(?:astra|sol)(?:$|-)/iu.test(id))
-  const fast = ids.filter(id => /^gpt-\d+(?:\.\d+)?-luna(?:$|-)/iu.test(id))
-  const preferred = complex ? strong : fast
-  const candidates = preferred.length > 0 ? preferred : complex ? fast : strong
+  // Use only exact IDs supplied by the account catalog; version ordering is
+  // within task-appropriate families, not an invented list of model names.
+  const family = (id: string): string | undefined =>
+    /^gpt-\d+(?:\.\d+)*-(luna|terra|sol|astra)(?:$|-)/iu.exec(id)?.[1]?.toLowerCase()
+  const groups = complex ? [['sol', 'astra'], ['terra'], ['luna']] : [['luna'], ['terra'], ['sol', 'astra']]
   const collator = new Intl.Collator('en', { numeric: true })
-  candidates.sort((left, right) => collator.compare(right, left))
-  return candidates[0]
+  for (const group of groups) {
+    const candidates = ids.filter(id => group.includes(family(id) ?? ''))
+    candidates.sort((left, right) => collator.compare(right, left))
+    if (candidates.length > 0) return candidates[0]
+  }
+  return undefined
 }
 
 /**
@@ -494,6 +499,8 @@ export interface NexusRuntimeOptions {
   readonly profiles: () => ReadonlyMap<string, ResolvedPiAiProviderProfile>
   readonly freeRoutePolicies?: () => readonly NexusFreeRoutePolicy[]
   readonly nativeCodexAuthorized: () => Promise<boolean>
+  /** Exact last-good native account-visible catalog, excluding static/retired dispatch entries. */
+  readonly codexVisibleModelIds?: () => readonly string[] | undefined
   readonly providerAuthorized: (provider: string, profile: ResolvedPiAiProviderProfile) => Promise<boolean>
 }
 
@@ -636,6 +643,16 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     try { return await promise } finally { catalogInFlight = undefined }
   }
 
+  // listModels refreshes the native catalog through the existing adapter.
+  // Production additionally intersects it with native account-visible IDs,
+  // rather than trusting the static/retired dispatch superset.
+  const accountCodexModels = async (): Promise<readonly LlmModelInfo[]> => {
+    const advertised = await ctx.llm.listModels('openai-codex').catch(() => [])
+    if (options.codexVisibleModelIds === undefined) return advertised
+    const visible = options.codexVisibleModelIds()
+    return visible === undefined ? [] : advertised.filter(model => visible.includes(model.id))
+  }
+
   ctx.llm.registerAdapter([NEXUS_PROVIDER], new NexusSelectorAdapter())
 
   const agentEvents = ctx as unknown as NexusAgentEventBridge
@@ -698,6 +715,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
         const quota = await getQuota(now, payload.signal)
         eligible = eligible && nexusCodexAvailability(quota, Date.now()) === 'available'
           && await options.nativeCodexAuthorized()
+          && (await accountCodexModels()).some(model => model.id === route.model)
           && await codexContextFits(route.model)
       } else {
         const inventory = await listAuthorizedModels(now)
@@ -754,7 +772,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     // Re-read the live Codex model directory rather than trusting cached account
     // authorization from the generic economics inventory.
     const advertised = nativeAuthorized
-      ? await ctx.llm.listModels('openai-codex').catch(() => [])
+      ? await accountCodexModels()
       : []
     const ids = advertised.filter(model =>
       (!hasImage || model.inputModalities?.includes('image') === true)
@@ -819,9 +837,14 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     const state = perAgent.get(payload.agent)
     const active = state?.turn === payload.turn ? state : undefined
     if (payload.signal.aborted || active?.routed === undefined || active.routed.provider !== payload.provider
-      || active.failovers >= 2
+      || active.failovers >= (active.routed.provider === 'openai-codex' ? 4 : 2)
       || !['RATE_LIMIT', 'TIMEOUT', 'TRANSPORT', 'SERVER', 'AUTH', 'MISSING_CREDENTIAL', 'MODEL_NOT_FOUND'].includes(payload.failure.code)) {
       return next()
+    }
+    if (active.routed.provider === 'openai-codex' && payload.failure.code === 'RATE_LIMIT') {
+      // Refresh shared account evidence before attempting a sibling model.
+      quotaReadAt = 0
+      quotaCache = undefined
     }
     const failed = routeKey(active.routed.provider, active.routed.model)
     active.excluded.add(failed)
@@ -916,12 +939,14 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
         readiness: (blockedUntil.get(routeKey(model.provider, model.id)) ?? 0) > Date.now() ? 'cooldown' : 'not-live-probed' }
     }))
     const quota = await getQuota(Date.now(), signal)
+    const nativeVisible = options.codexVisibleModelIds?.()
     const last = query.sessionId === undefined ? undefined : activeSessions.get(query.sessionId)
     return { models, total: filtered.length, offset, nextOffset: offset + page.length < filtered.length ? offset + page.length : null,
       quota: nexusQuotaView(quota, Date.now()), lastDispatchedRoute: last?.key ?? null,
       lastDispatchedEffort: last?.effort ?? null, lastExecution: last?.execution ?? null,
       dispatchIdentityBasis: 'route-selected-not-execution-proof', localAutomaticRouting: false,
       codexAdmission: { quotaStatus: nexusCodexAvailability(quota, Date.now()), withinAdvisoryPace: nexusCodexWithinPace(quota, Date.now()),
-        authorizedCatalogModels: listed.filter(model => model.provider === 'openai-codex' && model.authorized).map(model => model.id), quotaScope: 'shared-account' } }
+        authorizedCatalogModels: listed.filter(model => model.provider === 'openai-codex' && model.authorized
+          && (options.codexVisibleModelIds === undefined || nativeVisible?.includes(model.id) === true)).map(model => model.id), quotaScope: 'shared-account' } }
   }
 }
