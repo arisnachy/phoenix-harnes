@@ -174,8 +174,12 @@ describe('Nexus installed runtime failover', () => {
     type Failure = typeof payload & { provider: string; failure: { code: string } }
     const route = hooks.get('agent/request') as (p: typeof payload, next: () => Promise<Route>) => Promise<Route>
     const fail = hooks.get('agent/request-error') as (p: Failure, next: () => Promise<undefined>) => Promise<{ kind: string } | undefined>
-    await expect(route({ ...payload, approximateInputTokens: 280000 }, async () => selected))
-      .rejects.toMatchObject({ code: 'CONTEXT_WINDOW_EXCEEDED' })
+    const oversizedAgent = { session: { ...agent.session, id: 'oversized-native-fixture' } }
+    expect(await route({ ...payload, agent: oversizedAgent, approximateInputTokens: 280000 }, async () => selected))
+      .toMatchObject({ provider: 'openai-codex', model: 'gpt-6-luna' })
+    const unknownAgent = { session: { ...agent.session, id: 'unknown-estimate-native-fixture' } }
+    expect(await route({ ...payload, agent: unknownAgent, approximateInputTokens: undefined } as unknown as typeof payload, async () => selected))
+      .toMatchObject({ provider: 'openai-codex', model: 'gpt-6-luna' })
     for (const model of visible) {
       expect(await route(payload, async () => selected)).toMatchObject({ provider: 'openai-codex', model })
       expect(await fail({ ...payload, provider: 'openai-codex', failure: { code: 'TIMEOUT' } }, async () => undefined)).toEqual({ kind: 'retry' })
@@ -342,9 +346,9 @@ describe('Nexus native account snapshot', () => {
 
 
 describe('Nexus live context budget', () => {
-  it('reserves output and estimation margin for actual request size', () => {
-    expect(nexusRequiredContext(4000)).toBe(7048)
-    expect(nexusRequiredContext(50000, 4096)).toBe(66596)
+  it('estimates actual request size plus explicit output without an artificial margin', () => {
+    expect(nexusRequiredContext(4000)).toBe(4000)
+    expect(nexusRequiredContext(50000, 4096)).toBe(54096)
     expect(nexusRequiredContext(undefined)).toBeUndefined()
     expect(nexusRequiredContext(-1)).toBeUndefined()
     expect(nexusRequiredContext(1000, 0)).toBeUndefined()
