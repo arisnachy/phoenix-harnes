@@ -19,6 +19,7 @@ describe('Google account Antigravity CLI adapter', () => {
         { role: 'assistant', content: [{ type: 'text', text: '¡Hola!' }] },
         { role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'puedes leerme' }] },
         { role: 'user', source: { kind: 'plugin', plugin: '@phoenix-ai/dsh-system-prompt' }, content: [{ type: 'text', text: 'Contexto interno de Phoenix.' }] },
+        { role: 'user', source: { kind: 'skill-catalog' }, content: [{ type: 'text', text: 'Catálogo de habilidades.' }] },
       ],
     } as GenerateOptions
     const execute = vi.fn(async (_args: readonly string[], input?: string) => {
@@ -30,8 +31,9 @@ describe('Google account Antigravity CLI adapter', () => {
       expect(text).toContain('USER:\nhola')
       expect(text).toContain('ASSISTANT:\n¡Hola!')
       expect(text).toContain('gemini-4-hydrogen-low')
-      expect(text).toContain('CONTEXTO INTERNO DE PHOENIX:\nContexto interno de Phoenix.')
+      expect(text).toContain('CONTEXTO INTERNO DE PHOENIX:\nContexto interno de Phoenix.\n\nCatálogo de habilidades.')
       expect(text).not.toContain('USER:\nContexto interno de Phoenix.')
+      expect(text).not.toContain('USER:\nCatálogo de habilidades.')
       expect(text.endsWith('USER:\npuedes leerme')).toBe(true)
       return JSON.stringify({ event: 'result', result: { status: 'SUCCESS', response: 'Gemini' } })
     })
