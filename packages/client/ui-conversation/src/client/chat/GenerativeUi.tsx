@@ -870,6 +870,20 @@ export function splitGenerativeUiText(
   }
 
   let tail = text.slice(cursor)
+  // A model can finish valid JSON but omit the closing Markdown fence. Repair
+  // only a complete, schema-valid final canvas; never guess missing fields.
+  if (options.streaming !== true && rendered < MAX_UI_BLOCKS && tail.length <= 100_000) {
+    const dangling = /(?:^|\n)```[ \t]*generative-ui[ \t]*\r?\n([\s\S]*)$/iu.exec(tail)
+    if (dangling?.[1] !== undefined && !dangling[1].includes('```')) {
+      let recovered: GenerativeUiBlock | null = null
+      try { recovered = parseGenerativeUiBlock(JSON.parse(dangling[1])) } catch { /* do not invent missing content */ }
+      if (recovered !== null) {
+        appendMarkdown(segments, tail.slice(0, dangling.index))
+        segments.push({ kind: 'ui', block: recovered })
+        tail = ''
+      }
+    }
+  }
   if (options.streaming === true) {
     const lastJsonFence = tail.lastIndexOf('```json')
     const relevantJson = lastJsonFence >= 0 && /"component"\s*:\s*"(?:visual_intelligence|ui_canvas|scale_form|smart_form|smart_form_library|adaptive_app|adaptive_form|adaptive_control|adaptive_field_result|spreadsheet|spreadsheet_patch|space_patch|geo_map|scene_map|diagram|status_pill|agent_line|smart_card|metric_card|event_card|comparison|timeline|sports_espn_dashboard|sports_game_card|sports_schedule_card|sports_ticket_card|sports_ticket_bundle_card|sports_odds_card)"/.test(tail.slice(lastJsonFence))
