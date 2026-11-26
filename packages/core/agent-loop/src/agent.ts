@@ -801,7 +801,8 @@ export class ReactLoopAgent implements Agent {
         },
     ))
     const proposedConfig = await this.dispatch.waterfall(
-      'agent/request', { turn, step, signal },
+      'agent/request', { turn, step, signal,
+        approximateInputTokens: tokenInputInventory(system, tools, boundaryMessages).approximateInputTokens },
       () => Promise.resolve(seedConfig),
     )
     signal.throwIfAborted()
