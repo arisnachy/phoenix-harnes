@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createUserMessage, type GenerateOptions } from '@phoenix-ai/dsh-llm'
-import { encodeGoogleUserEvent, buildPrompt, assertGoogleAccountSettings, googleAccountEnvironment, parseGoogleModels, parseGoogleResult, isGoogleCliAuthFailure, GOOGLE_ACCOUNT_PROVIDER, ANTIGRAVITY_MODEL_PROVIDER, GoogleAccountCliAdapter, isGoogleAccountRoute, registerGoogleAccountCli } from '../src/antigravity-cli.ts'
+import { encodeGoogleUserEvent, buildPrompt, assertGoogleAccountSettings, googleAccountEnvironment, parseGoogleModels, parseGoogleResult, isGoogleCliAuthFailure, googleCliQuotaFailure, GOOGLE_ACCOUNT_PROVIDER, ANTIGRAVITY_MODEL_PROVIDER, GoogleAccountCliAdapter, isGoogleAccountRoute, registerGoogleAccountCli } from '../src/antigravity-cli.ts'
 
 describe('Google account Antigravity CLI adapter', () => {
   it('uses documented typed content, preserves Unicode and newlines, and rejects empty prompts', () => {
@@ -144,6 +144,16 @@ describe('Google account Antigravity CLI adapter', () => {
 
   it('uses an account route separate from Gemini API keys', () => {
     expect(GOOGLE_ACCOUNT_PROVIDER).toBe('google-account')
+  })
+
+  it('preserves Google quota and rate-limit classifications without exposing provider diagnostics', () => {
+    const quota = 'AGY_ERROR: {"status":"RESOURCE_EXHAUSTED","message":"HTTP 429: quota reached (private details)"}'
+    expect(googleCliQuotaFailure(quota)).toMatchObject({ code: 'GOOGLE_CLI_QUOTA' })
+    expect(googleCliQuotaFailure(quota)?.message).not.toContain('private details')
+    expect(googleCliQuotaFailure('RESOURCE_EXHAUSTED')).toMatchObject({ code: 'RATE_LIMIT' })
+    expect(googleCliQuotaFailure('UNAVAILABLE')).toBeUndefined()
+    expect(() => parseGoogleResult(JSON.stringify({ event: 'result', result: { status: 'ERROR', error: quota } })))
+      .toThrow(/alcanzó la cuota/u)
   })
 
   it('discovers unique Gemini slugs without guessing a fixed account catalog', () => {
