@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { INSPECTABLE_SLOTS, inspectAdaptiveLiveSlots } from '../src/client/AdaptiveLiveSlots.ts'
+import { INSPECTABLE_SLOTS, inspectAdaptiveLiveSlots, livingNeedsCompactSidebar, livingSeason } from '../src/client/AdaptiveLiveSlots.ts'
 
 describe('Adaptive OS live UI self-inspection', () => {
   it('observes only an allowlisted slot roster without escalating privileges', () => {
@@ -16,5 +16,26 @@ describe('Adaptive OS live UI self-inspection', () => {
   it('treats malformed counts as unavailable', () => {
     const snapshot = inspectAdaptiveLiveSlots(() => Number.POSITIVE_INFINITY)
     expect(snapshot.slots.every(s => s.registrations === 0)).toBe(true)
+  })
+})
+
+describe('Living presence reversible local presentation', () => {
+  it('decorates only an enabled local holiday window and restores automatically', () => {
+    expect(livingSeason(new Date(2026, 11, 1), true)).toBe('christmas')
+    expect(livingSeason(new Date(2027, 0, 6), true)).toBe('christmas')
+    expect(livingSeason(new Date(2027, 0, 7), true)).toBe('none')
+    expect(livingSeason(new Date(2026, 11, 25), false)).toBe('none')
+    expect(livingSeason(new Date(NaN), true)).toBe('none')
+  })
+  it('borrows width only from a real constrained layout and respects ownership', () => {
+    const input = { enabled: true, viewport: 1280, sidebar: 320, details: 360, visualWork: false, cordisOwnsLayout: false }
+    expect(livingNeedsCompactSidebar(input)).toBe(true)
+    expect(livingNeedsCompactSidebar({ ...input, viewport: 1600 })).toBe(false)
+    expect(livingNeedsCompactSidebar({ ...input, enabled: false })).toBe(false)
+    expect(livingNeedsCompactSidebar({ ...input, cordisOwnsLayout: true })).toBe(false)
+    expect(livingNeedsCompactSidebar({ ...input, sidebar: 0 })).toBe(false)
+    expect(livingNeedsCompactSidebar({ ...input, viewport: NaN })).toBe(false)
+    expect(livingNeedsCompactSidebar({ ...input, viewport: 1150, details: 0, visualWork: true })).toBe(true)
+    expect(livingNeedsCompactSidebar({ ...input, viewport: 1150, details: 0 })).toBe(false)
   })
 })
