@@ -40,8 +40,8 @@ export function inspectAdaptiveLiveSlots(
   }
 }
 
-/** Local user-owned opt-in; no model or connector grants are created. */
-export const LIVING_PRESENCE_KEY = 'phoenix:living-presence:v1'
+/** Permanent local presentation capability; no model or connector grants are created. */
+export const LIVING_PRESENCE_ENABLED = true as const
 export type LivingSeason = 'christmas' | 'none'
 
 /** Respect the local calendar, without polling a model or a network service. */
