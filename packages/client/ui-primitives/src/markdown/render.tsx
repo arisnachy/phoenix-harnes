@@ -6,7 +6,7 @@
  *
  * Untrusted-output policy (unchanged from the replaced pipeline): link and
  * image destinations pass a protocol allowlist, images additionally require
- * absolute HTTP(S), raw HTML renders as literal text (no HTML enters the
+ * absolute HTTP(S) or the exact private FastSD JPEG route, raw HTML renders as literal text (no HTML enters the
  * DOM), and KaTeX runs without trusted commands. Fragment-anchor URLs fail
  * the allowlist, so footnote references and back-references render as plain
  * text rather than in-page links.
@@ -515,8 +515,12 @@ function inlineCodeHttpUrl(value: string): string | undefined {
   }
 }
 
+// The private FastSD server accepts only opaque, random JPEG identifiers on
+// loopback. Do not broaden the general relative URL or link allowlist.
+const LOCAL_GENERATED_IMAGE = /^\/local-images\/[a-f0-9]{32}\.jpg$/u
+
 function renderImage(url: string, alt: string, key: Key): ReactNode {
-  const imageSrc = remoteImageUrl(sanitizeUrl(normalizeUri(url)))
+  const imageSrc = LOCAL_GENERATED_IMAGE.test(url) ? url : remoteImageUrl(sanitizeUrl(normalizeUri(url)))
   if (imageSrc === undefined) {
     return <span key={key} className={css.imageAlt}>{alt}</span>
   }

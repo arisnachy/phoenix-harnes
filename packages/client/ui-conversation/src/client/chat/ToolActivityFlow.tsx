@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import type { ComponentProps } from 'react'
 import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
 import type { ToolCallBlock } from '@phoenix-ai/dsh-client-runtime/client'
-import { PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
+import { MarkdownText, PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { AssistantChatData, ToolChatData } from '../contract/chat-nodes.ts'
 import { isRunningTool, isSettledTool } from '../contract/chat-nodes.ts'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
@@ -80,6 +80,7 @@ type FlowItem =
     readonly key: string
     readonly images: readonly { readonly attachment: ImageAttachmentRef }[]
   }
+  | { readonly kind: 'local-image'; readonly key: string; readonly markdown: string }
   | { readonly kind: 'sports'; readonly key: string; readonly blocks: readonly GenerativeUiBlock[] }
   | { readonly kind: 'healthia'; readonly key: string; readonly blocks: readonly GenerativeUiBlock[] }
   | { readonly kind: 'oracle'; readonly key: string; readonly blocks: readonly GenerativeUiBlock[] }
@@ -102,6 +103,34 @@ function imageActivity(node: OrderedChatNode): readonly { readonly attachment: I
   const root = (node.data as ToolChatData).root
   if (!isSettledTool(root)) return []
   return root.content.flatMap(block => block.type === 'image' ? [{ attachment: block.attachment }] : [])
+}
+
+// FastSD keeps raster bytes on the private loopback host, so text-only models
+// never need to receive base64. Its exact successful receipt can drive the
+// same Markdown image surface without depending on a model-authored response.
+function fastSdImageReceipts(root: ToolCallBlock): string[] {
+  const receipts = new Set<string>()
+  const pending: ToolCallBlock[] = [root]
+  const visited = new Set<ToolCallBlock>()
+  while (pending.length > 0 && visited.size < 256) {
+    const call = pending.pop()
+    if (call === undefined || visited.has(call)) continue
+    visited.add(call)
+    pending.push(...(call.subCalls ?? []))
+    if (!isSettledTool(call) || call.isError
+      || !/^mcp__[a-z0-9_-]*fastsd[a-z0-9_-]*__generate_image$/iu.test(call.call?.name ?? '')) continue
+    const raw = call.content.map(block => block.type === 'text' ? block.text : '').join('')
+    try {
+      const value = JSON.parse(raw) as { fileId?: unknown; markdown?: unknown; model?: unknown } | null
+      if (value === null || typeof value.fileId !== 'string' || !/^[a-f0-9]{32}$/u.test(value.fileId)
+        || value.model !== 'rupeshs/sd-turbo-openvino') continue
+      const markdown = '![Imagen generada localmente](/local-images/' + value.fileId + '.jpg)'
+      if (value.markdown === markdown) receipts.add(markdown)
+    } catch {
+      // Non-receipt tool text is not a generated image.
+    }
+  }
+  return [...receipts]
 }
 
 function isWholeActivity(kind: string): boolean {
@@ -451,6 +480,7 @@ export function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
     }
   }
   const flow: FlowItem[] = []
+  const localImagesShown = new Set<string>()
   let pending: ActivityItem[] = []
   let pendingAnchorKey: string | undefined
   let sportsCards: GenerativeUiBlock[] = []
@@ -487,6 +517,17 @@ export function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
     if (isWholeActivity(node.kind)) {
       if (node.kind === 'tool-call') {
         const result = (node.data as ToolChatData).root
+        for (const markdown of fastSdImageReceipts(result)) {
+          if (localImagesShown.has(markdown)) continue
+          localImagesShown.add(markdown)
+          // Avoid a second copy if the assistant already emitted this exact
+          // worker receipt. The path is random and unique to this generation.
+          const inAssistant = nodes.some(candidate => assistantData(candidate)?.blocks
+            .some(block => block.kind === 'text' && block.text.includes(markdown)))
+          if (inAssistant) continue
+          flush()
+          flow.push({ kind: 'local-image', key: 'local-image:' + node.key + ':' + markdown, markdown })
+        }
         const oracleCards = oracleCardsFromToolResult(result)
         if (oracleCards.length > 0) {
           flush()
@@ -1242,6 +1283,8 @@ function BrowserWorkspace({
                 ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
                 : item.kind === 'activity'
                   ? <ToolActivityGroup items={item.items} anchorKey={item.anchorKey} {...seatProps} />
+                  : item.kind === 'local-image'
+                    ? <div data-chat-flow-kind="generated-image"><MarkdownText text={item.markdown} /></div>
                   : item.kind === 'images'
                     ? <div data-chat-flow-kind="generated-image">
                       {seatProps.renderMessageImages({ images: item.images, align: 'start' })}
@@ -1480,6 +1523,8 @@ export function ToolActivityFlow({
                     t={seatProps.t}
                   />
                 )
+                : item.kind === 'local-image'
+                  ? <div data-chat-flow-kind="generated-image"><MarkdownText text={item.markdown} /></div>
                 : item.kind === 'images'
                   ? (
                     <div data-chat-flow-kind="generated-image">
