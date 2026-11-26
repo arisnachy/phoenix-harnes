@@ -14,11 +14,11 @@ import type { AuthorizationMethod, AuthorizationPrompt, AuthorizationSession } f
 import { isCredentialKeySegment } from '@phoenix-ai/dsh-credentials'
 import { catalogProvider, catalogProviderIds } from './catalog.ts'
 import { recordKeyFor } from './auth.ts'
-import { GOOGLE_ANTIGRAVITY_PROVIDER, googleAntigravityProvider } from './google-antigravity.ts'
+import { GOOGLE_ANTIGRAVITY_PROVIDER } from './google-antigravity.ts'
 import type { PiAiAuthInjection } from './adapter.ts'
 
 /** Providers whose credentials are owned by a native product session rather than pi-ai login. */
-export const NATIVE_SESSION_AUTH_PROVIDERS = new Set<string>(['openai-codex'])
+export const NATIVE_SESSION_AUTH_PROVIDERS = new Set<string>(['openai-codex', GOOGLE_ANTIGRAVITY_PROVIDER])
 
 /**
  * Decide whether a provider should expose the generic pi-ai login flow.
@@ -130,10 +130,7 @@ export function registerPiAiFlows(ctx: Context, auth: PiAiAuthInjection): void {
       },
       async run(session) {
         const models = createModels(auth)
-        const activeProvider = providerId === GOOGLE_ANTIGRAVITY_PROVIDER
-          ? googleAntigravityProvider({ authContext: auth.authContext })
-          : provider
-        models.setProvider(activeProvider)
+        models.setProvider(provider)
         const type: AuthType = session.method === 'oauth' ? 'oauth' : 'api_key'
         await models.login(providerId, type, {
           signal: session.signal,
