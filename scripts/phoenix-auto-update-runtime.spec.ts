@@ -12,6 +12,97 @@ const desktop = readFileSync(resolve('apps/desktop-windows/Program.cs'), 'utf8')
 const build = readFileSync(resolve('scripts/build.ts'), 'utf8')
 const stableWorkflow = readFileSync(resolve('.github/workflows/phoenix-stable-update-channel.yml'), 'utf8')
 
+describe('automatic live repair of paused runtime storage', () => {
+  it('invokes the guarded helper for the exact target and rechecks capacity before staging', () => {
+    const begin = updater.indexOf("console.error('[PHOENIX UPDATE] storage capacity blocked; attempting guarded live repair now.')")
+    const end = updater.indexOf("console.error('[PHOENIX UPDATE] storage capacity recovered;", begin)
+    expect(begin).toBeGreaterThan(0)
+    expect(end).toBeGreaterThan(begin)
+    const repair = updater.slice(begin, end)
+    expect(repair.indexOf('runLiveStorageMigration(root, inspection.target)')).toBeLessThan(
+      repair.indexOf('if (!updaterRuntimeStorageHasCapacity(root, inspection.target))'))
+    expect(repair).toContain("status: 'paused'")
+    expect(repair).toContain('break')
+    expect(updater).toContain('!manualRefreshRequested && blockedStorageTarget === inspection.target')
+    expect(supervisor).toContain('reclaimInactiveBackupForCapacity(persistentRuntime(target), { liveMigration: true })')
+    const start = updater.indexOf('function runLiveStorageMigration(root, capacityTarget)')
+    const stop = updater.indexOf('\nasync function watch(', start)
+    const spawn = vi.fn(() => ({ status: 0 }))
+    const { runLiveStorageMigration } = runInNewContext(
+      updater.slice(start, stop) + '\n({ runLiveStorageMigration })',
+      {
+        process: { platform: 'win32', execPath: 'node', env: {
+          PHOENIX_UPDATE_SUPERVISED: '1', PHOENIX_RUNTIME_ROOT: 'active',
+        } },
+        join, existsSync: () => true,
+        durableUpdateState: () => ({ status: 'paused', phase: 'storage' }),
+        spawnSync: spawn, console: { error: () => {} },
+      },
+    ) as { runLiveStorageMigration: (root: string, target: string) => void }
+    const target = 'a'.repeat(40)
+    runLiveStorageMigration('source', target)
+    expect(spawn).toHaveBeenCalledWith('node', [
+      join('active', 'scripts', 'phoenix-windows-supervisor.mjs'),
+      '--live-storage-migration', '--capacity-target', target,
+    ], expect.objectContaining({ cwd: 'source', timeout: 120_000 }))
+  })
+
+  it('reclaims only an idle same-checkout slot and refuses deletion if the live lease or census fails', () => {
+    const start = supervisor.indexOf('function reclaimInactiveBackupForCapacity(nextRuntime,')
+    const end = supervisor.indexOf('\n/**', start)
+    expect(start).toBeGreaterThan(0)
+    expect(end).toBeGreaterThan(start)
+    const paths = new Set(['active', 'old'])
+    let lease = true
+    let census: Set<string> | undefined = new Set(['old'])
+    let revokeOnCensus = false
+    let protectedOld = false
+    const remove = vi.fn((path: string) => paths.delete(path))
+    const { reclaimInactiveBackupForCapacity } = runInNewContext(
+      supervisor.slice(start, end) + '\n({ reclaimInactiveBackupForCapacity })',
+      {
+        liveStorageMigrationAllowed: () => lease,
+        runtimeRoot: 'active', root: 'source', supervisorSourceRoot: 'active',
+        runtimePathKey: (path: string) => path,
+        readActiveRuntimeRecord: () => ({ path: 'active' }),
+        process: { platform: 'win32', env: {} },
+        registeredWorktreePaths: () => new Set(paths),
+        runtimeDirectoriesForCleanup: () => [...paths],
+        existsSync: () => false, join,
+        runtimeProtectedByOwningCheckout: (path: string) => protectedOld && path === 'old',
+        managedDirectoryMtimeMs: () => 0,
+        MAX_RUNTIME_DIRECTORIES: 2,
+        windowsProcessReferences: () => {
+          if (revokeOnCensus) lease = false
+          return census
+        },
+        removeManagedWorktree: remove,
+        console: { error: () => {} },
+      },
+    ) as { reclaimInactiveBackupForCapacity: (target: string, opts: { liveMigration: boolean }) => void }
+    const repair = () => { reclaimInactiveBackupForCapacity('new', { liveMigration: true }) }
+    repair()
+    census = undefined
+    repair()
+    census = new Set()
+    protectedOld = true
+    repair()
+    protectedOld = false
+    lease = false
+    repair()
+    lease = true
+    revokeOnCensus = true
+    repair()
+    expect(remove).not.toHaveBeenCalled()
+    lease = true
+    revokeOnCensus = false
+    repair()
+    expect(remove).toHaveBeenCalledTimes(1)
+    expect(remove.mock.calls[0]?.[0]).toBe('old')
+    expect([...paths]).toEqual(['active'])
+  })
+})
+
 describe('real Windows disk headroom guard', () => {
   it('blocks a multi-GiB supervisor runtime when there is only 5 GiB free', () => {
     const start = supervisor.indexOf('function assertRuntimeDiskHeadroom() {')
@@ -722,7 +813,7 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(updater).toContain('if (active?.path !== undefined) keep.add(runtimePathKey(active.path))')
     expect(updater).toContain('process.env.PHOENIX_RUNTIME_ROOT?.trim()')
     expect(updater).toContain('if (existsSync(targetRuntime)) return true')
-    expect(supervisor).toContain('function reclaimInactiveBackupForCapacity(nextRuntime)')
+    expect(supervisor).toContain('function reclaimInactiveBackupForCapacity(nextRuntime, { liveMigration = false } = {})')
     expect(supervisor).toContain('!runtimeProtectedByOwningCheckout(path)')
     expect(supervisor).toContain('if (runtimeDirectoriesForCleanup().length < MAX_RUNTIME_DIRECTORIES) break')
     expect(supervisor).toContain('reclaimInactiveBackupForCapacity(nextRuntime)')
