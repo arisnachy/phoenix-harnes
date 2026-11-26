@@ -21,17 +21,24 @@ export function checkoutRevision(root=SOURCE_ROOT,git=execFileSync){
   }catch{return null}
 }
 /** The chat renderer is a separately loaded client plugin, not the Vite shell. */
-export function sportsClientBundleReady(root){
+export function sportsClientBundleDiagnostic(root){
+  const path=join(root,'packages','client','ui-conversation','lib','client.js')
   try {
-    const client=readFileSync(join(root,'packages','client','ui-conversation','lib','client.js'),'utf8')
-    // A previous PHOENIX binary can contain all three generic components yet
-    // still render the obsolete per-game "Registrar mi apuesta" form. A valid
-    // bundle must carry the receipt-linked tracker introduced in November 2026.
-    const required=['sports_game_card','sports_ticket_card','sports_ticket_bundle_card','sports-evidence',
-      'Seguimiento automático del boleto']
-    return required.every(contract=>client.includes(contract))
-      && !client.includes('Registrar mi apuesta para seguir el objetivo')
-  } catch {return false}
+    const client=readFileSync(path,'utf8')
+    // The receipt-linked tracker now lives in SportsTicketLiveTracker. The
+    // old SportsBetProgress heading can be tree-shaken and must not gate startup.
+    const required=['sports_game_card','sports_ticket_card','sports_ticket_bundle_card',
+      'data-ticket-reference','PHOENIX / TICKET INTELIGENTE']
+    const missing=required.filter(contract=>!client.includes(contract))
+    const obsolete=client.includes('Registrar mi apuesta para seguir el objetivo')
+    return {ready:missing.length===0&&!obsolete,detail:[
+      ...(missing.length?['faltan: '+missing.join(', ')]:[]),
+      ...(obsolete?['contiene el formulario obsoleto']:[]),
+    ].join('; ')}
+  } catch(error){return {ready:false,detail:path+': '+String(error?.message||error)}}
+}
+export function sportsClientBundleReady(root){
+  return sportsClientBundleDiagnostic(root).ready
 }
 /** A revision stamp is authoritative only when index.html is also present. */
 export function frontendIsCurrent(root,revision){
@@ -73,7 +80,8 @@ export function verifyFrontend({
     if(status!==0)throw new Error('Falló '+['pnpm',...args].join(' ')+'. No iniciaré la versión antigua del frontend. Verifica la compilación y las dependencias.')
   }
   if(!existsSync(index))throw new Error('Vite finalizó sin generar apps/web/dist/index.html; no iniciaré una interfaz desactualizada.')
-  if(!sportsClientBundleReady(root))throw new Error('El plugin cliente de conversación no contiene sports_game_card/sports_ticket_card. El build del plugin falló o usó otro paquete; no iniciaré el UI antiguo.')
+  const plugin=sportsClientBundleDiagnostic(root)
+  if(!plugin.ready)throw new Error('El plugin cliente de conversación no cumple el contrato actual: '+plugin.detail+'. No iniciaré el UI antiguo.')
   if(readRevision(root)!==revision)throw new Error('El checkout cambió durante la compilación. Vuelve a ejecutar pnpm phoenix.')
   const marker=join(dirname(index),STAMP)
   mkdirSync(dirname(marker),{recursive:true})
