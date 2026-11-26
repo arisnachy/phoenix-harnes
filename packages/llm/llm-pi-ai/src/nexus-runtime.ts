@@ -450,12 +450,34 @@ export interface NexusRuntimeOptions {
   readonly providerAuthorized: (provider: string, profile: ResolvedPiAiProviderProfile) => Promise<boolean>
 }
 
+type NexusInspectionQuery = { provider?: string; offset?: number; sessionId?: string }
+
+type NexusInspectionModel = Omit<NexusModel, 'price' | 'online' | 'contextWindow' | 'thinkingLevels'> & {
+  priceClass: ReturnType<typeof nexusPriceClass>
+  contextWindow: number | null
+  thinkingLevels: readonly string[]
+  defaultEffort: string | null
+  readiness: string
+}
+
+type NexusInspection = {
+  models: NexusInspectionModel[]
+  total: number
+  offset: number
+  nextOffset: number | null
+  quota: ReturnType<typeof nexusQuotaView>
+  lastDispatchedRoute: string | null
+  lastDispatchedEffort: string | null
+  localAutomaticRouting: boolean
+}
+
 /**
  * Install the opt-in Nexus selector, real-route dispatch and bounded failover.
  * @param ctx - Host context with existing LLM/auth/Agent capabilities.
  * @param options - Configured provider truth and native Codex token authority.
+ * @returns Read-only runtime inspection callback.
  */
-export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions) {
+export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions): (signal: AbortSignal, query?: NexusInspectionQuery) => Promise<NexusInspection> {
   const receipts = new NexusReceiptStore(dshHomePath('nexus-receipts-v1.json'))
   const activeSessions = new Map<string, { key: string; exact?: string; numeric?: string; effort?: string }>()
   const prices = new NexusOpenRouterPrices()

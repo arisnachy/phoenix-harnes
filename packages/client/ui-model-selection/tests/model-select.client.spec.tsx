@@ -702,7 +702,7 @@ describe('Phoenix Local installed model branding', () => {
     expect(qwen.querySelector('svg[data-provider-mark="qwen"]')).not.toBeNull()
     expect(gemma.getAttribute('aria-checked')).toBe('true')
     fireEvent.click(qwen)
-    await waitFor(() => expect(select).toHaveBeenCalledWith({ provider: 'phoenix-local', model: 'ollama:qwen3.5:2b' }))
+    await waitFor(() => { expect(select).toHaveBeenCalledWith({ provider: 'phoenix-local', model: 'ollama:qwen3.5:2b' }) })
   })
 })
 
@@ -737,7 +737,7 @@ describe('PHOENIX → ORIÓN model picker', () => {
     fireEvent.change(search, { target: { value: '' } })
     const eclipse = screen.getByRole('menuitemradio', { name: 'Fénix Eclipse' })
     fireEvent.click(eclipse)
-    await waitFor(() => expect(select).toHaveBeenCalledWith({ provider: 'phoenix', model: 'phoenix-auto' }))
+    await waitFor(() => { expect(select).toHaveBeenCalledWith({ provider: 'phoenix', model: 'phoenix-auto' }) })
   })
 
   it('sends an exact Nexus wire route when ORIÓN is selected, even in a merged PHOENIX group', async () => {
@@ -757,7 +757,7 @@ describe('PHOENIX → ORIÓN model picker', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
     const orion = screen.getByRole('menuitemradio', { name: 'ORIÓN' })
     fireEvent.click(orion)
-    await waitFor(() => expect(select).toHaveBeenCalledWith({ provider: 'phoenix-nexus', model: 'nexus-auto' }))
+    await waitFor(() => { expect(select).toHaveBeenCalledWith({ provider: 'phoenix-nexus', model: 'nexus-auto' }) })
   })
 
   it('displays legacy standalone Nexus catalog entries as PHOENIX → ORIÓN', () => {
