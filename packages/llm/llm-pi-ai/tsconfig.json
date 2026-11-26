@@ -40,6 +40,12 @@
     },
     {
       "path": "../../util/timeout"
+    },
+    {
+      "path": "../../util/atomic-write"
+    },
+    {
+      "path": "../../util/home-paths"
     }
   ]
 }

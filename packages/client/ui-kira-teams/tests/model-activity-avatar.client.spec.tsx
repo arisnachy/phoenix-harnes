@@ -2,6 +2,7 @@ import { Children, isValidElement, type ReactElement, type ReactNode } from 'rea
 import { describe, expect, it } from 'vitest'
 import {
   ModelActivityAvatar,
+  ModelEngineBadge,
   modelEngineMark,
   modelEngineFamily,
   agentAvatarKind,
@@ -9,6 +10,7 @@ import {
   portraitSrcForKind,
 } from '../src/client/ModelActivityAvatar.tsx'
 import { KIRA_MODERN_STILL_PORTRAITS } from '../src/client/KiraModernStillPortraits.ts'
+import { engineProviderMark } from '../src/client/model-provider-mark.ts'
 
 describe('modelAvatarKind', () => {
   it.each([
@@ -172,5 +174,18 @@ describe('approved 21 modern static characters', () => {
     for (const kind of Object.keys(KIRA_MODERN_STILL_PORTRAITS) as Array<keyof typeof KIRA_MODERN_STILL_PORTRAITS>) {
       expect(portraitSrcForKind(kind)).toBe(KIRA_MODERN_STILL_PORTRAITS[kind])
     }
+  })
+})
+
+describe('Nexus observed provider icons', () => {
+  it('shows the actual provider on all observed non-Codex team models', () => {
+    for (const provider of ['openai-codex', 'openrouter', 'deepseek', 'nvidia',
+      'anthropic', 'google', 'ollama', 'opencode', 'qwen']) {
+      expect(engineProviderMark(provider)?.path.length).toBeGreaterThan(20)
+    }
+    expect(engineProviderMark('custom-provider')).toBeUndefined()
+    const badge = ModelEngineBadge({ model: 'deepseek-v4', provider: 'deepseek', placement: 'header' })
+    expect(badge?.props['data-provider-mark']).toBe('deepseek')
+    expect(badge?.props['data-engine-model']).toBe('deepseek-v4')
   })
 })

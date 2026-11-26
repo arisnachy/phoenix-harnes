@@ -1,0 +1,44 @@
+name: PHOENIX NBA NFL live endpoint proof
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/phoenix-nba-nfl-live-proof.yml'
+      - 'scripts/phoenix-nba-nfl-endpoint-proof.mjs'
+      - 'packages/core/tool-sports/src/sports-direct-stats.ts'
+      - 'packages/core/tool-sports/src/espn-nfl-weekly.ts'
+      - 'packages/core/tool-sports/src/nfl-evidence-research.ts'
+      - 'packages/core/tool-sports/src/basketball-evidence-dossier.ts'
+      - 'packages/core/tool-sports/tests/sports-direct-stats.test.mjs'
+      - 'packages/core/tool-sports/tests/nfl-evidence-research.test.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - run: pnpm install --frozen-lockfile
+      - name: Check live script syntax
+        run: node --check scripts/phoenix-nba-nfl-endpoint-proof.mjs
+      - name: Verify real ESPN shape fixtures and weekly NFL fallback
+        run: node --experimental-strip-types --test packages/core/tool-sports/tests/sports-direct-stats.test.mjs packages/core/tool-sports/tests/nfl-evidence-research.test.mjs
+      - name: Execute NBA/NFL HTTP proof using actual PHOENIX adapters
+        env:
+          PHOENIX_SPORTS_PROOF_STRICT: '1'
+        run: node --experimental-strip-types scripts/phoenix-nba-nfl-endpoint-proof.mjs
+      - name: Publish detailed endpoint and player evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-nba-nfl-live-endpoint-proof
+          path: phoenix-nba-nfl-endpoint-proof.json
+          if-no-files-found: warn
+          retention-days: 30
