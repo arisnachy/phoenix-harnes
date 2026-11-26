@@ -443,10 +443,24 @@ export class NexusOpenRouterPrices {
   contextWindow(id: string): number | undefined { return this.contexts.get(id) }
 }
 
+/**
+ * Reserve output capacity and a margin for tokenizer differences. This is a
+ * conservative routing estimate, not a provider token count.
+ * @param input - estimated tokens in the current projected request.
+ * @param output - requested output budget, if explicit.
+ * @returns total required context, or undefined for invalid/missing measurements.
+ */
+export function nexusRequiredContext(input: number | undefined, output?: number): number | undefined {
+  if (input === undefined || !Number.isSafeInteger(input) || input < 0) return undefined
+  if (output !== undefined && (!Number.isSafeInteger(output) || output <= 0)) return undefined
+  const required = Math.ceil(input * 1.25) + (output ?? 2048)
+  return Number.isSafeInteger(required) ? required : undefined
+}
+
 /** Narrow Agent events bridge avoids importing Agent source into the LLM package. */
 interface NexusAgentEventBridge {
   on(event: 'agent/request', listener: (
-    payload: { agent: NexusAgentHandle; turn: number; step: number; signal: AbortSignal },
+    payload: { agent: NexusAgentHandle; turn: number; step: number; signal: AbortSignal; approximateInputTokens?: number },
     next: () => Promise<LlmCallConfig>,
   ) => Promise<LlmCallConfig>): void
   on(event: 'agent/request-error', listener: (
@@ -635,6 +649,15 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     const text = nexusTurnText(agent.session.events, payload.turn)
     const complex = text.length === 0 || nexusRequiresStrongModel(text)
     const hasImage = nexusTurnHasHumanImage(agent.session.events, payload.turn)
+    const requiredContext = nexusRequiredContext(payload.approximateInputTokens, selected.maxTokens)
+    if (requiredContext === undefined) {
+      throw new LlmError('Nexus cannot route without a valid current request context estimate', 'NEXUS_NO_ELIGIBLE_ROUTE')
+    }
+    const codexContextFits = async (model: string): Promise<boolean> => {
+      const info = await ctx.llm.resolveModelInfo('openai-codex', model, payload.signal).catch(() => undefined)
+      const window = info?.context?.contextWindow
+      return window !== undefined && Number.isSafeInteger(window) && window >= requiredContext
+    }
     const exact = !hasImage ? nexusExactResponseTarget(text) : undefined
     const numeric = !hasImage && exact === undefined ? nexusNumericResponseTarget(text) : undefined
     const activeRoute = (route: NexusRoute) => ({ key: routeKey(route.provider, route.model),
@@ -665,12 +688,13 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
         const quota = await getQuota(now, payload.signal)
         eligible = eligible && nexusCodexFreshReserve(quota, Date.now())
           && nexusCodexWithinPace(quota, Date.now()) && await options.nativeCodexAuthorized()
+          && await codexContextFits(route.model)
       } else {
         const inventory = await listAuthorizedModels(now)
         const model = inventory.find(item => item.provider === route.provider && item.id === route.model)
         eligible = eligible && model !== undefined && model.online && model.supportsTools === true
           && (!hasImage || model.supportsImages === true)
-          && model.contextWindow !== undefined && model.contextWindow >= 8_192
+          && model.contextWindow !== undefined && model.contextWindow >= requiredContext
           && nexusPriceClass(model, Date.now()) === 'verified-free'
           && (route.provider === 'openrouter' ? (profile?.baseURL === undefined
             || profile.baseURL.replace(/\/+$/u, '') === 'https://openrouter.ai/api/v1')
@@ -704,7 +728,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       // Even short turns inherit the harness tool schema; only capable routes are safe.
       needsTools: true,
       needsImages: hasImage,
-      inputTokens: 8_192,
+      inputTokens: requiredContext,
       minimumQuality: 0,
       allowPaid: false,
       allowLocal: false,
@@ -717,8 +741,9 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       const ids = models.filter(model => model.provider === 'openai-codex' && model.authorized
         && (!hasImage || model.supportsImages === true)
         && !state.excluded.has(routeKey(model.provider, model.id))).map(model => model.id)
-      const candidate = nexusCodexFallback(ids, complex)
       const withinBudget = nexusCodexFreshReserve(quota,Date.now()) && nexusCodexWithinPace(quota,Date.now())
+      const fitting = withinBudget ? await Promise.all(ids.map(async id => await codexContextFits(id) ? id : undefined)) : []
+      const candidate = nexusCodexFallback(fitting.filter((id): id is string => id !== undefined), complex)
       if (candidate !== undefined && withinBudget && await options.nativeCodexAuthorized()) {
         route = { provider: 'openai-codex', model: candidate, priceClass: 'unknown',
           reason: 'subscription-first: authorized Codex account within both quota budgets' }
