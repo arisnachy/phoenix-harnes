@@ -41,5 +41,8 @@ describe('Living presence reversible local presentation', () => {
     expect(livingNeedsCompactSidebar({ ...input, viewport: NaN })).toBe(false)
     expect(livingNeedsCompactSidebar({ ...input, viewport: 1150, details: 0, visualWork: true })).toBe(true)
     expect(livingNeedsCompactSidebar({ ...input, viewport: 1150, details: 0 })).toBe(false)
+    // Normal chat also adapts when a manually enlarged rail consumes the center floor.
+    expect(livingNeedsCompactSidebar({ ...input, viewport: 1040, sidebar: 420, details: 0 })).toBe(true)
+    expect(livingNeedsCompactSidebar({ ...input, viewport: 1100, sidebar: 420, details: 0 })).toBe(false)
   })
 })
