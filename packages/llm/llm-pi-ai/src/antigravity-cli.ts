@@ -11,6 +11,12 @@ import type { GenerateOptions, LlmModelInfo, StreamChunk } from '@phoenix-ai/dsh
 import { antigravityExecutable, antigravityInstalled, ensureAntigravityInstalled, installAntigravity } from './antigravity-install.ts'
 
 export const GOOGLE_ACCOUNT_PROVIDER = 'google-account'
+export const ANTIGRAVITY_MODEL_PROVIDER = 'google-antigravity'
+
+/** The old and current selector IDs both execute the native CLI, never an API key. */
+export function isGoogleAccountRoute(provider: string | undefined): boolean {
+  return provider === GOOGLE_ACCOUNT_PROVIDER || provider === ANTIGRAVITY_MODEL_PROVIDER
+}
 export const GOOGLE_ACCOUNT_KEY = credentialKey('llm-pi-ai', GOOGLE_ACCOUNT_PROVIDER)
 
 
@@ -152,17 +158,19 @@ function buildPrompt(request: GenerateOptions): string {
 }
 
 export class GoogleAccountCliAdapter extends LlmAdapter {
+  constructor(private readonly route: string = ANTIGRAVITY_MODEL_PROVIDER) { super() }
+
   override providerInfo(): { id: string; name: string } {
-    return { id: GOOGLE_ACCOUNT_PROVIDER, name: 'Google Antigravity CLI (cuenta Google)' }
+    return { id: this.route, name: 'Google Antigravity CLI (cuenta Google)' }
   }
   override async listModels(): Promise<readonly LlmModelInfo[]> {
     try {
       const slugs = parseGoogleModels(await runGoogleCli(['models']))
-      return slugs.map(id => ({ provider: GOOGLE_ACCOUNT_PROVIDER, id, name: 'Gemini · ' + id, inputModalities: ['text'] as const }))
+      return slugs.map(id => ({ provider: this.route, id, name: 'Gemini · ' + id, inputModalities: ['text'] as const }))
     } catch { return [] }
   }
   override async *stream(request: GenerateOptions): AsyncIterable<StreamChunk> {
-    if (request.provider !== GOOGLE_ACCOUNT_PROVIDER || !/^gemini-[a-z0-9._-]+$/iu.test(request.model)) {
+    if (request.provider !== this.route || !/^gemini-[a-z0-9._-]+$/iu.test(request.model)) {
       throw new LlmError('Modelo Gemini no reconocido', 'INVALID_MODEL')
     }
     const flags = ['--input-format', 'stream-json', '--output-format', 'stream-json', '--model', request.model, '--sandbox', '--mode', 'default', '--disable-slash-commands']
@@ -227,12 +235,14 @@ export class GoogleAccountCliAdapter extends LlmAdapter {
 
 /** Add Google account models and store only a verified account-session marker. */
 export function registerGoogleAccountCli(ctx: Context): void {
-  ctx.llm.registerAdapter([GOOGLE_ACCOUNT_PROVIDER], new GoogleAccountCliAdapter())
+  ctx.llm.registerAdapter([ANTIGRAVITY_MODEL_PROVIDER], new GoogleAccountCliAdapter(ANTIGRAVITY_MODEL_PROVIDER))
+  // Preserve conversations saved using the temporary native route identifier.
+  ctx.llm.registerAdapter([GOOGLE_ACCOUNT_PROVIDER], new GoogleAccountCliAdapter(GOOGLE_ACCOUNT_PROVIDER))
   ctx.inject(['authorization', 'credentials'], (authorized) => {
     authorized.authorization.registerFlow({
       key: GOOGLE_ACCOUNT_KEY,
       label: 'Google Antigravity CLI (cuenta Google)',
-      methods: [{ id: 'cli', label: 'Instalar y conectar cuenta Google' }],
+      methods: [{ id: 'oauth', label: 'Instalar y conectar cuenta Google' }, { id: 'cli', label: 'Conectar CLI (compatibilidad)' }],
       async inspect() {
         if (!await antigravityInstalled().catch(() => false)) return undefined
         const stored = await authorized.credentials.readRecord(GOOGLE_ACCOUNT_KEY)

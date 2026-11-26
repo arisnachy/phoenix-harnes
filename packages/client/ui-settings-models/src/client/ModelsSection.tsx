@@ -279,7 +279,8 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
    */
   const accountFlowFor = (provider: string): ProviderEditorProps['oauth'] => {
     if (api.authorization === undefined) return undefined
-    const flow = accountFlows.get(provider)
+    // The canonical Antigravity card uses only the native CLI marker; an old direct OAuth grant cannot mark it connected.
+    const flow = accountFlows.get(provider === 'google-antigravity' ? 'google-account' : provider)
     return flow === undefined ? undefined : {
       key: flow.key,
       label: flow.label,
