@@ -2371,6 +2371,9 @@ importers:
       emoji-picker-react:
         specifier: 4.22.3
         version: 4.22.3(react@18.3.1)
+      simple-icons:
+        specifier: 16.30.0
+        version: 16.30.0
     devDependencies:
       '@phoenix-ai/cordis':
         specifier: workspace:^
@@ -6115,6 +6118,9 @@ importers:
       '@phoenix-ai/cordis':
         specifier: workspace:^
         version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-atomic-write':
+        specifier: workspace:^
+        version: link:../../util/atomic-write
       '@phoenix-ai/dsh-attachment':
         specifier: workspace:^
         version: link:../../attachment/attachment
@@ -6124,6 +6130,9 @@ importers:
       '@phoenix-ai/dsh-credentials':
         specifier: workspace:^
         version: link:../../credentials/credentials
+      '@phoenix-ai/dsh-home-paths':
+        specifier: workspace:^
+        version: link:../../util/home-paths
       '@phoenix-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
