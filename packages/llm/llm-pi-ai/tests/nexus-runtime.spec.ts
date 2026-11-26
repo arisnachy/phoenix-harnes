@@ -3,7 +3,7 @@ import {
   NEXUS_MODEL, NEXUS_PROVIDER, NexusSelectorAdapter,
   nexusCodexFallback, nexusCodexHasReserve, nexusCodexWithinPace, nexusRequiresStrongModel,
   nexusTurnText, nexusTurnHasHumanImage,
-  nexusReadNativeCodexQuota, nexusCodexFreshReserve, nexusEconomyEffort,
+  nexusReadNativeCodexQuota, nexusCodexFreshReserve, nexusEconomyEffort, nexusAdaptiveEffort,
   nexusExactResponseTarget, nexusExactResponseQuality, installNexusRuntime,
   nexusNumericResponseTarget, nexusNumericResponseQuality, nexusOperatorPolicy, nexusQuotaView,
 } from '../src/nexus-runtime.ts'
@@ -21,6 +21,8 @@ describe('Nexus synthetic model route', () => {
     expect(nexusCodexFallback(['gpt-6-luna', 'gpt-6.1-sol', 'gpt-6.2-sol'], true)).toBe('gpt-6.2-sol')
     expect(nexusCodexFallback(['gpt-6-luna', 'gpt-6.2-sol'], false)).toBe('gpt-6-luna')
     expect(nexusCodexFallback(['unrelated-model'], true)).toBeUndefined()
+    expect(nexusCodexFallback(['gpt-6.2-sol'], false)).toBe('gpt-6.2-sol')
+    expect(nexusCodexFallback(['gpt-6-luna'], true)).toBe('gpt-6-luna')
   })
   it('paces both windows using native reset timestamps rather than token guesses', () => {
     const now = 1_800_000_000_000
@@ -88,6 +90,10 @@ describe('native Codex window freshness and economic reasoning',()=>{
     expect(nexusEconomyEffort(['high','low','medium'],false)).toBe('low')
     expect(nexusEconomyEffort(['high','medium'],false)).toBeUndefined()
     expect(nexusEconomyEffort(['high','low'],true)).toBeUndefined()
+    expect(nexusAdaptiveEffort(['high','medium','low'], true, 0.2)).toBe('high')
+    expect(nexusAdaptiveEffort(['high','medium','low'], true, 0.8)).toBe('medium')
+    expect(nexusAdaptiveEffort(['high','medium','low'], false, 0.8)).toBe('low')
+    expect(nexusAdaptiveEffort(['custom'], true, 0.8)).toBeUndefined()
   })
 })
 
@@ -107,7 +113,7 @@ describe('independent Nexus acceptance', () => {
 })
 
 describe('Nexus installed runtime failover', () => {
-  it('retries the same turn from a failed free provider to a quota-authorized Codex route', async () => {
+  it('prioritizes the quota-authorized Codex subscription and retries with verified free only on failure', async () => {
     const now = Date.now()
     const telemetry = { kind: 'account', provider: 'Codex', accountType: 'chatgpt',
       primaryLimit: { windowDurationMins: 300, usedPercent: 1,
@@ -158,11 +164,6 @@ describe('Nexus installed runtime failover', () => {
       const fail = hooks.get('agent/request-error') as
         (p: Failure, next: () => Promise<undefined>) => Promise<{ kind: string } | undefined>
       expect(await route(payload, async () => selected)).toMatchObject({
-        provider: 'openrouter', model: 'fixture/free',
-      })
-      expect(await fail({ ...payload, provider: 'openrouter', failure: { code: 'RATE_LIMIT' } },
-        async () => undefined)).toEqual({ kind: 'retry' })
-      expect(await route(payload, async () => selected)).toMatchObject({
         provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'low',
       })
       const snapshot = await inspect(payload.signal, { sessionId: agent.session.id })
@@ -192,6 +193,11 @@ describe('Nexus installed runtime failover', () => {
       expect(snapshot.total).toBe(2)
       expect(snapshot.models.map(m => m.priceClass)).toContain('verified-free')
       expect(await fail({ ...payload, provider: 'openai-codex', failure: { code: 'TIMEOUT' } },
+        async () => undefined)).toEqual({ kind: 'retry' })
+      expect(await route(payload, async () => selected)).toMatchObject({
+        provider: 'openrouter', model: 'fixture/free',
+      })
+      expect(await fail({ ...payload, provider: 'openrouter', failure: { code: 'RATE_LIMIT' } },
         async () => undefined)).toEqual({ kind: 'retry' })
       await expect(route(payload, async () => selected)).rejects.toThrow('no verified free model')
       expect(await fail({ ...payload, provider: 'openai-codex', failure: { code: 'TIMEOUT' } },
