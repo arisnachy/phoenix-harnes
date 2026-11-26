@@ -99,6 +99,16 @@ export function isGoogleCliAuthFailure(value: string): boolean {
   return /api[ _-]?key|unauthenticated|authentication|sign[ -]?in|log[ -]?in|oauth|\b(?:401|403)\b/iu.test(value)
 }
 
+export function googleCliQuotaFailure(diagnostic: string): LlmError | undefined {
+  if (/\bquota\s+(?:reached|exhausted|exceeded)\b|\bQUOTA_EXHAUSTED\b/iu.test(diagnostic)) {
+    return new LlmError('Google Antigravity alcanzó la cuota del modelo. Espera a que se renueve la cuota para volver a intentarlo.', 'GOOGLE_CLI_QUOTA')
+  }
+  if (/\bRESOURCE_EXHAUSTED\b|\b429\b/iu.test(diagnostic)) {
+    return new LlmError('Google Antigravity limitó temporalmente la solicitud (HTTP 429).', 'RATE_LIMIT')
+  }
+  return undefined
+}
+
 /** Send sensitive prompts through stdin, never process command arguments. */
 export function runGoogleCli(args: readonly string[], input = '', signal?: AbortSignal): Promise<string> {
   assertGoogleAccountMode()
@@ -149,7 +159,7 @@ export function runGoogleCli(args: readonly string[], input = '', signal?: Abort
         finish(new LlmError('Google CLI output too large', 'GOOGLE_CLI_OUTPUT'))
       }
     })
-    child.stderr.on('data', (data: string) => { errorText = (errorText + data).slice(-2000) })
+    child.stderr.on('data', (data: string) => { errorText = (errorText + data).slice(-16000) })
     child.on('error', () => finish(new LlmError(
       'Instala Antigravity CLI y ejecuta agy para iniciar sesión con Google.',
       'GOOGLE_CLI_MISSING',
@@ -158,7 +168,7 @@ export function runGoogleCli(args: readonly string[], input = '', signal?: Abort
       if (signal?.aborted) finish(new LlmError('Google CLI cancelled', 'ABORTED'))
       else if (code !== 0) {
         const authFailure = isGoogleCliAuthFailure(errorText + output)
-        finish(new LlmError(
+        finish(googleCliQuotaFailure(errorText) ?? new LlmError(
           authFailure ? 'Antigravity CLI rechazó la autenticación. Ejecuta agy con la misma cuenta de Windows y comprueba que no exista modelProvider en settings.json.' : `Antigravity CLI terminó con código ${code ?? 'desconocido'}.`,
           authFailure ? 'AUTH_REQUIRED' : 'GOOGLE_CLI_FAILED',
         ))
@@ -204,6 +214,8 @@ export function parseGoogleResult(value: string): GoogleCliResult {
     }
   }
   if (result?.status !== 'SUCCESS') {
+    const quotaFailure = googleCliQuotaFailure(result?.error ?? '')
+    if (quotaFailure) throw quotaFailure
     if (isGoogleCliAuthFailure(result?.error ?? '')) {
       throw new LlmError('Antigravity CLI rechazó la sesión de Google. Vuelve a conectar la cuenta desde Modelos; no se usará una API key.', 'AUTH_REQUIRED')
     }
