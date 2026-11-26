@@ -9,7 +9,7 @@ import {
   parseAntigravityAuth,
 } from '../src/google-antigravity.ts'
 import { catalogModels, catalogProvider, catalogProviderIds } from '../src/catalog.ts'
-import { registerPiAiFlows } from '../src/login.ts'
+import { registerPiAiFlows, usesPiAiLogin } from '../src/login.ts'
 import { recordKeyFor } from '../src/auth.ts'
 
 describe('google-antigravity provider & catalog', () => {
@@ -27,7 +27,7 @@ describe('google-antigravity provider & catalog', () => {
     expect(models.get('claude-opus-4-6-thinking')?.reasoning).toBe(true)
   })
 
-  it('registers an OAuth-only authorization flow for Settings -> Models', async () => {
+  it('never registers the obsolete direct OAuth flow for Settings -> Models', () => {
     const flows = new Map<string, {
       key: string
       label: string
@@ -59,15 +59,8 @@ describe('google-antigravity provider & catalog', () => {
       authContext: { env: async () => undefined, fileExists: async () => false },
     })
 
-    const flow = flows.get('llm-pi-ai/google-antigravity')
-    expect(flow).toBeDefined()
-    expect(flow?.label).toBe('Google Antigravity')
-    expect(flow?.methods).toEqual([{ id: 'oauth', label: 'Google Antigravity OAuth' }])
-    expect(await flow?.inspect()).toEqual({
-      kind: 'account',
-      provider: 'Google Antigravity',
-      accountType: 'oauth',
-    })
+    expect(usesPiAiLogin(GOOGLE_ANTIGRAVITY_PROVIDER)).toBe(false)
+    expect(flows.has('llm-pi-ai/google-antigravity')).toBe(false)
   })
 
   it('completes PKCE loopback OAuth login, project discovery, refresh, and toAuth', async () => {
