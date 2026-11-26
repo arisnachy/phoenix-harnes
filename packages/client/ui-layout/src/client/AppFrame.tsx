@@ -30,7 +30,7 @@ import {
 import { isVisualOperation, restoreVisualBoard, readVisualBoard } from './AdaptiveVisualKit.ts'
 import { AdaptiveAppPreview } from './AdaptiveAppPreview.tsx'
 import { PhoenixSpace } from './PhoenixSpace.tsx'
-import { LIVING_PRESENCE_KEY, livingSeason, livingNeedsCompactSidebar, type AdaptiveLiveSnapshot, type LivingPresenceSnapshot } from './AdaptiveLiveSlots.ts'
+import { LIVING_PRESENCE_ENABLED, livingSeason, livingNeedsCompactSidebar, type AdaptiveLiveSnapshot, type LivingPresenceSnapshot } from './AdaptiveLiveSlots.ts'
 
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
@@ -190,29 +190,11 @@ export function AppFrame({
   })
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState(() => window.innerWidth)
-  const [livingEnabled, setLivingEnabled] = useState(() => {
-    try { return window.localStorage.getItem(LIVING_PRESENCE_KEY) === 'enabled' } catch { return false }
-  })
   const [livingDate, setLivingDate] = useState(() => new Date())
   const livingSnapshot = useRef<LivingPresenceSnapshot>({
-    enabled: false, season: 'none', compacted: false, recoveredPixels: 0, notice: 'disabled',
+    enabled: LIVING_PRESENCE_ENABLED, season: 'none', compacted: false, recoveredPixels: 0, notice: 'ready',
   })
-  const toggleLiving = useCallback(() => {
-    const next = !livingEnabled
-    try { window.localStorage.setItem(LIVING_PRESENCE_KEY, next ? 'enabled' : 'disabled') } catch { /* session-only */ }
-    setLivingEnabled(next)
-  }, [livingEnabled])
   useEffect(() => {
-    const sync = (event: StorageEvent): void => {
-      if (event.key !== LIVING_PRESENCE_KEY && event.key !== null) return
-      try { setLivingEnabled(window.localStorage.getItem(LIVING_PRESENCE_KEY) === 'enabled') }
-      catch { setLivingEnabled(false) }
-    }
-    window.addEventListener('storage', sync)
-    return () => window.removeEventListener('storage', sync)
-  }, [])
-  useEffect(() => {
-    if (!livingEnabled) return
     let timer: number | undefined
     const refresh = (): void => {
       if (timer !== undefined) window.clearTimeout(timer)
@@ -227,7 +209,7 @@ export function AppFrame({
       if (timer !== undefined) window.clearTimeout(timer)
       window.removeEventListener('focus', refresh)
     }
-  }, [livingEnabled])
+  }, [])
   const [adaptiveApp, setAdaptiveApp] = useState<string>('general')
   const [spaceOpen, setSpaceOpen] = useState(false)
   const [spaceHost,setSpaceHost]=useState<HTMLElement|null>(null)
@@ -634,7 +616,7 @@ export function AppFrame({
   // (or the default when the wide preference is closed) and the center
   // absorbs the squeeze.
   const livingCompaction = livingNeedsCompactSidebar({
-    enabled: livingEnabled, viewport, sidebar: panels.sidebar,
+    enabled: LIVING_PRESENCE_ENABLED, viewport, sidebar: panels.sidebar,
     details: detailsSession === undefined ? 0 : panels.details,
     visualWork: adaptiveActive || spaceOpen, cordisOwnsLayout: panels.workspaceCordis,
   })
@@ -670,12 +652,12 @@ export function AppFrame({
   const overlayStableChatAxisOffset = sidebarCollapsed
     ? 0
     : Math.max(0, (cols.sidebar - SIDEBAR_COLLAPSED) / 2)
-  const season = livingSeason(livingDate, livingEnabled)
+  const season = livingSeason(livingDate, LIVING_PRESENCE_ENABLED)
   const compacted = livingCompaction && sidebarCollapsed && viewport >= SIDEBAR_AUTO_COLLAPSE
   const presence: LivingPresenceSnapshot = {
-    enabled: livingEnabled, season, compacted,
+    enabled: LIVING_PRESENCE_ENABLED, season, compacted,
     recoveredPixels: compacted ? Math.max(0, panels.sidebar - cols.sidebar) : 0,
-    notice: !livingEnabled ? 'disabled' : compacted ? 'workspace-compacted' : season === 'christmas' ? 'christmas' : 'ready',
+    notice: compacted ? 'workspace-compacted' : season === 'christmas' ? 'christmas' : 'ready',
   }
   livingSnapshot.current = presence
   const colsRef = useRef(cols)
@@ -720,7 +702,6 @@ export function AppFrame({
           collapsed: sidebarCollapsed,
           width: cols.sidebar,
           livingPresence: presence,
-          toggleLivingPresence: toggleLiving,
         })}
       </div>
       <>

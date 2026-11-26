@@ -52,7 +52,6 @@ export function SidebarRoot({
   renderSlot,
   taskConnection,
   livingPresence,
-  toggleLivingPresence,
 }: SidebarRootComponentProps) {
   // Match rendered controls to the actual sidebar width immediately.
   // The old 150ms settle timer blocked the rail and retained costly wide rows.
@@ -386,15 +385,8 @@ export function SidebarRoot({
 
       {/* Footer actions stack above Settings in both sidebar widths. */}
       <div className={css.footArea}>
-        {livingPresence && toggleLivingPresence && (
+        {livingPresence && ((wide && livingPresence.notice !== 'ready') || (!wide && livingPresence.compacted)) && (
           <div className={css.livingPresence}>
-            <button type="button" className={css.livingToggle} aria-pressed={livingPresence.enabled}
-              aria-label={livingPresence.enabled ? 'Desactivar PHOENIX Living' : 'Activar PHOENIX Living'}
-              title={livingPresence.enabled ? 'Desactivar adaptaciones automáticas de presentación' : 'Activar adaptaciones reversibles y decoración de temporada'}
-              onClick={toggleLivingPresence}>
-              <span aria-hidden="true">{livingPresence.season === 'christmas' ? '✧' : '✦'}</span>
-              {wide && <span>Living {livingPresence.enabled ? '· Activo' : '· Inactivo'}</span>}
-            </button>
             {wide && livingPresence.enabled && livingPresence.notice !== 'ready' && (
               <span className={css.livingNotice} role="status">
                 {livingPresence.notice === 'workspace-compacted'
