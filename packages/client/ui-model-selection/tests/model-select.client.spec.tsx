@@ -702,7 +702,7 @@ describe('Phoenix Local installed model branding', () => {
     expect(qwen.querySelector('svg[data-provider-mark="qwen"]')).not.toBeNull()
     expect(gemma.getAttribute('aria-checked')).toBe('true')
     fireEvent.click(qwen)
-    await waitFor(() => expect(select).toHaveBeenCalledWith({ provider: 'phoenix-local', model: 'ollama:qwen3.5:2b' }))
+    await waitFor(() => { expect(select).toHaveBeenCalledWith({ provider: 'phoenix-local', model: 'ollama:qwen3.5:2b' }) })
   })
 })
 
