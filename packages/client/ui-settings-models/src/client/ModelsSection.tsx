@@ -443,7 +443,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
               <div className={styles['rowHead']}>
                 <span className={styles['rowIdentity']}>
                   <span className={styles['rowName']}>{isCodex && row.entry.displayName === CODEX_PROVIDER ? 'OpenAI Codex' : row.entry.displayName}</span>
-                  {(isCodex || accountFlowFor(row.entry.provider)?.methods.some(method => method.id === 'oauth') === true) ? (
+                  {(isCodex || accountFlowFor(row.entry.provider)?.methods.some(method => method.id === 'oauth' || method.id === 'cli') === true) ? (
                     <span role="img" className={styles['rowTag']}
                       aria-label={t(accountConnected ? 'accountAuthConnected' : 'accountAuthMissing')}
                       title={t(accountConnected ? 'accountAuthConnected' : 'accountAuthMissing')}>
