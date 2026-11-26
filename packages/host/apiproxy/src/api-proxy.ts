@@ -82,7 +82,7 @@ import type {} from '@phoenix-ai/dsh-jobs'
 import type { JobSnapshot } from '@phoenix-ai/dsh-jobs'
 // Type-only: resolves `ctx.get('sessionProjectionCache')` (the cold listing column).
 import type {} from '@phoenix-ai/dsh-session-projection-cache'
-import { orderModelProviderGroups, readProviderOrder } from './model-order.ts'
+import { orderModelProviderGroups, readHiddenModelProviders, readProviderOrder } from './model-order.ts'
 // GoalError narrows domain rejections to their stable codes at the wire boundary.
 import { GoalError } from '@phoenix-ai/dsh-goal'
 import type { GoalRef as CoreGoalRef } from '@phoenix-ai/dsh-goal'
@@ -398,7 +398,7 @@ async function buildModelCatalog(ctx: Context): Promise<{
   groups: ModelProviderGroup[]
   failures: ModelCatalogFailure[]
 }> {
-  const catalog = await Promise.all(ctx.llm.listProviders().map(async (provider) => {
+  const catalog = await Promise.all(ctx.llm.listProviders().filter(provider => provider.id !== 'chatgpt-web').map(async (provider) => {
     try {
       const models = await ctx.llm.listModels(provider.id)
       const entries = await Promise.all(models.map(async (model) => {
@@ -449,9 +449,9 @@ async function buildModelCatalog(ctx: Context): Promise<{
     }
   }))
   const groups = catalog.flatMap(item => item.kind === 'group' ? [item.group] : []).filter(group => group.models.length > 0)
-  const profile = ctx.get('userProfile', false) as { get(): { profile: { modelProviderOrder?: readonly string[] } } } | undefined
+  const profile = ctx.get('userProfile', false) as { get(): { profile: { modelProviderOrder?: readonly string[]; hiddenModelProviders?: readonly string[] } } } | undefined
   return {
-    groups: orderModelProviderGroups(groups, readProviderOrder(profile)),
+    groups: orderModelProviderGroups(groups, readProviderOrder(profile), readHiddenModelProviders(profile)),
     failures: catalog.flatMap(item => item.kind === 'failure' ? [item.failure] : []),
   }
 }
@@ -3972,7 +3972,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             active: true,
           })
         }
-        return Promise.resolve(ok(request, { providers: views }))
+        return Promise.resolve(ok(request, { providers: [...new Map(views.filter(view => view.provider !== 'chatgpt-web').map(view => [view.provider, view])).values()] }))
       },
 
       async models(request) {

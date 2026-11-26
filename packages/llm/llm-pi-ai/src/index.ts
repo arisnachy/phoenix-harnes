@@ -64,7 +64,7 @@ import { authContextFrom, credentialStoreFrom } from './auth.ts'
 import { catalogProvider, catalogProviderIds } from './catalog.ts'
 import { CODEX_PROVIDER, CodexLiveCatalog } from './codex-live-catalog.ts'
 import { codexNativeAccessToken } from './codex-auth.ts'
-import { assertServiceable, CHATGPT_WEB_PROVIDER, chatgptWebDefaults, Config, DEFAULT_PHOENIX_LOCAL_STREAM_IDLE_TIMEOUT_MS, resolveProfiles } from './config.ts'
+import { assertServiceable, CHATGPT_WEB_PROVIDER, Config, DEFAULT_PHOENIX_LOCAL_STREAM_IDLE_TIMEOUT_MS, resolveProfiles } from './config.ts'
 import type { PiAiProviderProfile, ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
 import { installCodexAvatarTransform, installCodexImageGeneration } from './image-generation.ts'
@@ -230,7 +230,7 @@ function registrationFacts(profiles: ReadonlyMap<string, ResolvedPiAiProviderPro
 function directoryEntries(
   profiles: ReadonlyMap<string, ResolvedPiAiProviderProfile>,
 ): LlmConfigurableProvider[] {
-  const knownRoutes = new Set([...catalogProviderIds(), CHATGPT_WEB_PROVIDER])
+  const knownRoutes = new Set(catalogProviderIds().filter(provider => provider !== CHATGPT_WEB_PROVIDER))
   const entries = new Map<string, LlmConfigurableProvider>()
   const declare = (provider: string, displayName: string): void => {
     entries.set(provider, {
@@ -238,13 +238,11 @@ function directoryEntries(
       displayName: provider === 'openai-codex' && displayName === provider ? 'OpenAI Codex' : displayName,
       settingsNs: NS,
       settingsPath: ['providers', provider],
-      declared: provider === CHATGPT_WEB_PROVIDER || !knownRoutes.has(provider),
+      declared: !knownRoutes.has(provider),
     })
   }
   for (const provider of knownRoutes) {
-    const defaultName = provider === CHATGPT_WEB_PROVIDER
-      ? chatgptWebDefaults().displayName
-      : catalogProvider(provider)?.name ?? provider
+    const defaultName = catalogProvider(provider)?.name ?? provider
     declare(provider, defaultName)
   }
   for (const [provider, profile] of profiles) {

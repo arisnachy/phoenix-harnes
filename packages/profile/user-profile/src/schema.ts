@@ -46,6 +46,7 @@ export const UserProfileSettingsSchema: z<UserProfileSettings> = z.object({
   assistantGender: z.union(['masculine', 'feminine', 'neutral']).default(DEFAULT_ASSISTANT_GENDER),
   assistantGenderSource: z.union(['inferred', 'manual']).required(false),
   modelProviderOrder: z.array(z.string()).required(false),
+  hiddenModelProviders: z.array(z.string()).required(false),
   preferredName: z.string().required(false),
   profession: z.string().required(false),
   professionalTitle: z.string().required(false),
@@ -80,7 +81,7 @@ export const UserProfileSettingsSchema: z<UserProfileSettings> = z.object({
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const PROFILE_TEXT_FIELDS = ['assistantName', 'preferredName', 'profession', 'professionalTitle', 'gender', 'pronouns', 'tone'] as const
-const PROFILE_UPDATE_FIELDS = [...PROFILE_TEXT_FIELDS, 'assistantGender', 'assistantGenderSource', 'modelProviderOrder', 'dateOfBirth', 'family', 'addressingMode', 'countryCode', 'momentsTimeZone', 'specialDates'] as const
+const PROFILE_UPDATE_FIELDS = [...PROFILE_TEXT_FIELDS, 'assistantGender', 'assistantGenderSource', 'modelProviderOrder', 'hiddenModelProviders', 'dateOfBirth', 'family', 'addressingMode', 'countryCode', 'momentsTimeZone', 'specialDates'] as const
 const CONSENT_FIELDS = ['preferredName', 'profession', 'professionalTitle', 'dateOfBirth', 'gender', 'pronouns', 'tone', 'family', 'moments'] as const
 
 /** Validate cross-field and bounded profile constraints.
@@ -101,6 +102,7 @@ export function validateUserProfile(profile: UserProfileSettings): void {
     throw new TypeError('user profile addressingMode must be automatic, name, title, or none')
   }
   validateProviderOrder(profile.modelProviderOrder)
+  validateProviderOrder(profile.hiddenModelProviders)
   if (profile.countryCode !== undefined && !/^[A-Z]{2}$/.test(profile.countryCode)) throw new TypeError('user profile countryCode must be ISO 3166-1 alpha-2')
   if (profile.momentsTimeZone !== undefined) {
     try { new Intl.DateTimeFormat('en-US', { timeZone: profile.momentsTimeZone }) } catch { throw new TypeError('user profile momentsTimeZone must be a valid IANA zone') }
@@ -132,7 +134,7 @@ export function validateUserProfileUpdate(patch: unknown): asserts patch is User
   for (const field of PROFILE_UPDATE_FIELDS) {
     if (!Object.hasOwn(patch, field)) continue
     const value = patch[field]
-    if (value !== null && value !== undefined && field !== 'family' && field !== 'specialDates' && field !== 'modelProviderOrder' && typeof value !== 'string') {
+    if (value !== null && value !== undefined && field !== 'family' && field !== 'specialDates' && field !== 'modelProviderOrder' && field !== 'hiddenModelProviders' && typeof value !== 'string') {
       throw new TypeError(`user profile update field "${field}" must be a string or null`)
     }
     if (field === 'assistantGender' && value !== null && value !== undefined
@@ -147,7 +149,7 @@ export function validateUserProfileUpdate(patch: unknown): asserts patch is User
       && !USER_ADDRESS_MODES.includes(value as UserAddressMode)) {
       throw new TypeError('user profile update addressingMode must be automatic, name, title, or none')
     }
-    if (field === 'modelProviderOrder' && value !== null && value !== undefined && !Array.isArray(value)) {
+    if ((field === 'modelProviderOrder' || field === 'hiddenModelProviders') && value !== null && value !== undefined && !Array.isArray(value)) {
       throw new TypeError('user profile update field "modelProviderOrder" must be an array or null')
     }
     if (field === 'specialDates' && value !== null && value !== undefined && !Array.isArray(value)) throw new TypeError('user profile specialDates must be an array or null')
@@ -182,6 +184,7 @@ function clearProfileField(profile: UserProfileSettings, field: typeof PROFILE_U
     case 'assistantGender': profile.assistantGender = DEFAULT_ASSISTANT_GENDER; break
     case 'assistantGenderSource': delete profile.assistantGenderSource; break
     case 'modelProviderOrder': delete profile.modelProviderOrder; break
+    case 'hiddenModelProviders': delete profile.hiddenModelProviders; break
     case 'preferredName': delete profile.preferredName; break
     case 'profession': delete profile.profession; break
     case 'professionalTitle': delete profile.professionalTitle; break

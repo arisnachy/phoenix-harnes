@@ -352,6 +352,16 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
 
   // Configured providers remain visible in the grid; setup is opened in the wizard.
   const configured = state.rows.filter(row => row.configured)
+  const managed = state.rows.filter(row => row.configured || row.entry.active)
+  const hiddenProviders = new Set((state.namespaces.get('user-profile')?.value as { hiddenModelProviders?: string[] } | undefined)?.hiddenModelProviders ?? [])
+  const setProviderHidden = (provider: string, hidden: boolean): void => {
+    if (reordering) return
+    setReordering(true)
+    setOrderFailure(undefined)
+    void controller.setProviderHidden(provider, hidden)
+      .catch((error: unknown) => { setOrderFailure(messageOf(error)) })
+      .finally(() => { setReordering(false) })
+  }
   const filteredConfigured = configured.filter(row =>
     `${row.entry.displayName} ${row.entry.provider}`.toLocaleLowerCase()
       .includes(searchQuery.trim().toLocaleLowerCase()))
@@ -393,7 +403,31 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
           {organizing ? t('finishOrder') : t('manageOrder')}
         </button>
       </div>
-      {organizing ? <p className={styles['intro']}>{t('providerOrder')}</p> : null}
+      {organizing ? (
+        <section aria-label={t('providerOrder')}>
+          <p className={styles['intro']}>{t('providerOrder')}</p>
+          <ul className={styles['rows']}>
+            {managed.map((row, index) => (
+              <li key={row.entry.provider} className={styles['rowCard']}>
+                <div className={styles['rowHead']}>
+                  <span className={styles['rowName']}>{row.entry.displayName}</span>
+                  <span className={styles['rowActions']}>
+                    <button type="button" className={styles['iconButton']} aria-label={`${t('moveUp')}: ${row.entry.displayName}`}
+                      disabled={!state.writable || reordering || index === 0} onClick={() => { moveProvider(row.entry.provider, 'up') }}>↑</button>
+                    <button type="button" className={styles['iconButton']} aria-label={`${t('moveDown')}: ${row.entry.displayName}`}
+                      disabled={!state.writable || reordering || index === managed.length - 1} onClick={() => { moveProvider(row.entry.provider, 'down') }}>↓</button>
+                    <button type="button" className={styles['secondaryButton']} disabled={!state.writable || reordering}
+                      aria-pressed={hiddenProviders.has(row.entry.provider)}
+                      onClick={() => { setProviderHidden(row.entry.provider, !hiddenProviders.has(row.entry.provider)) }}>
+                      {hiddenProviders.has(row.entry.provider) ? t('showProviderInSelector') : t('hideProviderFromSelector')}
+                    </button>
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       {accountRegistryStatus !== 'ready' ? (
         <div className={styles['authorizationPrompt']} role="status">
           <span>{t(accountRegistryStatus === 'loading' ? 'wizardAuthRegistryLoading' : 'wizardAuthRegistryUnavailable')}</span>
@@ -426,7 +460,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
       )}
       {codexAuthFailure === undefined ? null : <p role="alert" className={styles['error']}>{codexAuthFailure}</p>}
       <ul className={styles['rows']}>
-        {filteredConfigured.map((row, index) => {
+        {(organizing ? [] : filteredConfigured).map((row, index) => {
           const target = targetOf(row)
           const namespace = state.namespaces.get(target.settingsNs)
           /* v8 ignore next -- the join marks a row configured only when its namespace resolved */
