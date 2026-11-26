@@ -173,6 +173,26 @@ describe('Nexus installed runtime failover', () => {
       const snapshot = await inspect(payload.signal, { sessionId: agent.session.id })
       expect(snapshot.lastDispatchedRoute).toBe('openai-codex/gpt-6-luna')
       expect(snapshot.lastDispatchedEffort).toBe('low')
+      expect(snapshot.lastExecution).toBeNull()
+      expect(snapshot.dispatchIdentityBasis).toBe('route-selected-not-execution-proof')
+      type StreamRequest = Route & { sessionId: string }
+      const stream = hooks.get('llm/stream') as (
+        request: StreamRequest, next: () => AsyncIterable<unknown>,
+      ) => AsyncIterable<unknown>
+      const observed = stream({
+        provider: 'openai-codex', model: 'gpt-6-luna', sessionId: agent.session.id,
+      }, async function* () {
+        yield { type: 'usage', usage: { inputTokens: 12, outputTokens: 3, cacheReadTokens: 2 } }
+      })
+      for await (const chunk of observed) {
+        expect(chunk).toMatchObject({ type: 'usage' })
+      }
+      const execution = await inspect(payload.signal, { sessionId: agent.session.id })
+      expect(execution.lastExecution).toMatchObject({
+        provider: 'openai-codex', model: 'gpt-6-luna', stage: 'stream-observed',
+        reasoningEffort: 'low', reasoningBasis: 'request-config',
+        usage: { inputTokens: 14, outputTokens: 3 },
+      })
       expect(snapshot.quota.fiveHours).toMatchObject({ status: 'reported', remainingPercent: 99 })
       expect(snapshot.total).toBe(2)
       expect(snapshot.models.map(m => m.priceClass)).toContain('verified-free')
@@ -221,6 +241,10 @@ describe('Nexus native account snapshot', () => {
       primaryObservedAt: now, secondaryObservedAt: now }, now)
     expect(view.fiveHours).toMatchObject({ status: 'reported', remainingPercent: 0, remainingMs: 3_600_000 })
     expect(view.sevenDays).toMatchObject({ status: 'reported', remainingPercent: 60, remainingMs: 86_400_000 })
+    expect(view.sevenDays).toMatchObject({
+      remainingDays: 1, remainingHours: 0, remainingMinutes: 0,
+      suggestedPercentPerDay: 51, suggestedPercentPerHour: 2.125,
+    })
     expect(view.exactTokenBalance).toBeNull()
     expect(nexusQuotaView(undefined, now).fiveHours).toEqual({ status: 'unknown' })
   })
