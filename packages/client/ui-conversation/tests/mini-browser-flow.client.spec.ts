@@ -13,7 +13,7 @@ const flowNodes = (...keys: string[]) => keys.map(key => ({ kind: 'node' as cons
 describe('FastSD generated image delivery', () => {
   const id = '0123456789abcdef0123456789abcdef'
   const markdown = '![Imagen generada localmente](/local-images/' + id + '.jpg)'
-  const receipt = { fileId: id, markdown, model: 'rupeshs/sd-turbo-openvino' }
+  const receipt = { fileId: id, markdown, model: 'rupeshs/flux2-klein-4b-int4-ov' }
   const localTool = (value: unknown, isError = false, name = 'mcp__phoenix_fastsd__generate_image'): BrowserFlowNode => ({
     key: 'local-tool', kind: 'tool-call', data: { root: {
       kind: 'tool-result', callId: 'fastsd-1', call: { name, argsRaw: '{}' },

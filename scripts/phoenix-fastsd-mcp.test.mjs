@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { decodeImage, FASTSD_MODEL, FASTSD_SIZE, generationRequest, imageRoot, fastsdRoot } from './phoenix-fastsd-mcp.mjs'
+import { decodeImage, FASTSD_MODEL, FASTSD_SIZE, generationRequest, imageRoot, fastsdRoot, legacyFastsdRoot, legacyCacheCandidates } from './phoenix-fastsd-mcp.mjs'
 
-test('SD Turbo OpenVINO is a dedicated, fixed local image route', () => {
+test('FLUX.2 Klein OpenVINO is a dedicated, fixed local image route', () => {
   const body = generationRequest('A detailed medical textbook diagram')
-  assert.equal(FASTSD_MODEL, 'rupeshs/sd-turbo-openvino')
+  assert.equal(FASTSD_MODEL, 'rupeshs/flux2-klein-4b-int4-ov')
   assert.equal(FASTSD_SIZE, 512)
   assert.equal(body.openvino_lcm_model_id, FASTSD_MODEL)
   assert.equal(body.use_openvino, true)
@@ -12,7 +12,7 @@ test('SD Turbo OpenVINO is a dedicated, fixed local image route', () => {
   assert.equal(body.use_lcm_lora, false)
   assert.equal(body.number_of_images, 1)
   assert.equal(body.guidance_scale, 1)
-  assert.equal(body.inference_steps, 1)
+  assert.equal(body.inference_steps, 4)
   assert.equal(body.image_width, 512)
   assert.equal(body.image_height, 512)
   assert.equal(body.use_seed, false)
@@ -38,4 +38,12 @@ test('only bounded base64 JPEG is accepted, never arbitrary tool-output bytes', 
   assert.throws(() => decodeImage('not base64!!!'), /codificada/)
   assert.throws(() => decodeImage(Buffer.alloc(50).toString('base64')), /JPEG/)
   assert.throws(() => decodeImage(Buffer.from([0xff,0xd8,0xff,0xd9]).toString('base64')), /JPEG/)
+})
+
+test('migration isolates the new runtime and scopes cleanup to exact legacy weights', () => {
+  assert.equal(fastsdRoot(), legacyFastsdRoot() + '-flux2')
+  const paths = legacyCacheCandidates('/user', '/phoenix/fastsdcpu', {})
+  assert.equal(paths.length, 3)
+  assert.ok(paths.every(path => path.endsWith('models--rupeshs--sd-turbo-openvino')))
+  assert.equal(legacyCacheCandidates('/user', '/phoenix/fastsdcpu', { HF_HUB_CACHE: '/shared' }).length, 2)
 })
