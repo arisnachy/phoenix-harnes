@@ -19,6 +19,11 @@ export function senseSessionId(value: string | undefined): string {
   return value
 }
 
+/** Only an explicit Codex engine selection may request a native voice session. */
+export function agentSpeechUsesCodex(engine: unknown): boolean {
+  return engine === 'codex'
+}
+
 export const name = 'tool-voice'
 export const inject = ['tools', 'voice', 'systemPrompt']
 
@@ -27,8 +32,8 @@ export function apply(ctx: Context): void {
   ctx.systemPrompt.section({
     name: 'tool:voice',
     order: 119,
-    text: 'If the user explicitly asks you to speak, test audio, or say a phrase out loud, call phoenix_voice_speak with short natural text in the configured language. '
-      + 'Use phoenix_voice_status for diagnostics. Use phoenix_codex_live_control to open, speak through, inspect or close Codex Live independently of the text model. The agent may autonomously open speaker-only voice when the user requests speech or has enabled proactive spoken notifications; never activate the microphone implicitly. If login is required, use authorize to request the official connector dialog; only the user may complete it. A queued control is not a playback receipt. Use status to check the result before claiming success; use phoenix_voice_speak with engine=local only after a definitive native failure or if local voice is requested. '
+    text: 'For ordinary speech and authorized spontaneous spoken notifications, call phoenix_voice_speak with engine=local and short natural text in the configured language. You may take initiative to speak a brief useful notification when appropriate without starting Live. Only when the user explicitly requests Codex voice or a Codex test, use engine=codex or phoenix_codex_live_control. '
+      + 'Use phoenix_voice_status for diagnostics. Use phoenix_codex_live_control to open, speak through, inspect or close Codex Live independently of the text model. Do not open Codex Live for proactive speech or a generic request to speak; local is the default. Never activate the microphone implicitly. If login is required for an explicit Codex request, use authorize to request the official connector dialog; only the user may complete it. A queued or claimed control is not a playback receipt. Use status to check the result before claiming success. Do not silently substitute local speech during an explicit Codex test. '
       + 'Never claim that the speaker was audible or that microphone audio was heard based solely on a successful synthesis receipt. '
       + 'When asked to hear Windows audio or the microphone, use phoenix_audio_status and phoenix_audio_listen (source output or microphone), not phoenix_voice_speak. The Windows host must be open and the user approves every 3-12 second clip in a native dialog. Never activate a microphone implicitly or listen continuously. '
       + 'When asked to analyze YouTube or browser video, first attempt video_media_inspect and youtube_video_listen if registered, then inspect the embedded browser using its authenticated channel to verify the page and media state. If speech is unavailable but the user is playing the video in Windows, independently check phoenix_audio_status and offer phoenix_audio_listen with source output and visible consent. A short captured clip never proves knowledge of the whole video. Ask to share a tab only when the native or authorized alternatives really cannot obtain the needed evidence. Never invent frames, speech, or transcription. '
@@ -56,6 +61,7 @@ export function apply(ctx: Context): void {
           available: realtime.available,
           authenticated: realtime.authenticated,
           reason: realtime.reason ?? null,
+          detail: realtime.detail ?? null,
         },
         note: 'Codex Live disponible no equivale a sesión WebRTC ya autorizada. La salida de voz local puede funcionar sin abrir el micrófono.',
       })
@@ -64,7 +70,7 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name: 'phoenix_codex_live_control',
-    description: 'Controla Codex Live en la conversación actual: open inicia solo altavoz sin micrófono; speak abre y habla; close libera la conexión; authorize solicita el diálogo oficial si falta iniciar sesión; status consulta el recibo real del último control. Respeta el perfil femenino, masculino o neutro configurado. No concede OAuth ni confirma audibilidad. Solo usa voz por petición del usuario o alertas proactivas autorizadas.',
+    description: 'Controla Codex Live en la conversación actual: open inicia solo altavoz sin micrófono; speak abre y habla; close libera la conexión; authorize solicita el diálogo oficial si falta iniciar sesión; status consulta el recibo real del último control. Respeta el perfil femenino, masculino o neutro configurado. No concede OAuth ni confirma audibilidad. Solo abre, autoriza o reproduce Codex cuando el usuario lo pida expresamente; las alertas proactivas usan voz local.',
     parameters: {
       action: { type: 'string', required: true, enum: ['open', 'close', 'speak', 'authorize', 'status'] },
       text: { type: 'string', description: 'Solo para speak: frase breve, máximo 300 caracteres.' },
@@ -84,9 +90,9 @@ export function apply(ctx: Context): void {
   }))
   ctx.tools.register(defineTool({
     name: 'phoenix_voice_speak',
-    description: 'REPRODUCIR AUDIO AHORA. Kira debe llamar esta herramienta cuando el usuario le diga habla, di algo, lee en voz alta, quiero escucharte, prueba tu voz o ¿me escuchas bien?; usa Codex Live si hay sesión autorizada y activa; si no, sintetiza audio real usando voz local de PHOENIX en el idioma seleccionado. Responde con el proveedor y resultado verificables. No requiere micrófono. No usar para narrar cada paso ni simular reproducción.',
+    description: 'REPRODUCIR AUDIO AHORA. Kira debe llamar esta herramienta cuando el usuario le diga habla, di algo, lee en voz alta, quiero escucharte, prueba tu voz o ¿me escuchas bien?; usa voz local por defecto (también para iniciativa propia); usa engine=codex exclusivamente si el usuario pide Codex de forma explícita. No sustituyas por otra voz en una prueba Codex. Responde con el proveedor y resultado verificables. No requiere micrófono. No usar para narrar cada paso ni simular reproducción.',
     parameters: {
-      engine: { type: 'string', enum: ['auto', 'local'], description: 'auto prioriza Codex Live; local usa voz local configurada sin intentar abrir Codex.' },
+      engine: { type: 'string', enum: ['auto', 'local', 'codex'], description: 'local (predeterminado) y auto usan voz local sin abrir Live. codex solo cuando el usuario lo pide expresamente.' },
       text: {
         type: 'string', required: true,
         description: 'Frase corta, natural y pronunciable en el idioma configurado, máximo 300 caracteres. No incluir identificadores ni secretos.',
@@ -101,13 +107,16 @@ export function apply(ctx: Context): void {
     async execute(args, exec) {
       const language = args.language?.trim() || process.env.PHOENIX_VOICE_LANGUAGE?.trim() || 'es-DO'
       const key = exec.agent?.id
-      if (args.engine !== 'local' && typeof key === 'string' && /^[A-Za-z0-9_:-]{1,128}$/u.test(key)) {
+      if (agentSpeechUsesCodex(args.engine)) {
+        if (typeof key !== 'string' || !/^[A-Za-z0-9_:-]{1,128}$/u.test(key)) {
+          return JSON.stringify({ accepted: false, state: 'failed', reason: 'no-foreground-client' })
+        }
         const native = ctx.voice.agentRealtimeControl(key, 'speak', args.text)
-        if (native.state === 'queued' || native.reason === 'control-busy') return JSON.stringify({
-          ...native, accepted: false, instruction: 'Control solicitado o en curso. Consulta phoenix_codex_live_control status; no afirmes reproducción ni repitas por Kokoro mientras esté pendiente.',
+        return JSON.stringify({
+          ...native, accepted: false, instruction: 'Consulta phoenix_codex_live_control status. Solo completed con evidencia de transporte indica recepción; no afirmes audibilidad. No sustituyas esta prueba por Kokoro.',
         })
       }
-      const receipt = await deliverAgentSpeech(ctx.voice, args.text, language, args.engine === 'local' ? undefined : key)
+      const receipt = await deliverAgentSpeech(ctx.voice, args.text, language)
       return JSON.stringify({
         ...receipt,
         instruction: receipt.accepted
