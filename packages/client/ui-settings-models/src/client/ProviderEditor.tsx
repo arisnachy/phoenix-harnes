@@ -212,21 +212,22 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   const oauth = props.oauth
   /** An account-only flow replaces the key field with its sign-in buttons. */
   const isCodex = props.provider === 'openai-codex'
+  const isAntigravity = props.provider === 'google-antigravity' || props.provider === 'google-account'
   const openAiPaired = props.onSelectOpenAiRoute !== undefined
     && (props.provider === 'openai' || isCodex)
-  const supportsAccount = isCodex || oauth?.methods.some(method => method.id === 'oauth') === true
+  const supportsAccount = isCodex || isAntigravity || oauth?.methods.some(method => method.id === 'oauth' || method.id === 'cli') === true
     || openAiPaired
   // A registered OAuth-only pi-ai provider (e.g. a CLI or account adapter)
   // must not get a fabricated API-key form. Dual-mode registrations can show both.
-  const supportsApiKey = !isChatGptWeb && (!isCodex || openAiPaired)
+  const supportsApiKey = !isChatGptWeb && !isAntigravity && (!isCodex || openAiPaired)
     && (openAiPaired || oauth === undefined
       || oauth.methods.some(method => method.id === 'api-key'))
-  const defaultMethod = isCodex || (!openAiPaired && oauth?.methods.some(method => method.id === 'oauth') === true)
+  const defaultMethod = isCodex || isAntigravity || (!openAiPaired && oauth?.methods.some(method => method.id === 'oauth' || method.id === 'cli') === true)
     ? 'oauth' : 'api-key'
   const selectedMethod = preferredMethod === 'auto' ? defaultMethod
     : preferredMethod === 'oauth' && supportsAccount ? 'oauth'
       : supportsApiKey ? 'api-key' : 'oauth'
-  const oauthOnly = isCodex || (props.guided === true && selectedMethod === 'oauth')
+  const oauthOnly = isCodex || isAntigravity || (props.guided === true && selectedMethod === 'oauth')
   const accountReady = oauth?.connected === true || authorizedDuringEdit
   const { attempt, answer, setAnswer, failure: authFailure, begin, submitAnswer, cancel } =
     useAuthorizationAttempt(api.authorization, () => {
@@ -472,7 +473,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
             an inline sign-in that never routes an OAuth grant through the
             API-key input. An account-only flow (no api-key method) is the
             whole credential story, so the key field below steps aside. */}
-        {props.guided === true && selectedMethod !== 'oauth' ? null : oauth === undefined ? (isCodex ? (
+        {props.guided === true && selectedMethod !== 'oauth' ? null : oauth === undefined ? (isCodex || isAntigravity ? (
           <p role="status" className={styles['advancedHint']}>{t('accountUnavailable')}</p>
         ) : null) : (
           <div className={styles['field']}>
@@ -481,7 +482,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
               ? <p role="status" className={styles['connectedChip']}>{t('accountSignedIn')}</p>
               : null}
             <div className={styles['authorizationActions']}>
-              {oauth.methods.filter(method => method.id === 'oauth').map(method => (
+              {oauth.methods.filter(method => method.id === 'oauth' || method.id === 'cli').map(method => (
                 <button
                   key={method.id}
                   type="button"

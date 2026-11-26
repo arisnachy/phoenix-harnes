@@ -1,5 +1,6 @@
 /** Account-backed Gemini model route through the official Antigravity CLI. No token extraction. */
-import { spawn } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
+import { promisify } from 'node:util'
 import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
@@ -55,6 +56,24 @@ export function googleAccountEnvironment(env: NodeJS.ProcessEnv): NodeJS.Process
 }
 
 
+/** Open the official interactive login in a visible Windows console, not an OAuth web popup. */
+export async function launchGoogleCliLogin(signal?: AbortSignal): Promise<boolean> {
+  if (process.platform !== 'win32') return false
+  const powershell = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+  const script = "$ErrorActionPreference = 'Stop'; Start-Process -FilePath $env:PHOENIX_AGY_LOGIN_EXE -ArgumentList @('acp','--login')"
+  await promisify(execFile)(powershell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], {
+    cwd: tmpdir(), windowsHide: true, timeout: 15_000,
+    env: { ...googleAccountEnvironment(process.env), PHOENIX_AGY_LOGIN_EXE: antigravityExecutable() },
+    ...signal === undefined ? {} : { signal },
+  })
+  return true
+}
+
+/** Classify provider diagnostics without exposing arbitrary CLI output or credentials. */
+export function isGoogleCliAuthFailure(value: string): boolean {
+  return /api[ _-]?key|unauthenticated|authentication|sign[ -]?in|log[ -]?in|oauth|\b(?:401|403)\b/iu.test(value)
+}
+
 /** Send sensitive prompts through stdin, never process command arguments. */
 export function runGoogleCli(args: readonly string[], input = '', signal?: AbortSignal): Promise<string> {
   assertGoogleAccountMode()
@@ -93,7 +112,7 @@ export function runGoogleCli(args: readonly string[], input = '', signal?: Abort
     child.on('close', (code) => {
       if (signal?.aborted) finish(new LlmError('Google CLI cancelled', 'ABORTED'))
       else if (code !== 0) {
-        const authFailure = /api.key|unauthenticated|authentication|sign.in|login|oauth|401|403/iu.test(errorText + output)
+        const authFailure = isGoogleCliAuthFailure(errorText + output)
         finish(new LlmError(
           authFailure ? 'Antigravity CLI rechazó la autenticación. Ejecuta agy con la misma cuenta de Windows y comprueba que no exista modelProvider en settings.json.' : `Antigravity CLI terminó con código ${code ?? 'desconocido'}.`,
           authFailure ? 'AUTH_REQUIRED' : 'GOOGLE_CLI_FAILED',
@@ -130,10 +149,12 @@ export function parseGoogleResult(value: string): GoogleCliResult {
       if (event.event === 'result') result = event.result
     }
   }
-  if (result?.status !== 'SUCCESS') throw new LlmError(
-    'Antigravity CLI no completó la solicitud: ' + (result?.error ?? result?.status ?? 'sin respuesta'),
-    'GOOGLE_CLI_PROTOCOL',
-  )
+  if (result?.status !== 'SUCCESS') {
+    if (isGoogleCliAuthFailure(result?.error ?? '')) {
+      throw new LlmError('Antigravity CLI rechazó la sesión de Google. Vuelve a conectar la cuenta desde Modelos; no se usará una API key.', 'AUTH_REQUIRED')
+    }
+    throw new LlmError('Antigravity CLI no completó la solicitud: ' + (result?.status ?? 'sin respuesta'), 'GOOGLE_CLI_PROTOCOL')
+  }
   return result
 }
 
@@ -242,7 +263,7 @@ export function registerGoogleAccountCli(ctx: Context): void {
     authorized.authorization.registerFlow({
       key: GOOGLE_ACCOUNT_KEY,
       label: 'Google Antigravity CLI (cuenta Google)',
-      methods: [{ id: 'oauth', label: 'Instalar y conectar cuenta Google' }, { id: 'cli', label: 'Conectar CLI (compatibilidad)' }],
+      methods: [{ id: 'cli', label: 'Instalar y conectar cuenta Google' }],
       async inspect() {
         if (!await antigravityInstalled().catch(() => false)) return undefined
         const stored = await authorized.credentials.readRecord(GOOGLE_ACCOUNT_KEY)
@@ -265,9 +286,11 @@ export function registerGoogleAccountCli(ctx: Context): void {
           },
         })
         const exe = antigravityExecutable()
+        const launched = await launchGoogleCliLogin(session.signal).catch(() => false)
         session.notify({
-          message: 'CLI instalada y verificada. Abre una terminal nueva, ejecuta ' + exe + ' (entre comillas si contiene espacios) e inicia sesión con Google. En PowerShell utiliza & antes de una ruta entre comillas. Regresa aquí para verificar el modelo. Nunca pegues tokens ni contraseñas.',
-          url: 'https://antigravity.google/docs/install/',
+          message: launched
+            ? 'Se solicitó abrir la terminal oficial de Google. Completa el inicio de sesión en esa ventana y vuelve aquí para verificar.'
+            : 'CLI instalada. Abre una terminal, ejecuta ' + exe + ' acp --login (en PowerShell usa & y comillas si la ruta tiene espacios). Completa el inicio de sesión y vuelve aquí. Nunca pegues tokens ni contraseñas.',
         })
         const answer = await session.prompt({
           kind: 'text', message: 'Escribe VERIFICAR tras completar el inicio de sesión local.',
