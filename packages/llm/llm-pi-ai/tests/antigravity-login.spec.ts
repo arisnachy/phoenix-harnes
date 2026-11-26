@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { describe, expect, it, vi } from 'vitest'
-import { googleCliConsentUrl, relayGoogleCliLogin } from '../src/antigravity-login.ts'
+import { googleCliConsentUrl, googleCliRequestsCode, relayGoogleCliLogin } from '../src/antigravity-login.ts'
 
 const url = 'https://accounts.google.com/o/oauth2/v2/auth?response_type=code&redirect_uri=https%3A%2F%2Fantigravity.google%2Foauth-callback&state=fake'
 
@@ -17,6 +17,14 @@ describe('Antigravity OAuth code relay', () => {
     const prompt = vi.fn(async () => 'fake-code')
     await relayGoogleCliLogin(child, { signal: new AbortController().signal, notify, prompt })
     expect(notify).toHaveBeenCalledWith(expect.objectContaining({ url }))
+    expect(prompt).toHaveBeenCalledWith(expect.objectContaining({ kind: 'secret' }))
+  })
+  it('accepts a code prompt even when the CLI opens the browser itself without printing a URL or newline', async () => {
+    expect(googleCliRequestsCode('Paste the authorization code: ')).toBe(true)
+    expect(googleCliRequestsCode('Installing dependencies')).toBe(false)
+    const child = spawn(process.execPath, ['-e', 'process.stderr.write("Paste the authorization code: "); process.stdin.once("data", b => process.exit(b.toString().trim() === "fake-code" ? 0 : 1));'], { stdio: ['pipe', 'pipe', 'pipe'] })
+    const prompt = vi.fn(async () => 'fake-code')
+    await relayGoogleCliLogin(child, { signal: new AbortController().signal, notify: vi.fn(), prompt })
     expect(prompt).toHaveBeenCalledWith(expect.objectContaining({ kind: 'secret' }))
   })
   it('does not treat a failed CLI exchange as authentication', async () => {

@@ -533,7 +533,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
             {shownKeyFailure === undefined ? null : <p className={styles['error']}>{t(shownKeyFailure)}</p>}
           </div>
         )}
-        {props.credentialOnly === true ? null : <details className={styles['customized']}>
+        {props.credentialOnly === true || isAntigravity ? null : <details className={styles['customized']}>
           <summary className={styles['customizedSummary']}>{t('customized')}</summary>
           <div className={styles['customizedBody']}>
             {/* The name and the protocol are the create card's two remaining
@@ -636,7 +636,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
               : null}
           </div>
         )}
-      {props.guided === true ? (
+      {props.guided === true && !isAntigravity ? (
         <>
           <ol className={styles['wizardSteps']} aria-label={t('wizardConnection')}>
             {(['wizardConnection', 'wizardOptions', 'wizardVerify'] as const).map((stepName, index) => (
@@ -683,12 +683,12 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
           ) : null}
         </>
       ) : null}
-      <div hidden={props.guided === true && wizardStep !== 1}>
+      <div hidden={props.guided === true && !isAntigravity && wizardStep !== 1}>
         {layout === 'unknown'
           ? <p className={styles['advancedHint']}>{`${t('advancedHint')} (${namespace.ns})`}</p>
           : curatedFields(layout)}
       </div>
-      {props.guided === true && wizardStep === 2 ? (
+      {props.guided === true && !isAntigravity && wizardStep === 2 ? (
         <section className={styles['wizardReview']} aria-label={t('wizardVerify')}>
           <p className={styles['advancedHint']}>{t('wizardReviewHint')}</p>
           <div className={styles['wizardReviewSummary']}>
@@ -715,7 +715,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
             {`${t('model')} ${String(modelFailure.index + 1)}: ${t(modelFailure.key)}`}
           </p>
         )}
-      {props.guided === true && wizardStep < 2 ? (
+      {props.guided === true && !isAntigravity && wizardStep < 2 ? (
         <div className={styles['wizardNav']}>
           {wizardStep > 0 ? (
             <button type="button" className={styles['secondaryButton']}
@@ -727,25 +727,25 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
             onClick={() => { props.onClose(false) }}>{t('cancel')}</button>
         </div>
       ) : null}
-      {props.guided === true && wizardStep === 2 ? (
+      {props.guided === true && !isAntigravity && wizardStep === 2 ? (
         <button type="button" className={styles['secondaryButton']}
           disabled={busy} onClick={() => { setWizardStep(1) }}>{t('wizardBack')}</button>
       ) : null}
-      <div hidden={props.guided === true && wizardStep !== 2}>
+      <div hidden={props.guided === true && !isAntigravity && wizardStep !== 2}>
       <EditorFooter
         t={t}
         busy={busy}
-        submitDisabled={disabled || layout === 'unknown'
+        submitDisabled={disabled || (isAntigravity && (!accountReady || attempt?.status === 'pending')) || layout === 'unknown'
           || (props.credentialOnly !== true && modelFailure !== undefined)
           || shownKeyFailure !== undefined
-          || (props.guided === true && supportsAccount && selectedMethod === 'oauth' && !accountReady)
+          || (props.guided === true && !isAntigravity && supportsAccount && selectedMethod === 'oauth' && !accountReady)
           // An account-only flow has no key field to satisfy: the blank-key
           // apply (ambient authentication) is exactly the intended submit.
           || (props.credentialRequired === true && ! oauthOnly && keyValue.length === 0)}
         submitLabel={props.submitLabel ?? 'apply'}
         submitBusyLabel={props.submitBusyLabel ?? 'applying'}
         {...props.cancelLabel === undefined ? {} : { cancelLabel: props.cancelLabel }}
-        onCancel={() => { props.onClose(false) }}
+        onCancel={() => { if (isAntigravity && attempt?.status === 'pending') cancel(); props.onClose(false) }}
         onSubmit={() => { void apply() }}
       />
       </div>
