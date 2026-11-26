@@ -19,6 +19,8 @@ export interface HumanOSAssemblyContext {
 export interface HumanOSSelfModel {
   readonly schema: 1
   readonly identity: 'kira'
+  readonly product: 'PHOENIX'
+  readonly selectedEngine: 'ORIÓN' | 'Fénix Eclipse' | 'direct-model' | 'unknown'
   readonly scope: 'current-agent-and-global-registry'
   readonly modelSelection: { readonly providerSpecified: boolean; readonly modelSpecified: boolean }
   readonly atlas: {
@@ -145,6 +147,12 @@ export function inspectHumanOSSelfModel(
   return {
     schema: 1,
     identity: 'kira',
+    product: 'PHOENIX',
+    selectedEngine: assembly.agent?.options?.provider === 'phoenix-nexus' && assembly.agent.options.model === 'nexus-auto'
+      ? 'ORIÓN'
+      : assembly.agent?.options?.provider === 'phoenix' && assembly.agent.options.model === 'phoenix-auto'
+        ? 'Fénix Eclipse'
+        : selected(assembly.agent?.options?.provider) && selected(assembly.agent?.options?.model) ? 'direct-model' : 'unknown',
     scope: 'current-agent-and-global-registry',
     modelSelection: {
       providerSpecified: selected(assembly.agent?.options?.provider),
@@ -185,6 +193,7 @@ export function renderHumanOSSelfModel(
   if (view === undefined) return ''
   return [
     '<phoenix_humanos_self_model>',
+    'Kira is the PHOENIX coordinator; ORIÓN is the adaptive router (legacy wire ID phoenix-nexus/nexus-auto), Fénix Eclipse is the separate phoenix/phoenix-auto route. Model changes never replace Kira. selectedEngine is a selection, not execution proof.',
     'Read-only operational self-observation. This is a registry snapshot, not subjective consciousness, live tool availability, proof of success, permission, or a reason to start work.',
     'HARDNESS descriptor counts are global metadata, not current-agent access. Verification outcome counts describe a bounded sample of existing recorded cases and exact descriptor versions, not live ability, statistical probabilities or model confidence.',
     'A failed, denied, missing, stale or contradictory verification case calls for task-specific rechecking, not an automatic tool retry or permission escalation. Resolve the exact capability with the existing permission gates.',
