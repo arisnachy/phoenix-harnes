@@ -462,7 +462,7 @@ export function apply(ctx: Context): void {
 
   ctx.tools.register(defineTool({
     name: 'system_environment_inspect',
-    description: 'Read current PHOENIX Host, Windows/macOS/Linux identification, aggregate CPU/RAM/GPU, PC/laptop classification and allowlisted software/tool presence. Use only for user-requested device/OS/tool availability questions or app capability planning. Read-only; detected does NOT mean authorized, usable, healthy, or installed. No paths, secrets, serials, process lists or patient data.',
+    description: 'Read current PHOENIX Host, Windows/macOS/Linux identification, aggregate CPU/RAM/GPU, PC/laptop classification and allowlisted software/tool presence. Includes local WinApp CLI, ODR, OCR, Windows ML and App Actions API evidence; prefer local no-billing tools for Windows tasks. Agent registration and actual execution require separate verification and authorization. Never automate personal Microsoft Copilot or activate paid services. Use only for user-requested device/OS/tool availability questions or app capability planning. Read-only; detected does NOT mean authorized, usable, healthy, or installed. No paths, secrets, serials, process lists or patient data.',
     parameters: {},
     output: {
       schema: { type: 'string' },

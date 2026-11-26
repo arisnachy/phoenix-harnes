@@ -51,6 +51,25 @@ describe('System proprioception privacy and authority', () => {
     expect(runner).toHaveBeenCalledTimes(1)
     expect(runner.mock.calls[0]?.[1]).toContain('-EncodedCommand')
   })
+  it('reports native Windows evidence independently from launch authority and paid services',()=>{
+    const runner=vi.fn(()=>({status:0,stdout:JSON.stringify({
+      ...sample,commands:{winapp:true,odr:true,foundry:true},
+      apps:{copilot:true},native:{uia:true,'app-actions':false,'windows-ocr':true,'windows-ml':'true',secret:'PRIVATE'},
+    })}))
+    const view=inspectSystemEnvironment({platform:'win32',runner})
+    expect(view.commands.find(x=>x.id==='winapp')?.command).toBe('detected')
+    expect(view.guiApps.find(x=>x.id==='copilot')?.detection).toBe('detected')
+    expect(view.windowsNative.apiPresence).toEqual([
+      {id:'uia',state:'detected'},{id:'app-actions',state:'not-detected'},
+      {id:'windows-ocr',state:'detected'},{id:'windows-ml',state:'not-checked'},
+    ])
+    expect(view.windowsNative.policy).toBe('local-only-no-billing')
+    expect(view.windowsNative.execution).toBe('not-granted-by-inventory')
+    expect(view.windowsNative.agentLaunchers).toBe('package-identity-and-registration-unverified')
+    expect(view.windowsNative.copilot).toBe('manual-only-no-automated-consumer-access')
+    expect(JSON.stringify(view)).not.toContain('PRIVATE')
+    expect(inspectSystemEnvironment({platform:'linux'}).windowsNative.apiPresence.every(x=>x.state==='not-checked')).toBe(true)
+  })
   it('does not run platform-specific discovery on non-Windows Host', () => {
     const runner=vi.fn()
     const result=inspectSystemEnvironment({platform:'linux',runner,cpus:[],totalMemory:0,freeMemory:0})

@@ -40,6 +40,9 @@ Schemas remain cache-stable while visibility and definitions are unchanged. Per-
 
 ## PHOENIX Adaptive OS · propiocepción y autorización
 
+Windows Native inventory extends the existing system inspection with local WinApp CLI, ODR, Foundry, OCR and transcription command detection, plus UI Automation, App Actions, Windows OCR and Windows ML API probes. No additional subscription, downloads, cloud calls or billing are required by this inventory. Missing evidence is reported as not checked; detected APIs do not prove permission or working invocation. Microsoft Copilot is manual only. Agent Launchers registration is not implemented here: it requires package identity and an associated registered App Action. Use the existing authorized shell for installed local tools, not an unapproved execution path.
+
+
 Esta integración expone herramientas que Kira puede usar a petición del usuario, sin conceder permisos por observar el entorno:
 
 - `system_environment_inspect`: identifica el Host actual, arquitectura y versión del SO, CPU, núcleos, RAM, GPU anunciada, factor de forma (escritorio/portátil) y presencia de un conjunto acotado de comandos/aplicaciones Windows. No se extraen rutas, serie, nombre de equipo, identidad del usuario, procesos ni credenciales. Las limitaciones de GPU se marcan como «no verificadas».
