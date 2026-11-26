@@ -51,6 +51,8 @@ export interface VoiceConversationRealtimeStatus {
 export interface VoiceConversationRealtimeStartRequest {
   readonly key: string
   readonly offerSdp: string
+  /** Agent-initiated speaker-only negotiation, with no microphone input. */
+  readonly outputOnly?: boolean
   /** Current direct Codex model. Phoenix Auto omits its synthetic id. */
   readonly model?: string
 }
@@ -60,6 +62,7 @@ export interface VoiceConversationRealtimeStartReceipt {
   readonly accepted: boolean
   readonly threadId?: string
   readonly answerSdp?: string
+  readonly voiceGender?: 'feminine' | 'masculine' | 'neutral'
   readonly reason?: 'disabled' | 'invalid' | 'codex-unavailable' | 'codex-login-required' | 'experimental-unavailable' | 'negotiation-failed'
   /** Bounded sanitized startup diagnostic when native Codex negotiation fails. */
   readonly detail?: string
@@ -87,4 +90,27 @@ export interface VoiceConversationRealtimeStopRequest {
 /** Whether a native Codex realtime session was active and stopped. */
 export interface VoiceConversationRealtimeStopReceipt {
   readonly stopped: boolean
+}
+
+/** Session-scoped, single-claim command for the foreground voice client. */
+export type VoiceAgentRealtimeAction = 'open' | 'close' | 'speak' | 'authorize'
+export interface VoiceAgentRealtimeCommand {
+  readonly id: string
+  readonly action: VoiceAgentRealtimeAction
+  readonly gender: 'feminine' | 'masculine' | 'neutral'
+  readonly expiresAt: number
+  readonly text?: string
+}
+export interface VoiceAgentRealtimeResult {
+  readonly state: 'queued' | 'claimed' | 'completed' | 'failed'
+  readonly id?: string
+  readonly reason?: string
+  readonly provider?: string
+}
+export interface VoiceAgentRealtimeCompletion {
+  readonly key: string
+  readonly id: string
+  readonly accepted: boolean
+  readonly reason?: string
+  readonly provider?: string
 }
