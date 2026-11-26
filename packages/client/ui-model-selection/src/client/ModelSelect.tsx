@@ -33,6 +33,7 @@ import {
   isPhoenixAutoRouting, localModelBrandMark, presentModel, providerBrandMark, providerInitial, type ModelPresentation,
 } from './presentation.ts'
 import css from './ModelSelect.module.css'
+import { projectAntigravitySelector } from './antigravity-visibility.ts'
 
 /** Which pane the dropdown shows: the two-row root or one drilled-in list. */
 type Pane = 'root' | 'model' | 'effort' | 'speed'
@@ -82,10 +83,11 @@ export function ModelSelect(
   { locked, available, directory, load, select, t }:
   ModelSelectInjected & { locked: boolean } & PropsLocale<'model'>,
 ) {
-  const state = useSyncExternalStore(
+  const rawState = useSyncExternalStore(
     fn => directory.subscribe(fn),
     () => directory.getSnapshot(),
   )
+  const state = useMemo(() => projectAntigravitySelector(rawState), [rawState])
   const [open, setOpen] = useState(false)
   const [pane, setPane] = useState<Pane>('root')
   const [modelQuery, setModelQuery] = useState('')
