@@ -120,6 +120,37 @@ export function exportPptx(content:string):Buffer {
   })
   return zipOffice(entries)
 }
+
+const W='http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+function wordParagraph(line:string):string{
+  const heading=/^(#{1,6})\s+(.+)$/u.exec(line)
+  const style=heading?'Heading'+Math.min(heading[1]!.length,3):'Normal'
+  const value=heading?heading[2]!:line.replace(/^\s*[-*]\s+/u,'• ')
+  const runs=value.split(/(\*\*[^*]+\*\*)/gu).map(part=>{
+    const bold=part.startsWith('**')&&part.endsWith('**')&&part.length>4
+    const safe=(bold?part.slice(2,-2):part).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/gu,'')
+    return '<w:r>'+(bold?'<w:rPr><w:b/></w:rPr>':'')+'<w:t xml:space="preserve">'+xml(safe)+'</w:t></w:r>'
+  }).join('')
+  return '<w:p><w:pPr><w:pStyle w:val="'+style+'"/></w:pPr>'+runs+'</w:p>'
+}
+/** Editable local Word export for native Markdown documents; advanced layouts
+ * belong to dedicated document tools. No remote content or macros. */
+export function exportDocx(content:string):Buffer {
+  if(Buffer.byteLength(content,'utf8')>750_000)throw Error('Documento demasiado grande')
+  const styles=XML+'<w:styles xmlns:w="'+W+'">'+
+    '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos"/><w:sz w:val="22"/><w:lang w:val="es-DO"/></w:rPr></w:rPrDefault></w:docDefaults>'+
+    '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="120" w:line="276" w:lineRule="auto"/></w:pPr></w:style>'+
+    [1,2,3].map(level=>'<w:style w:type="paragraph" w:styleId="Heading'+level+'"><w:name w:val="heading '+level+'"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="120"/><w:outlineLvl w:val="'+(level-1)+'"/></w:pPr><w:rPr><w:b/><w:color w:val="23435E"/><w:sz w:val="'+(level===1?36:level===2?28:24)+'"/></w:rPr></w:style>').join('')+'</w:styles>'
+  const paragraphs=content.split(/\r?\n/u).map(wordParagraph).join('')
+  return zipOffice([
+    {name:'[Content_Types].xml',data:XML+'<Types xmlns="'+CT+'"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>'},
+    {name:'_rels/.rels',data:packageRel('officeDocument','word/document.xml')},
+    {name:'word/document.xml',data:XML+'<w:document xmlns:w="'+W+'"><w:body>'+paragraphs+'<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>'},
+    {name:'word/styles.xml',data:styles},
+    {name:'word/_rels/document.xml.rels',data:packageRel('styles','styles.xml')},
+  ])
+}
+
 function column(index:number):string {
   let n=index+1;let result=''
   while(n>0){n--;result=String.fromCharCode(65+n%26)+result;n=Math.floor(n/26)}

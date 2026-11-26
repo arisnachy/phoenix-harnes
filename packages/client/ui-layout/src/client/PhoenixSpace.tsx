@@ -400,6 +400,8 @@ function ConnectedSpaceControls({item,dirty,onOpen}:{item:Item;dirty:boolean;onO
           await onOpen(result.item.id)
         })}}>{kind==='document'?'Crear informe conectado':'Crear presentación conectada'}</button>)}</div>}
         {!dirty&&!policy?.restricted&&['app','game','code'].includes(item.kind)&&<a href={'/space-api'+path+'/export?format=web-zip'} download>Descargar paquete web ZIP (HTML)</a>}
+        {!dirty&&policy&&!policy.restricted&&item.kind==='document'&&item.bytes===0&&['text/markdown','text/plain'].includes(item.mime)&&
+          <a href={'/space-api'+path+'/export?format=docx'} download>Exportar Word (.docx)</a>}
         {!policy?.restricted&&<a href={'/space-api'+path+'/export?format=portable'} download>Exportar fuente portable</a>}
       </>}
       {deps&&<>
@@ -780,8 +782,8 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
                 updateDeck(next);setSlideIndex(slideIndex+1)
               }}>Bajar</button></div></>:<textarea value={editor.content} onChange={e=>mutate({content:e.currentTarget.value})}/>}
             <a className={css.export} href={'/space-api/items/'+editor.item.id+'/export?format=pptx'} onClick={e=>{
-              if(editor.dirty){e.preventDefault();void persist(editor).then(()=>{
-                window.location.assign('/space-api/items/'+editor.item.id+'/export?format=pptx')
+              if(editor.dirty){e.preventDefault();void persist(editor).then(saved=>{
+                if(saved)window.location.assign('/space-api/items/'+editor.item.id+'/export?format=pptx')
               })}
             }}>Exportar PowerPoint (.pptx)</a>
           </div>
@@ -802,8 +804,8 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
           {sheet.columns.length>0&&<SheetMimic key={editor.item.id} sheet={sheet} space={editor.space} onApply={updateSheet}/>}
           <p>Fórmulas Excel compatibles: usa =SUM(B2:B10), =AVERAGE(...), referencias y operaciones. Excel recalcula al abrir.</p>
           <a className={css.export} href={'/space-api/items/'+editor.item.id+'/export?format=xlsx'} onClick={e=>{
-            if(editor.dirty){e.preventDefault();void persist(editor).then(()=>{
-              window.location.assign('/space-api/items/'+editor.item.id+'/export?format=xlsx')
+            if(editor.dirty){e.preventDefault();void persist(editor).then(saved=>{
+              if(saved)window.location.assign('/space-api/items/'+editor.item.id+'/export?format=xlsx')
             })}
           }}>Exportar Excel (.xlsx)</a>
         </div>}
