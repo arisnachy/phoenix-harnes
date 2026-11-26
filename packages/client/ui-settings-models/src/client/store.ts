@@ -189,7 +189,7 @@ export class ModelsSettingsStore {
       return
     }
     const namespaces = new Map(views.map(view => [view.ns, view]))
-    const rows: ProviderRow[] = providers.map((entry) => {
+    const rows: ProviderRow[] = [...new Map(providers.filter(entry => entry.provider !== 'chatgpt-web').map(entry => [entry.provider, entry])).values()].map((entry) => {
       const namespace = namespaces.get(entry.settingsNs)
       const configured = namespace !== undefined
         && (entry.settingsPath.length === 0 || this.schema.getPath(namespace.value, entry.settingsPath) !== undefined)
@@ -248,7 +248,7 @@ export class ModelsSettingsStore {
   async moveProvider(provider: string, direction: 'up' | 'down'): Promise<void> {
     const state = this.store.getSnapshot()
     if (!state.writable) throw new Error('provider order is read-only')
-    const order = state.rows.map(row => row.entry.provider)
+    const order = state.rows.filter(row => row.configured || row.entry.active).map(row => row.entry.provider)
     const index = order.indexOf(provider)
     if (index < 0) throw new Error(`provider "${provider}" is not available`)
     const nextIndex = direction === 'up' ? index - 1 : index + 1
@@ -263,6 +263,22 @@ export class ModelsSettingsStore {
     const response = await this.api.settings.mutate({
       ns: 'user-profile',
       ops: [{ op: 'set', path: ['modelProviderOrder'], value: next }],
+    })
+    if (!response.result.ok) throw new Error(response.result.error.message)
+    await this.load()
+  }
+
+  /** Change selector visibility without deleting credentials. */
+  async setProviderHidden(provider: string, hidden: boolean): Promise<void> {
+    const state = this.store.getSnapshot()
+    if (!state.writable) throw new Error('provider visibility is read-only')
+    const profile = state.namespaces.get('user-profile')?.value as { hiddenModelProviders?: string[] } | undefined
+    const next = new Set(profile?.hiddenModelProviders ?? [])
+    if (hidden) next.add(provider)
+    else next.delete(provider)
+    const response = await this.api.settings.mutate({
+      ns: 'user-profile',
+      ops: [{ op: 'set', path: ['hiddenModelProviders'], value: [...next] }],
     })
     if (!response.result.ok) throw new Error(response.result.error.message)
     await this.load()

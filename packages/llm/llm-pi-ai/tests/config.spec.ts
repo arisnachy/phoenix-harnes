@@ -143,27 +143,9 @@ describe('Phoenix Local slow-prefill budget', () => {
   })
 })
 
-describe('ChatGPT Web route defaults', () => {
-  it('materializes the dormant local bridge profile from one explicit route', () => {
-    const profile = resolveProfiles({ 'chatgpt-web': {} }).get('chatgpt-web')
-
-    expect(profile).toMatchObject({
-      displayName: 'ChatGPT Web',
-      api: 'openai-responses',
-      baseURL: 'http://127.0.0.1:17841/v1',
-    })
-    expect(profile?.piProvider.getModels().map(model => model.id)).toEqual([
-      'gpt-5.6-sol',
-      'gpt-5.6-luna',
-    ])
-  })
-
-  it('restores the bridge defaults when the loader materializes an omitted list as empty', () => {
-    const profile = resolveProfiles({ 'chatgpt-web': { models: [] } }).get('chatgpt-web')
-
-    expect(profile?.piProvider.getModels().map(model => model.id)).toEqual([
-      'gpt-5.6-sol',
-      'gpt-5.6-luna',
-    ])
+describe('Retired ChatGPT Web route', () => {
+  it('ignores legacy bridge profiles', () => {
+    expect(resolveProfiles({ 'chatgpt-web': {} }).has('chatgpt-web')).toBe(false)
+    expect(resolveProfiles({ 'chatgpt-web': { models: [] } }).has('chatgpt-web')).toBe(false)
   })
 })

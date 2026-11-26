@@ -497,20 +497,9 @@ export function resolveProfiles(
   const entries = Object.entries(providers ?? {})
   const resolved = new Map<string, ResolvedPiAiProviderProfile>()
   for (const [provider, rawSource] of entries) {
-    const source = provider === CHATGPT_WEB_PROVIDER
-      ? {
-        ...rawSource,
-        ...rawSource.displayName === undefined ? { displayName: chatgptWebDefaults().displayName } : {},
-        ...rawSource.api === undefined ? { api: chatgptWebDefaults().api } : {},
-        ...rawSource.baseURL === undefined ? { baseURL: chatgptWebDefaults().baseURL } : {},
-        // The loader materializes an omitted list as `[]`. Treat that form the
-        // same as an omitted list so the optional bridge remains serviceable
-        // after settings have been written and read back.
-        ...rawSource.models === undefined || rawSource.models.length === 0
-          ? { models: chatgptWebDefaults().models }
-          : {},
-      }
-      : rawSource
+    // Ignore retired bridge profiles from earlier installations.
+    if (provider === CHATGPT_WEB_PROVIDER) continue
+    const source = rawSource
     rejectRemovedFields(provider, source)
     if (provider.length === 0) throw new Error('llm-pi-ai: provider names must be non-empty')
     if (source.baseURL !== undefined && source.baseURL.length === 0) {
