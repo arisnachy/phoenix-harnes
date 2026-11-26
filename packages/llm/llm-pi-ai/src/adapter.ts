@@ -559,8 +559,9 @@ export class PiAiAdapter extends LlmAdapter {
         ? fitPhoenixLocalTextTurn(options, model.contextWindow, desiredMaxOutput)
         : fitGenerateOptionsToContext(options, model.contextWindow, desiredMaxOutput)
       if (options.provider === 'phoenix-local' && process.env.PHOENIX_TOKEN_AUDIT === '1') {
-        // The INPUT audit measures the raw assembled request before local fitting.
-        // Log only dimensions, never prompts, schemas or credentials.
+        // The agent-loop INPUT audit measures the assembled request BEFORE the
+        // local context fitter. This counterpoint explains what is retained.
+        // Never log actual messages, instructions, schemas or credentials.
         console.info('[PHOENIX LOCAL CONTEXT FIT] ' + JSON.stringify({
           provider: options.provider,
           model: options.model,
