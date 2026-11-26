@@ -84,6 +84,7 @@ describe('KIRA Team chat message', () => {
     expect(badge?.textContent).toContain('Luna')
     expect(badge?.closest('[data-avatar]')).toBeNull()
     expect(view.getByText('Atlas')).toBeTruthy()
+    expect(view.container.querySelector('[data-team-identity="kira"]')?.textContent).toBe('KIRA ϟ')
     expect(view.container.querySelector('[data-engine-model="gpt-6.1-sol"]')).toBeNull()
   })
 
