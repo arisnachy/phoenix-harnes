@@ -136,3 +136,14 @@ describe('AdaptiveLearningEngine', () => {
     expect(store.timeline({ projectId: 'phoenix', includeHistory: true }).length).toBeGreaterThan(0)
   })
 })
+
+
+describe('evidence discipline', () => {
+  it('does not promote repeated unverified transport successes', async () => {
+    const engine = new AdaptiveLearningEngine(new MemoryStore())
+    await engine.recordOutcome({ ...base(1_000), outcome: 'success', verified: false })
+    const next = await engine.recordOutcome({ ...base(1_001), eventSeq: 8, outcome: 'success', verified: false })
+    expect(next.status).toBe('candidate')
+    expect(engine.recommend({ projectId: 'phoenix' })).toEqual([])
+  })
+})
