@@ -612,7 +612,8 @@ export class ReactLoopAgent implements Agent {
     signal.throwIfAborted()
     const system = renderCacheFriendlyPrompt(assembly)
     if (process.env.PHOENIX_TOKEN_AUDIT === '1') {
-      // Section names and sizes expose prompt bloat without retaining text.
+      // Section names and sizes reveal accidental prompt bloat without
+      // exposing system instructions, user data or tool schema contents.
       const largestSections = assembly.sections
         .map(section => ({ name: section.name, rawChars: section.text.length }))
         .sort((a, b) => b.rawChars - a.rawChars)

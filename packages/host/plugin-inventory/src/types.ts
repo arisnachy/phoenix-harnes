@@ -638,3 +638,26 @@ export interface AnatomyConnectorInstallReceipt {
   readonly status:'started'|'running'|'blocked'|'error'
   readonly detail:string
 }
+
+/** Owner-selected external agent mode, not a native model route. */
+export type OpenClawEngineMode = 'native' | 'direct' | 'hybrid'
+export interface OpenClawEngineConfig {
+  readonly mode: OpenClawEngineMode
+  readonly agent: string
+  readonly port: number
+}
+export interface OpenClawConversationMessage {
+  readonly role: 'user' | 'assistant'
+  readonly text: string
+}
+export interface OpenClawConversationSnapshot {
+  readonly config: OpenClawEngineConfig
+  readonly thread: string
+  readonly messages: readonly OpenClawConversationMessage[]
+  readonly phase: 'idle' | 'running' | 'failed' | 'unconfirmed'
+  readonly partial: string
+}
+export interface OpenClawConversationSend {
+  readonly thread: string
+  readonly text: string
+}

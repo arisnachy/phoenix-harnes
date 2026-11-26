@@ -24,18 +24,15 @@ Default key reference: `PHOENIX_HEALTHIA_DATA_KEY`.
 
 #### What the model sees
 
-The provider registers `ctx.healthia` but renders no prompt or patient data;
-model-facing HealthIA consumers own every model-visible projection.
+The provider registers `ctx.healthia` but renders no prompt or patient data; model-facing HealthIA consumers own every model-visible projection.
 
 #### Token effect
 
-Storage, encryption, locking, and credential resolution add no model tokens by
-themselves.
+Storage, encryption, locking, and credential resolution add no model tokens by themselves.
 
 #### KV Cache effect
 
-The provider is cache-neutral. Reading or writing the encrypted record changes
-a model prefix only if a consumer later projects those bounded records.
+The provider is cache-neutral. Reading or writing the encrypted record changes a model prefix only if a consumer later projects those bounded records.
 
 ## Known Limitations and Deferred Work
 

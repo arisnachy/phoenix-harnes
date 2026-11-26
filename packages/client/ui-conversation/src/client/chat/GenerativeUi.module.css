@@ -639,6 +639,7 @@
 .sportsTicketNarrativeSources strong{font-weight:700}
 .sportsTicketNarrativeSources a{overflow-wrap:anywhere}
 
+
 /* PHOENIX Sports scoreboard — DENSE Pearl Light 2-up tiles.
  * A game is a scoreboard tile, not an article-sized report. */
 .sportsGameTitleSr{
@@ -733,6 +734,7 @@
   font-size:9px;font-variant-numeric:tabular-nums;
 }
 .sportsGameCompact .sportsGamePeriodStrip span{white-space:nowrap}
+
 
 /* PHOENIX pick tracker: small, legible and inside the game card, not a second
    giant results panel. A picked team is BLUE; analytic favorite is SEPARATE. */

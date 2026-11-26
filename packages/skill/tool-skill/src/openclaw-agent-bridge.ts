@@ -131,14 +131,30 @@ function gatewayPort(): number {
   return 18789
 }
 
-/** Disabled by default; a Gateway credential alone never enables agent delegation. */
+/** Execution is disabled by default; a Gateway credential alone never enables agent delegation. */
 export function registerOpenClawAgentBridge(ctx: Context): void {
-  if (process.env.PHOENIX_OPENCLAW_AGENT_BRIDGE !== '1') return
-  const agent = process.env.PHOENIX_OPENCLAW_AGENT_ID?.trim() ?? ''
-  if (!AGENT.test(agent) || agent === 'default') return
+  // Keep schemas out of native conversations unless the owner enabled Hybrid
+  // before Host startup. Recheck policy at every invocation for revocation.
+  let hybrid = false
+  try {
+    const home = process.env.DSH_HOME ?? join(homedir(), '.dsh')
+    const policy = record(JSON.parse(readFileSync(join(home, 'toolchains', 'openclaw-engine.json'), 'utf8')) as unknown)
+    hybrid = policy.version === 1 && policy.mode === 'hybrid'
+    if (policy.version === 1 && !hybrid) return
+  } catch { /* legacy environment opt-in */ }
+  if (process.env.PHOENIX_OPENCLAW_AGENT_BRIDGE === '0'
+    || (!hybrid && process.env.PHOENIX_OPENCLAW_AGENT_BRIDGE !== '1')) return
   const options = async (signal: AbortSignal): Promise<GatewayOptions> => {
-    if (process.env.PHOENIX_OPENCLAW_AGENT_BRIDGE !== '1' || process.env.PHOENIX_OPENCLAW_AGENT_ID?.trim() !== agent) {
-      throw new Error('OpenClaw delegation is disabled or its configuration changed; restart PHOENIX')
+    const home = process.env.DSH_HOME ?? join(homedir(), '.dsh')
+    let policy: Record<string, unknown> = {}
+    try { policy = record(JSON.parse(readFileSync(join(home, 'toolchains', 'openclaw-engine.json'), 'utf8')) as unknown) }
+    catch { /* legacy explicit environment opt-in */ }
+    const configured = policy.version === 1
+    const enabled = configured ? policy.mode === 'hybrid' : process.env.PHOENIX_OPENCLAW_AGENT_BRIDGE === '1'
+    const agent = configured && typeof policy.agent === 'string' ? policy.agent : process.env.PHOENIX_OPENCLAW_AGENT_ID?.trim() ?? ''
+    const port = configured && typeof policy.port === 'number' ? policy.port : gatewayPort()
+    if (!enabled || process.env.PHOENIX_OPENCLAW_AGENT_BRIDGE === '0' || !AGENT.test(agent) || agent === 'default') {
+      throw new Error('OpenClaw delegation is disabled; select Hybrid in PHOENIX Connectors')
     }
     let token: string | undefined
     try {
@@ -149,7 +165,7 @@ export function registerOpenClawAgentBridge(ctx: Context): void {
     } catch { /* explicit environment fallback */ }
     token ??= process.env.PHOENIX_OPENCLAW_GATEWAY_TOKEN ?? process.env.OPENCLAW_GATEWAY_TOKEN
     if (!token) throw new Error('Configure the OpenClaw Gateway credential in PHOENIX Connectors')
-    return { token, agent, port: gatewayPort(), signal }
+    return { token, agent, port, signal }
   }
   ctx.tools.register(defineTool({
     name: 'openclaw_agent_status',
