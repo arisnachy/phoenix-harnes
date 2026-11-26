@@ -63,11 +63,25 @@ describe('PHOENIX offline Windows runtime recovery', () => {
 
   it('reuses protected supervised cleanup and reports the configured runtime cap', () => {
     expect(repair).toContain("Join-Path $repo 'scripts\\phoenix-windows-supervisor.mjs'")
-    expect(repair).toContain("'PHOENIX_UPDATE_RUNTIME_BACKUPS', '1', 'Process'")
+    expect(repair).toContain("'PHOENIX_UPDATE_RUNTIME_BACKUPS', '0', 'Process'")
     expect(repair).toContain('& $node.Source $supervisor --cleanup-storage')
     expect(repair).toContain("'PHOENIX_UPDATE_RUNTIME_BACKUPS', $priorBackups, 'Process'")
     expect(repair).toContain('PHOENIX_UPDATE_RUNTIME_LIMIT')
     expect(supervisor).toContain("if (process.argv.includes('--cleanup-storage'))")
     expect(supervisor).toContain('runtimeProtectedByOwningCheckout(candidate)')
+  })
+})
+
+describe('PHOENIX staging storage diagnosis', () => {
+  it('does not claim successful repair while an unverifiable canonical stage and quarantine remain', () => {
+    const gate = repair.indexOf("if ($quarantines.Count -gt 0 -and")
+    const success = repair.indexOf("Write-Host ('[PHOENIX STORAGE] Capacity recovered (")
+    expect(gate).toBeGreaterThan(0)
+    expect(success).toBeGreaterThan(gate)
+    const block = repair.slice(gate, success)
+    expect(block).toContain('rev-parse --git-common-dir')
+    expect(block).toContain('$stageCommonPath.Equals($commonPath')
+    expect(block).toContain("throw 'PHOENIX staging remains blocked")
+    expect(block).not.toContain('Remove-Item')
   })
 })
