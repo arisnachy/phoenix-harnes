@@ -37,7 +37,7 @@ import {
   interruptVoiceAssistantSpeech, isCodexLiveRepairPending, waitForCodexLiveRepair, stopCodexRealtimeVoice,
   isCodexRealtimeVoiceActive, retryCodexRealtimeAudio, isLikelyVoiceAssistantEcho, openCodexReconnection, codexRealtimeRequiresLogin,
   setVoiceAssistantActive, setVoiceAssistantListening, subscribeVoiceAssistant, tryStartCodexRealtimeVoice,
-  hasApprovedVoiceFallback, setApprovedVoiceFallback,
+  hasApprovedVoiceFallback, setApprovedVoiceFallback, watchAgentCodexRealtime,
   type VoiceInputState, type VoiceRecognitionLike,
 } from '../voice.ts'
 import css from './InputBar.module.css'
@@ -227,6 +227,7 @@ export function InputBar({
   const voiceRef = useRef<VoiceRecognitionLike | null>(null)
   const voiceSubmitPendingRef = useRef(false)
   const voiceStartingRef = useRef(false)
+  useEffect(() => sessionId === undefined || inert ? undefined : watchAgentCodexRealtime(String(sessionId)), [sessionId, inert])
   const appendVoiceText = useCallback((text: string): void => {
     if (keyboard === undefined || locked || machineBusy) return
     if (isLikelyVoiceAssistantEcho(text)) return

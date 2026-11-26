@@ -76,6 +76,15 @@ type VoiceRemoteResult<T> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly error: { readonly code: string; readonly message: string } }
 
+type AgentLiveCommand = {
+  readonly id: string
+  readonly action: 'open' | 'close' | 'speak' | 'authorize'
+  readonly gender: 'feminine' | 'masculine' | 'neutral'
+  readonly expiresAt: number
+  readonly text?: string
+}
+type AgentLiveCompletion = { key: string; id: string; accepted: boolean; reason?: string; provider?: string }
+
 /** Host voice namespace mounted by @phoenix-ai/dsh-api-remotes. */
 export interface VoiceAssistantRemote {
   conversationStatus(): Promise<VoiceRemoteResult<VoiceConversationStatus>>
@@ -91,6 +100,8 @@ export interface VoiceAssistantRemote {
     request: { readonly key: string; readonly text: string },
   ): Promise<VoiceRemoteResult<{ readonly accepted: boolean; readonly reason?: string }>>
   conversationRealtimeStop?(request: { readonly key: string }): Promise<VoiceRemoteResult<VoiceConversationRealtimeStopReceipt>>
+  conversationAgentRealtimePoll?(key: string): Promise<VoiceRemoteResult<AgentLiveCommand | null>>
+  conversationAgentRealtimeComplete?(receipt: AgentLiveCompletion): Promise<VoiceRemoteResult<boolean>>
 }
 
 interface RemoteSpeechState {
@@ -141,6 +152,8 @@ interface CodexRealtimeVoiceSession {
   readonly key: string
   readonly peer: RTCPeerConnection
   readonly microphone: MediaStream
+  readonly outputOnly?: boolean
+  readonly voiceGender?: AgentLiveCommand['gender']
   /** Optional silent RTP mic gate: suppress speaker echo without disabling WebRTC audio. */
   readonly microphoneGate?: CodexRealtimeMicrophoneGate
   readonly events: RTCDataChannel
@@ -193,6 +206,7 @@ interface PendingCodexRealtimeUtterance {
   readonly key: string
   readonly instructions: string
   readonly echoText: string
+  readonly onAdmission?: (accepted: boolean) => void
   readonly assistantMessageKey?: string
   /** Strict conversational-tail stream identity; one segment is in flight at a time. */
   readonly streamMessageKey?: string
@@ -348,6 +362,7 @@ function sendCodexRealtimeUtterance(
       text: utterance.echoText,
     }).then((receipt) => {
       if (codexRealtimeVoiceSession !== session || session.activeUtterance !== utterance) return
+      utterance.onAdmission?.(receipt.ok && receipt.value.accepted)
       if (receipt.ok && receipt.value.accepted) {
         utterance.admission = 'accepted'
         document.documentElement.dataset.phoenixVoiceSpeechStatus = 'accepted'
@@ -403,6 +418,7 @@ function sendCodexRealtimeUtterance(
       resetNativeSentenceStream(session.key)
       document.documentElement.dataset.phoenixVoiceSpeechStatus = 'failed'
       document.documentElement.dataset.phoenixVoiceSpeechError = 'append-speech-request-failed'
+      utterance.onAdmission?.(false)
       console.warn('[PHOENIX VOICE] Codex native speech request failed.')
       publishVoiceIdle()
       flushCodexRealtimeUtterances(session)
@@ -509,8 +525,9 @@ function setCodexRealtimeMicOpen(session: CodexRealtimeVoiceSession, open: boole
       gate.gain.gain.value = open ? 1 : 0
     }
   }
-  session.ignoreUserTranscripts = !open
-  document.documentElement.dataset.phoenixVoiceMicrophone = open ? 'listening' : 'echo-filtered-for-output'
+  session.ignoreUserTranscripts = session.outputOnly === true || !open
+  document.documentElement.dataset.phoenixVoiceMicrophone = session.outputOnly === true
+    ? 'output-only' : open ? 'listening' : 'echo-filtered-for-output'
 }
 
 /**
@@ -1128,6 +1145,7 @@ export type CodexRealtimeVoiceStartResult =
  */
 export async function tryStartCodexRealtimeVoice(
   sessionKey: string,
+  outputOnly = false,
 ): Promise<CodexRealtimeVoiceStartResult> {
   // The user may close a call while the route/capability probe is in flight.
   // A late probe must not reacquire the microphone and resurrect voice mode.
@@ -1144,7 +1162,7 @@ export async function tryStartCodexRealtimeVoice(
     || remote.conversationRealtimeStart === undefined) {
     return { kind: 'failed', reason: 'host-realtime-unavailable' }
   }
-  if (!hasCodexRealtimeVoiceSupport()) {
+  if (outputOnly ? typeof RTCPeerConnection !== 'function' : !hasCodexRealtimeVoiceSupport()) {
     return { kind: 'failed', reason: 'browser-webrtc-unavailable' }
   }
 
@@ -1185,7 +1203,7 @@ export async function tryStartCodexRealtimeVoice(
   let events: RTCDataChannel | undefined
   let audio: HTMLAudioElement | undefined
   try {
-    microphone = await navigator.mediaDevices.getUserMedia({
+    microphone = outputOnly ? new MediaStream() : await navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: true,
         noiseSuppression: true,
@@ -1204,16 +1222,17 @@ export async function tryStartCodexRealtimeVoice(
     // Realtime's VAD can emit speech without a harness request. Do not play it.
     audio.muted = true
     document.documentElement.dataset.phoenixVoiceAudioMuteReason = 'awaiting-harness-speech'
-    document.documentElement.dataset.phoenixVoiceMicrophone = 'listening'
+    document.documentElement.dataset.phoenixVoiceMicrophone = outputOnly ? 'output-only' : 'listening'
     audio.dataset.phoenixCodexVoice = 'true'
     audio.style.display = 'none'
     document.body.append(audio)
 
-    microphoneGate = createCodexRealtimeMicrophoneGate(microphone)
+    microphoneGate = outputOnly ? undefined : createCodexRealtimeMicrophoneGate(microphone)
     document.documentElement.dataset.phoenixVoiceMicEchoGate = microphoneGate === undefined
       ? 'unavailable' : 'active'
     const rtcMicrophone = microphoneGate?.stream ?? microphone
-    for (const track of rtcMicrophone.getAudioTracks()) peer.addTrack(track, rtcMicrophone)
+    if (outputOnly) peer.addTransceiver('audio', { direction: 'recvonly' })
+    else for (const track of rtcMicrophone.getAudioTracks()) peer.addTrack(track, rtcMicrophone)
     peer.ontrack = (event) => {
       if (codexRealtimeVoiceGeneration !== generation || audio === undefined) return
       const stream = event.streams[0] ?? new MediaStream([event.track])
@@ -1263,7 +1282,8 @@ export async function tryStartCodexRealtimeVoice(
     const result = await remote.conversationRealtimeStart({
       key: sessionKey,
       offerSdp,
-    })
+      ...(outputOnly ? { outputOnly: true } : {}),
+    } as VoiceConversationRealtimeStartRequest)
     if (!result.ok) throw new Error(result.error.code)
     if (!result.value.accepted || result.value.answerSdp === undefined) {
       throw new Error(result.value.detail ?? result.value.reason ?? 'codex-realtime-rejected')
@@ -1272,7 +1292,10 @@ export async function tryStartCodexRealtimeVoice(
     if (generation !== codexRealtimeVoiceGeneration) throw new Error('start-superseded')
 
     const liveSession: CodexRealtimeVoiceSession = {
-      key: sessionKey, peer, microphone,
+      key: sessionKey, peer, microphone, outputOnly,
+      ...((result.value as { voiceGender?: AgentLiveCommand['gender'] }).voiceGender === undefined ? {} : {
+        voiceGender: (result.value as { voiceGender: AgentLiveCommand['gender'] }).voiceGender,
+      }),
       ...(microphoneGate !== undefined ? { microphoneGate } : {}),
       events, audio, recentTranscripts: new Map(),
       onPageHide: () => { void stopCodexRealtimeVoice() },
@@ -1289,7 +1312,7 @@ export async function tryStartCodexRealtimeVoice(
       }
     }
     setVoiceAssistantActive(true)
-    setVoiceAssistantListening(true)
+    setVoiceAssistantListening(!outputOnly)
 
     peer.onconnectionstatechange = () => {
       const liveSession = codexRealtimeVoiceSession
@@ -1381,6 +1404,81 @@ export async function stopCodexRealtimeVoice(): Promise<boolean> {
   return true
 }
 
+/** Foreground conversation consumes one host-authorized speaker control at a time. */
+export function watchAgentCodexRealtime(sessionKey: string): () => void {
+  let disposed = false
+  let polling = false
+  const poll = async (): Promise<void> => {
+    const remote = voiceAssistantRemote
+    if (disposed || polling || document.visibilityState === 'hidden' || remote?.conversationAgentRealtimePoll === undefined
+      || remote.conversationAgentRealtimeComplete === undefined || codexRealtimeVoiceStarting) return
+    polling = true
+    try {
+      const response = await remote.conversationAgentRealtimePoll(sessionKey)
+      if (!response.ok || response.value === null) return
+      const command = response.value
+      const complete = async (accepted: boolean, reason?: string, provider?: string): Promise<void> => {
+        await remote.conversationAgentRealtimeComplete?.({ key: sessionKey, id: command.id, accepted,
+          ...(reason === undefined ? {} : { reason }), ...(provider === undefined ? {} : { provider }) })
+      }
+      if (disposed || command.expiresAt <= Date.now()) { await complete(false, 'control-expired'); return }
+      const current = codexRealtimeVoiceSession
+      if (current !== undefined && current.key !== sessionKey) { await complete(false, 'another-conversation-owns-voice'); return }
+      if (command.action === 'authorize') {
+        openCodexReconnection()
+        await complete(true, 'official-login-dialog-requested')
+        return
+      }
+      if (command.action === 'close') {
+        if (current !== undefined) await stopCodexRealtimeVoice()
+        await complete(true, 'closed')
+        return
+      }
+      if (current !== undefined && current.voiceGender !== undefined && current.voiceGender !== command.gender) {
+        await stopCodexRealtimeVoice()
+      }
+      if (codexRealtimeVoiceSession === undefined) {
+        const started = await tryStartCodexRealtimeVoice(sessionKey, true)
+        if (started.kind !== 'started') {
+          const reason = started.kind === 'failed' ? started.reason : 'codex-live-unavailable'
+          await complete(false, reason)
+          return
+        }
+      }
+      if (disposed || command.expiresAt <= Date.now()) {
+        if (codexRealtimeVoiceSession?.key === sessionKey && codexRealtimeVoiceSession.outputOnly) await stopCodexRealtimeVoice()
+        await complete(false, 'control-expired')
+        return
+      }
+      if (command.action === 'open') { await complete(true, 'session-negotiated', 'codex-live'); return }
+      const text = conversationalSpeechText(command.text ?? '')
+      const deadline = Math.min(command.expiresAt, Date.now() + 12_000)
+      while (!disposed && Date.now() < deadline) {
+        const session = codexRealtimeVoiceSession
+        if (session?.key !== sessionKey) break
+        if (session.events.readyState === 'open' && session.activeUtterance === undefined) {
+          const admitted = await new Promise<boolean | undefined>(resolve => {
+            const timer = window.setTimeout(() => resolve(undefined), 10_000)
+            const sent = sendCodexRealtimeUtterance(session, { sessionKey, key: 'agent:' + command.id,
+              echoText: text, instructions: text, onAdmission: accepted => { window.clearTimeout(timer); resolve(accepted) } })
+            if (!sent) { window.clearTimeout(timer); resolve(false) }
+          })
+          await complete(admitted === true, admitted === true ? 'speech-accepted'
+            : admitted === undefined ? 'speech-admission-unknown' : 'speech-rejected', 'codex-live')
+          return
+        }
+        await new Promise<void>(resolve => window.setTimeout(resolve, 200))
+      }
+      await complete(false, 'voice-channel-not-ready')
+    } catch {
+      // An unacknowledged claim expires; never report fabricated playback.
+    } finally { polling = false }
+  }
+  const timer = window.setInterval(() => { void poll() }, 1000)
+  void poll()
+  return () => { disposed = true; window.clearInterval(timer) }
+}
+
 function forwardCodexRealtimeUserTranscript(payload: string): void {
   const handler = codexRealtimeUserTranscriptHandler
   if (handler === undefined) return
@@ -1415,7 +1513,7 @@ function forwardCodexRealtimeUserTranscript(payload: string): void {
   // already been paused for Kira's answer. It is not a fresh human barge-in:
   // treating the speaker echo as a user instruction immediately cancels the
   // authorized appendSpeech. Input is reopened when playback drains.
-  if (session.ignoreUserTranscripts) return
+  if (session.outputOnly || session.ignoreUserTranscripts) return
   // One VAD utterance can appear as both turn.done and transcription.completed.
   // Deduplicate across protocols and React remounts without suppressing an
   // intentionally repeated human command after a natural pause.
@@ -1808,6 +1906,7 @@ export function streamVoiceAssistantResponse(
   const realtime = codexRealtimeVoiceSession
   // The voice call is owned by the session whose InputBar opened it. A stale
   // or hidden session renderer must never append its transcript to that call.
+  if (realtime?.outputOnly === true) return // Agent speaker-only calls speak only explicitly authorized phrases.
   if (realtime !== undefined && expectedSessionKey !== undefined
     && realtime.key !== expectedSessionKey) return
   // Step-local assistant messages can precede more tool work. Codex Live

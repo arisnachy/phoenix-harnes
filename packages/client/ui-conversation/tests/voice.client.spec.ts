@@ -286,6 +286,7 @@ describe('browser voice adapter', () => {
       constructor() { FakePeer.instance = this }
       createDataChannel(): FakeDataChannel { return new FakeDataChannel() }
       addTrack = vi.fn((_track: unknown, _stream: unknown): void => {})
+      addTransceiver = vi.fn((_kind: string, _options: { direction: string }): void => {})
       async getStats(): Promise<Map<string, { type: string; kind: string; bytesReceived: number }>> {
         return new Map([['remote-audio', { type: 'inbound-rtp', kind: 'audio', bytesReceived: 4_096 }]])
       }
@@ -884,6 +885,31 @@ describe('browser voice adapter', () => {
       expect(isCodexRealtimeVoiceActive()).toBe(false)
       expect(document.documentElement.dataset.phoenixVoiceServiceError).toBe('usage_check_failed')
       expect(getVoiceAssistantSnapshot().lastError).not.toContain('non-public details')
+      // Autonomous output must not reacquire the physical microphone.
+      const originalStream = Object.getOwnPropertyDescriptor(window, 'MediaStream')
+      Object.defineProperty(window, 'MediaStream', { configurable: true, value: class {
+        getTracks(): never[] { return [] }
+        getAudioTracks(): never[] { return [] }
+      } })
+      try {
+        vi.useRealTimers()
+        const capture = navigator.mediaDevices.getUserMedia
+        const priorCaptures = vi.mocked(capture).mock.calls.length
+        await expect(tryStartCodexRealtimeVoice('session-harness', true)).resolves.toEqual({ kind: 'started' })
+        expect(vi.mocked(capture).mock.calls.length).toBe(priorCaptures)
+        expect(FakePeer.instance?.addTransceiver).toHaveBeenCalledWith('audio', { direction: 'recvonly' })
+        expect(FakePeer.instance?.addTrack).not.toHaveBeenCalled()
+        expect(realtimeStart).toHaveBeenLastCalledWith({ key: 'session-harness', offerSdp: 'v=0\r\n', outputOnly: true })
+        expect(document.documentElement.dataset.phoenixVoiceMicrophone).toBe('output-only')
+        const before = transcript.mock.calls.length
+        FakeDataChannel.instance?.onmessage?.({ data: JSON.stringify({ type: 'conversation.item.input_audio_transcription.completed', transcript: 'no microphone' }) })
+        expect(transcript.mock.calls.length).toBe(before)
+        await stopCodexRealtimeVoice()
+        expect(isCodexRealtimeVoiceActive()).toBe(false)
+      } finally {
+        if (originalStream === undefined) Reflect.deleteProperty(window, 'MediaStream')
+        else Object.defineProperty(window, 'MediaStream', originalStream)
+      }
     } finally {
       vi.useRealTimers()
       await stopCodexRealtimeVoice()
