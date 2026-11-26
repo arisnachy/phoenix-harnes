@@ -2,6 +2,7 @@
 
 import { randomBytes } from 'node:crypto'
 import { inspectCodexQuota } from './codex-quota.ts'
+import { projectAntigravityQuota } from './antigravity-quota.ts'
 import { runEvolution, summarizeEvolutionEvents } from './evolution.ts'
 import { AMPLIFIER_OPERATIONS, runAmplifier } from './amplifier.ts'
 import { saveNumericRecipe, runStoredNumericRecipe, type RecipeContext } from './amplifier-memory.ts'
@@ -297,6 +298,24 @@ export function apply(ctx: Context): void {
       return JSON.stringify(await inspectCodexQuota(auth,exec.signal))
     },
     presentCall:()=>({card:'generic',title:'PHOENIX · Cuotas Codex 5h / 7d',kind:'read' as const}),
+  }))
+
+  ctx.systemPrompt.section({name:'phoenix:antigravity-quota-awareness',order:115,text:'When using Antigravity or planning costly Google-account work, use antigravity_quota_inspect to observe actual quota groups, reset countdowns and sustainable percentage-point pace. Never equate quota percentage with exact tokens, guess a missing bucket, poll repeatedly, change paid credits or override a manually selected provider. Protect a 5% five-hour and 10% weekly reserve for discretionary work; preserve verification and quality. A shared bucket is not independent per model. Unknown or stale data cannot authorize automatic routing.'})
+  ctx.tools.register(defineTool({
+    name:'antigravity_quota_inspect',
+    description:'Read official Antigravity CLI quota groups and live reset/pacing facts, without a model prompt or credentials. Unknown data stays unknown.',
+    parameters:{},
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>true,
+    async execute(_args,exec){
+      try {
+        const auth=(ctx as unknown as {get(name:string):unknown}).get('authorization') as { list():readonly {key:string}[]; inspect(key:string,signal?:AbortSignal):Promise<unknown> } | undefined
+        const entry=auth?.list().find(x=>x.key==='llm-pi-ai/google-account')
+        const telemetry=entry&&auth ? await auth.inspect(entry.key,exec.signal) : undefined
+        return JSON.stringify(projectAntigravityQuota(telemetry))
+      } catch { return JSON.stringify(projectAntigravityQuota(undefined)) }
+    },
+    presentCall:()=>({card:'generic',title:'PHOENIX · Cuotas Antigravity',kind:'read' as const}),
   }))
 
   ctx.systemPrompt.section({name:'phoenix:intelligence-amplifier',order:119,text:'When explicit structured verification is useful, use phoenix_amplifier to evaluate arithmetic and constraints (logos), run bounded deterministic numeric recipes (compression), validate dependency plans (compile), check supplied evidence expiry and disagreements (epistemic), compare declared structural scenarios (counterfactual), test relation mappings (analogy), assess practice evidence (mentor), check translation glossary/placeholders (babel), review proposed side effects (sentinel), and inspect schema changes (morphogenesis). This is an offline deterministic verifier, not a source of facts, a translator, a causal discovery engine, or permission to act. Use only non-sensitive explicit inputs; do not send credentials, patient data or hidden reasoning. Existing tools, native approvals and revision checks remain authoritative. For reusable numeric DAGs, test with recipe-test, then save only when the user approves through phoenix_recipe; reuse the exact saved id and current numeric inputs. No automatic promotion. Do not call it on ordinary chat or claim model-level capability gains without measured benchmarks.'})

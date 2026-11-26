@@ -24,6 +24,7 @@ describe('Google account Antigravity CLI adapter', () => {
       const event = JSON.parse(input ?? '')
       expect(event.message.content).toEqual([{ type: 'text', text: buildPrompt(request) }])
       const text = event.message.content[0].text as string
+      expect(text.startsWith('TURNO ACTUAL DE PHOENIX (responde a este contenido):\n¿Qué modelo eres?')).toBe(true)
       expect(text).toContain('Eres Kira.')
       expect(text).toContain('USER:\nhola')
       expect(text).toContain('ASSISTANT:\n¡Hola!')
@@ -39,7 +40,7 @@ describe('Google account Antigravity CLI adapter', () => {
   })
 
   it('rejects missing conversation instead of generating an empty turn', () => {
-    expect(() => buildPrompt({ model: 'gemini-a', messages: [] })).toThrow(/mensajes/u)
+    expect(() => buildPrompt({ model: 'gemini-a', messages: [] })).toThrow(/turno actual/u)
   })
 
   it('refuses explicit modelProvider and malformed settings without switching to API billing', () => {
