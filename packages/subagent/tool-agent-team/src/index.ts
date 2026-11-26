@@ -214,6 +214,93 @@ export const Config: z<Config> = z.object({
 /** Model-facing collaboration guidance shared by Lead and teammates. */
 const POLICY = 'Agent Teams is real shared work. Kira is the single visible coordinator identity. For complex work the selected Sol/planner model creates a concise plan, then Kira runs it on Luna Max and delegates bounded specialist scopes using Luna Max. Kira owns verification and communication. Specialists do not switch to Sol when Kira requests strategic help. Prefer one specialist, add more only for independent parallel work, and cap live teammates at three. Never fabricate tools, peer dialogue, completion, or separate personas for planning and execution. Save and reuse the current plan and compact relevant evidence rather than duplicating whole histories. A new strategic blocker, design conflict or explicit corrective request can trigger another focused planner review, without a numerical consultation quota; never repeat the same unsuccessful consultation without new evidence. Simple tasks remain with Kira on Luna Max, without unnecessary planning or delegation. FÉNIX is a deterministic quality gate: do not call Terra for routine results, and do not transfer Kira\'s coordination to Terra. When a specialist reports a real contradictory or failed outcome with a delivered message id, Kira may call fenix_consult once for that turn. Reuse the consultant\'s evidence; do not call FÉNIX just to say a review happened.'
 
+
+type SynapseProvider = 'openai-codex' | 'google-antigravity'
+type SynapseWindow = { group: string; minutes: number; remaining: number; resetsAt: number; observedAt: number }
+type SynapseResource = { provider: SynapseProvider; status: 'available' | 'reserve' | 'unknown'; models: string[]; windows: SynapseWindow[] }
+type SynapseAuth = { list(): readonly { key: string }[]; inspect(key: string, signal?: AbortSignal): Promise<unknown> }
+type SynapseLlm = { listModels(provider: string): Promise<readonly { id: string }[]> }
+function synapseServices(ctx: Context) {
+  const services = ctx as unknown as { get(key: string): unknown }
+  return { authorization: services.get('authorization') as SynapseAuth | undefined,
+    llm: services.get('llm') as SynapseLlm | undefined }
+}
+function quotaObject(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown> : undefined
+}
+/** Project only fresh native percentage windows, never estimated token balances. */
+export function synapseQuotaWindows(provider: SynapseProvider, raw: unknown, now: number): SynapseWindow[] {
+  const account = quotaObject(raw)
+  if (account?.kind !== 'account') return []
+  const windows: SynapseWindow[] = []
+  const append = (value: unknown, group: string, google: boolean): boolean => {
+    const w = quotaObject(value)
+    if (!w || w.disabled === true) return false
+    const minutes = google ? w.durationMinutes : w.windowDurationMins
+    const percent = google ? w.remainingPercent : typeof w.usedPercent === 'number' ? 100 - w.usedPercent : undefined
+    const observed = w.observedAt
+    const reset = w.resetsAt
+    if ((minutes !== 300 && minutes !== 10080) || typeof percent !== 'number' || !Number.isFinite(percent)
+      || percent < 0 || percent > 100 || typeof observed !== 'number' || !Number.isFinite(observed)
+      || observed > now || now - observed > 120000 || typeof reset !== 'number' || !Number.isFinite(reset)
+      || reset * 1000 <= now || reset * 1000 - now > minutes * 60000) return false
+    windows.push({ group, minutes, remaining: percent, resetsAt: reset, observedAt: observed })
+    return true
+  }
+  if (provider === 'openai-codex') {
+    if (typeof account.provider !== 'string' || account.provider.toLowerCase() !== 'codex'
+      || typeof account.accountType !== 'string' || account.accountType.toLowerCase() !== 'chatgpt'
+      || !append(account.primaryLimit, 'codex-account', false) || !append(account.secondaryLimit, 'codex-account', false)
+      || new Set(windows.map(w => w.minutes)).size !== 2) return []
+  } else {
+    if (account.provider !== 'Google Antigravity CLI' || account.accountType !== 'google-native-cli'
+      || !Array.isArray(account.quotaGroups) || account.quotaGroups.length === 0) return []
+    for (const value of account.quotaGroups) {
+      const group = quotaObject(value)
+      if (typeof group?.name !== 'string' || !Array.isArray(group.buckets) || group.buckets.length !== 2) return []
+      const start = windows.length
+      if (!group.buckets.every(bucket => append(bucket, group.name as string, true))
+        || new Set(windows.slice(start).map(w => w.minutes)).size !== 2) return []
+    }
+  }
+  return windows
+}
+/** Native accounts only; unknown shared groups fail closed. No paid API fallback. */
+async function readSynapseResources(ctx: Context, signal: AbortSignal): Promise<SynapseResource[]> {
+  const { authorization, llm } = synapseServices(ctx)
+  return Promise.all((['openai-codex', 'google-antigravity'] as const).map(async provider => {
+    const unknown: SynapseResource = { provider, status: 'unknown', models: [], windows: [] }
+    const key = provider === 'openai-codex' ? 'subagent-codex/account' : 'llm-pi-ai/google-account'
+    try {
+      if (!authorization || !llm || !authorization.list().some(entry => String(entry.key) === key)) return unknown
+      const bounded = AbortSignal.any([signal, AbortSignal.timeout(15000)])
+      const raw = await authorization.inspect(key, bounded)
+      const windows = synapseQuotaWindows(provider, raw, Date.now())
+      if (bounded.aborted || windows.length === 0) return unknown
+      if (windows.some(w => w.remaining <= (w.minutes === 300 ? 5 : 10))) return { ...unknown, status: 'reserve', windows }
+      const catalog = await llm.listModels(provider)
+      if (bounded.aborted || synapseQuotaWindows(provider, raw, Date.now()).length === 0) return unknown
+      const models = [...new Set(catalog.map(m => m.id).filter(id =>
+        provider === 'google-antigravity' ? /^gemini-[a-z0-9._-]+$/iu.test(id)
+          : /^gpt-[a-z0-9._-]+$/iu.test(id) && id !== PHOENIX_CODEX_AUTO_MODEL))]
+      return { provider, status: models.length ? 'available' : 'unknown', windows, models }
+    } catch { return unknown }
+  }))
+}
+const SYNAPSE_RESOURCE_SCHEMA = {
+  type: 'array', items: { type: 'object', properties: {
+    provider: { type: 'string', required: true, enum: ['openai-codex', 'google-antigravity'] },
+    status: { type: 'string', required: true, enum: ['available', 'reserve', 'unknown'] },
+    models: { type: 'array', required: true, items: { type: 'string' } },
+    windows: { type: 'array', required: true, items: { type: 'object', properties: {
+      group: { type: 'string', required: true }, minutes: { type: 'integer', required: true },
+      remaining: { type: 'number', required: true }, resetsAt: { type: 'number', required: true },
+      observedAt: { type: 'number', required: true },
+    } } },
+  } },
+} as const
+
 const ACTIVE_WAIT_STATUSES: ReadonlySet<TeamMemberView['status']> = new Set(['running', 'provisioning'])
 type WaitBudget = { teamSeq: number; expired: number }
 const waitBudgets = new WeakMap<Agent, WaitBudget>()
@@ -500,9 +587,23 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
       text: () => {
         const membership = ctx.agentTeams.membership(agent)
         const socialStyle = teamSocialStyle(membership.name, membership.role)
-        return `${POLICY}\n\nYour Team role is ${membership.role}; your Team name is ${membership.name}; Team id is ${membership.id}.\nYour social voice: ${socialStyle}\n\n${teamLanguageInstruction(membership.root.session.events)}`
+        return `${POLICY}\n\nSYNAPSE: all participants belong to KIRA. Display KIRA ϟ actual model and provider, with the assigned role, never fabricated dialogue. For difficult or exceptional work use team_resources first when available. If two authorized native providers have fresh quota above reserve, seek independent bounded architecture review before showing your first plan, then exchange concise critiques, consolidate one plan, delegate bounded implementation to an eligible lower-consumption model when capability and cost are supported, and verify actual results. Prefer one model for simple tasks. Preserve explicit Eclipse Codex-only selection. Cross-provider collaboration requires authorized task context; never send sensitive data or full histories without permission, initiate paid routes, or repeat debates without evidence. Use fresh teammates, real delivered messages and the existing task board.\n\nYour Team role is ${membership.role}; your Team name is ${membership.name}; Team id is ${membership.id}.\nYour social voice: ${socialStyle}\n\n${teamLanguageInstruction(membership.root.session.events)}`
       },
     }))
+
+    if (agent.session.header.origin !== 'subagent' && synapseServices(ctx).authorization !== undefined) {
+      register(scoped.tools.register(defineTool({
+        name: 'team_resources',
+        description: 'Read native Codex and Antigravity account quota windows and advertised model IDs before collaborative work. Unknown is not available; shared quota groups are not token balances.',
+        parameters: {},
+        output: jsonOutput(SYNAPSE_RESOURCE_SCHEMA),
+        async execute(_args, exec) {
+          const lead = callingAgent(exec.agent, 'team_resources')
+          if (ctx.agentTeams.membership(lead).role !== 'lead') throw new TeamError('Only Kira may inspect team resources.', 'TEAM_MEMBER_LIMIT')
+          return await readSynapseResources(ctx, exec.signal)
+        },
+      })))
+    }
 
     // FÉNIX is a bounded consultation capability, not a permanent coordinator.
     // The gate inspects real Team evidence without spending a model request.
@@ -606,6 +707,8 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
           enum: ['fresh', 'fork'],
           description: 'fresh starts without Lead history; fork inherits completed Lead turns. Defaults to fresh.',
         },
+        collaboration_provider: { type: 'string', enum: ['openai-codex', 'google-antigravity'], description: 'Native provider for an explicitly authorized fresh SYNAPSE specialist; pair with collaboration_model from team_resources. Never use for sensitive context without permission.' },
+        collaboration_model: { type: 'string', description: 'Exact eligible advertised model ID from team_resources; runtime rechecks quota and catalog before spawning.' },
         ...Object.keys(config.modelProfiles).length === 0 ? {} : {
           model_profile: {
             type: 'string' as const,
@@ -689,14 +792,31 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
             namedProfile === undefined ? adaptiveEffort : undefined,
           )
           : codexDefault
-        const agentOptions: AgentOptions | undefined = profile !== undefined
+        let collaborationProfile: TeamModelProfile | undefined
+        if (args.collaboration_provider !== undefined || args.collaboration_model !== undefined) {
+          if (args.collaboration_provider === undefined || args.collaboration_model === undefined
+            || context !== 'fresh' || args.model_profile !== undefined
+            || (args.mission_complexity !== 'difficult' && args.mission_complexity !== 'exceptional')
+            || (eclipseEnabled && args.collaboration_provider !== 'openai-codex')) {
+            throw new TeamError('SYNAPSE requires a fresh difficult/exceptional task, an exact native route, and respects explicit Eclipse selection.', 'TEAM_MEMBER_LIMIT')
+          }
+          const resources = await readSynapseResources(ctx, exec.signal)
+          exec.signal.throwIfAborted()
+          const route = resources.find(r => r.provider === args.collaboration_provider)
+          if (route?.status !== 'available' || !route.models.includes(args.collaboration_model)) {
+            throw new TeamError('SYNAPSE route has no fresh native quota above reserve or advertised model. Replan instead of retrying blindly.', 'TEAM_MEMBER_LIMIT')
+          }
+          collaborationProfile = { provider: args.collaboration_provider, model: args.collaboration_model }
+        }
+        const selectedProfile = collaborationProfile ?? profile
+        const agentOptions: AgentOptions | undefined = selectedProfile !== undefined
           ? {
-            provider: profile.provider,
-            model: profile.model,
-            ...profile.maxTokens === undefined ? {} : { maxTokens: profile.maxTokens },
-            ...profile.reasoningEffort === undefined
+            provider: selectedProfile.provider,
+            model: selectedProfile.model,
+            ...selectedProfile.maxTokens === undefined ? {} : { maxTokens: selectedProfile.maxTokens },
+            ...selectedProfile.reasoningEffort === undefined
               ? {}
-              : { reasoningEffort: profile.reasoningEffort as NonNullable<AgentOptions['reasoningEffort']> },
+              : { reasoningEffort: selectedProfile.reasoningEffort as NonNullable<AgentOptions['reasoningEffort']> },
           }
           : activeProvider === undefined || activeModel === undefined
             ? undefined
@@ -710,7 +830,9 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
         // their bounded assignment. Fresh children cannot infer the plan from
         // the Lead's private history; a compact excerpt avoids token waste.
         const planBrief = eclipseEnabled ? eclipseTeamPlanSummary(agent.session.events) : undefined
-        const delegatedPrompt = eclipseTeamAssignmentPrompt(planBrief,args.prompt)
+        const delegatedPrompt = collaborationProfile === undefined
+          ? eclipseTeamAssignmentPrompt(planBrief,args.prompt)
+          : `You are a real KIRA team specialist, KIRA ϟ ${collaborationProfile.model} (${collaborationProfile.provider}). Keep KIRA identity and report real evidence to the Lead; only act within this bounded assignment.\n\n${args.prompt}`
         return await ctx.agentTeams.spawnTeammate(agent, {
           name: memberName,
           description: args.description,
