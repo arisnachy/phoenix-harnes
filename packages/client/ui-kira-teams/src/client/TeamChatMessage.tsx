@@ -207,12 +207,17 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
       <div className={css.column}>
         <div className={data.senderKind === 'user' ? undefined : css.card}>
           <div className={css.meta}>
-            <strong>{sender.name}</strong>
+            {data.senderKind === 'agent' && participants[data.senderId]?.model !== undefined
+              ? <strong data-team-identity="kira">KIRA ϟ</strong>
+              : <strong>{sender.name}</strong>}
             {data.senderKind !== 'user' && <ModelEngineBadge
               model={participants[data.senderId]?.model}
               provider={participants[data.senderId]?.modelProvider}
               placement="header"
             />}
+            {data.senderKind === 'agent' && participants[data.senderId]?.model !== undefined && (
+              <span className={css.role} title={sender.name}>{sender.name}</span>
+            )}
             <span className={css.role} title={sender.role}>{(data.role ?? participants[data.senderId]?.role) === undefined ? sender.role
               : t?.((data.role ?? participants[data.senderId]?.role) as import('./locales.ts').KiraTeamsKey) ?? sender.role}</span>
             {data.purpose !== undefined && !['update', 'assignment', 'result'].includes(data.purpose) && (
