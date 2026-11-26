@@ -445,6 +445,84 @@ describe('Codex image generation bridge', () => {
     expect(() => profileImageBackendOrder('free')).toThrow('no admiten la fotografía real')
   })
 
+  it('automatically invokes the installed native FastSD worker without an HTTP endpoint after Codex is unavailable', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phoenix-native-fastsd-test-'))
+    const previous = {
+      CODEX_HOME: process.env.CODEX_HOME,
+      PHOENIX_IMAGE_LOCAL_BASE_URL: process.env.PHOENIX_IMAGE_LOCAL_BASE_URL,
+      PHOENIX_FASTSD_ENABLE: process.env.PHOENIX_FASTSD_ENABLE,
+    }
+    process.env.CODEX_HOME = root
+    delete process.env.PHOENIX_IMAGE_LOCAL_BASE_URL
+    delete process.env.PHOENIX_FASTSD_ENABLE
+    const id = '0123456789abcdef0123456789abcdef'
+    const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(64), Buffer.from([0xff, 0xd9])])
+    const calls: string[] = []
+    let invalid = false
+    let policyRejected = false
+    let tool: CapturedImageTool | undefined
+    const saveImage = vi.fn(async () => ({
+      attachmentId: 'fastsd-image', mediaType: 'image/jpeg', bytes: jpeg.length,
+      width: 512, height: 512, name: 'fastsd.jpg',
+    }))
+    try {
+      const context = {
+        tools: { register(definition: CapturedImageTool) { tool = definition; return () => {} } },
+        subprocess: {
+          async resolveExecutable() { return 'codex' },
+          spawn(spec: { argv: readonly string[]; cwd: string; env?: NodeJS.ProcessEnv; stdio: { stdin: { data: string } } }) {
+            const local = spec.argv.includes('--generate-once')
+            calls.push(local ? 'fastsd' : 'codex')
+            const done = (async () => {
+              if (!local) return { exitCode: 1 }
+              expect(spec.env?.PHOENIX_LOCAL_IMAGE_HOME).toBe(spec.cwd)
+              expect(JSON.parse(spec.stdio.stdin.data)).toEqual({ prompt: 'A forest at sunrise' })
+              await writeFile(join(spec.cwd, id + '.jpg'), jpeg)
+              return { exitCode: 0 }
+            })()
+            return { done, collected: {
+              stdout: { readFrom: () => ({ text: local ? JSON.stringify({
+                ok: true, markdown: invalid ? '![x](/private.jpg)' : '![Imagen generada localmente](/local-images/' + id + '.jpg)',
+              }) : '' }) },
+              stderr: { readFrom: () => ({ text: local ? '' : policyRejected ? 'content_policy_violation' : 'image_generation unavailable' }) },
+            } }
+          },
+        },
+        attachments: { saveImage, async readImage(ref: unknown) { return { ref, data: jpeg } } },
+      } as unknown as Context
+      installCodexImageGeneration(context)
+      if (tool === undefined) throw new Error('Tool was not registered')
+      const execution = { signal: new AbortController().signal, agent: {
+        options: { provider: 'openai-codex' }, session: { header: { cwd: root } },
+      } }
+      const result = await tool.execute({ prompt: 'A forest at sunrise' }, execution)
+      expect(calls).toEqual(['codex', 'fastsd'])
+      expect(result).toMatchObject({ provider: 'local', model: 'rupeshs/sd-turbo-openvino',
+        attachment: { attachmentId: 'fastsd-image', width: 512, height: 512 } })
+      expect(await readFile((result as { path: string }).path)).toEqual(jpeg)
+      expect(saveImage).toHaveBeenCalledOnce()
+      invalid = true
+      await expect(tool.execute({ prompt: 'A forest at sunrise', backend: 'local' }, execution))
+        .rejects.toThrow('invalid FastSD image receipt')
+      expect(saveImage).toHaveBeenCalledOnce()
+      process.env.PHOENIX_FASTSD_ENABLE = '0'
+      await expect(tool.execute({ prompt: 'A forest at sunrise', backend: 'local' }, execution))
+        .rejects.toThrow('native FastSD CPU is disabled')
+      expect(calls).toEqual(['codex', 'fastsd', 'fastsd'])
+      policyRejected = true
+      delete process.env.PHOENIX_FASTSD_ENABLE
+      await expect(tool.execute({ prompt: 'A forest at sunrise' }, execution))
+        .rejects.toThrow('Codex rejected the request under its content policy')
+      expect(calls).toEqual(['codex', 'fastsd', 'fastsd', 'codex'])
+    } finally {
+      for (const [name, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[name]
+        else process.env[name] = value
+      }
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it('passes the opted-in profile photo to a loopback image-to-image editor after Codex fails', async () => {
     const root = await mkdtemp(join(tmpdir(), 'phoenix-profile-edit-'))
     const previousHome = process.env.CODEX_HOME
@@ -669,7 +747,7 @@ describe('Codex image generation bridge', () => {
       installCodexImageGeneration(context)
       if (tool === undefined) throw new Error('image_generation tool was not registered')
 
-      expect(tool.timeoutMs).toBe(360_000)
+      expect(tool.timeoutMs).toBe(30 * 60_000)
       const result = await tool.execute(
         {
           objective: 'Generate the requested image',
