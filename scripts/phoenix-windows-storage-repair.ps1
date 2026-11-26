@@ -227,7 +227,7 @@ if ($after.Count -ge $configuredLimit) {
 # when an unverifiable canonical stage and an existing quarantine coexist.
 # Do not report a complete recovery unless that separate gate is clear.
 $stagePath = Join-Path $storageRoot $currentStage
-$quarantinePattern = '^' + [regex]::Escape($currentStage) + '-conflict-\d+-\d+
+$quarantinePattern = '^' + [regex]::Escape($currentStage) + '-conflict-\d+-\d+$'
 
 $quarantines = @($legacyAfter | Where-Object { $_.Name -match $quarantinePattern })
 if ($quarantines.Count -gt 0 -and (Test-Path -LiteralPath $stagePath -PathType Container)) {
