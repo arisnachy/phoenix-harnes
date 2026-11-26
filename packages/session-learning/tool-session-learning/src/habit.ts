@@ -35,7 +35,10 @@ export function assessHabitExperience(state: ExperienceAggregate): HabitAssessme
     + state.totalRetries
     + state.totalUserInterventions
   ) / runs
-  const driftDetected = detectDrift(state.recentRuns)
+  const mature = state.maturity === 'validated' || state.maturity === 'habitual'
+  // A formerly successful habit is not evidence that the latest attempt passed.
+  const needsQualityReview = mature && state.recentRuns.at(-1)?.qualityPassed === false
+  const driftDetected = needsQualityReview || detectDrift(state.recentRuns)
   const successRate = state.verifiedSuccesses / Math.max(1, state.verifiedSuccesses + state.failures)
   const confidence = Math.max(0, Math.min(1, maturityConfidence(state.maturity) * successRate))
 
@@ -50,7 +53,8 @@ export function assessHabitExperience(state: ExperienceAggregate): HabitAssessme
       averageTokens,
       averageToolCalls,
       averageFriction,
-      reason: 'recent verified runs degraded relative to the earlier repeated-task baseline',
+      reason: needsQualityReview ? 'latest attempt lacks verified quality; reassess before reusing the habit'
+        : 'recent resource use degraded relative to the earlier repeated-task baseline',
     }
   }
 
@@ -150,7 +154,11 @@ function detectDrift(runs: readonly ExperienceRunMetrics[]): boolean {
     && recentTime >= baselineTime * 1.5
     && recentTime - baselineTime >= 250
   const frictionDrift = recentFriction >= baselineFriction + 0.75
-  return timeDrift || frictionDrift
+  const baselineTokens = average(baseline.map(run => run.totalTokens))
+  const recentTokens = average(recent.map(run => run.totalTokens))
+  const tokenDrift = baselineTokens > 0 && recentTokens >= baselineTokens * 1.5
+    && recentTokens - baselineTokens >= 512
+  return timeDrift || frictionDrift || tokenDrift
 }
 
 function friction(run: ExperienceRunMetrics): number {
