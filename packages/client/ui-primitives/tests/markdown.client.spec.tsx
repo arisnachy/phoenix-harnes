@@ -295,6 +295,25 @@ describe('MarkdownText', () => {
     }
   })
 
+  it('renders the FastSD worker receipt and keeps other local paths inert', () => {
+    const image = '/local-images/0123456789abcdef0123456789abcdef.jpg'
+    const markdown = [
+      '![Imagen generada localmente](' + image + ')',
+      '![wrong extension](' + image.replace('.jpg', '.png') + ')',
+      '![wrong id](/local-images/short.jpg)',
+      '![query](' + image + '?x=1)',
+      '![fragment](' + image + '#x)',
+      '![traversal](/local-images/../private.jpg)',
+      '![other relative route](/workspace/private.jpg)',
+      '[not a local link](' + image + ')',
+    ].join('\n\n')
+    const { container } = render(<MarkdownText text={markdown} />)
+    const images = [...container.querySelectorAll('img')]
+    expect(images.map(value => value.getAttribute('src'))).toEqual([image])
+    expect(images[0]?.getAttribute('alt')).toBe('Imagen generada localmente')
+    expect(container.querySelector('a')).toBeNull()
+  })
+
   it('neutralizes raw HTML, unsafe or relative links, and unsupported images', () => {
     const markdown = [
       '<script>globalThis.compromised = true</script>',
