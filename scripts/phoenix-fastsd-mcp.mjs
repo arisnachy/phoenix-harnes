@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * PHOENIX local image MCP bridge. SD Turbo runs in a separate FastSD CPU
+ * PHOENIX local image MCP bridge. FLUX.2 Klein runs in a separate FastSD CPU
  * OpenVINO process, never inside Ollama or Eclipse.
  *
  * MCP stdio is JSON-lines. No generated base64 is passed to a text-only LLM:
@@ -8,14 +8,16 @@
  */
 import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync, readFileSync, lstatSync, realpathSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createInterface } from 'node:readline'
 import process from 'node:process'
 
-export const FASTSD_MODEL = 'rupeshs/sd-turbo-openvino'
+export const FASTSD_MODEL = 'rupeshs/flux2-klein-4b-int4-ov'
+export const FASTSD_REVISION = 'ae7208c030f9a1fe5abb0d8af5d8976abce3417f'
+const LEGACY_REPO = 'models--rupeshs--sd-turbo-openvino'
 export const FASTSD_SIZE = 512
 const THIS = fileURLToPath(import.meta.url)
 const PROJECT_ROOT = resolve(dirname(THIS), '..')
@@ -23,11 +25,59 @@ const APP_ROOT = process.env.LOCALAPPDATA
   ? join(process.env.LOCALAPPDATA, 'PHOENIX')
   : join(homedir(), '.phoenix')
 export const imageRoot = () => resolve(process.env.PHOENIX_LOCAL_IMAGE_HOME || join(APP_ROOT, 'images'))
-export const fastsdRoot = () => resolve(process.env.PHOENIX_FASTSD_HOME || join(APP_ROOT, 'fastsdcpu'))
+export const legacyFastsdRoot = () => resolve(process.env.PHOENIX_FASTSD_HOME || join(APP_ROOT, 'fastsdcpu'))
+export const fastsdRoot = () => legacyFastsdRoot() + '-flux2'
+const readyFile = () => join(fastsdRoot(), '.phoenix-fastsd-ready')
+const verifiedFile = () => join(fastsdRoot(), '.phoenix-flux2-verified')
+const migratedFile = () => join(fastsdRoot(), '.phoenix-flux2-migrated')
+function claimMigration() {
+  mkdirSync(fastsdRoot(), { recursive: true })
+  const lock = join(fastsdRoot(), '.phoenix-flux2-migration.lock')
+  try { writeFileSync(lock, String(process.pid), { flag: 'wx' }) }
+  catch (error) {
+    if (error.code !== 'EEXIST') throw error
+    let owner
+    try { owner = Number(readFileSync(lock, 'utf8')) } catch { return undefined }
+    if (!Number.isSafeInteger(owner) || owner <= 0) return undefined
+    try { process.kill(owner, 0); return undefined } catch (failure) {
+      if (failure.code !== 'ESRCH') return undefined
+    }
+    try { rmSync(lock); writeFileSync(lock, String(process.pid), { flag: 'wx' }) } catch { return undefined }
+  }
+  return () => {
+    try { if (readFileSync(lock, 'utf8') === String(process.pid)) rmSync(lock) } catch { /* already released */ }
+  }
+}
+function ready() {
+  try { return readFileSync(readyFile(), 'utf8').trim() === FASTSD_REVISION } catch { return false }
+}
+export function legacyCacheCandidates(home, legacyRoot, env = process.env) {
+  // Do not touch explicitly shared/custom caches: ownership is unknown.
+  const owned = [join(legacyRoot, 'hub', LEGACY_REPO), join(legacyRoot, 'cache', 'hub', LEGACY_REPO)]
+  if (!env.HF_HOME && !env.HF_HUB_CACHE && !env.HUGGINGFACE_HUB_CACHE && !env.XDG_CACHE_HOME) {
+    owned.push(join(home, '.cache', 'huggingface', 'hub', LEGACY_REPO))
+  }
+  return owned
+}
+function retireLegacyModel() {
+  if (!existsSync(verifiedFile()) || !existsSync(join(legacyFastsdRoot(), '.phoenix-fastsd-ready'))) return
+  for (const target of legacyCacheCandidates(homedir(), legacyFastsdRoot())) {
+    if (!existsSync(target)) continue
+    // Refuse junctions/symlinks anywhere along the resolved target.
+    const actual = realpathSync(target)
+    const equivalent = process.platform === 'win32'
+      ? actual.toLowerCase() === resolve(target).toLowerCase() : actual === resolve(target)
+    if (!equivalent || !lstatSync(target).isDirectory() || lstatSync(target).isSymbolicLink()) {
+      throw new Error('No se retiró una caché SD Turbo redirigida: ' + target)
+    }
+    rmSync(target, { recursive: true, force: true })
+  }
+  writeFileSync(migratedFile(), FASTSD_REVISION + '\n')
+}
 const portValue = Number(process.env.PHOENIX_FASTSD_PORT ?? 18765)
 const PORT = Number.isInteger(portValue) && portValue > 1024 && portValue <= 65535 ? portValue : 18765
 const ORIGIN = 'http://127.0.0.1:' + PORT
-const TIMEOUT_MS = 13 * 60_000
+const TIMEOUT_MS = 25 * 60_000
 let backend
 let idleTimer
 let backendStart
@@ -51,7 +101,7 @@ export function generationRequest(prompt, extra = {}) {
     use_tiny_auto_encoder: false,
     image_height: FASTSD_SIZE,
     image_width: FASTSD_SIZE,
-    inference_steps: 1,
+    inference_steps: 4,
     guidance_scale: 1,
     number_of_images: 1,
     diffusion_task: 'text_to_image',
@@ -98,13 +148,13 @@ async function ensureInstalled() {
   const root = fastsdRoot()
   const python = join(root, 'env', process.platform === 'win32' ? 'Scripts' : 'bin',
     process.platform === 'win32' ? 'python.exe' : 'python')
-  if (existsSync(python) && existsSync(join(root, '.phoenix-fastsd-ready'))) return python
+  if (existsSync(python) && ready()) return python
   if (process.platform !== 'win32' || process.env.PHOENIX_FASTSD_AUTOINSTALL === '0') {
     throw new Error('FastSD CPU no está instalado. En Windows: powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\phoenix-fastsd-setup.ps1')
   }
   await run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-    join(PROJECT_ROOT, 'scripts', 'phoenix-fastsd-setup.ps1')], PROJECT_ROOT, 15 * 60_000)
-  if (!existsSync(python) || !existsSync(join(root, '.phoenix-fastsd-ready'))) throw new Error('La instalación FastSD no se pudo verificar.')
+    join(PROJECT_ROOT, 'scripts', 'phoenix-fastsd-setup.ps1')], PROJECT_ROOT, 30 * 60_000)
+  if (!existsSync(python) || !ready()) throw new Error('La instalación FastSD no se pudo verificar.')
   return python
 }
 
@@ -115,7 +165,7 @@ async function startBackend() {
     const python = await ensureInstalled()
     const root = fastsdRoot()
     const script = "import sys;sys.path.insert(0,'src');import uvicorn;from backend.api.web import app;uvicorn.run(app,host='127.0.0.1',port=" + PORT + ")"
-    const env = { ...process.env }
+    const env = { ...process.env, HF_HUB_CACHE: join(root, 'hub'), HUGGINGFACE_HUB_CACHE: join(root, 'hub') }
     const libs = join(root, 'env', 'Lib', 'site-packages', 'openvino', 'libs')
     env.PATH = (env.PATH || env.Path || '') + (process.platform === 'win32' ? ';' : ':') + libs
     backend = spawn(python, ['-c', script], { cwd: root, env, stdio: 'ignore', windowsHide: true })
@@ -164,7 +214,7 @@ async function generate(prompt, options) {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(request),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: AbortSignal.timeout(options?.migrationOnly === true ? 60 * 60_000 : TIMEOUT_MS),
   })
   if (!response.ok) throw new Error('FastSD respondió HTTP ' + response.status)
   const result = await response.json()
@@ -173,6 +223,13 @@ async function generate(prompt, options) {
     throw new Error('FastSD no produjo exactamente una imagen.')
   }
   const bytes = decodeImage(result.images[0])
+  // Never delete old model weights until the replacement has generated real pixels.
+  mkdirSync(fastsdRoot(), { recursive: true })
+  writeFileSync(verifiedFile(), FASTSD_REVISION + '\n')
+  try { retireLegacyModel() } catch (error) {
+    process.stderr.write('[PHOENIX FastSD] Limpieza pendiente: ' + error.message + '\n')
+  }
+  if (options?.migrationOnly === true) return { model: FASTSD_MODEL, latency: result.latency }
   const fileId = randomBytes(16).toString('hex')
   const root = imageRoot()
   mkdirSync(root, { recursive: true, mode: 0o700 })
@@ -184,7 +241,7 @@ async function generate(prompt, options) {
 
 export const tools = [{
   name: 'generate_image',
-  description: 'Genera una imagen ORIGINAL local solamente cuando el usuario la solicita explícitamente. Usa SD Turbo OpenVINO 512x512 sobre CPU, separado de Ollama. Tras terminar, incluye literalmente el campo markdown devuelto en tu respuesta, para que el usuario vea la imagen en el chat. No prometas precisión anatómica ni diagnóstico médico.',
+  description: 'Genera una imagen ORIGINAL local solamente cuando el usuario la solicita explícitamente. Usa FLUX.2 Klein 4B INT4 OpenVINO 512x512 sobre CPU, separado de Ollama. Tras terminar, incluye literalmente el campo markdown devuelto en tu respuesta, para que el usuario vea la imagen en el chat. No prometas precisión anatómica ni diagnóstico médico.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -227,7 +284,7 @@ async function message(request) {
         return { jsonrpc: '2.0', id, result: {
           protocolVersion: request.params?.protocolVersion ?? '2025-03-26',
           capabilities: { tools: {} },
-          serverInfo: { name: 'phoenix-fastsd-openvino', version: '1.0.0' },
+          serverInfo: { name: 'phoenix-fastsd-openvino', version: '2.0.0' },
         } }
       case 'ping':
         return { jsonrpc: '2.0', id, result: {} }
@@ -252,7 +309,28 @@ async function message(request) {
 
 const entry = process.argv[1] && resolve(process.argv[1]) === THIS
 if (entry) {
-  if (process.argv.includes('--generate-once')) {
+  if (process.argv.includes('--migrate-only')) {
+    // Only existing installations migrate automatically; new users keep on-demand setup.
+    let releaseMigration
+    try {
+      if (process.env.PHOENIX_FASTSD_AUTOINSTALL !== '0' && process.env.PHOENIX_FASTSD_ENABLE !== '0'
+        && existsSync(join(legacyFastsdRoot(), '.phoenix-fastsd-ready'))) {
+        releaseMigration = claimMigration()
+        if (releaseMigration && existsSync(verifiedFile())) {
+          if (!existsSync(migratedFile())) retireLegacyModel()
+        } else if (releaseMigration) {
+          await generate('A simple blue ceramic cup on a wooden table, soft daylight, photograph', { migrationOnly: true })
+        }
+        process.stdout.write(JSON.stringify({ ok: true, model: FASTSD_MODEL }) + '\n')
+      }
+    } catch (error) {
+      process.stderr.write('[PHOENIX FastSD] Migración pendiente: ' + error.message + '\n')
+      process.exitCode = 1
+    } finally {
+      if (backend?.exitCode === null) backend.kill()
+      releaseMigration?.()
+    }
+  } else if (process.argv.includes('--generate-once')) {
     // This isolated worker is invoked before Kira assembles any model context.
     // The stdin JSON carries exactly one fresh user image prompt, not a session.
     let input = ''
@@ -266,7 +344,7 @@ if (entry) {
         throw new Error('Prompt de imagen local inválido.')
       }
       const result = await generate(payload.prompt)
-      process.stdout.write(JSON.stringify({ ok: true, markdown: result.markdown }) + '\n')
+      process.stdout.write(JSON.stringify({ ok: true, markdown: result.markdown, model: result.model }) + '\n')
     } catch (error) {
       process.stdout.write(JSON.stringify({
         ok: false, error: error instanceof Error ? error.message.slice(0, 280) : 'Error de imagen local',

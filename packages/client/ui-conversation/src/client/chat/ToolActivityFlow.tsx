@@ -123,7 +123,7 @@ function fastSdImageReceipts(root: ToolCallBlock): string[] {
     try {
       const value = JSON.parse(raw) as { fileId?: unknown; markdown?: unknown; model?: unknown } | null
       if (value === null || typeof value.fileId !== 'string' || !/^[a-f0-9]{32}$/u.test(value.fileId)
-        || value.model !== 'rupeshs/sd-turbo-openvino') continue
+        || !['rupeshs/sd-turbo-openvino', 'rupeshs/flux2-klein-4b-int4-ov'].includes(String(value.model))) continue
       const markdown = '![Imagen generada localmente](/local-images/' + value.fileId + '.jpg)'
       if (value.markdown === markdown) receipts.add(markdown)
     } catch {

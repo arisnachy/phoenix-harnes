@@ -1,11 +1,12 @@
-# One-time, user-scoped FastSD CPU setup for PHOENIX on Windows.
-# Triggered only on the first explicit local image request; never at normal startup.
+# Versioned, user-scoped FLUX.2 Klein setup for PHOENIX on Windows.
+# Existing installations migrate asynchronously after updates; new installs remain on demand.
 # Uses an exact audited upstream commit rather than an uncontrolled floating branch.
 $ErrorActionPreference = 'Stop'
 $upstream = 'https://github.com/rupeshs/fastsdcpu.git'
-$commit = '10ed947f16cd35479a1d202be4e1309e243fd767'
+$commit = 'ae7208c030f9a1fe5abb0d8af5d8976abce3417f'
 $base = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'PHOENIX' } else { Join-Path $HOME '.phoenix' }
-$destination = if ($env:PHOENIX_FASTSD_HOME) { $env:PHOENIX_FASTSD_HOME } else { Join-Path $base 'fastsdcpu' }
+$legacy = if ($env:PHOENIX_FASTSD_HOME) { $env:PHOENIX_FASTSD_HOME } else { Join-Path $base 'fastsdcpu' }
+$destination = [IO.Path]::GetFullPath($legacy) + '-flux2'
 $venv = Join-Path $destination 'env'
 $py = Join-Path $venv 'Scripts\python.exe'
 function Invoke-Checked([string]$exe, [string[]]$arguments) {
@@ -13,8 +14,13 @@ function Invoke-Checked([string]$exe, [string[]]$arguments) {
   if ($LASTEXITCODE -ne 0) { throw "$exe exited with $LASTEXITCODE" }
 }
 $ready = Join-Path $destination '.phoenix-fastsd-ready'
-if (Test-Path -LiteralPath $py) {
-  & $py -c 'import openvino, torch, fastapi, uvicorn'
+$mutex = New-Object System.Threading.Mutex($false, 'Local\PHOENIX-FastSD-FLUX2-Setup')
+$held = $false
+try {
+  try { $held = $mutex.WaitOne([TimeSpan]::FromMinutes(25)) } catch [System.Threading.AbandonedMutexException] { $held = $true }
+  if (-not $held) { throw 'Otra instalación de FLUX sigue en progreso.' }
+if ((Test-Path -LiteralPath $py) -and (Test-Path -LiteralPath $ready) -and ((Get-Content -LiteralPath $ready -Raw).Trim() -eq $commit)) {
+  & $py -c 'import openvino, torch, fastapi, uvicorn; from diffusers import Flux2KleinPipeline'
   if ($LASTEXITCODE -eq 0) {
     Set-Content -LiteralPath $ready -Value $commit -Encoding Ascii
     Write-Host '[PHOENIX FastSD] Python environment verified.'
@@ -60,6 +66,11 @@ if (-not (Test-Path -LiteralPath $py)) { Invoke-Checked 'uv' @('venv', '--python
 if (-not (Test-Path -LiteralPath $py)) { throw 'No se encontró el ejecutable Python de FastSD.' }
 Invoke-Checked 'uv' @('pip', 'install', '--python', $py, 'torch==2.8.0', '--index-url', 'https://download.pytorch.org/whl/cpu')
 Invoke-Checked 'uv' @('pip', 'install', '--python', $py, '-r', (Join-Path $destination 'requirements.txt'))
-Invoke-Checked $py @('-c', 'import openvino, torch, fastapi, uvicorn; print("FastSD CPU OpenVINO dependencies ready")')
+Invoke-Checked $py @('-c', 'import openvino, torch, fastapi, uvicorn; from diffusers import Flux2KleinPipeline; print("FLUX.2 OpenVINO dependencies ready")')
 Set-Content -LiteralPath $ready -Value $commit -Encoding Ascii
 Write-Host '[PHOENIX FastSD] Instalación preparada. El modelo se descargará bajo demanda en la primera generación.'
+
+} finally {
+  if ($held) { $mutex.ReleaseMutex() }
+  $mutex.Dispose()
+}
