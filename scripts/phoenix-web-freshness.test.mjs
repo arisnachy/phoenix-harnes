@@ -29,7 +29,7 @@ test('rebuilds missing dist, stamps successful revision and skips repeat launch'
       mkdirSync(dirname(index),{recursive:true});writeFileSync(index,'<!doctype html>')
       const plugin=join(root,'packages/client/ui-conversation/lib/client.js')
       mkdirSync(dirname(plugin),{recursive:true})
-      writeFileSync(plugin,'sports_game_card sports_ticket_card sports_ticket_bundle_card sports-evidence Seguimiento automático del boleto')
+      writeFileSync(plugin,'sports_game_card sports_ticket_card sports_ticket_bundle_card data-ticket-reference PHOENIX / TICKET INTELIGENTE')
     }
     return 0
   }})
@@ -39,14 +39,14 @@ test('rebuilds missing dist, stamps successful revision and skips repeat launch'
   assert.equal(sportsClientBundleReady(root),true)
   writeFileSync(join(root,'packages/client/ui-conversation/lib/client.js'),'obsolete')
   assert.equal(frontendIsCurrent(root,FIRST),false)
-  writeFileSync(join(root,'packages/client/ui-conversation/lib/client.js'),'sports_game_card sports_ticket_card sports_ticket_bundle_card sports-evidence Seguimiento automático del boleto')
+  writeFileSync(join(root,'packages/client/ui-conversation/lib/client.js'),'sports_game_card sports_ticket_card sports_ticket_bundle_card data-ticket-reference PHOENIX / TICKET INTELIGENTE')
   writeFileSync(join(root,'packages/client/ui-conversation/lib/client.js'),
     'sports_game_card sports_ticket_card sports-evidence Registrar mi apuesta para seguir el objetivo')
   assert.equal(sportsClientBundleReady(root),false)
   assert.equal(frontendIsCurrent(root,FIRST),false,
     'legacy manual bet form must invalidate even an apparently current revision stamp')
   writeFileSync(join(root,'packages/client/ui-conversation/lib/client.js'),
-    'sports_game_card sports_ticket_card sports_ticket_bundle_card sports-evidence Seguimiento automático del boleto')
+    'sports_game_card sports_ticket_card sports_ticket_bundle_card data-ticket-reference PHOENIX / TICKET INTELIGENTE')
   assert.equal(verifyFrontend({root,readRevision,build:()=>{throw Error('unexpected rebuild')}}).status,'current')
 })
 test('revision mismatch never serves obsolete frontend and restamps only after build',async t=>{
@@ -67,4 +67,16 @@ test('packaged installs without .git keep their dist; no dist is never treated a
   assert.equal(verifyFrontend({root,readRevision:()=>null,build:()=>{throw Error('No build!')}}).status,'packaged')
   await rm(join(base,'index.html'))
   assert.throws(()=>verifyFrontend({root,readRevision:()=>null}),/no tiene frontend/)
+})
+
+test('accepts the receipt tracker contract, rejects the obsolete text-only fingerprint and reports missing markers',async t=>{
+  const root=await directory(t)
+  const plugin=join(root,'packages/client/ui-conversation/lib/client.js')
+  await mkdir(dirname(plugin),{recursive:true})
+  await writeFile(plugin,'sports_game_card sports_ticket_card sports_ticket_bundle_card sports-evidence Seguimiento automático del boleto')
+  assert.equal(sportsClientBundleReady(root),false)
+  await writeFile(plugin,'sports_game_card sports_ticket_card sports_ticket_bundle_card data-ticket-reference PHOENIX / TICKET INTELIGENTE')
+  assert.equal(sportsClientBundleReady(root),true)
+  await writeFile(plugin,'sports_game_card sports_ticket_card sports_ticket_bundle_card data-ticket-reference PHOENIX / TICKET INTELIGENTE Registrar mi apuesta para seguir el objetivo')
+  assert.equal(sportsClientBundleReady(root),false)
 })
