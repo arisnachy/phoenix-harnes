@@ -116,12 +116,12 @@ function SurfaceRender(props: { readonly render: () => ReactNode }): ReactNode {
 
 /** Center column grid item (session-body building block). */
 function CenterColumn(props: { children?: ReactNode; adaptiveActive?: boolean }) {
-  return <div className={css.centerCol} data-adaptive-active={props.adaptiveActive || undefined}>{props.children}</div>
+  return <div className={css.centerCol} data-living-target="center" data-adaptive-active={props.adaptiveActive || undefined}>{props.children}</div>
 }
 
 /** Details column grid item; width 0 keeps the subtree mounted (never unmount on close). */
 function DetailsColumn(props: { children?: ReactNode }) {
-  return <div className={css.detailsCol}>{props.children}</div>
+  return <div className={css.detailsCol} data-living-target="details">{props.children}</div>
 }
 
 /**
@@ -681,6 +681,99 @@ export function AppFrame({
     actions.setDetails(detailsBase.current - dx)
   }, [actions])
 
+  // The layout owns these presentation-only controls; agent requests never
+  // gain arbitrary selectors, clinical access or authority over user settings.
+  useEffect(() => {
+    const root = frameRef.current
+    if (!root || currentSession === undefined) return
+    let last: { revision: string; signature: string; at: number } | undefined
+    let pendingTimer: number | undefined
+    let highlightTimer: number | undefined
+    let pending = false
+    let serial = 0
+    const width = (target: string): number => Math.max(0, Math.min(100000,
+      Math.round(root.querySelector('[data-living-target="' + target + '"]')?.getBoundingClientRect().width ?? 0)))
+    const geometry = () => ({
+      sidebar: width('sidebar'), center: width('center'), details: width('details'),
+      collapsed: root.dataset.sidebarCollapsed === 'true',
+      busy: root.dataset.dragging === 'true' || root.dataset.cordisSide !== undefined,
+    })
+    const signature = () => JSON.stringify(geometry())
+    const receipt = (): string => {
+      const g = geometry(), at = Date.now(), revision = String(at) + ':' + String(++serial)
+      last = { revision, signature: JSON.stringify(g), at }
+      return JSON.stringify({ revision, ...g, highlight: root.dataset.livingHighlight ?? null })
+    }
+    const clearHighlight = () => {
+      if (highlightTimer !== undefined) window.clearTimeout(highlightTimer)
+      highlightTimer = undefined
+      delete root.dataset.livingHighlight
+    }
+    const onControl = (event: Event): void => {
+      const d = (event as CustomEvent<{
+        key?: unknown; action?: unknown; revision?: unknown; expiresAt?: unknown
+        reply?: (value: {accepted: boolean; reason: string}) => void
+      }>).detail
+      if (!d || d.key !== String(currentSession) || typeof d.reply !== 'function'
+        || typeof d.expiresAt !== 'number' || d.expiresAt <= Date.now()
+        || document.visibilityState === 'hidden') return
+      const reply = d.reply
+      if (pending) { reply({accepted: false, reason: 'layout-busy'}); return }
+      if (d.action === 'ui-inspect') { reply({accepted: true, reason: receipt()}); return }
+      if (!last || d.revision !== last.revision || Date.now() - last.at > 30_000
+        || signature() !== last.signature) {
+        reply({accepted: false, reason: 'stale-ui-revision'}); return
+      }
+      last = undefined
+      if (d.action === 'ui-clear-highlight') {
+        clearHighlight()
+        reply({accepted: true, reason: receipt()})
+        return
+      }
+      if (d.action === 'ui-highlight-sidebar' || d.action === 'ui-highlight-details'
+        || d.action === 'ui-highlight-composer') {
+        const target = d.action === 'ui-highlight-sidebar' ? 'sidebar'
+          : d.action === 'ui-highlight-details' ? 'details' : 'composer'
+        const element = root.querySelector(target === 'composer' ? '[data-composer-card]' : '[data-living-target="' + target + '"]')
+        const rect = element?.getBoundingClientRect()
+        if (!rect || rect.width < 1 || rect.height < 1) {
+          reply({accepted: false, reason: 'target-not-visible'}); return
+        }
+        clearHighlight()
+        root.dataset.livingHighlight = target
+        highlightTimer = window.setTimeout(clearHighlight, 12_000)
+        reply({accepted: true, reason: receipt()})
+        return
+      }
+      if (d.action !== 'ui-compact' && d.action !== 'ui-expand') {
+        reply({accepted: false, reason: 'invalid-layout-action'}); return
+      }
+      if (geometry().busy) { reply({accepted: false, reason: 'layout-owned-or-dragging'}); return }
+      const desired = d.action === 'ui-compact'
+      if (geometry().collapsed === desired) { reply({accepted: true, reason: receipt()}); return }
+      pending = true
+      actions.toggleSidebar()
+      // Read the rendered owner state after React commits, not just tool admission.
+      const deadline = Date.now() + 900
+      const check = (): void => {
+        if (geometry().collapsed === desired) {
+          pending = false
+          reply({accepted: true, reason: receipt()})
+        } else if (Date.now() >= deadline) {
+          pending = false
+          reply({accepted: false, reason: 'layout-change-not-observed'})
+        } else pendingTimer = window.setTimeout(check, 40)
+      }
+      pendingTimer = window.setTimeout(check, 40)
+    }
+    window.addEventListener('phoenix:agent-ui-control', onControl)
+    return () => {
+      window.removeEventListener('phoenix:agent-ui-control', onControl)
+      if (pendingTimer !== undefined) window.clearTimeout(pendingTimer)
+      clearHighlight()
+    }
+  }, [currentSession, actions])
+
   return (
     <div
       ref={frameRef}
@@ -697,7 +790,7 @@ export function AppFrame({
       data-details-collapsed={cols.details === 0 || undefined}
       data-dragging={dragging || undefined}
     >
-      <div className={css.sidebarCol}>
+      <div className={css.sidebarCol} data-living-target="sidebar">
         {renderSlot('sidebar', {
           collapsed: sidebarCollapsed,
           width: cols.sidebar,
