@@ -174,6 +174,8 @@ describe('Nexus installed runtime failover', () => {
     type Failure = typeof payload & { provider: string; failure: { code: string } }
     const route = hooks.get('agent/request') as (p: typeof payload, next: () => Promise<Route>) => Promise<Route>
     const fail = hooks.get('agent/request-error') as (p: Failure, next: () => Promise<undefined>) => Promise<{ kind: string } | undefined>
+    await expect(route({ ...payload, approximateInputTokens: 280000 }, async () => selected))
+      .rejects.toMatchObject({ code: 'CONTEXT_WINDOW_EXCEEDED' })
     for (const model of visible) {
       expect(await route(payload, async () => selected)).toMatchObject({ provider: 'openai-codex', model })
       expect(await fail({ ...payload, provider: 'openai-codex', failure: { code: 'TIMEOUT' } }, async () => undefined)).toEqual({ kind: 'retry' })
