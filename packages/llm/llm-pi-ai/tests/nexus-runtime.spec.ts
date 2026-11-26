@@ -5,7 +5,7 @@ import {
   nexusTurnText, nexusTurnHasHumanImage,
   nexusReadNativeCodexQuota, nexusCodexFreshReserve, nexusEconomyEffort, nexusAdaptiveEffort,
   nexusExactResponseTarget, nexusExactResponseQuality, installNexusRuntime,
-  nexusNumericResponseTarget, nexusNumericResponseQuality, nexusOperatorPolicy, nexusQuotaView, nexusRequiredContext,
+  nexusNumericResponseTarget, nexusNumericResponseQuality, nexusOperatorPolicy, nexusQuotaView, nexusRequiredContext, nexusCodexAvailability,
 } from '../src/nexus-runtime.ts'
 
 describe('ORIÓN synthetic model route', () => {
@@ -48,6 +48,8 @@ describe('ORIÓN synthetic model route', () => {
     expect(nexusCodexHasReserve({ primaryUsedPercent: 20, secondaryUsedPercent: 92 })).toBe(false)
     expect(nexusCodexHasReserve({ primaryUsedPercent: 40, secondaryUsedPercent: 75 })).toBe(true)
     expect(nexusRequiresStrongModel('Hola')).toBe(false)
+    expect(nexusRequiresStrongModel('estoy feliz')).toBe(false)
+    expect(nexusRequiresStrongModel('estoy feliz, revisa los correos')).toBe(true)
     expect(nexusRequiresStrongModel('Implementar una aplicación clínica')).toBe(true)
     for (const instruction of ['Revisa los correos', 'Responde los pendientes', 'qué pasó', 'busca eso', 'no funciona', 'sí', 'síguelo', 'check email', 'fix it', '']) {
       expect(nexusRequiresStrongModel(instruction)).toBe(true)
@@ -95,6 +97,17 @@ describe('native Codex window freshness and economic reasoning',()=>{
     expect(nexusCodexFreshReserve({ ...quota, resetPrimaryAt: now / 1000 },now)).toBe(false)
     expect(nexusReadNativeCodexQuota({ ...telemetry, accountType: 'apiKey' })).toBeUndefined()
     expect(nexusReadNativeCodexQuota({ ...telemetry, secondaryLimit: telemetry.primaryLimit })).toBeUndefined()
+  })
+  it('distinguishes reported remaining quota from advisory pacing and reserve', () => {
+    const observed = { primaryUsedPercent: 2, secondaryUsedPercent: 81,
+      resetPrimaryAt: now + 49 * 60_000, resetSecondaryAt: now + 86 * 60_000,
+      primaryObservedAt: now, secondaryObservedAt: now }
+    expect(nexusCodexAvailability(observed, now)).toBe('available')
+    expect(nexusCodexAvailability({ ...observed, secondaryUsedPercent: 95 }, now)).toBe('available')
+    expect(nexusCodexWithinPace({ ...observed, secondaryUsedPercent: 95 }, now)).toBe(false)
+    expect(nexusCodexAvailability({ ...observed, secondaryUsedPercent: 100 }, now)).toBe('exhausted')
+    expect(nexusCodexAvailability({ ...observed, primaryObservedAt: now - 121000 }, now)).toBe('unknown')
+    expect(nexusCodexAvailability(undefined, now)).toBe('unknown')
   })
   it('never invents effort names or reduces complex task reasoning',()=>{
     expect(nexusEconomyEffort(['high','low','medium'],false)).toBe('low')
@@ -176,7 +189,15 @@ describe('Nexus installed runtime failover', () => {
       expect(await route(payload, async () => selected)).toMatchObject({
         provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'low',
       })
+      const socialAgent = { session: { ...agent.session, id: 'social-fixture', events: [
+        { type: 'turn/start', data: { turn: 3 } },
+        { type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'estoy feliz' }] } },
+      ] } }
+      expect(await route({ ...payload, agent: socialAgent, turn: 3 }, async () => selected)).toMatchObject({
+        provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'low',
+      })
       const snapshot = await inspect(payload.signal, { sessionId: agent.session.id })
+      expect(snapshot.codexAdmission).toMatchObject({ quotaStatus: 'available', quotaScope: 'shared-account', authorizedCatalogModels: ['gpt-6-luna'] })
       expect(snapshot.lastDispatchedRoute).toBe('openai-codex/gpt-6-luna')
       expect(snapshot.lastDispatchedEffort).toBe('low')
       expect(snapshot.lastExecution).toBeNull()
@@ -217,7 +238,7 @@ describe('Nexus installed runtime failover', () => {
         { type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Revisa los correos' }] } },
       ] } }
       await expect(route({ ...payload, agent: emailAgent }, async () => selected)).rejects.toMatchObject({ code: 'NEXUS_NO_ELIGIBLE_ROUTE' })
-      await expect(route({ ...payload, agent: { session: { ...agent.session, id: 'large-context' } }, approximateInputTokens: 50000 }, async () => selected)).rejects.toThrow('no verified free model')
+      await expect(route({ ...payload, agent: { session: { ...agent.session, id: 'large-context' } }, approximateInputTokens: 50000 }, async () => selected)).rejects.toMatchObject({ code: 'NEXUS_NO_ELIGIBLE_ROUTE' })
       expect(await fail({ ...payload, provider: 'openrouter', failure: { code: 'RATE_LIMIT' } },
         async () => undefined)).toEqual({ kind: 'retry' })
       await expect(route(payload, async () => selected)).rejects.toMatchObject({ code: 'NEXUS_NO_ELIGIBLE_ROUTE' })

@@ -207,6 +207,18 @@ export function nexusReadNativeCodexQuota(telemetry:unknown):NexusCodexQuota|und
   }
 }
 /**
+ * Actual native account availability, separate from the advisory pacing reserve.
+ * @param quota - native account observations for both shared windows.
+ * @param now - epoch milliseconds.
+ * @returns Fresh availability; an unreported window never implies quota.
+ */
+export function nexusCodexAvailability(quota: NexusCodexQuota | undefined, now: number): 'available' | 'exhausted' | 'unknown' {
+  const view = nexusQuotaView(quota, now)
+  if (view.fiveHours.status !== 'reported' || view.sevenDays.status !== 'reported') return 'unknown'
+  return view.fiveHours.remainingPercent > 0 && view.sevenDays.remainingPercent > 0 ? 'available' : 'exhausted'
+}
+
+/**
  * Automatic admission requires a fresh native sample and a future reset for BOTH windows.
  * @param quota - native account observation.
  * @param now - epoch milliseconds.
@@ -273,7 +285,7 @@ export function nexusRequiresStrongModel(text: string): boolean {
   // Open-ended work is not low risk merely because the prompt is short.
   // Only standalone social greetings and independently checkable contracts
   // qualify for an unbenchmarked free model.
-  return !/^(?:hola|hello|hi|hey|buenos días|buenas tardes|buenas noches|good morning|good evening)[!.?]*$/iu.test(text.trim())
+  return !/^(?:hola|hello|hi|hey|buenos días|buenas tardes|buenas noches|good morning|good evening|estoy feliz|estoy content[oa]|estoy bien|muy bien|s[uú]per|genial|gracias|muchas gracias|i am happy|i'm happy|thanks|thank you)[!.?]*$/iu.test(text.trim())
     && nexusExactResponseTarget(text) === undefined
     && nexusNumericResponseTarget(text) === undefined
 }
@@ -534,6 +546,7 @@ type NexusInspection = {
   lastExecution: NexusObservedExecution | null
   dispatchIdentityBasis: 'route-selected-not-execution-proof'
   localAutomaticRouting: boolean
+  codexAdmission: { quotaStatus: ReturnType<typeof nexusCodexAvailability>; withinAdvisoryPace: boolean; authorizedCatalogModels: string[]; quotaScope: 'shared-account' }
 }
 
 /**
@@ -558,19 +571,23 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
   const routeKey = (provider: string, model: string) => provider + '/' + model
 
   const getQuota = async (now: number, signal: AbortSignal): Promise<NexusCodexQuota | undefined> => {
-    if (now < quotaReadAt + 10_000 && nexusCodexFreshReserve(quotaCache,now)) return quotaCache
+    if (now < quotaReadAt + 10_000 && nexusCodexAvailability(quotaCache, now) !== 'unknown') return quotaCache
     quotaReadAt = now
     const auth = ctx.get('authorization')
     if (auth === undefined) { quotaCache = undefined; return undefined }
     const codex = auth.list().find(entry => String(entry.key)==='subagent-codex/account')
     if (codex === undefined) { quotaCache = undefined; return undefined }
     try {
-      const timeout = AbortSignal.timeout(2_000)
+      const timeout = AbortSignal.timeout(12_000)
       const inspection = await auth.inspect(codex.key, AbortSignal.any([signal, timeout]))
-      quotaCache=nexusReadNativeCodexQuota(inspection)
+      signal.throwIfAborted()
+      const observed = nexusReadNativeCodexQuota(inspection)
+      // A transient refresh cannot erase a still-fresh observation, or renew its age.
+      if (nexusCodexAvailability(observed, Date.now()) !== 'unknown') quotaCache = observed
+      else if (nexusCodexAvailability(quotaCache, Date.now()) === 'unknown') quotaCache = observed
     } catch {
-      // A failed refresh must not authorize additional subscription usage.
-      quotaCache = undefined
+      // Never extend the age of a cached observation on a failed refresh.
+      if (nexusCodexAvailability(quotaCache, Date.now()) === 'unknown') quotaCache = undefined
     }
     return quotaCache
   }
@@ -648,8 +665,10 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     perAgent.set(agent, state)
     const text = nexusTurnText(agent.session.events, payload.turn)
     const hasImage = nexusTurnHasHumanImage(agent.session.events, payload.turn)
-    // Continuations and tool-result steps must not silently downgrade to free chat.
-    const complex = payload.turn !== 1 || payload.step !== 1 || hasImage || nexusRequiresStrongModel(text)
+    // Social turns may use the economical native model at any turn. Free routes
+    // remain limited to the original first-turn, first-step safety boundary.
+    const complex = payload.step !== 1 || hasImage || nexusRequiresStrongModel(text)
+    const freeAllowed = payload.turn === 1 && !complex
     const requiredContext = nexusRequiredContext(payload.approximateInputTokens, selected.maxTokens)
     if (requiredContext === undefined) {
       throw new LlmError('Nexus cannot route without a valid current request context estimate', 'NEXUS_NO_ELIGIBLE_ROUTE')
@@ -687,13 +706,13 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       let eligible = authenticated
       if (route.provider === 'openai-codex') {
         const quota = await getQuota(now, payload.signal)
-        eligible = eligible && nexusCodexFreshReserve(quota, Date.now())
-          && nexusCodexWithinPace(quota, Date.now()) && await options.nativeCodexAuthorized()
+        eligible = eligible && nexusCodexAvailability(quota, Date.now()) === 'available'
+          && await options.nativeCodexAuthorized()
           && await codexContextFits(route.model)
       } else {
         const inventory = await listAuthorizedModels(now)
         const model = inventory.find(item => item.provider === route.provider && item.id === route.model)
-        eligible = eligible && !complex && model !== undefined && model.online && model.supportsTools === true
+        eligible = eligible && freeAllowed && model !== undefined && model.online && model.supportsTools === true
           && (!hasImage || model.supportsImages === true)
           && model.contextWindow !== undefined && model.contextWindow >= requiredContext
           && nexusPriceClass(model, Date.now()) === 'verified-free'
@@ -735,32 +754,48 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       allowLocal: false,
     }, Date.now())
     let route: NexusRoute | undefined
-    {
-      // A native ChatGPT/Codex seat is a user-existing subscription, not a new
-      // API-key billing route. It remains bounded by the reported quota.
-      const quota = await getQuota(now, payload.signal)
-      const ids = models.filter(model => model.provider === 'openai-codex' && model.authorized
-        && (!hasImage || model.supportsImages === true)
-        && !state.excluded.has(routeKey(model.provider, model.id))).map(model => model.id)
-      const withinBudget = nexusCodexFreshReserve(quota,Date.now()) && nexusCodexWithinPace(quota,Date.now())
-      const fitting = withinBudget ? await Promise.all(ids.map(async id => await codexContextFits(id) ? id : undefined)) : []
-      const candidate = nexusCodexFallback(fitting.filter((id): id is string => id !== undefined), complex)
-      if (candidate !== undefined && withinBudget && await options.nativeCodexAuthorized()) {
-        route = { provider: 'openai-codex', model: candidate, priceClass: 'unknown',
-          reason: 'subscription-first: authorized Codex account within both quota budgets' }
-      }
+    // A shared native account quota is not a separate balance for every model.
+    const quota = await getQuota(now, payload.signal)
+    const quotaStatus = nexusCodexAvailability(quota, Date.now())
+    const codexProfile = options.profiles().get('openai-codex')
+    const nativeAuthorized = codexProfile !== undefined
+      && await options.nativeCodexAuthorized().catch(() => false)
+      && await options.providerAuthorized('openai-codex', codexProfile).catch(() => false)
+    // Re-read the live Codex model directory rather than trusting cached account
+    // authorization from the generic economics inventory.
+    const advertised = nativeAuthorized
+      ? await ctx.llm.listModels('openai-codex').catch(() => [])
+      : []
+    const ids = advertised.filter(model =>
+      (!hasImage || model.inputModalities?.includes('image') === true)
+      && !state.excluded.has(routeKey('openai-codex', model.id))
+      && (blockedUntil.get(routeKey('openai-codex', model.id)) ?? 0) <= Date.now()
+    ).map(model => model.id)
+    const fitting = nativeAuthorized && quotaStatus === 'available'
+      ? await Promise.all(ids.map(async id => await codexContextFits(id) ? id : undefined))
+      : []
+    const candidate = nexusCodexFallback(fitting.filter((id): id is string => id !== undefined), complex)
+    if (candidate !== undefined && quotaStatus === 'available') {
+      route = { provider: 'openai-codex', model: candidate, priceClass: 'unknown',
+        reason: nexusCodexWithinPace(quota, Date.now())
+          ? 'subscription-first: fresh native account quota and compatible model'
+          : 'subscription-first: native quota available; conserve through adaptive reasoning, not a false exhaustion gate' }
     }
-    // Free routes are a last resort, and unbenchmarked free routes are not safe for complex work.
-    if (route === undefined && !complex) route = free
-    if (route === undefined && complex) {
-      throw new LlmError(
-        'ORIÓN: no hay una ruta de suscripción autorizada con capacidad y cuota disponibles para continuar esta tarea. Selecciona un modelo adecuado; no se sustituirá por un chat gratuito sin validar.',
-        'NEXUS_NO_ELIGIBLE_ROUTE',
-      )
-    }
+    if (route === undefined && freeAllowed) route = free
     if (route === undefined) {
+      const view = nexusQuotaView(quota, Date.now())
+      const remaining = (window: NexusQuotaWindowView): string =>
+        window.status === 'reported' ? String(window.remainingPercent) + '%' : 'sin verificar'
+      const reason = !nativeAuthorized ? 'autorización de Codex no confirmada'
+        : quotaStatus === 'unknown' ? 'cuota nativa no confirmada o desactualizada'
+          : quotaStatus === 'exhausted' ? 'cuota nativa agotada'
+            : ids.length === 0 ? 'sin modelos anunciados elegibles (catálogo, modalidad o cooldown)'
+              : 'ningún modelo elegible tiene capacidad de contexto confirmada o familia compatible'
       throw new LlmError(
-        'ORIÓN no encontró un modelo gratuito verificado compatible ni una ruta Codex con reserva de cuota. Selecciona un modelo manualmente o conecta un proveedor gratuito compatible.',
+        'ORIÓN: ' + reason + '. Cuota compartida 5h: ' + remaining(view.fiveHours)
+        + '; 7d: ' + remaining(view.sevenDays) + '; contexto requerido: ' + String(requiredContext)
+        + ' tokens; modelos candidatos: ' + String(ids.length)
+        + '. No se ejecutará una ruta de pago no autorizada ni un modelo gratuito no validado para trabajo complejo.',
         'NEXUS_NO_ELIGIBLE_ROUTE',
       )
     }
@@ -895,6 +930,8 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     return { models, total: filtered.length, offset, nextOffset: offset + page.length < filtered.length ? offset + page.length : null,
       quota: nexusQuotaView(quota, Date.now()), lastDispatchedRoute: last?.key ?? null,
       lastDispatchedEffort: last?.effort ?? null, lastExecution: last?.execution ?? null,
-      dispatchIdentityBasis: 'route-selected-not-execution-proof', localAutomaticRouting: false }
+      dispatchIdentityBasis: 'route-selected-not-execution-proof', localAutomaticRouting: false,
+      codexAdmission: { quotaStatus: nexusCodexAvailability(quota, Date.now()), withinAdvisoryPace: nexusCodexWithinPace(quota, Date.now()),
+        authorizedCatalogModels: listed.filter(model => model.provider === 'openai-codex' && model.authorized).map(model => model.id), quotaScope: 'shared-account' } }
   }
 }
