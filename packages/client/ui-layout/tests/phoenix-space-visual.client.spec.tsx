@@ -30,6 +30,35 @@ describe('PHOENIX Space visual opening',()=>{
     expect(result.indexOf('Content-Security-Policy')).toBeLessThan(result.indexOf('<img'))
     expect(spacePreviewDocument(html,true)).toContain('img-src data: blob: https:')
   })
+  it('moves and deletes directly from the library and restores from trash',async()=>{
+    let current={...item}
+    const requests:Record<string,unknown>[]=[]
+    vi.stubGlobal('fetch',vi.fn(async(input:string,init?:RequestInit)=>{
+      if(input.includes('/items?')){
+        const trash=input.includes('deleted=1')
+        return new Response(JSON.stringify({items:current.deleted===trash?[current]:[]}))
+      }
+      if(input.endsWith('/items/'+item.id)&&init?.method==='PUT'){
+        const change=JSON.parse(String(init.body)) as Record<string,unknown>
+        requests.push(change)
+        current={...current,...change,revision:current.revision+1}
+        return new Response(JSON.stringify({item:current}))
+      }
+      throw Error('Unexpected request')
+    }))
+    render(<PhoenixSpace onClose={vi.fn()}/>)
+    fireEvent.change(await screen.findByRole('combobox',{name:'Mover PHOENIX visual'}),{target:{value:'docencia'}})
+    expect(await screen.findByText('Movido a docencia')).toBeTruthy()
+    expect(requests[0]).toEqual({revision:1,space:'docencia'})
+    await screen.findByText('Aplicaciones · docencia')
+    fireEvent.click(screen.getByRole('button',{name:'Eliminar PHOENIX visual'}))
+    expect(await screen.findByText('Movido a Papelera')).toBeTruthy()
+    expect(requests[1]).toEqual({revision:2,deleted:true})
+    fireEvent.click(screen.getByRole('button',{name:'Papelera',exact:true}))
+    fireEvent.click(await screen.findByRole('button',{name:'Restaurar PHOENIX visual'}))
+    expect(await screen.findByText('Recuperado')).toBeTruthy()
+    expect(requests[2]).toEqual({revision:3,deleted:false})
+  })
   it('opens a saved canvas visually and shows source only when requested',async()=>{
     vi.stubGlobal('fetch',vi.fn(async(input:string)=>{
       if(input.includes('/items?'))return new Response(JSON.stringify({items:[item]}))
