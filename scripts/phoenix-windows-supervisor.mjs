@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto'
 import { retireIntegratedWorkspaces } from './phoenix-retire-integrated-workspaces.mjs'
 import { spawn, spawnSync } from 'node:child_process'
 import {
-  existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, statfsSync, unlinkSync, writeFileSync,
+  existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, statfsSync, unlinkSync, writeFileSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { createServer } from 'node:net'
@@ -942,6 +942,50 @@ function liveStorageMigrationAllowed() {
     return sameRepository(expected)
   } catch {
     return false
+  }
+}
+
+// A quarantine is not automatically disposable just because of its name.
+// Accelerate only an unregistered linked worktree with an explicit pointer to
+// this checkout's missing Git metadata. Unknown directories retain normal
+// retention/protection policy; never delete an active or foreign checkout.
+function ownedOrphanedStageQuarantine(path, registered) {
+  if (registered === undefined || registered.has(runtimePathKey(path))
+    || existsSync(join(path, '.phoenix-keep'))) return false
+  try {
+    const dotGit = join(path, '.git')
+    if (!lstatSync(path).isDirectory() || !lstatSync(dotGit).isFile()) return false
+    const match = /^gitdir:\s*(.+)\s*$/imu.exec(readFileSync(dotGit, 'utf8'))
+    const common = absoluteGitPath(root, gitValue(root, ['rev-parse', '--git-common-dir']))
+    if (!match || !common) return false
+    const linked = resolve(path, match[1].trim())
+    const worktrees = runtimePathKey(join(common, 'worktrees'))
+    if (runtimePathKey(dirname(linked)) !== worktrees || existsSync(linked)) return false
+    return detachedWorktreeMetadata(path)
+  } catch {
+    return false
+  }
+}
+
+function cleanupBlockingStageQuarantines() {
+  if (!liveStorageMigrationAllowed()) return
+  const keep = new Set([root, supervisorSourceRoot, runtimeRoot,
+    readActiveRuntimeRecord()?.path, process.env.PHOENIX_RUNTIME_ROOT].filter(Boolean).map(runtimePathKey))
+  const prefix = persistentStage().toLowerCase() + '-conflict-'
+  const registered = registeredWorktreePaths()
+  if (registered === undefined) return
+  for (const candidate of stageDirectoriesForCleanup()) {
+    const key = runtimePathKey(candidate)
+    if (!key.toLowerCase().startsWith(prefix) || keep.has(key)
+      || !ownedOrphanedStageQuarantine(candidate, registered)) continue
+    const busy = windowsProcessReferences([candidate])
+    if (busy === undefined || busy.has(key) || !liveStorageMigrationAllowed()) continue
+    const refreshed = registeredWorktreePaths()
+    if (!ownedOrphanedStageQuarantine(candidate, refreshed)
+      || runtimeProtectedByOwningCheckout(candidate) || stageProtectedByOwningCheckout(candidate)) continue
+    if (removeOrphanedManagedDirectory(candidate, true)) {
+      console.error('[PHOENIX STORAGE] reclaimed verified orphan staging quarantine: ' + candidate)
+    }
   }
 }
 
@@ -2243,7 +2287,9 @@ if (process.argv.includes('--live-storage-migration')) {
     reclaimInactiveBackupForCapacity(persistentRuntime(target), { liveMigration: true })
     process.exit(0)
   }
+  if (readUpdateState()?.phase === 'staging-storage') cleanupBlockingStageQuarantines()
   cleanupObsoleteRuntimes([supervisorSourceRoot], {
+    reportBusy: readUpdateState()?.phase === 'staging-storage',
     reapDormantStage: true,
     liveMigration: true,
   })

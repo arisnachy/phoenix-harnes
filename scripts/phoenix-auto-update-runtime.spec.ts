@@ -1115,3 +1115,73 @@ describe('PHOENIX transient stable channel retry', () => {
     expect(isProtectedUpdateStateDuringNetworkRetry({ status: 'error', phase: 'prepare' })).toBe(false)
   })
 })
+
+
+describe('staging quarantine recovery', () => {
+  it('classifies a blocked canonical stage without accumulating another quarantine', () => {
+    const start = updater.indexOf('function stagingStorageError(')
+    const end = updater.indexOf('function quarantineConflictingStagingPath(', start)
+    let existing = true
+    let owned = false
+    let entries = [{ isDirectory: () => true, name: 'phoenix-stage-1234567890-conflict-4-5' }]
+    const api = runInNewContext(updater.slice(start, end) + '\n({stagingStorageError, stagingQuarantineBlocks})', {
+      stageDirectory: () => 'stage', existsSync: () => existing, sameRepositoryWorktree: () => owned,
+      stageIdentity: () => '1234567890', stageBaseDirectory: () => 'base', readdirSync: () => entries,
+    }) as {stagingStorageError: (message: string) => Error & {code: string}; stagingQuarantineBlocks: (root: string) => boolean}
+    expect(api.stagingStorageError('blocked').code).toBe('PHOENIX_STAGING_STORAGE')
+    expect(api.stagingQuarantineBlocks('root')).toBe(true)
+    owned = true
+    expect(api.stagingQuarantineBlocks('root')).toBe(false)
+    owned = false
+    existing = false
+    expect(api.stagingQuarantineBlocks('root')).toBe(false)
+    existing = true
+    entries = [{ isDirectory: () => true, name: 'phoenix-stage-9999999999-conflict-4-5' }]
+    expect(api.stagingQuarantineBlocks('root')).toBe(false)
+  })
+
+  it('persists a paused staging state and invokes live repair with no pending deferred activation', () => {
+    const start = updater.indexOf("if (error?.code === 'PHOENIX_STAGING_STORAGE')")
+    const end = updater.indexOf('watcher check failed safely:', start)
+    expect(start).toBeGreaterThan(0)
+    const branch = updater.slice(start, end)
+    expect(branch).toContain("status: 'paused'")
+    expect(branch).toContain("phase: 'staging-storage'")
+    expect(branch).toContain('pending = undefined')
+    expect(branch).toContain('preparedTarget = undefined')
+    expect(branch).toContain('nextStageRetryAt = Date.now() + STORAGE_RETRY_MS')
+    expect(branch.indexOf('writeState(root')).toBeLessThan(branch.indexOf('runLiveStorageMigration(root)'))
+    expect(updater).toContain('!manualRefreshRequested && blockedStageTarget === inspection.target')
+  })
+
+  it('accelerates only a proven own orphan, never foreign metadata or a live registration', () => {
+    const start = supervisor.indexOf('function ownedOrphanedStageQuarantine(')
+    const end = supervisor.indexOf('function cleanupBlockingStageQuarantines(', start)
+    let pointer = 'gitdir: /repo/.git/worktrees/old'
+    let metadataExists = false
+    let keep = false
+    let linkedFile = true
+    const candidate = '/base/phoenix-stage-1234567890-conflict-1-2'
+    const api = runInNewContext(supervisor.slice(start, end) + '\n({ownedOrphanedStageQuarantine})', {
+      root: '/repo', runtimePathKey: (p:string) => p, join: (...p:string[]) => p.join('/'), resolve: (_a:string,b:string) => b, dirname: (p:string) => p.slice(0,p.lastIndexOf('/')),
+      existsSync: (p:string) => p.endsWith('.phoenix-keep') ? keep : metadataExists,
+      lstatSync: () => ({isDirectory: () => true, isFile: () => linkedFile}),
+      readFileSync: () => pointer, absoluteGitPath: () => '/repo/.git',
+      gitValue: () => '/repo/.git', detachedWorktreeMetadata: () => true,
+    }) as {ownedOrphanedStageQuarantine: (p:string, registered?:Set<string>) => boolean}
+    expect(api.ownedOrphanedStageQuarantine(candidate, new Set())).toBe(true)
+    expect(api.ownedOrphanedStageQuarantine(candidate, undefined)).toBe(false)
+    expect(api.ownedOrphanedStageQuarantine(candidate, new Set([candidate]))).toBe(false)
+    keep = true
+    expect(api.ownedOrphanedStageQuarantine(candidate, new Set())).toBe(false)
+    keep = false
+    metadataExists = true
+    expect(api.ownedOrphanedStageQuarantine(candidate, new Set())).toBe(false)
+    metadataExists = false
+    pointer = 'gitdir: /other/.git/worktrees/old'
+    expect(api.ownedOrphanedStageQuarantine(candidate, new Set())).toBe(false)
+    pointer = 'gitdir: /repo/.git/worktrees/old'
+    linkedFile = false
+    expect(api.ownedOrphanedStageQuarantine(candidate, new Set())).toBe(false)
+  })
+})
