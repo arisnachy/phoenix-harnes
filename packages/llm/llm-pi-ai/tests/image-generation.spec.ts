@@ -459,6 +459,7 @@ describe('Codex image generation bridge', () => {
     const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(64), Buffer.from([0xff, 0xd9])])
     const calls: string[] = []
     let invalid = false
+    let policyRejected = false
     let tool: CapturedImageTool | undefined
     const saveImage = vi.fn(async () => ({
       attachmentId: 'fastsd-image', mediaType: 'image/jpeg', bytes: jpeg.length,
@@ -483,7 +484,7 @@ describe('Codex image generation bridge', () => {
               stdout: { readFrom: () => ({ text: local ? JSON.stringify({
                 ok: true, markdown: invalid ? '![x](/private.jpg)' : '![Imagen generada localmente](/local-images/' + id + '.jpg)',
               }) : '' }) },
-              stderr: { readFrom: () => ({ text: local ? '' : 'image_generation unavailable' }) },
+              stderr: { readFrom: () => ({ text: local ? '' : policyRejected ? 'content_policy_violation' : 'image_generation unavailable' }) },
             } }
           },
         },
@@ -508,6 +509,11 @@ describe('Codex image generation bridge', () => {
       await expect(tool.execute({ prompt: 'A forest at sunrise', backend: 'local' }, execution))
         .rejects.toThrow('native FastSD CPU is disabled')
       expect(calls).toEqual(['codex', 'fastsd', 'fastsd'])
+      policyRejected = true
+      delete process.env.PHOENIX_FASTSD_ENABLE
+      await expect(tool.execute({ prompt: 'A forest at sunrise' }, execution))
+        .rejects.toThrow('Codex rejected the request under its content policy')
+      expect(calls).toEqual(['codex', 'fastsd', 'fastsd', 'codex'])
     } finally {
       for (const [name, value] of Object.entries(previous)) {
         if (value === undefined) delete process.env[name]
