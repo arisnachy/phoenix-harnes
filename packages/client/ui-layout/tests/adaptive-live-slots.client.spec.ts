@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { INSPECTABLE_SLOTS, inspectAdaptiveLiveSlots, livingNeedsCompactSidebar, livingSeason } from '../src/client/AdaptiveLiveSlots.ts'
+import { LIVING_PRESENCE_ENABLED, INSPECTABLE_SLOTS, inspectAdaptiveLiveSlots, livingNeedsCompactSidebar, livingSeason } from '../src/client/AdaptiveLiveSlots.ts'
 
 describe('Adaptive OS live UI self-inspection', () => {
   it('observes only an allowlisted slot roster without escalating privileges', () => {
@@ -20,6 +20,10 @@ describe('Adaptive OS live UI self-inspection', () => {
 })
 
 describe('Living presence reversible local presentation', () => {
+  it('is permanently active independent of browser preferences', () => {
+    expect(LIVING_PRESENCE_ENABLED).toBe(true)
+    expect(livingSeason(new Date(2026, 11, 25), LIVING_PRESENCE_ENABLED)).toBe('christmas')
+  })
   it('decorates only an enabled local holiday window and restores automatically', () => {
     expect(livingSeason(new Date(2026, 11, 1), true)).toBe('christmas')
     expect(livingSeason(new Date(2027, 0, 6), true)).toBe('christmas')

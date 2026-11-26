@@ -56,7 +56,6 @@ export interface SidebarOwnerProps {
   width: number
   /** Optional bounded local presentation metadata, not tool authorization. */
   livingPresence?: import('./AdaptiveLiveSlots.ts').LivingPresenceSnapshot
-  toggleLivingPresence?: () => void
 }
 
 /** Conversation owner share: business state and actions belong to the registrant. */
