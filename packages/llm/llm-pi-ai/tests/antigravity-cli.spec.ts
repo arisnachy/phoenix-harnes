@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { GenerateOptions } from '@phoenix-ai/dsh-llm'
+import { createUserMessage, type GenerateOptions } from '@phoenix-ai/dsh-llm'
 import { encodeGoogleUserEvent, buildPrompt, assertGoogleAccountSettings, googleAccountEnvironment, parseGoogleModels, parseGoogleResult, isGoogleCliAuthFailure, GOOGLE_ACCOUNT_PROVIDER, ANTIGRAVITY_MODEL_PROVIDER, GoogleAccountCliAdapter, isGoogleAccountRoute, registerGoogleAccountCli } from '../src/antigravity-cli.ts'
 
 describe('Google account Antigravity CLI adapter', () => {
@@ -49,12 +49,12 @@ describe('Google account Antigravity CLI adapter', () => {
   })
 
   it('turns the web preview into a Phoenix canvas tool call', async () => {
-    const request = {
+    const request: GenerateOptions = {
       provider: ANTIGRAVITY_MODEL_PROVIDER,
       model: 'gemini-4-hydrogen-low',
-      messages: [{ role: 'user', content: [{ type: 'text', text: 'crea una pagina web para verla' }] }],
+      messages: [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'crea una pagina web para verla' }] })],
       tools: [{ name: 'phoenix_canvas', description: 'Publish HTML', parameters: { type: 'object' } }],
-    } as GenerateOptions
+    }
     const args = JSON.stringify({ title: 'Página', html: '<h1>Página</h1>' })
     const execute = vi.fn(async (flags: readonly string[], input?: string) => {
       expect(input).toContain('solicita phoenix_canvas')
@@ -72,12 +72,12 @@ describe('Google account Antigravity CLI adapter', () => {
   })
 
   it('does not present plain text as a completed action in a tool-enabled response', async () => {
-    const request = {
+    const request: GenerateOptions = {
       provider: ANTIGRAVITY_MODEL_PROVIDER,
       model: 'gemini-4-hydrogen-low',
-      messages: [{ role: 'user', content: [{ type: 'text', text: 'crea una pagina web para verla' }] }],
+      messages: [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'crea una pagina web para verla' }] })],
       tools: [{ name: 'phoenix_canvas', description: 'Publish HTML', parameters: { type: 'object' } }],
-    } as GenerateOptions
+    }
     const execute = async () => JSON.stringify({
       event: 'result', result: { status: 'SUCCESS', response: 'Ya creé index.html.' },
     })
