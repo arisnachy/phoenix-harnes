@@ -5,7 +5,7 @@ import {
   nexusTurnText, nexusTurnHasHumanImage,
   nexusReadNativeCodexQuota, nexusCodexFreshReserve, nexusEconomyEffort, nexusAdaptiveEffort,
   nexusExactResponseTarget, nexusExactResponseQuality, installNexusRuntime,
-  nexusNumericResponseTarget, nexusNumericResponseQuality, nexusOperatorPolicy, nexusQuotaView, nexusRequiredContext,
+  nexusNumericResponseTarget, nexusNumericResponseQuality, nexusOperatorPolicy, nexusQuotaView, nexusRequiredContext, nexusCodexAvailability,
 } from '../src/nexus-runtime.ts'
 
 describe('ORIÓN synthetic model route', () => {
@@ -25,6 +25,11 @@ describe('ORIÓN synthetic model route', () => {
     expect(nexusCodexFallback(['unrelated-model'], true)).toBeUndefined()
     expect(nexusCodexFallback(['gpt-6.2-sol'], false)).toBe('gpt-6.2-sol')
     expect(nexusCodexFallback(['gpt-6-luna'], true)).toBe('gpt-6-luna')
+    expect(nexusCodexFallback(['gpt-5.6-terra', 'gpt-6.1-terra'], true)).toBe('gpt-6.1-terra')
+    expect(nexusCodexFallback(['gpt-6-luna', 'gpt-6.2-terra', 'gpt-6.2-sol'], false)).toBe('gpt-6-luna')
+    expect(nexusCodexFallback(['gpt-6.1-terra', 'gpt-6.2-terra', 'gpt-6.2-sol'], false)).toBe('gpt-6.2-terra')
+    expect(nexusCodexFallback(['gpt-6.2-sol', 'gpt-6.3-astra', 'gpt-6.4-luna'], true)).toBe('gpt-6.3-astra')
+    expect(nexusCodexFallback(['gpt-6.9-luna', 'gpt-6.10-luna'], false)).toBe('gpt-6.10-luna')
   })
   it('paces both windows using native reset timestamps rather than token guesses', () => {
     const now = 1_800_000_000_000
@@ -48,6 +53,8 @@ describe('ORIÓN synthetic model route', () => {
     expect(nexusCodexHasReserve({ primaryUsedPercent: 20, secondaryUsedPercent: 92 })).toBe(false)
     expect(nexusCodexHasReserve({ primaryUsedPercent: 40, secondaryUsedPercent: 75 })).toBe(true)
     expect(nexusRequiresStrongModel('Hola')).toBe(false)
+    expect(nexusRequiresStrongModel('estoy feliz')).toBe(false)
+    expect(nexusRequiresStrongModel('estoy feliz, revisa los correos')).toBe(true)
     expect(nexusRequiresStrongModel('Implementar una aplicación clínica')).toBe(true)
     for (const instruction of ['Revisa los correos', 'Responde los pendientes', 'qué pasó', 'busca eso', 'no funciona', 'sí', 'síguelo', 'check email', 'fix it', '']) {
       expect(nexusRequiresStrongModel(instruction)).toBe(true)
@@ -96,6 +103,17 @@ describe('native Codex window freshness and economic reasoning',()=>{
     expect(nexusReadNativeCodexQuota({ ...telemetry, accountType: 'apiKey' })).toBeUndefined()
     expect(nexusReadNativeCodexQuota({ ...telemetry, secondaryLimit: telemetry.primaryLimit })).toBeUndefined()
   })
+  it('distinguishes reported remaining quota from advisory pacing and reserve', () => {
+    const observed = { primaryUsedPercent: 2, secondaryUsedPercent: 81,
+      resetPrimaryAt: now + 49 * 60_000, resetSecondaryAt: now + 86 * 60_000,
+      primaryObservedAt: now, secondaryObservedAt: now }
+    expect(nexusCodexAvailability(observed, now)).toBe('available')
+    expect(nexusCodexAvailability({ ...observed, secondaryUsedPercent: 95 }, now)).toBe('available')
+    expect(nexusCodexWithinPace({ ...observed, secondaryUsedPercent: 95 }, now)).toBe(false)
+    expect(nexusCodexAvailability({ ...observed, secondaryUsedPercent: 100 }, now)).toBe('exhausted')
+    expect(nexusCodexAvailability({ ...observed, primaryObservedAt: now - 121000 }, now)).toBe('unknown')
+    expect(nexusCodexAvailability(undefined, now)).toBe('unknown')
+  })
   it('never invents effort names or reduces complex task reasoning',()=>{
     expect(nexusEconomyEffort(['high','low','medium'],false)).toBe('low')
     expect(nexusEconomyEffort(['high','medium'],false)).toBeUndefined()
@@ -123,6 +141,46 @@ describe('independent Nexus acceptance', () => {
 })
 
 describe('Nexus installed runtime failover', () => {
+  it('tries account-visible sibling models before another provider and excludes retired entries', async () => {
+    const now = Date.now()
+    const telemetry = { kind: 'account', provider: 'Codex', accountType: 'chatgpt',
+      primaryLimit: { windowDurationMins: 300, usedPercent: 2, resetsAt: (now + 3600000) / 1000, observedAt: now },
+      secondaryLimit: { windowDurationMins: 10080, usedPercent: 81, resetsAt: (now + 7200000) / 1000, observedAt: now },
+    }
+    const hooks = new Map<string, unknown>()
+    const visible = ['gpt-6-luna', 'gpt-6.1-terra', 'gpt-6.2-sol', 'gpt-6.1-astra']
+    const ctx = {
+      on: (event: string, listener: unknown) => { hooks.set(event, listener) },
+      get: () => ({ list: () => [{ key: 'subagent-codex/account' }], inspect: async () => telemetry }),
+      llm: {
+        registerAdapter: () => undefined,
+        listProviders: () => [{ id: 'openai-codex' }],
+        listModels: async () => [...visible, 'gpt-99-luna'].map(id => ({ id, name: id })),
+        resolveModelInfo: async () => ({ context: { contextWindow: 128000 }, reasoning: { efforts: [{ id: 'low' }] } }),
+      },
+    }
+    const profiles = new Map([['openai-codex', {}]])
+    installNexusRuntime(ctx as never, {
+      profiles: () => profiles as never, codexVisibleModelIds: () => visible,
+      providerAuthorized: async () => true, nativeCodexAuthorized: async () => true,
+    })
+    const agent = { session: { id: 'sibling-fixture', events: [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Hola' }] } },
+    ] } }
+    const payload = { agent, turn: 1, step: 1, signal: new AbortController().signal, approximateInputTokens: 4000 }
+    const selected = { provider: NEXUS_PROVIDER, model: NEXUS_MODEL }
+    type Route = { provider: string; model: string }
+    type Failure = typeof payload & { provider: string; failure: { code: string } }
+    const route = hooks.get('agent/request') as (p: typeof payload, next: () => Promise<Route>) => Promise<Route>
+    const fail = hooks.get('agent/request-error') as (p: Failure, next: () => Promise<undefined>) => Promise<{ kind: string } | undefined>
+    for (const model of visible) {
+      expect(await route(payload, async () => selected)).toMatchObject({ provider: 'openai-codex', model })
+      expect(await fail({ ...payload, provider: 'openai-codex', failure: { code: 'TIMEOUT' } }, async () => undefined)).toEqual({ kind: 'retry' })
+    }
+    await expect(route(payload, async () => selected)).rejects.toMatchObject({ code: 'NEXUS_NO_ELIGIBLE_ROUTE' })
+  })
+
   it('prioritizes the quota-authorized Codex subscription and retries with verified free only on failure', async () => {
     const now = Date.now()
     const telemetry = { kind: 'account', provider: 'Codex', accountType: 'chatgpt',
@@ -176,7 +234,15 @@ describe('Nexus installed runtime failover', () => {
       expect(await route(payload, async () => selected)).toMatchObject({
         provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'low',
       })
+      const socialAgent = { session: { ...agent.session, id: 'social-fixture', events: [
+        { type: 'turn/start', data: { turn: 3 } },
+        { type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'estoy feliz' }] } },
+      ] } }
+      expect(await route({ ...payload, agent: socialAgent, turn: 3 }, async () => selected)).toMatchObject({
+        provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'low',
+      })
       const snapshot = await inspect(payload.signal, { sessionId: agent.session.id })
+      expect(snapshot.codexAdmission).toMatchObject({ quotaStatus: 'available', quotaScope: 'shared-account', authorizedCatalogModels: ['gpt-6-luna'] })
       expect(snapshot.lastDispatchedRoute).toBe('openai-codex/gpt-6-luna')
       expect(snapshot.lastDispatchedEffort).toBe('low')
       expect(snapshot.lastExecution).toBeNull()
@@ -217,7 +283,7 @@ describe('Nexus installed runtime failover', () => {
         { type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Revisa los correos' }] } },
       ] } }
       await expect(route({ ...payload, agent: emailAgent }, async () => selected)).rejects.toMatchObject({ code: 'NEXUS_NO_ELIGIBLE_ROUTE' })
-      await expect(route({ ...payload, agent: { session: { ...agent.session, id: 'large-context' } }, approximateInputTokens: 50000 }, async () => selected)).rejects.toThrow('no verified free model')
+      await expect(route({ ...payload, agent: { session: { ...agent.session, id: 'large-context' } }, approximateInputTokens: 50000 }, async () => selected)).rejects.toMatchObject({ code: 'NEXUS_NO_ELIGIBLE_ROUTE' })
       expect(await fail({ ...payload, provider: 'openrouter', failure: { code: 'RATE_LIMIT' } },
         async () => undefined)).toEqual({ kind: 'retry' })
       await expect(route(payload, async () => selected)).rejects.toMatchObject({ code: 'NEXUS_NO_ELIGIBLE_ROUTE' })
