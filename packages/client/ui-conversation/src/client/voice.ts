@@ -78,7 +78,7 @@ type VoiceRemoteResult<T> =
 
 type AgentLiveCommand = {
   readonly id: string
-  readonly action: 'open' | 'close' | 'speak' | 'authorize'
+  readonly action: 'open' | 'close' | 'speak' | 'authorize' | 'ui-inspect' | 'ui-compact' | 'ui-expand' | 'ui-highlight-sidebar' | 'ui-highlight-composer' | 'ui-highlight-details' | 'ui-clear-highlight'
   readonly gender: 'feminine' | 'masculine' | 'neutral'
   readonly expiresAt: number
   readonly text?: string
@@ -1428,6 +1428,18 @@ export function watchAgentCodexRealtime(sessionKey: string): () => void {
           ...(reason === undefined ? {} : { reason }), ...(provider === undefined ? {} : { provider }) })
       }
       if (disposed || command.expiresAt <= Date.now()) { await complete(false, 'control-expired'); return }
+      if (command.action.startsWith('ui-')) {
+        // Only the native layout owner can execute or acknowledge presentation commands.
+        const result = await new Promise<{accepted: boolean; reason: string}>(resolve => {
+          const timer = window.setTimeout(() => resolve({accepted: false, reason: 'layout-receipt-timeout'}), 1500)
+          window.dispatchEvent(new CustomEvent('phoenix:agent-ui-control', { detail: {
+            key: sessionKey, action: command.action, revision: command.text, expiresAt: command.expiresAt,
+            reply: (value: {accepted: boolean; reason: string}) => { window.clearTimeout(timer); resolve(value) },
+          } }))
+        })
+        await complete(result.accepted, result.reason)
+        return
+      }
       const current = codexRealtimeVoiceSession
       if (current !== undefined && current.key !== sessionKey) { await complete(false, 'another-conversation-owns-voice'); return }
       if (command.action === 'authorize') {

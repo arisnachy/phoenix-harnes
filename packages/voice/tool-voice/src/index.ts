@@ -79,7 +79,7 @@ export function apply(ctx: Context): void {
     isConcurrencySafe: () => false,
     async execute(args, exec) {
       const key = senseSessionId(exec.agent?.id)
-      if (args.action === 'status') return JSON.stringify(ctx.voice.agentRealtimeControlStatus(key))
+      if (args.action === 'status') return JSON.stringify(ctx.voice.agentRealtimeControlStatus(key, 'voice'))
       const action = args.action
       if (action !== 'open' && action !== 'close' && action !== 'speak' && action !== 'authorize') {
         return JSON.stringify({ state: 'failed', reason: 'invalid-action' })
@@ -87,6 +87,38 @@ export function apply(ctx: Context): void {
       return JSON.stringify(ctx.voice.agentRealtimeControl(key, action, args.text))
     },
     presentCall: () => ({ card: 'generic', title: 'Controlar Codex Live', kind: 'other' as const }),
+  }))
+  ctx.systemPrompt.section({name: 'phoenix:live-ui-control', order: 118,
+    text: 'Use phoenix_ui_control inspect to see actual current shell geometry and a fresh revision. You may compact or expand the sidebar or highlight a real sidebar, composer or details control on your own initiative when it helps the user; use the exact revision and current conversation. These changes are local, reversible and do not modify user data, clinical content, permissions or code. A queued request is not success: use status and verify the receipt before explaining what actually changed. Do not repeatedly override a user manual choice.'})
+  ctx.tools.register(defineTool({
+    name: 'phoenix_ui_control',
+    description: 'Live PHOENIX presentation control. inspect reads actual current sidebar, center, details and revision. compact/expand changes sidebar using its existing controls. highlight-sidebar/highlight-composer/highlight-details points to an existing visible area; clear-highlight removes it. For every change, pass the exact revision from a fresh inspect. status reads the last UI receipt. No microphone, file, account, clinical data, arbitrary selectors or executable code.',
+    parameters: {
+      action: { type: 'string', required: true, enum: ['inspect', 'compact', 'expand', 'highlight-sidebar', 'highlight-composer', 'highlight-details', 'clear-highlight', 'status'] },
+      revision: { type: 'string', description: 'Exact revision from inspect. Required except inspect/status.' },
+    },
+    output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text' as const, text: value }] },
+    isConcurrencySafe: () => false,
+    async execute(args, exec) {
+      if (exec.agent?.session.header.origin === 'subagent') throw Error('UI_CONTROL_OWNER_REQUIRED')
+      const key = senseSessionId(exec.agent?.id)
+      if (args.action === 'status') return JSON.stringify(ctx.voice.agentRealtimeControlStatus(key, 'ui'))
+      const action = args.action
+      if (action !== 'inspect' && action !== 'compact' && action !== 'expand' && action !== 'highlight-sidebar'
+        && action !== 'highlight-composer' && action !== 'highlight-details' && action !== 'clear-highlight') {
+        return JSON.stringify({ state: 'failed', reason: 'invalid-action' })
+      }
+      const result = ctx.voice.agentRealtimeControl(key, `ui-${action}`, args.revision)
+      if (result.state !== 'queued') return JSON.stringify(result)
+      // Bounded foreground wait for the actual client readback, never claim success from admission.
+      for (let i = 0; i < 12 && !exec.signal?.aborted; i++) {
+        await new Promise<void>(resolve => setTimeout(resolve, 200))
+        const receipt = ctx.voice.agentRealtimeControlStatus(key, 'ui')
+        if (receipt.id !== result.id || receipt.state === 'completed' || receipt.state === 'failed') return JSON.stringify(receipt)
+      }
+      return JSON.stringify(ctx.voice.agentRealtimeControlStatus(key, 'ui'))
+    },
+    presentCall: () => ({ card: 'generic', title: 'PHOENIX · Control visual autónomo', kind: 'other' as const }),
   }))
   ctx.tools.register(defineTool({
     name: 'phoenix_voice_speak',
