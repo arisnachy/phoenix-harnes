@@ -6,6 +6,12 @@ import VoiceRuntime from '@phoenix-ai/dsh-voice'
 import * as ToolVoice from '../src/index.ts'
 
 describe('Kira speech tools in a real Cordis registry', () => {
+  it('keeps normal and proactive speech local unless Codex is explicitly selected', () => {
+    expect(ToolVoice.agentSpeechUsesCodex(undefined)).toBe(false)
+    expect(ToolVoice.agentSpeechUsesCodex('auto')).toBe(false)
+    expect(ToolVoice.agentSpeechUsesCodex('local')).toBe(false)
+    expect(ToolVoice.agentSpeechUsesCodex('codex')).toBe(true)
+  })
   it('keeps the real conversation identity for native viewer ownership', () => {
     expect(ToolVoice.senseSessionId('thread-4:step_8')).toBe('thread-4:step_8')
     expect(() => ToolVoice.senseSessionId(undefined)).toThrow(/SESSION_NOT_AVAILABLE/)
