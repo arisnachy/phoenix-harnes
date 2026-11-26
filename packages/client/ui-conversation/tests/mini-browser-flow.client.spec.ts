@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { addBrowserCards, releaseMiniBrowserSession, groupActiveBrowserFlow, isAtActivityTail, isBrowserPrompt, isEmbeddedNavigationTool, hasNavigatedWebPage, visibleResearchSourceUrl, isSecureAskDismissed, setSecureAskDismissed, isMediaPlaybackPrompt } from '../src/client/chat/ToolActivityFlow.tsx'
+import { buildFlow, addBrowserCards, releaseMiniBrowserSession, groupActiveBrowserFlow, isAtActivityTail, isBrowserPrompt, isEmbeddedNavigationTool, hasNavigatedWebPage, visibleResearchSourceUrl, isSecureAskDismissed, setSecureAskDismissed, isMediaPlaybackPrompt } from '../src/client/chat/ToolActivityFlow.tsx'
 
 type BrowserFlowNode = { key: string; kind: string; data: unknown }
 const user = (key: string, text: string): BrowserFlowNode => ({
@@ -9,6 +9,37 @@ const assistant = (key: string): BrowserFlowNode => ({
   key, kind: 'assistant-step', data: {},
 })
 const flowNodes = (...keys: string[]) => keys.map(key => ({ kind: 'node' as const, key }))
+
+describe('FastSD generated image delivery', () => {
+  const id = '0123456789abcdef0123456789abcdef'
+  const markdown = '![Imagen generada localmente](/local-images/' + id + '.jpg)'
+  const receipt = { fileId: id, markdown, model: 'rupeshs/sd-turbo-openvino' }
+  const localTool = (value: unknown, isError = false, name = 'mcp__phoenix_fastsd__generate_image'): BrowserFlowNode => ({
+    key: 'local-tool', kind: 'tool-call', data: { root: {
+      kind: 'tool-result', callId: 'fastsd-1', call: { name, argsRaw: '{}' },
+      content: [{ type: 'text', text: JSON.stringify(value) }], isError, subCalls: [],
+    } },
+  })
+  const previews = (nodes: BrowserFlowNode[]) => buildFlow(nodes).filter(item => item.kind === 'local-image')
+
+  it('shows the real successful local image even when the model returns only prose', () => {
+    expect(previews([localTool(receipt)])).toMatchObject([{ markdown }])
+  })
+
+  it('does not duplicate the exact image already present in assistant Markdown', () => {
+    expect(previews([localTool(receipt), {
+      key: 'assistant', kind: 'assistant-step',
+      data: { status: 'settled', blocks: [{ kind: 'text', text: 'Aquí está: ' + markdown }] },
+    }])).toEqual([])
+  })
+
+  it('never presents failed, malformed or unrelated tool results as local images', () => {
+    expect(previews([localTool(receipt, true)])).toEqual([])
+    expect(previews([localTool({ ...receipt, markdown: '![x](/private.jpg)' })])).toEqual([])
+    expect(previews([localTool({ ...receipt, fileId: '../private' })])).toEqual([])
+    expect(previews([localTool(receipt, false, 'mcp__other__generate_image')])).toEqual([])
+  })
+})
 
 describe('MiniBrowser chronological conversation cards', () => {
   it('follows fresh streamed activity until the reader scrolls more than 48px away', () => {
