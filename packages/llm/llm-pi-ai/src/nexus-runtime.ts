@@ -19,6 +19,10 @@ import {
 export const NEXUS_PROVIDER = 'phoenix-nexus'
 /** Stable synthetic selector id resolved before any provider request. */
 export const NEXUS_MODEL = 'nexus-auto'
+/** Public ORIÓN alias for the legacy Nexus provider ID (not a second provider). */
+export const ORION_PROVIDER = NEXUS_PROVIDER
+/** Public ORIÓN alias for the legacy Nexus selector ID (not a second model). */
+export const ORION_MODEL = NEXUS_MODEL
 const CATALOG_AGE_MS = 300_000
 const OPENROUTER_PRICE_URL = 'https://openrouter.ai/api/v1/models'
 const FAILURE_COOLDOWN_MS = 180_000
@@ -55,16 +59,16 @@ export function nexusOperatorPolicy(policies: readonly NexusFreeRoutePolicy[], p
 /** A non-executable selector advertises Nexus without claiming model capabilities. */
 export class NexusSelectorAdapter extends LlmAdapter {
   override providerInfo(provider: string) {
-    return { id: provider, name: 'PHOENIX Nexus' }
+    return { id: provider, name: 'PHOENIX' }
   }
 
   override listModels(provider: string): Promise<readonly LlmModelInfo[]> {
     return Promise.resolve([{ provider, id: NEXUS_MODEL,
-      name: 'PHOENIX Nexus', description: 'Inteligencia adaptativa · costo y calidad' }])
+      name: 'ORIÓN', description: 'Motor de inteligencia adaptativa · calidad, costo y cuotas verificadas' }])
   }
 
   override stream(_options: GenerateOptions): AsyncIterable<StreamChunk> {
-    throw new LlmError('Nexus must resolve a concrete provider/model before streaming', 'NEXUS_UNRESOLVED')
+    throw new LlmError('ORIÓN debe resolver un proveedor y modelo reales antes de transmitir', 'NEXUS_UNRESOLVED')
   }
 }
 
@@ -171,8 +175,14 @@ export function nexusCodexWithinPace(quota: NexusCodexQuota | undefined, now: nu
  */
 export function nexusReadNativeCodexQuota(telemetry:unknown):NexusCodexQuota|undefined{
   if(!telemetry||typeof telemetry!=='object')return undefined
-  type Window = { usedPercent?: number; windowDurationMins?: number; resetsAt?: number; observedAt?: number }
-  const row = telemetry as { kind?: string; provider?: string; accountType?: string; primaryLimit?: Window; secondaryLimit?: Window }
+  type Window = { usedPercent?: number, windowDurationMins?: number, resetsAt?: number, observedAt?: number }
+  const row = telemetry as {
+    kind?: string
+    provider?: string
+    accountType?: string
+    primaryLimit?: Window
+    secondaryLimit?: Window
+  }
   if(row.kind!=='account'||typeof row.provider!=='string'||row.provider.toLowerCase()!=='codex'
     ||typeof row.accountType!=='string'||row.accountType.toLowerCase()!=='chatgpt')return undefined
   const windows=[row.primaryLimit,row.secondaryLimit]
@@ -184,10 +194,10 @@ export function nexusReadNativeCodexQuota(telemetry:unknown):NexusCodexQuota|und
   if(!p||!s)return undefined
   return {
     primaryUsedPercent:p.usedPercent,secondaryUsedPercent:s.usedPercent,
-    ...(p.resetsAt===undefined?{}:{ resetPrimaryAt: p.resetsAt }),
-    ...(s.resetsAt===undefined?{}:{ resetSecondaryAt: s.resetsAt }),
-    ...(p.observedAt===undefined?{}:{ primaryObservedAt: p.observedAt }),
-    ...(s.observedAt===undefined?{}:{ secondaryObservedAt: s.observedAt }),
+    ...(p.resetsAt === undefined ? {} : { resetPrimaryAt: p.resetsAt }),
+    ...(s.resetsAt === undefined ? {} : { resetSecondaryAt: s.resetsAt }),
+    ...(p.observedAt === undefined ? {} : { primaryObservedAt: p.observedAt }),
+    ...(s.observedAt === undefined ? {} : { secondaryObservedAt: s.observedAt }),
   }
 }
 /**
@@ -693,22 +703,22 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     }
     if (route === undefined) {
       throw new LlmError(
-        'Nexus found no verified free model that meets this task, and no Codex subscription route with quota reserve. Choose a model manually or connect a supported free provider.',
+        'ORIÓN no encontró un modelo gratuito verificado compatible ni una ruta Codex con reserva de cuota. Selecciona un modelo manualmente o conecta un proveedor gratuito compatible.',
         'NEXUS_NO_ELIGIBLE_ROUTE',
       )
     }
     const profile = options.profiles().get(route.provider)
     if (profile === undefined || !await options.providerAuthorized(route.provider, profile).catch(() => false)) {
-      throw new LlmError('Nexus route authorization changed before dispatch', 'NEXUS_NO_ELIGIBLE_ROUTE')
+      throw new LlmError('La autorización de la ruta ORIÓN cambió antes de ejecutarse', 'NEXUS_NO_ELIGIBLE_ROUTE')
     }
     if (route.provider !== 'openai-codex' && route.provider !== 'openrouter'
       && nexusOperatorPolicy(options.freeRoutePolicies?.() ?? [], route.provider, route.model, profile.baseURL, Date.now()) === undefined) {
-      throw new LlmError('Nexus free-route attestation changed before dispatch', 'NEXUS_NO_ELIGIBLE_ROUTE')
+      throw new LlmError('La validación gratuita de ORIÓN cambió antes de ejecutarse', 'NEXUS_NO_ELIGIBLE_ROUTE')
     }
     if (route.provider === 'openrouter' && ((profile.baseURL !== undefined
       && profile.baseURL.replace(/\/+$/u, '') !== 'https://openrouter.ai/api/v1')
       || nexusPriceClass({ price: prices.get(route.model) }, Date.now()) !== 'verified-free')) {
-      throw new LlmError('Nexus OpenRouter price or endpoint changed before dispatch', 'NEXUS_NO_ELIGIBLE_ROUTE')
+      throw new LlmError('El precio o endpoint OpenRouter de ORIÓN cambió antes de ejecutarse', 'NEXUS_NO_ELIGIBLE_ROUTE')
     }
     payload.signal.throwIfAborted()
     state.routed = route
