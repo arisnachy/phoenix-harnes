@@ -44,6 +44,20 @@ const phoenixModelSettings = JSON.stringify({
   permissions: { deny: ['read_file(*)', 'write_file(*)', 'command(*)', 'read_url(*)', 'execute_url(*)', 'mcp(*)'] },
 })
 
+function decodePhoenixResponse(response: string): unknown {
+  const text = response.trim()
+  const fenced = /^\x60{3}json[ \t]*\r?\n([\s\S]+)\r?\n\x60{3}$/iu.exec(text)
+  try { return JSON.parse(fenced?.[1] ?? text) } catch { /* Try the CLI's appended final line below. */ }
+  const lastLine = text.lastIndexOf('\n')
+  if (lastLine === -1) return undefined
+  // The CLI can concatenate a normal reply and the schema-constrained reply.
+  // Recover only text from a trailing frame. Tool calls require a whole envelope.
+  try {
+    const final = JSON.parse(text.slice(lastLine + 1).trim()) as { kind?: unknown; text?: unknown } | null
+    return final?.kind === 'final' && typeof final.text === 'string' ? final : undefined
+  } catch { return undefined }
+}
+
 
 /** Refuse API-key billing on the account-only route. */
 export function assertGoogleAccountMode(): void {
@@ -275,13 +289,22 @@ export class GoogleAccountCliAdapter extends LlmAdapter {
     }
     if (request.tools?.length) flags.push('--json-schema', phoenixToolResponseSchema)
     const input = encodeGoogleUserEvent(buildPrompt(request))
-    const result = parseGoogleResult(await this.execute(flags, input, request.signal))
+    const tools = request.tools ?? []
+    let result = parseGoogleResult(await this.execute(flags, input, request.signal))
     let response = result.response ?? ''
     if (!response.trim()) throw new LlmError('Antigravity terminó sin devolver contenido.', 'GOOGLE_CLI_EMPTY_OUTPUT')
     let calls: Array<{ name: string; arguments: string }> | undefined
-    if (request.tools?.length) {
-      let decoded: unknown
-      try { decoded = JSON.parse(response) } catch { decoded = undefined }
+    if (tools.length > 0) {
+      let decoded = decodePhoenixResponse(response)
+      if (decoded === undefined) {
+        request.signal?.throwIfAborted()
+        const repair = 'Devuelve exactamente un objeto JSON del esquema de PHOENIX, sin texto fuera del objeto. '
+          + 'Una pregunta informativa se responde con kind=final y text. Si se requiere una acción, solicita la herramienta con kind=tools.'
+        result = parseGoogleResult(await this.execute(flags,
+          encodeGoogleUserEvent(repair + '\n\n' + buildPrompt(request)), request.signal))
+        response = result.response ?? ''
+        decoded = decodePhoenixResponse(response)
+      }
       if (decoded && typeof decoded === 'object') {
         const object = decoded as { kind?: unknown; text?: unknown; calls?: unknown }
         if (object.kind === 'final' && typeof object.text === 'string' && object.text.trim()) response = object.text
@@ -289,7 +312,7 @@ export class GoogleAccountCliAdapter extends LlmAdapter {
           throw new LlmError('Antigravity no devolvió una respuesta válida para las herramientas de PHOENIX.', 'GOOGLE_CLI_PROTOCOL')
         }
         if (object.kind === 'tools' && Array.isArray(object.calls) && object.calls.length > 0) {
-          const valid = new Set(request.tools.map(tool => tool.name))
+          const valid = new Set(tools.map(tool => tool.name))
           calls = object.calls.map((raw: unknown) => {
             if (!raw || typeof raw !== 'object') throw new LlmError('Tool call invalid', 'INVALID_TOOL_CALL')
             const call = raw as { name?: unknown; arguments?: unknown }
