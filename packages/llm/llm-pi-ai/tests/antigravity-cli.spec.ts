@@ -48,6 +48,43 @@ describe('Google account Antigravity CLI adapter', () => {
     expect(() => buildPrompt({ model: 'gemini-a', messages: [] })).toThrow(/turno actual/u)
   })
 
+  it('turns the web preview into a Phoenix canvas tool call', async () => {
+    const request = {
+      provider: ANTIGRAVITY_MODEL_PROVIDER,
+      model: 'gemini-4-hydrogen-low',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'crea una pagina web para verla' }] }],
+      tools: [{ name: 'phoenix_canvas', description: 'Publish HTML', parameters: { type: 'object' } }],
+    } as GenerateOptions
+    const args = JSON.stringify({ title: 'Página', html: '<h1>Página</h1>' })
+    const execute = vi.fn(async (flags: readonly string[], input?: string) => {
+      expect(input).toContain('solicita phoenix_canvas')
+      expect(JSON.parse(flags[flags.indexOf('--settings') + 1]!)).toMatchObject({
+        permissions: { deny: expect.arrayContaining(['write_file(*)', 'command(*)']) },
+      })
+      expect(JSON.parse(flags[flags.indexOf('--json-schema') + 1]!)).toMatchObject({ required: ['kind'] })
+      return JSON.stringify({ event: 'result', result: {
+        status: 'SUCCESS', response: JSON.stringify({ kind: 'tools', calls: [{ name: 'phoenix_canvas', arguments: args }] }),
+      } })
+    })
+    const chunks = []
+    for await (const chunk of new GoogleAccountCliAdapter(ANTIGRAVITY_MODEL_PROVIDER, execute).stream(request)) chunks.push(chunk)
+    expect(chunks).toContainEqual(expect.objectContaining({ type: 'tool-call-delta', name: 'phoenix_canvas', argumentsDelta: args }))
+  })
+
+  it('does not present plain text as a completed action in a tool-enabled response', async () => {
+    const request = {
+      provider: ANTIGRAVITY_MODEL_PROVIDER,
+      model: 'gemini-4-hydrogen-low',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'crea una pagina web para verla' }] }],
+      tools: [{ name: 'phoenix_canvas', description: 'Publish HTML', parameters: { type: 'object' } }],
+    } as GenerateOptions
+    const execute = async () => JSON.stringify({
+      event: 'result', result: { status: 'SUCCESS', response: 'Ya creé index.html.' },
+    })
+    const stream = new GoogleAccountCliAdapter(ANTIGRAVITY_MODEL_PROVIDER, execute).stream(request)
+    await expect(stream[Symbol.asyncIterator]().next()).rejects.toThrow(/respuesta estructurada/u)
+  })
+
   it('refuses explicit modelProvider and malformed settings without switching to API billing', () => {
     expect(() => assertGoogleAccountSettings({})).not.toThrow()
     expect(() => assertGoogleAccountSettings({ modelProvider: 'gemini' })).toThrow(/modelProvider/u)
