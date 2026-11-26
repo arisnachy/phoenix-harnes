@@ -7,7 +7,7 @@
 import { dshHomePath } from '@phoenix-ai/dsh-home-paths'
 import { NexusReceiptStore } from './nexus-receipts.ts'
 import type { Context } from '@phoenix-ai/cordis'
-import { LlmAdapter, LlmError } from '@phoenix-ai/dsh-llm'
+import { CONTEXT_WINDOW_EXCEEDED_CODE, LlmAdapter, LlmError } from '@phoenix-ai/dsh-llm'
 import type { GenerateOptions, LlmModelInfo, StreamChunk, LlmCallConfig } from '@phoenix-ai/dsh-llm'
 import type { NexusFreeRoutePolicy, ResolvedPiAiProviderProfile } from './config.ts'
 import {
@@ -680,11 +680,13 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     if (requiredContext === undefined) {
       throw new LlmError('Nexus cannot route without a valid current request context estimate', 'NEXUS_NO_ELIGIBLE_ROUTE')
     }
-    const codexContextFits = async (model: string): Promise<boolean> => {
+    const codexContextWindow = async (model: string): Promise<number | undefined> => {
       const info = await ctx.llm.resolveModelInfo('openai-codex', model, payload.signal).catch(() => undefined)
       const window = info?.context?.contextWindow
-      return window !== undefined && Number.isSafeInteger(window) && window >= requiredContext
+      return window !== undefined && Number.isSafeInteger(window) && window > 0 ? window : undefined
     }
+    const codexContextFits = async (model: string): Promise<boolean> =>
+      (await codexContextWindow(model) ?? 0) >= requiredContext
     const exact = !hasImage ? nexusExactResponseTarget(text) : undefined
     const numeric = !hasImage && exact === undefined ? nexusNumericResponseTarget(text) : undefined
     const activeRoute = (route: NexusRoute) => ({ key: routeKey(route.provider, route.model),
@@ -779,10 +781,23 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       && !state.excluded.has(routeKey('openai-codex', model.id))
       && (blockedUntil.get(routeKey('openai-codex', model.id)) ?? 0) <= Date.now()
     ).map(model => model.id)
-    const fitting = nativeAuthorized && quotaStatus === 'available'
-      ? await Promise.all(ids.map(async id => await codexContextFits(id) ? id : undefined))
+    const capacities = nativeAuthorized && quotaStatus === 'available'
+      ? await Promise.all(ids.map(async id => ({ id, window: await codexContextWindow(id) })))
       : []
-    const candidate = nexusCodexFallback(fitting.filter((id): id is string => id !== undefined), complex)
+    const fitting = capacities.filter(item => item.window !== undefined && item.window >= requiredContext).map(item => item.id)
+    const candidate = nexusCodexFallback(fitting, complex)
+    const knownOversized = capacities.filter(item => item.window !== undefined && item.window < requiredContext)
+      .map(item => item.id)
+    if (candidate === undefined && nexusCodexFallback(knownOversized, complex) !== undefined) {
+      // This is recoverable context pressure, not exhaustion of provider quota.
+      // The Agent loop invokes existing durable compaction and reroutes the
+      // rebuilt request before any provider or tool side effect.
+      throw new LlmError(
+        'ORIÓN: contexto estimado ' + String(requiredContext)
+        + ' tokens excede los modelos Codex compatibles; se requiere compactación del historial.',
+        CONTEXT_WINDOW_EXCEEDED_CODE,
+      )
+    }
     if (candidate !== undefined && quotaStatus === 'available') {
       route = { provider: 'openai-codex', model: candidate, priceClass: 'unknown',
         reason: nexusCodexWithinPace(quota, Date.now())
