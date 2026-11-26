@@ -28,6 +28,7 @@ const ESTIMATED_CHARS_PER_TOKEN = 4
 const ESTIMATED_IMAGE_CHARS = 4800
 const PI_CONTEXT_SAFETY_TOKENS = 4096
 const MAX_RESPONSE_RESERVE_TOKENS = 4096
+const LONG_RESPONSE_RESERVE_TOKENS = 8192
 const PRESSURE_TOOL_DESCRIPTION_MAX_CHARS = 160
 const PRESSURE_SKILL_CATALOG_MAX_CHARS = 12_000
 /** Bound optional conversation history in the text-only fallback. */
@@ -333,9 +334,12 @@ export function fitGenerateOptionsToContext(
   // existing 4096-token guard on large cloud models.
   const capacity = Math.floor(contextWindow)
   const safetyReserve = Math.min(PI_CONTEXT_SAFETY_TOKENS, Math.floor(capacity / 8))
+  const latestHuman = options.messages.findLast(message => message.role === 'user' && message.source.kind === 'user')
+  const longResponse = latestHuman?.content.some(block => block.type === 'text'
+    && /\b(?:exhaustiv\p{L}*|detallad\p{L}*|detailed|comprehensive|informe|report|investigaci[oó]n|research|step.by.step|paso a paso)\b/iu.test(block.text)) === true
   const responseReserve = Math.min(
     Math.max(0, Math.floor(desiredMaxOutput)),
-    MAX_RESPONSE_RESERVE_TOKENS,
+    longResponse ? LONG_RESPONSE_RESERVE_TOKENS : MAX_RESPONSE_RESERVE_TOKENS,
     Math.floor(capacity / 4),
   )
   const inputBudgetTokens = Math.max(
@@ -376,13 +380,13 @@ export function fitGenerateOptionsToContext(
  * the user's actual request.
  */
 const LOCAL_LITE_SYSTEM = [
-  'You are Phoenix Local, a brief offline conversational assistant.',
+  'You are Phoenix Local, an offline conversational assistant.',
   'This turn uses a reduced view of recent conversation, not full agent memory.',
   'You have no tool, file, browser, or system access in this lightweight turn.',
   'Never claim to perform an action, see an unprovided file, or remember omitted details.',
   'If a task requires tools, full history or long context, explain that the user',
   'should use a lightweight agent preset or a larger/cloud model.',
-  'Answer the latest user request concisely in its language.',
+  'Answer the latest user request in its language. Give complete substantive explanations with useful headings, examples and Markdown tables when appropriate; keep simple conversation brief.',
 ].join(' ')
 
 function isAuxiliarySkillCatalog(message: Message): boolean {

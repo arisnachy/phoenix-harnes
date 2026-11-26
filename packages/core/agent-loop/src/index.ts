@@ -266,7 +266,7 @@ export interface AgentLoopSettings {
   maxStepsPerTurn: number
   /** Number of automatic output-limit continuations per human request; zero disables them. */
   autoContinueMaxSegments: number
-  /** Exact provider route IDs eligible for output-limit continuation. */
+  /** Provider route IDs eligible for output-limit continuation; * enables all. */
   autoContinueProviders: string[]
 }
 
@@ -289,7 +289,7 @@ export interface Config {
   maxStepsPerTurn?: number
   /** Output-limit continuations per human request (0 disables); default 3. */
   autoContinueMaxSegments?: number
-  /** Provider route IDs eligible for automatic output-limit continuation. */
+  /** Provider route IDs eligible for automatic output-limit continuation; * enables all. */
   autoContinueProviders?: string[]
   /** Agents created or resumed at plugin startup. */
   agents: (AgentOptions & {
