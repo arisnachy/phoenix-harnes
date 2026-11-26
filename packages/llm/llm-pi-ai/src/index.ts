@@ -446,6 +446,7 @@ export function apply(ctx: Context, config: Config): void {
 
   const inspectNexus = installNexusRuntime(ctx, {
     profiles,
+    codexVisibleModelIds: () => codexCatalog.visibleIds(),
     freeRoutePolicies: () => current().nexusFreeRoutes ?? EMPTY_NEXUS_POLICIES,
     providerAuthorized: async (provider, profile) => {
       try { return (await resolveApiKey(provider, profile)) !== undefined }
