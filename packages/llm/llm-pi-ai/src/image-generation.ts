@@ -2,7 +2,7 @@
  * Provider-aware real-raster image-generation bridge.
  *
  * OpenAI Codex callers use the locally installed Codex CLI and its authenticated
- * built-in image tool. Fallbacks prefer a configured local endpoint with no
+ * built-in image tool. Fallbacks prefer a configured local endpoint or native FastSD with no
  * hosted quota, then configured allocation-backed providers (Cloudflare Workers
  * AI before Hugging Face). The bridge never falls back to SVG/HTML/CSS/canvas
  * artwork and never forwards an OPENAI_API_KEY or silently crosses into
@@ -14,6 +14,7 @@ import { randomUUID } from 'node:crypto'
 import { lstat, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, extname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { Context } from '@phoenix-ai/cordis'
 import type { AttachmentStore, ImageAttachmentRef, ImageMediaType, StoredImageAttachment } from '@phoenix-ai/dsh-attachment'
 import { credentialRef } from '@phoenix-ai/dsh-credentials'
@@ -230,7 +231,7 @@ export const imageGenerationToolDescription =
   + 'When a user supplies an X-ray, ECG, clinical photograph, imaging study or diagnostic report and requests an explanatory image/3D model, first read the original source with a capable vision/document route and answer its actual findings and any written impression in text; separate directly observed evidence, reported diagnosis, provisional hypothesis and limitations. Never substitute generic normal anatomy for the requested abnormality, hallucinate a patient-specific lesion or advertise a 3D reconstruction of a single projection. A conceptual 3D atlas must be labelled illustrative and must match the supported findings. If the source is unreadable, state the specific limitation instead of silently generating a patient-diagnosis illustration. '
   + 'SOURCE-EXACT MEDICAL IMAGE CONTRACT: when an actual clinical image is supplied in the current turn, bind its image attachment as image-to-image reference. Preserve visibly observed vascular branching, organ silhouettes, imaging plane, sidedness and original label abbreviations; do not invent invisible nerves, microvessels, or millimetric measurements without calibrated DICOM metadata. Separate source-observed features from atlas-only inferred anatomy, which must appear in a separately labelled educational panel. Never fall back to a text-only generator when original study pixels were requested. A generative illustration is not pixel-perfect diagnostic reconstruction. '
   + 'For game work, use it for production sprites, character sheets, tiles, backgrounds, portraits, textures, and other raster assets when appropriate; prefer transparent backgrounds for sprite/character assets when supported, then inspect the generated local path with read_image before shipping or importing it. '
-  + 'Normally use backend=auto. Auto is independent of the active text-model provider: it tries the locally authenticated OpenAI Codex/ChatGPT built-in image generator first, then a configured local image endpoint with no hosted quota, then configured allocation-backed providers: Cloudflare Workers AI first and Hugging Face free credits second. '
+  + 'Normally use backend=auto. Auto is independent of the active text-model provider: it tries the locally authenticated OpenAI Codex/ChatGPT built-in image generator first, then a configured local image endpoint or native FastSD CPU with no hosted quota (text-to-image only, actual 512×512 JPEG), then configured allocation-backed providers: Cloudflare Workers AI first and Hugging Face free credits second. '
   + 'Do not claim that only an external connector such as Higgsfield is available until image_generation itself has actually been attempted. Do not silently switch to a separately billed OpenAI API. '
   + 'When the user explicitly opted in to use their original profile photograph, auto attempts genuine image-to-image via Codex, then a configured local loopback /images/edits endpoint. Never use text-only free providers to invent the user\'s face. '
   + 'If a real raster backend is unavailable, fail loudly instead of fabricating a vector/HTML substitute. '
@@ -356,6 +357,8 @@ export async function phoenixCodexSqliteHome(purpose = 'image'): Promise<string>
 const DEFAULT_CLOUDFLARE_IMAGE_MODEL = '@cf/black-forest-labs/flux-1-schnell'
 const DEFAULT_FREE_IMAGE_MODEL = 'stabilityai/stable-diffusion-3-medium-diffusers'
 const MAX_FREE_IMAGE_BYTES = 32 * 1024 * 1024
+const FASTSD_MAX_IMAGE_BYTES = 12_000_000
+const FASTSD_WORKER = fileURLToPath(new URL('../../../../scripts/phoenix-fastsd-mcp.mjs', import.meta.url))
 
 /** Hosted zero-upfront-cost providers, in the order PHOENIX tries them. */
 export const freeImageProviderOrder = ['cloudflare', 'huggingface'] as const
@@ -580,6 +583,73 @@ async function persistProviderRaster(
   return { path, attachment }
 }
 
+// Use the existing installed FastSD worker, not an invented OpenAI-compatible
+// endpoint. An isolated per-call output root binds the receipt to this execution
+// and prevents the adoption of stale images or model-supplied filesystem paths.
+let nativeFastSdQueue: Promise<void> = Promise.resolve()
+
+async function generateWithNativeFastSd(
+  ctx: Context,
+  prompt: string,
+  signal: AbortSignal,
+): Promise<ImageGenerationValue> {
+  if (process.env.PHOENIX_FASTSD_ENABLE === '0') {
+    throw new Error('image_generation: native FastSD CPU is disabled')
+  }
+  const payload = JSON.stringify({ prompt })
+  if (prompt.length > 3000 || payload.length > 4096) {
+    throw new Error('image_generation: native FastSD requires a prompt within its 3000-character input limit')
+  }
+  const task = nativeFastSdQueue.then(async () => {
+    signal.throwIfAborted()
+    const outputRoot = await mkdtemp(join(tmpdir(), 'phoenix-native-fastsd-'))
+    try {
+      const handle = servicesOf(ctx).subprocess.spawn({
+        argv: [process.execPath, FASTSD_WORKER, '--generate-once'],
+        cwd: outputRoot,
+        stdio: { stdin: { data: payload }, stdout: { maxBytes: 8192 }, stderr: { maxBytes: 8192 } },
+        graceMs: 2_000,
+        signal,
+        env: { PHOENIX_LOCAL_IMAGE_HOME: outputRoot },
+      })
+      const outcome = await handle.done
+      signal.throwIfAborted()
+      const output = handle.collected.stdout?.readFrom(0).text ?? ''
+      let receipt: { ok?: unknown; markdown?: unknown; error?: unknown } | null
+      try {
+        receipt = JSON.parse(output) as typeof receipt
+      } catch {
+        throw new Error('image_generation: FastSD worker returned no verifiable receipt')
+      }
+      if (outcome.exitCode !== 0 || receipt?.ok !== true) {
+        const detail = typeof receipt?.error === 'string' ? receipt.error.slice(0, 300) : 'worker failed'
+        throw new Error('image_generation: native FastSD CPU: ' + detail)
+      }
+      const id = typeof receipt.markdown === 'string'
+        ? /^!\[Imagen generada localmente\]\(\/local-images\/([a-f0-9]{32})\.jpg\)$/u.exec(receipt.markdown)?.[1]
+        : undefined
+      if (id === undefined) throw new Error('image_generation: invalid FastSD image receipt')
+      const file = join(outputRoot, id + '.jpg')
+      const info = await lstat(file)
+      if (!info.isFile() || info.isSymbolicLink() || info.size < 32 || info.size > FASTSD_MAX_IMAGE_BYTES) {
+        throw new Error('image_generation: invalid FastSD raster file')
+      }
+      const data = await readFile(file)
+      if (data.length !== info.size || imageMediaTypeFromBytes(data) !== 'image/jpeg'
+        || data[data.length - 2] !== 0xff || data[data.length - 1] !== 0xd9) {
+        throw new Error('image_generation: invalid FastSD JPEG bytes')
+      }
+      signal.throwIfAborted()
+      const { path, attachment } = await persistProviderRaster(ctx, data, 'image/jpeg', 'fastsd')
+      return { provider: 'local' as const, model: 'rupeshs/sd-turbo-openvino', path, attachment }
+    } finally {
+      await rm(outputRoot, { recursive: true, force: true })
+    }
+  })
+  nativeFastSdQueue = task.then(() => undefined, () => undefined)
+  return task
+}
+
 async function generateWithLocalProvider(
   ctx: Context,
   args: ImageGenerationArgs,
@@ -590,6 +660,8 @@ async function generateWithLocalProvider(
 ): Promise<ImageGenerationValue> {
   const endpoint = localImageEndpoint()
   if (endpoint === undefined) {
+    // FastSD is text-to-image only; do not replace a source image with a synthesis.
+    if (reference === undefined) return generateWithNativeFastSd(ctx, prompt, signal)
     throw new Error(
       'image_generation: local backend is not configured; set PHOENIX_IMAGE_LOCAL_BASE_URL '
       + 'and optionally PHOENIX_IMAGE_LOCAL_MODEL. For profile photos the local editor '
@@ -1174,6 +1246,10 @@ function imageArtifactMeta(value: unknown): Record<string, unknown> {
   }
 }
 
+// An explicit provider content-policy rejection is not a backend outage.
+// Preserve the provider's decision rather than routing around it.
+class ImageContentPolicyRefusal extends Error {}
+
 function imageFailureError(kind: CodexImageFailureKind, combined: string): Error {
   switch (kind) {
     case 'quota':
@@ -1246,6 +1322,9 @@ async function generateWithCodexProvider(
     }
 
     const combined = `${run.stdout}\n${run.stderr}`.trim()
+    if (/\b(?:content_policy_violation|content_policy_rejection|moderation_blocked|safety_policy_violation)\b/iu.test(combined)) {
+      throw new ImageContentPolicyRefusal('image_generation: Codex rejected the request under its content policy.')
+    }
     if (run.exitCode !== 0) throw imageFailureError(classifyCodexImageFailure(combined), combined)
 
     const generated = await waitForFreshImage(watched, signal)
@@ -1531,7 +1610,7 @@ export function installCodexImageGeneration(ctx: Context): void {
         backend: {
           type: 'string',
           enum: ['auto', 'codex', 'local', 'free'],
-          description: 'Image backend. Prefer auto: Codex/ChatGPT first regardless of the text model, then a configured local endpoint, then Cloudflare Workers AI free allocation and Hugging Face free credits. Explicit values disable fallback.',
+          description: 'Image backend. Prefer auto: Codex/ChatGPT first regardless of the text model, then a configured local endpoint or native FastSD CPU (text-to-image only), then Cloudflare Workers AI free allocation and Hugging Face free credits. Explicit values disable fallback.',
         },
       },
     },
@@ -1571,8 +1650,9 @@ export function installCodexImageGeneration(ctx: Context): void {
       },
       presentationMeta: (_args, value) => imageArtifactMeta(value),
     },
-    // A complex, high-fidelity edit may legitimately exceed three minutes.
-    timeoutMs: 360_000,
+    // CPU startup and first-time setup can exceed the old six-minute shared budget.
+    // Codex retains its own six-minute attempt budget below.
+    timeoutMs: 30 * 60_000,
     async execute(rawArgs, exec) {
       const args = imageGenerationArgs(rawArgs)
       const prompt = args.prompt.trim()
@@ -1624,22 +1704,24 @@ export function installCodexImageGeneration(ctx: Context): void {
       for (const backend of backends) {
         let image: ImageGenerationValue
         try {
+          const codexSignal = backend === 'codex'
+            ? AbortSignal.any([exec.signal, AbortSignal.timeout(360_000)]) : exec.signal
           if (backend === 'codex' && photo !== undefined) {
             const extension = codexProfileReferenceExtension(photo)
             const dir = await mkdtemp(join(tmpdir(), referenceKind === 'clinical' ? 'phoenix-clinical-source-' : 'phoenix-user-photo-'))
             try {
               const source = join(dir, (referenceKind === 'clinical' ? 'clinical-study' : 'profile-original') + extension)
               await writeFile(source, photo.data, { flag: 'wx' })
-              image = await generateWithCodexProvider(ctx, visualArgs, styledPrompt, exec.signal, source, referenceKind)
+              image = await generateWithCodexProvider(ctx, visualArgs, styledPrompt, codexSignal, source, referenceKind)
             } finally {
               await rm(dir, { recursive: true, force: true })
             }
-          } else if (backend === 'codex') image = await generateWithCodexProvider(ctx, visualArgs, styledPrompt, exec.signal)
+          } else if (backend === 'codex') image = await generateWithCodexProvider(ctx, visualArgs, styledPrompt, codexSignal)
           else if (backend === 'local') image = await generateWithLocalProvider(ctx, visualArgs, styledPrompt, exec.signal, photo, referenceKind)
           else image = await generateWithFreeProvider(ctx, visualArgs, styledPrompt, exec.signal)
         } catch (error) {
           exec.signal.throwIfAborted()
-          if (requestedBackend !== 'auto') throw error
+          if (error instanceof ImageContentPolicyRefusal || requestedBackend !== 'auto') throw error
           failures.push(`${backend}: ${error instanceof Error ? error.message : String(error)}`)
           continue
         }
