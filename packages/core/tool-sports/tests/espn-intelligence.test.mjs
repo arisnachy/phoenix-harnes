@@ -41,6 +41,39 @@ test('team explorer produces responsive cards with only actual roster, news, log
   assert.equal(data.sources.filter(s=>s.status==='available').length,4)
   assert.ok(data.sections.some(s=>s.heading.includes('Disponibilidad')&&s.items[0].value==='Day-to-day'))
 })
+test('team explorer requests splits when season stats are available',async()=>{
+  const {urls,fetcher}=mock(u=>{
+    if(u.includes('/teams/456/roster'))return{athletes:[
+      {items:[{id:'991',displayName:'Verified Player A',position:{displayName:'Guard'},
+        headshot:{href:'https://a.espncdn.com/i/headshots/nba/players/full/1.png'},injuries:[{status:'Day-to-day',date:'2026-10-29'}]}]},
+    ]}
+    if(u.includes('/athletes/991/stats'))return{categories:[{stats:[
+      {name:'pointsPerGame',displayName:'Points per game',displayValue:'12.0'},
+    ]}]}
+    if(u.includes('/teams/456/schedule'))return{events:[{name:'City A vs City B',date:'2026-11-02'}]}
+    if(u.includes('/teams/456/news'))return{articles:[{headline:'City A injury update',
+      published:'2026-10-29',description:'Roster update',links:{web:{href:'https://www.espn.com/nhl/story/_/id/123/team-news'}}}]}
+    if(u.endsWith('/teams/456'))return{team:{displayName:'City A',abbreviation:'A',
+      logos:[{href:'https://a.espncdn.com/i/teamlogos/nba/500/a.png'}]}}
+    return{}
+  })
+  const data=await exploreEspn({sport:'basketball',league:'nba',view:'team',teamId:'456'},fetcher,{},Date.parse('2026-10-29'))
+  assert.equal(data.title,'City A')
+  assert.ok(data.uiBlock.props.image?.includes('espncdn'))
+  assert.ok(data.sections.some(s=>s.heading==='Plantilla verificada'&&s.items[0].action===undefined))
+  assert.ok(data.sections.some(s=>s.heading==='Estadísticas individuales consultadas'&&s.items.some(a=>a.label==='Verified Player A')))
+  assert.equal(data.uiBlock.component,'sports_espn_dashboard')
+  assert.ok(data.sections.some(s=>s.heading==='Plantilla verificada'&&s.items[0].label==='Verified Player A'))
+  assert.ok(data.sections.some(s=>s.heading==='Plantilla verificada'&&s.items[0].image===
+    'https://a.espncdn.com/i/headshots/nba/players/full/1.png'))
+  assert.ok(data.sections.some(s=>s.heading==='Noticias del equipo'&&s.items[0].label==='City A injury update'))
+  assert.ok(data.sections.some(s=>s.heading==='Noticias del equipo'&&s.items[0].href?.startsWith('https://www.espn.com/')))
+  assert.ok(urls.some(u=>u.includes('/athletes/991/stats')))
+  assert.ok(urls.some(u=>u.includes('/athletes/991/gamelog')))
+  assert.ok(urls.some(u=>u.includes('/athletes/991/splits')))
+  assert.equal(data.sources.filter(s=>s.status==='available').length,5)
+  assert.ok(data.sections.some(s=>s.heading.includes('Disponibilidad')&&s.items[0].value==='Day-to-day'))
+})
 test('player explorer handles statistics, gamelog and splits as distinct sections',async()=>{
   const {fetcher}=mock(u=>{
     if(u.endsWith('/athletes/990'))return{displayName:'Athlete Real',age:31,

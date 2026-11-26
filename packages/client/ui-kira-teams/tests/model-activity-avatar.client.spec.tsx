@@ -31,6 +31,7 @@ describe('model engine glyphs', () => {
     expect(modelEngineMark('gpt-6-luna-max')).toBe('☾')
     expect(modelEngineMark('gpt-6-astra')).toBe('★')
     expect(modelEngineMark('deepseek-v4', 'deepseek')).toBe('ϟ')
+    expect(modelEngineMark('nexus-auto', 'phoenix-nexus')).toBe('✦')
     expect(modelEngineMark('some-other-model')).toBeUndefined()
     expect(modelEngineFamily('gpt-6-luna', 'openai-codex')).toBe('luna')
     expect(modelEngineFamily('gpt-6-astra', 'openai-codex')).toBe('astra')
@@ -56,6 +57,20 @@ describe('model engine glyphs', () => {
       .some(child => child.props['data-engine-mark'] !== undefined)).toBe(false)
   })
 })
+
+  it('marks only the ORIÓN synthetic engine with the belt and keeps real providers honest', () => {
+    const orion = ModelEngineBadge({ model: 'nexus-auto', provider: 'phoenix-nexus', placement: 'header' })
+    expect(orion?.props['data-provider-mark']).toBe('orion')
+    expect(orion?.props['data-engine-mark']).toBe('✦')
+    expect(orion?.props['aria-label']).toContain('ORIÓN')
+
+    const real = ModelEngineBadge({ model: 'gpt-6-luna', provider: 'openai-codex', placement: 'header' })
+    expect(real?.props['data-provider-mark']).not.toBe('orion')
+    expect(real?.props['data-engine-mark']).toBe('☾')
+    const unknown = ModelEngineBadge({ model: 'other-llm', provider: 'unrecognized-provider' })
+    expect(unknown?.props['data-provider-mark']).toBeUndefined()
+    expect(unknown?.props['aria-label']).not.toContain('ORIÓN')
+  })
 
 describe('agentAvatarKind', () => {
   it('keeps the exact approved 20-portrait roster aligned with the visible KIRA codename', () => {

@@ -47,7 +47,9 @@
     "@phoenix-ai/dsh-client-runtime": "workspace:^",
     "@phoenix-ai/dsh-client-ui-theme": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
-    "@phoenix-ai/cordis": "workspace:^"
+    "@phoenix-ai/cordis": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-primitives": "workspace:^",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "@phoenix-ai/dsh-client-locale": "workspace:^",
