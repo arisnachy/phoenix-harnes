@@ -407,3 +407,36 @@ describe('monotonic native Windows turn browser/image fallback guard', () => {
     expect(nativeDesktopFallbackDenied('image_generation', {}, user('genera una carita'))).toBeUndefined()
   })
 })
+
+
+describe('Windows semantic UI Automation', () => {
+  it('requires exact window and fresh semantic element identifiers', () => {
+    expect(() => validateComputerArgs({ action: 'uia_inspect', target: 'Notepad' })).toThrow(/exact hwnd/)
+    expect(() => validateComputerArgs({ action: 'uia_invoke', target: 'hwnd:0x123' })).toThrow(/runtime ID/)
+    expect(() => validateComputerArgs({ action: 'uia_invoke', target: 'hwnd:0x123', element: '1;exit' })).toThrow(/runtime ID/)
+    expect(() => validateComputerArgs({ action: 'uia_set_value', target: 'hwnd:0x123', element: '42,7' })).toThrow(/requires text/)
+    expect(() => validateComputerArgs({ action: 'uia_invoke', target: 'hwnd:0x123', element: '42,-7,9' })).not.toThrow()
+  })
+  it('does not widen existing observation or interaction authority', () => {
+    expect(() => assertComputerActionAllowed('observe', 'uia_inspect')).not.toThrow()
+    expect(() => assertComputerActionAllowed('observe', 'uia_invoke')).toThrow(/interact/)
+    expect(() => assertComputerActionAllowed('off', 'uia_inspect')).toThrow(/disabled/)
+    expect(computerActionNeedsApproval('workspace-write', 'uia_inspect')).toBe(false)
+    expect(computerActionNeedsApproval('workspace-write', 'uia_invoke')).toBe(true)
+    expect(desktopPreviewCommandForAction({ action: 'uia_inspect', target: 'hwnd:0x123' }, 's-test').observe).toBe(true)
+    expect(desktopPreviewCommandForAction({ action: 'uia_invoke', target: 'hwnd:0x123', element: '42,7' }, 's-test').observe).toBe(false)
+  })
+  it('uses fixed driver source, scoped environment, bounded traversal and semantic receipts', () => {
+    const text = 'not executable: ; $env:secret'
+    const invocation = windowsComputerInvocation({ action: 'uia_set_value', target: 'hwnd:0x123', element: '42,7', uiaIdentity: '123:456', text })
+    expect(invocation.env).toMatchObject({ PHX_UIA_ELEMENT: '42,7', PHX_UIA_IDENTITY: '123:456', PHX_TEXT: text })
+    expect(invocation.stdin).not.toContain(text)
+    expect(invocation.stdin).toContain('UIAutomationClient')
+    expect(invocation.stdin).toContain('IsPassword')
+    expect(invocation.stdin).toContain('GetRuntimeId()')
+    expect(invocation.stdin).toContain('visited -lt 400')
+    expect(invocation.stdin).toContain('applicationGoalVerified=$false')
+    expect(invocation.timeoutMs).toBe(12_000)
+    expect(shouldCaptureAfterAction('uia_invoke')).toBe(false)
+  })
+})
