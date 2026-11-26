@@ -777,14 +777,6 @@
 
 /* Living is a small, reversible shell accent; never overlays or intercepts content. */
 .livingPresence { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.livingToggle {
-  display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 30px;
-  border: 1px solid transparent; border-radius: 8px; background: transparent; color: inherit;
-  font: inherit; font-size: 11px; cursor: pointer; width: 100%;
-}
-.livingToggle[aria-pressed="true"] { color: var(--dsw-specific-phoenix-accent); }
-.livingToggle:hover { background: var(--dsw-alias-interactive-bg-hover); }
-.livingToggle:focus-visible { outline: 2px solid var(--dsw-specific-phoenix-accent); outline-offset: 1px; }
 .livingNotice { font-size: 11px; line-height: 1.4; opacity: .8; padding: 0 4px 3px; overflow-wrap: anywhere; }
 .livingRailNote { font-size: 11px; text-align: center; opacity: .8; }
 .root[data-living-season="christmas"] .logoRow {
@@ -793,5 +785,4 @@
     radial-gradient(ellipse at 84% 0%, rgba(206, 89, 68, .14), transparent 56%);
   box-shadow: inset 0 2px rgba(190, 151, 68, .55);
 }
-.root[data-living-season="christmas"] .livingToggle[aria-pressed="true"] { color: inherit; }
-.root[data-living-season="christmas"] .livingToggle[aria-pressed="true"] > span:first-child { color: #b88a30; }
+
