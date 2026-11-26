@@ -21,6 +21,29 @@ export function isGoogleAccountRoute(provider: string | undefined): boolean {
 }
 export const GOOGLE_ACCOUNT_KEY = credentialKey('llm-pi-ai', GOOGLE_ACCOUNT_PROVIDER)
 
+const phoenixToolResponseSchema = JSON.stringify({
+  type: 'object',
+  properties: {
+    kind: { type: 'string', enum: ['final', 'tools'] },
+    text: { type: 'string' },
+    calls: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { name: { type: 'string' }, arguments: { type: 'string' } },
+        required: ['name', 'arguments'],
+      },
+    },
+  },
+  required: ['kind'],
+})
+
+// Native CLI actions would run outside Phoenix's tool dispatcher and cannot
+// publish a Phoenix artifact or produce a result the agent loop can verify.
+const phoenixModelSettings = JSON.stringify({
+  permissions: { deny: ['read_file(*)', 'write_file(*)', 'command(*)', 'read_url(*)', 'execute_url(*)', 'mcp(*)'] },
+})
+
 
 /** Refuse API-key billing on the account-only route. */
 export function assertGoogleAccountMode(): void {
@@ -199,10 +222,16 @@ export function buildPrompt(request: Pick<GenerateOptions, 'system' | 'messages'
   if (request.system) turns.push('SYSTEM:\n' + request.system)
   turns.push('Modelo seleccionado en PHOENIX: ' + request.model + '. Responde al último turno de la conversación, utilizando el historial como contexto.')
   if (request.tools?.length) {
-    turns.push('Herramientas de PHOENIX (no las ejecutes tú): ' + JSON.stringify(request.tools))
+    turns.push('Solo el host de PHOENIX puede ejecutar estas herramientas y entregar resultados en este chat. '
+      + 'Usa kind=tools para solicitar acciones al host. No uses herramientas nativas de Antigravity para esas acciones '
+      + 'ni afirmes haberlas completado sin un resultado de PHOENIX. Herramientas disponibles: ' + JSON.stringify(request.tools))
     turns.push('Devuelve un JSON. Para respuesta: {"kind":"final","text":"respuesta"}. '
       + 'Para solicitar herramientas: {"kind":"tools","calls":[{"name":"nombre","arguments":"objeto JSON serializado"}]}. '
-      + 'Solo PHOENIX ejecutará herramientas y devolverá sus resultados.')
+      + 'Para una respuesta puramente conversacional o después de verificar el resultado del host, usa kind=final.')
+    if (request.tools.some(tool => tool.name === 'phoenix_canvas')) {
+      turns.push('Para crear y mostrar una página web o mini-app en este chat, solicita phoenix_canvas con el título y el HTML autocontenido. '
+        + 'Un nombre de archivo o una descripción no presenta una vista previa.')
+    }
   }
   const conversation: string[] = []
   const internalContext: string[] = []
@@ -240,10 +269,11 @@ export class GoogleAccountCliAdapter extends LlmAdapter {
     if (request.provider !== this.route || !/^gemini-[a-z0-9._-]+$/iu.test(request.model)) {
       throw new LlmError('Modelo Gemini no reconocido', 'INVALID_MODEL')
     }
-    const flags = ['--input-format', 'stream-json', '--output-format', 'stream-json', '--model', request.model, '--sandbox', '--mode', 'default', '--disable-slash-commands']
+    const flags = ['--input-format', 'stream-json', '--output-format', 'stream-json', '--model', request.model, '--sandbox', '--disable-slash-commands', '--settings', phoenixModelSettings]
     if (request.reasoningEffort === 'low' || request.reasoningEffort === 'medium' || request.reasoningEffort === 'high') {
       flags.push('--effort', request.reasoningEffort)
     }
+    if (request.tools?.length) flags.push('--json-schema', phoenixToolResponseSchema)
     const input = encodeGoogleUserEvent(buildPrompt(request))
     const result = parseGoogleResult(await this.execute(flags, input, request.signal))
     let response = result.response ?? ''
@@ -254,7 +284,10 @@ export class GoogleAccountCliAdapter extends LlmAdapter {
       try { decoded = JSON.parse(response) } catch { decoded = undefined }
       if (decoded && typeof decoded === 'object') {
         const object = decoded as { kind?: unknown; text?: unknown; calls?: unknown }
-        if (object.kind === 'final' && typeof object.text === 'string') response = object.text
+        if (object.kind === 'final' && typeof object.text === 'string' && object.text.trim()) response = object.text
+        else if (object.kind !== 'tools' || !Array.isArray(object.calls) || object.calls.length === 0) {
+          throw new LlmError('Antigravity no devolvió una respuesta válida para las herramientas de PHOENIX.', 'GOOGLE_CLI_PROTOCOL')
+        }
         if (object.kind === 'tools' && Array.isArray(object.calls) && object.calls.length > 0) {
           const valid = new Set(request.tools.map(tool => tool.name))
           calls = object.calls.map((raw: unknown) => {
@@ -273,7 +306,7 @@ export class GoogleAccountCliAdapter extends LlmAdapter {
             return { name: call.name, arguments: call.arguments }
           })
         }
-      }
+      } else throw new LlmError('Antigravity no devolvió una respuesta estructurada para PHOENIX.', 'GOOGLE_CLI_PROTOCOL')
     }
     if (calls !== undefined) {
       for (let index = 0; index < calls.length; index += 1) {
