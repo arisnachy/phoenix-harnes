@@ -99,6 +99,11 @@ type NexusQuotaWindowView = { status: 'unknown' } | {
   remainingPercent: number
   resetAt: string
   remainingMs: number
+  remainingDays: number
+  remainingHours: number
+  remainingMinutes: number
+  suggestedPercentPerDay: number
+  suggestedPercentPerHour: number
 }
 
 /**
@@ -117,8 +122,15 @@ export function nexusQuotaView(quota: NexusCodexQuota | undefined, now: number):
     if (used === undefined || !Number.isFinite(used) || used < 0 || used > 100
       || resetAt === undefined || !Number.isFinite(resetAt) || resetAt <= now || resetAt - now > duration
       || observed === undefined || !Number.isFinite(observed) || observed > now || now - observed > 120_000) return { status: 'unknown' as const }
+    const remainingMs = resetAt - now
+    const spendable = (100 - used) * 0.85
     return { status: 'reported' as const, usedPercent: used, remainingPercent: 100 - used,
-      resetAt: new Date(resetAt).toISOString(), remainingMs: resetAt - now }
+      resetAt: new Date(resetAt).toISOString(), remainingMs,
+      remainingDays: Math.floor(remainingMs / (24 * HOUR_MS)),
+      remainingHours: Math.floor(remainingMs % (24 * HOUR_MS) / HOUR_MS),
+      remainingMinutes: Math.floor(remainingMs % HOUR_MS / 60_000),
+      suggestedPercentPerDay: Math.min(spendable, spendable * 24 * HOUR_MS / remainingMs),
+      suggestedPercentPerHour: Math.min(spendable, spendable * HOUR_MS / remainingMs) }
   }
   return { fiveHours: window(quota?.primaryUsedPercent, quota?.resetPrimaryAt, quota?.primaryObservedAt, 5 * HOUR_MS),
     sevenDays: window(quota?.secondaryUsedPercent, quota?.resetSecondaryAt, quota?.secondaryObservedAt, 7 * 24 * HOUR_MS),
@@ -450,6 +462,24 @@ type NexusInspectionModel = Omit<NexusModel, 'price' | 'online' | 'contextWindow
   readiness: string
 }
 
+type NexusObservedExecution = {
+  provider: string
+  model: string
+  observedAt: number
+  stage: 'stream-observed' | 'finished'
+  reasoningEffort: string | null
+  reasoningBasis: 'request-config' | 'provider-default-unconfirmed'
+  usage: { inputTokens: number; outputTokens: number } | null
+}
+
+type NexusActiveRoute = {
+  key: string
+  exact?: string
+  numeric?: string
+  effort?: string
+  execution?: NexusObservedExecution
+}
+
 type NexusInspection = {
   models: NexusInspectionModel[]
   total: number
@@ -458,6 +488,8 @@ type NexusInspection = {
   quota: ReturnType<typeof nexusQuotaView>
   lastDispatchedRoute: string | null
   lastDispatchedEffort: string | null
+  lastExecution: NexusObservedExecution | null
+  dispatchIdentityBasis: 'route-selected-not-execution-proof'
   localAutomaticRouting: boolean
 }
 
@@ -469,7 +501,7 @@ type NexusInspection = {
  */
 export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions): (signal: AbortSignal, query?: NexusInspectionQuery) => Promise<NexusInspection> {
   const receipts = new NexusReceiptStore(dshHomePath('nexus-receipts-v1.json'))
-  const activeSessions = new Map<string, { key: string; exact?: string; numeric?: string; effort?: string }>()
+  const activeSessions = new Map<string, NexusActiveRoute>()
   const prices = new NexusOpenRouterPrices()
   const perAgent = new WeakMap<object, NexusAgentRouteState>()
   const blockedUntil = new Map<string, number>()
@@ -581,7 +613,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     const buildRoute=async(route:NexusRoute):Promise<LlmCallConfig>=>{
       const { serviceTier: _tier, reasoningEffort: _effort, ...base }=selected
       let reasoningEffort:LlmCallConfig['reasoningEffort']
-      if(route.provider==='openai-codex'&&!complex&&!hasImage){
+      if (!complex && !hasImage) {
         const info=await ctx.llm.resolveModelInfo(route.provider,route.model,payload.signal).catch(()=>undefined)
         reasoningEffort=nexusEconomyEffort(info?.reasoning?.efforts.map(e=>e.id)??[],false)
       }
@@ -633,7 +665,8 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
         observedLatencyMs: samples.reduce((sum, r) => sum + r.latencyMs, 0) / samples.length }
     }).filter(model =>
       !state.excluded.has(routeKey(model.provider, model.id))
-      && (blockedUntil.get(routeKey(model.provider, model.id)) ?? 0) <= now)
+      && (blockedUntil.get(routeKey(model.provider, model.id)) ?? 0) <= now
+      && (model.observedQuality === undefined || model.observedQuality >= 0.5))
     const free = chooseNexusRoute(models, {
       // Even short turns inherit the harness tool schema; only capable routes are safe.
       needsTools: true,
@@ -722,6 +755,17 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       let overflow = false
       try {
         for await (const chunk of upstream) {
+          // A selected route is not execution evidence. Observe real stream data;
+          // the backend may not expose an independently confirmed model alias.
+          const execution: NexusObservedExecution = active.execution ?? {
+            provider: request.provider, model: request.model, observedAt: Date.now(),
+            stage: 'stream-observed',
+            reasoningEffort: active.effort ?? null,
+            reasoningBasis: active.effort === undefined
+              ? 'provider-default-unconfirmed' : 'request-config',
+            usage: null,
+          }
+          active.execution = execution
           if (chunk.type === 'usage') {
             usage = {
               provider: request.provider, model: request.model, timestamp: Date.now(),
@@ -729,11 +773,13 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
                 + (chunk.usage.cacheWriteTokens ?? 0),
               outputTokens: chunk.usage.outputTokens,
             }
+            execution.usage = { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens }
           } else if ((active.exact !== undefined || active.numeric !== undefined) && chunk.type === 'text-delta') {
             if (answer.length + chunk.text.length > 512) overflow = true
             else if (!overflow) answer += chunk.text
           } else if (chunk.type === 'finish') {
             terminal = true
+            execution.stage = 'finished'
             succeeded = chunk.reason.kind === 'stop' || chunk.reason.kind === 'tool-calls'
             if (active.exact !== undefined && chunk.reason.kind === 'stop') {
               exactResponseAccepted = !overflow && answer.trim() === active.exact
@@ -781,6 +827,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     const last = query.sessionId === undefined ? undefined : activeSessions.get(query.sessionId)
     return { models, total: filtered.length, offset, nextOffset: offset + page.length < filtered.length ? offset + page.length : null,
       quota: nexusQuotaView(quota, Date.now()), lastDispatchedRoute: last?.key ?? null,
-      lastDispatchedEffort: last?.effort ?? null, localAutomaticRouting: false }
+      lastDispatchedEffort: last?.effort ?? null, lastExecution: last?.execution ?? null,
+      dispatchIdentityBasis: 'route-selected-not-execution-proof', localAutomaticRouting: false }
   }
 }
