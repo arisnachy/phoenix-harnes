@@ -30,3 +30,16 @@ it('labels the native Codex route without replacing an explicitly configured nam
   expect(orderModelProviderGroups([{ id: 'openai-codex', name: 'openai-codex', models: [] }], [])[0]?.name).toBe('OpenAI Codex')
   expect(orderModelProviderGroups([{ id: 'openai-codex', name: 'My account', models: [] }], [])[0]?.name).toBe('My account')
 })
+
+it('merges duplicate providers and removes hidden and retired routes', () => {
+  const routes = [
+    { id: 'google-antigravity', name: 'Google Antigravity CLI', models: [{ id: 'a', name: 'A' }] },
+    { id: 'google-antigravity', name: 'Google Antigravity CLI', models: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }] },
+    { id: 'chatgpt-web', name: 'ChatGPT Web', models: [] },
+    { id: 'deepseek', name: 'DeepSeek', models: [] },
+    { id: 'openai-codex', name: 'OpenAI Codex', models: [] },
+  ]
+  const result = orderModelProviderGroups(routes, ['google-antigravity'], ['deepseek'])
+  expect(result.map(group => group.id)).toEqual(['google-antigravity', 'openai-codex'])
+  expect(result[0]?.models.map(model => model.id)).toEqual(['a', 'b'])
+})

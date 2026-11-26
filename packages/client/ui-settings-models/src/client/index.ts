@@ -7,7 +7,7 @@ import type { AssistantMailClient, AssistantMailSnapshot } from './AssistantMail
  * existing Remote APIs.
  */
 import type { ClientContext } from '@phoenix-ai/dsh-client-runtime/client'
-import type { ChatGptWebSnapshot, ConnectionHandle } from '@phoenix-ai/dsh-api-remotes/client'
+import type { ConnectionHandle } from '@phoenix-ai/dsh-api-remotes/client'
 import type {} from '@phoenix-ai/dsh-client-ui-settings/client'
 import type {} from '@phoenix-ai/dsh-client-locale/client'
 import type {} from '@phoenix-ai/dsh-api-remotes/client'
@@ -22,7 +22,6 @@ import type {
   PhoenixLocalModelSnapshot,
 } from './PhoenixLocalPanel.tsx'
 import { ConnectorsSettingsSection } from './AuthorizationPanel.tsx'
-import type { ChatGptWebBridgeClient } from './chatgpt-web-toggle.ts'
 import type {
   ConnectorsSettingsSectionProps,
   McpConnectorHubSnapshot,
@@ -113,11 +112,6 @@ type PluginInventoryRemoteResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: { code: string; message: string } }
 
-type PluginInventoryChatGptWebRemote = {
-  chatGptWebState(): Promise<PluginInventoryRemoteResult<ChatGptWebSnapshot>>
-  enableChatGptWeb(): Promise<PluginInventoryRemoteResult<ChatGptWebSnapshot>>
-  disableChatGptWeb(): Promise<PluginInventoryRemoteResult<ChatGptWebSnapshot>>
-}
 
 
 type PluginInventoryMcpRegistryRemote = {
@@ -363,19 +357,6 @@ function mcpRegistryClient(ctx: ClientContext): McpRegistryClient {
   }
 }
 
-/** Adapt the optional Host Remote to the ChatGPT Web Settings switch. */
-function chatGptWebClient(ctx: ClientContext): ChatGptWebBridgeClient {
-  const remote = (): PluginInventoryChatGptWebRemote => {
-    const value = ctx.get('remote.pluginInventory') as PluginInventoryChatGptWebRemote | undefined
-    if (value === undefined) throw new Error('ChatGPT Web is unavailable on this host.')
-    return value
-  }
-  return {
-    state: async () => unwrapPluginInventory('chatGptWebState', await remote().chatGptWebState()),
-    enable: async () => unwrapPluginInventory('enableChatGptWeb', await remote().enableChatGptWeb()),
-    disable: async () => unwrapPluginInventory('disableChatGptWeb', await remote().disableChatGptWeb()),
-  }
-}
 
 /** Adapt the generated Host Remote to the tiny browser-safe card interface. */
 function localModelClient(ctx: ClientContext): PhoenixLocalModelClient {
@@ -548,7 +529,6 @@ export function apply(ctx: ClientContext): void {
     assistantMail,
     t,
     connectorT,
-    chatGptWeb: chatGptWebClient(ctx),
     settings: connection.api.settings,
     mcpRegistry,
     telegram,
