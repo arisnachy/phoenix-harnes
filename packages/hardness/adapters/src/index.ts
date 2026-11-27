@@ -508,6 +508,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         proactivity.engine,
         ctx,
       ))
+      disposers.push(systemPrompt.section({ name: 'phoenix:finix-companion', order: 119, text: 'Finix is a distinct local companion. When the user addresses @Finix or explicitly requests its work, use phoenix_finix_delegate for bounded local read-only tasks. The receipt means queued, not completed. Use phoenix_finix_status to inspect its actual resident state. Do not substitute Kira or a remote provider for Finix silently. Review material findings in the shared initiative context; act only within current authorization.' }))
       disposers.push(installCapabilityOperatingProtocol(systemPrompt))
       disposers.push(systemPrompt.section({ name: 'phoenix:gnosis', order: 155, text: GNOSIS_PROTOCOL }))
       disposers.push(systemPrompt.section({ name: 'phoenix:3d-intent-router', order: 176, text: PHOENIX_3D_ROUTING_PROTOCOL }))
