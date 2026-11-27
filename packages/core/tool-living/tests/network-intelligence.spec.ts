@@ -101,6 +101,16 @@ describe('Network Intelligence',()=>{
     expect(after.devices?.[1]?.id).toBe(before.devices?.[1]?.id)
     expect(JSON.stringify(after)).not.toMatch(/02-AA-BB|02aabbccdde[e]/iu)
   })
+  it('observes only local IPv6 neighbors, merges link-layer pseudonyms across address families', async()=>{
+    const t=new NetworkIntelligence(async()=>ok(JSON.stringify({...host,
+      neighbors:[{IPAddress:'192.168.1.1',State:'Reachable',LinkLayerAddress:'00-11-22-33-44-55'},{IPAddress:'192.168.1.3',State:'Stale',LinkLayerAddress:'02-AA-BB-CC-DD-EE'}],
+      ipv6Devices:[{IPAddress:'fe80::1234%4',State:'Reachable',LinkLayerAddress:'02-AA-BB-CC-DD-EE'},{IPAddress:'fd00::2',State:'Stale'},{IPAddress:'2001:db8::1',State:'Reachable'},{IPAddress:'ff02::1',State:'Reachable'}]})),'win32')
+    const result=await t.inventory()
+    expect(result).toMatchObject({ipv6Devices:[{address:'fe80::1234',identity:'link-layer'},{address:'fd00::2',identity:'address-only'}],link:{ipv6NeighborCount:2}})
+    expect(result.ipv6Devices?.[0]?.id).toBe(result.devices?.[1]?.id)
+    expect(JSON.stringify(result)).not.toMatch(/2001:db8|ff02::1|02-AA-BB/u)
+    expect(await t.monitor()).toMatchObject({observedDeviceIds:[expect.any(String),expect.any(String)]})
+  })
   it('maps logical on-link evidence without inventing physical connections', async()=>{
     const t=new NetworkIntelligence(async()=>ok(JSON.stringify(host)),'win32')
     const result=await t.inventory()
