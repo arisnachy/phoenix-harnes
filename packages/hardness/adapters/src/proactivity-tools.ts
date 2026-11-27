@@ -316,7 +316,10 @@ function managementTool(
   })
 }
 
-/** Report the companion's last persisted self-observation without starting a model. */
+/** Report the companion's last persisted self-observation without starting a model.
+ * @param engine - Shared durable task engine.
+ * @returns Read-only companion status tool.
+ */
 export function createFinixStatusTool(engine: ProactivityEngine): ToolDefinition {
   return defineTool({
     name: 'phoenix_finix_status',
@@ -337,7 +340,10 @@ export function createFinixStatusTool(engine: ProactivityEngine): ToolDefinition
   })
 }
 
-/** Delegate bounded, local-only research via the durable scheduler, never another provider. */
+/** Delegate bounded, local-only research via the durable scheduler, never another provider.
+ * @param engine - Shared durable task engine.
+ * @returns Local companion delegation tool.
+ */
 export function createFinixDelegateTool(engine: ProactivityEngine): ToolDefinition {
   return defineTool({
     name: 'phoenix_finix_delegate',
@@ -380,16 +386,6 @@ export function createProactivityTools(
 ): readonly ToolDefinition[] {
   return [
     createProactivityCreateTool(engine, options),
-    defineTool({
-      name: 'phoenix_finix_delegate',
-      description: 'Delegate authorized local research or preparation to Finix now. The result is returned in Finix’s independent output channel, not as a Kira answer. Do not use to bypass permissions, send messages, or consume remote model quota.',
-      parameters: { instruction: { type: 'string', required: true }, title: { type: 'string', required: true } },
-      output: { schema: { type: 'object', additionalProperties: true }, render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
-      async execute(args) {
-        return taskView(await engine.create({ title: args.title, instruction: args.instruction, createdBy: 'harness', runAt: new Date().toISOString(), executionPolicy: 'companion-local', delivery: 'work', visibility: 'visible', attentionMode: 'result' }))
-      },
-      presentCall: () => ({ card: 'generic', title: 'Delegar a Finix', kind: 'execute' }),
-    }),
     createProactivityWatchTool(engine),
     createProactivityListTool(engine),
     createFinixStatusTool(engine),
