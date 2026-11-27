@@ -2,7 +2,7 @@
  * No I/O, inference, new persistence, access grants or executable routing.
  */
 import type { HardnessService } from '@phoenix-ai/dsh-hardness'
-import { defineTool, type JsonValue, type ToolDefinition } from '@phoenix-ai/dsh-tools'
+import { defineTool, type JsonValue, type ToolDefinition, type ToolRunContext } from '@phoenix-ai/dsh-tools'
 
 type Atlas = ReturnType<HardnessService['snapshot']>
 type ToolSchema = { readonly name: string; readonly description: string }
@@ -135,14 +135,14 @@ export function traceGnosis(graph: Graph, target: string) {
   return { nodes, truncated: queue.some(node => !seen.has(node.id)) }
 }
 
-export const GNOSIS_PROTOCOL = 'GNOSIS is a provider-neutral read-only semantic view of the currently visible tool registry and exact-version HARDNESS evidence. For a non-trivial task with uncertain capability, use phoenix_gnosis search/check before guessing tool names; trace dependencies or inspect conflicts only when relevant. Reuse the returned candidates and verify live access through the actual tool and existing permission gates. Registry presence and historical passes never prove current availability, authorization, quota or completion. No results means unknown, not impossible. Do not search routinely when an exact mounted tool is already known. Do not interpret lexical scores as probabilities. GNOSIS cannot execute, certify, modify or install tools.'
+export const GNOSIS_PROTOCOL = 'GNOSIS is a provider-neutral read-only semantic view of the currently visible tool registry and exact-version HARDNESS evidence. For a non-trivial task with uncertain capability, use phoenix_gnosis search/check before guessing tool names; trace dependencies or inspect conflicts only when relevant. Reuse the returned candidates and verify live access through the actual tool and existing permission gates. Registry presence and historical passes never prove current availability, authorization, quota or completion. No results means unknown, not impossible. Do not search routinely when an exact mounted tool is already known. Do not interpret lexical scores as probabilities. Use environment for existing Reality Context telemetry and context for a compact advisory tool shortlist, never to remove mandatory context. If mounted, phoenix_gnosis_memory retrieves scoped stored relations; memory_search remains the authority for content. GNOSIS cannot execute, certify, modify or install tools.'
 
-export function createGnosisTool(hardness: Pick<HardnessService,'snapshot'>, schemas: () => readonly ToolSchema[]): ToolDefinition {
+export function createGnosisTool(hardness: Pick<HardnessService,'snapshot'>, schemas: () => readonly ToolSchema[], reality?: (exec: ToolRunContext) => unknown): ToolDefinition {
   return defineTool({
     name: 'phoenix_gnosis',
     description: 'Read-only GNOSIS capability graph: search visible tool names/meaning (English/Spanish), check an exact tool, trace declared dependencies, list conflicts/stale evidence, or paginate the inventory. Results never grant execution or permissions.',
     parameters: {
-      operation: { type: 'string', enum: ['search','check','trace','conflicts','inspect'], required: true },
+      operation: { type: 'string', enum: ['search','check','trace','conflicts','inspect','environment','context'], required: true },
       query: { type: 'string', description: 'Search phrase or exact tool name/id; required for search, check and trace.' },
       offset: { type: 'number', description: 'Zero-based page offset for inspect/conflicts.' },
     },
@@ -152,12 +152,17 @@ export function createGnosisTool(hardness: Pick<HardnessService,'snapshot'>, sch
     },
     async execute(args, exec) {
       exec.signal.throwIfAborted()
+      if (args.operation === 'environment') {
+        const result = reality === undefined ? { state: 'unknown' } : reality(exec)
+        return JSON.parse(JSON.stringify({ schema: 'phoenix.gnosis.v1', authority: 'read-only-reality-context', privilegesGranted: false, result })) as Record<string, JsonValue>
+      }
       const graph = buildGnosisGraph(schemas(), hardness.snapshot())
       const query = (args.query ?? '').trim().slice(0, MAX_QUERY)
       const offset = Math.max(0, Math.trunc(Number.isFinite(args.offset) ? args.offset ?? 0 : 0))
       let result: unknown
       switch (args.operation) {
         case 'search': result = { candidates: searchGnosis(graph, query) }; break
+        case 'context': result = { candidates: searchGnosis(graph, query, 5), totalVisible: graph.nodes.length, advisoryOnly: true, mandatoryContextUnchanged: true }; break
         case 'check': result = checkGnosis(graph, query); break
         case 'trace': result = traceGnosis(graph, query); break
         case 'conflicts':
