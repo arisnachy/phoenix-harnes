@@ -80,6 +80,12 @@ interface GpuPayload {
   }[]
 }
 
+interface PhysicalTelemetry {
+  readonly thermalZones: readonly { readonly temperatureC: number; readonly kind: 'acpi-zone' }[]
+  readonly nvidia: readonly { readonly temperatureC: number | null; readonly utilizationPercent: number | null }[]
+  readonly links: readonly { readonly receiveMbps: number | null; readonly transmitMbps: number | null }[]
+}
+
 interface InternetProbePayload {
   readonly reachable: boolean
   readonly target: string
@@ -455,7 +461,7 @@ function batteryStatusLabel(code: number | null): string | null {
 }
 
 async function windowsCimJson(script: string): Promise<Record<string, unknown>[]> {
-  const { stdout } = await execFileAsync('powershell.exe', [
+  const { stdout } = await execFileAsync(join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), [
     '-NoLogo',
     '-NoProfile',
     '-NonInteractive',
@@ -532,6 +538,54 @@ async function probeGpu(): Promise<{ value: GpuPayload | null; source: string; c
   }
 }
 
+/** Read only OS/driver-reported metrics. A zone is not a CPU die; a busy GPU is not proof of inference. */
+async function probePhysicalTelemetry(): Promise<{ value: PhysicalTelemetry | null; source: string; confidence: number }> {
+  if (platform() !== 'win32') return { value: null, source: 'unsupported-platform', confidence: 0 }
+  const [zones, links, nvidia] = await Promise.all([
+    windowsCimJson("$items = @(Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction Stop | Select-Object CurrentTemperature -First 16); ConvertTo-Json -InputObject $items -Compress").catch(() => []),
+    windowsCimJson("$items = @(Get-NetAdapter -ErrorAction Stop | Where-Object Status -eq Up | Select-Object ReceiveLinkSpeed,TransmitLinkSpeed -First 16); ConvertTo-Json -InputObject $items -Compress").catch(() => []),
+    (async () => {
+      const root = process.env.SystemRoot || 'C:\\Windows'
+      const paths = [join(root, 'System32', 'nvidia-smi.exe'), join(process.env.ProgramFiles || 'C:\\Program Files', 'NVIDIA Corporation', 'NVSMI', 'nvidia-smi.exe')]
+      for (const executable of paths) {
+        if (!existsSync(executable)) continue
+        try {
+          const { stdout } = await execFileAsync(executable, ['--query-gpu=temperature.gpu,utilization.gpu', '--format=csv,noheader,nounits'], { timeout: 3_000, windowsHide: true, maxBuffer: 16_384 })
+          return String(stdout).trim().split(/\r?\n/u).slice(0, 16).flatMap(line => {
+            const parts = line.split(',').map(v => v.trim())
+            if (parts.length !== 2) return []
+            const metric = (v: string, minimum: number, maximum: number) => {
+              if (!/^-?\d+(?:\.\d+)?$/u.test(v)) return null
+              const n = Number(v)
+              return Number.isFinite(n) && n >= minimum && n <= maximum ? n : null
+            }
+            const temperatureC = metric(parts[0] ?? '', -20, 130)
+            const utilizationPercent = metric(parts[1] ?? '', 0, 100)
+            return temperatureC === null && utilizationPercent === null ? [] : [{ temperatureC, utilizationPercent }]
+          })
+        } catch { /* Try the next known driver location. */ }
+      }
+      return []
+    })(),
+  ])
+  const thermalZones = zones.flatMap(row => {
+    const raw = numericValue(row.CurrentTemperature)
+    const c = raw === null ? NaN : raw / 10 - 273.15
+    return Number.isFinite(c) && c >= -20 && c <= 130 ? [{ temperatureC: Math.round(c * 10) / 10, kind: 'acpi-zone' as const }] : []
+  })
+  const rate = (value: unknown) => {
+    const n = numericValue(value)
+    return n !== null && n > 0 && Number.isSafeInteger(n) ? n / 1_000_000 : null
+  }
+  const linkRates = links.flatMap(row => {
+    const receiveMbps = rate(row.ReceiveLinkSpeed)
+    const transmitMbps = rate(row.TransmitLinkSpeed)
+    return receiveMbps === null && transmitMbps === null ? [] : [{ receiveMbps, transmitMbps }]
+  })
+  const available = thermalZones.length + linkRates.length + nvidia.length > 0
+  return { value: available ? { thermalZones, nvidia, links: linkRates } : null, source: available ? 'windows-acpi-netadapter-nvidia-smi' : 'physical-telemetry-unavailable', confidence: available ? 0.9 : 0 }
+}
+
 async function probeUserActivity(): Promise<{ value: UserActivityPayload | null; source: string; confidence: number }> {
   if (platform() !== 'win32') return { value: null, source: `unsupported-platform:${platform()}`, confidence: 0 }
   const source = String.raw`
@@ -569,7 +623,7 @@ public static class PhoenixLastInput {
     '[pscustomobject]@{ idleSeconds = [math]::Round($milliseconds / 1000.0, 1) } | ConvertTo-Json -Compress',
   ].join('; ')
   try {
-    const { stdout } = await execFileAsync('powershell.exe', [
+    const { stdout } = await execFileAsync(join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), [
       '-NoLogo',
       '-NoProfile',
       '-NonInteractive',
@@ -804,6 +858,26 @@ export function quotaBudgetSnapshot(
   })
 }
 
+/** Last non-interrupted assistant route recorded by the session, never the current in-flight request. */
+export function lastRecordedResponseRoute(session: unknown): Record<string, unknown> | null {
+  const events = asRecord(session)?.events
+  if (!Array.isArray(events)) return null
+  for (let i = events.length - 1; i >= Math.max(0, events.length - 2048); i--) {
+    const event = asRecord(events[i])
+    if (event?.type !== 'assistant/message') continue
+    const data = asRecord(event.data)
+    if (!data || data.interrupted === true) continue
+    const source = asRecord(asRecord(data.message)?.source)
+    if (source?.kind !== 'model' || typeof source.provider !== 'string' || typeof source.model !== 'string'
+      || !source.provider || !source.model || source.provider.length > 256 || source.model.length > 512) continue
+    const time = numericValue(event.time)
+    return { provider: source.provider, model: source.model, observedAt: time !== null && time >= 0 && time <= 8.64e15 ? new Date(time).toISOString() : null,
+      turn: numericValue(data.turn), step: numericValue(data.step), source: 'session-assistant-message', underlyingProviderVerified: false,
+      rule: 'historical recorded response route; an adaptive router may conceal the underlying provider model' }
+  }
+  return null
+}
+
 function sessionAiSnapshot(
   ctx: Context,
   assembly: RealityAssemblyContext | undefined,
@@ -873,6 +947,7 @@ function sessionAiSnapshot(
   return {
     activeModel,
     defaultModel,
+    lastRecordedResponseRoute: lastRecordedResponseRoute(agent?.session),
     selectionSource: activeModel === null ? 'no-active-agent-model' : 'active-agent',
     contextWindowTokens,
     contextWindowSource: contextWindowTokens === null
@@ -1130,6 +1205,7 @@ export class RealityContextEngine {
   private userActivity = cache<UserActivityPayload>(null, 'not-probed', 1, 0)
   private battery = cache<BatteryPayload>(null, 'not-probed', 1, 0)
   private gpu = cache<GpuPayload>(null, 'not-probed', 1, 0)
+  private physical = cache<PhysicalTelemetry>(null, 'not-probed', 1, 0)
   private clockSync = cache<boolean>(null, 'not-probed', 1, 0)
   private weather = cache<WeatherPayload>(null, 'not-configured', 1, 0)
   private browserWeather = cache<WeatherPayload>(null, 'not-probed', 1, 0)
@@ -1190,6 +1266,12 @@ export class RealityContextEngine {
       hostProbes.push((async () => {
         const probe = await probeGpu()
         this.gpu = cache(probe.value, probe.source, 10 * 60_000, probe.confidence)
+      })())
+    }
+    if (now > this.physical.expiresAt) {
+      hostProbes.push((async () => {
+        const probe = await probePhysicalTelemetry()
+        this.physical = cache(probe.value, probe.source, 60_000, probe.confidence)
       })())
     }
     if (now > this.userActivity.expiresAt) {
@@ -1310,6 +1392,7 @@ export class RealityContextEngine {
         this.userActivity,
         this.battery,
         this.gpu,
+        this.physical,
         this.clockSync,
         this.weather,
         this.browserWeather,
@@ -1367,6 +1450,7 @@ export class RealityContextEngine {
     const internet = signal(this.internet, epoch)
     const battery = signal(this.battery, epoch)
     const gpu = signal(this.gpu, epoch)
+    const physical = signal(this.physical, epoch)
     const userActivity = signal(this.userActivity, epoch)
     const sessionAi = sessionAiSnapshot(ctx, assembly, runtimeValue?.ai)
 
@@ -1463,10 +1547,18 @@ export class RealityContextEngine {
         battery,
         gpu,
         temperature: {
-          value: null,
-          source: 'not-authoritatively-exposed-by-current-host-adapter',
-          stale: true,
-          rule: 'do not infer thermals from load, fan noise, GPU status, or battery state',
+          ...physical,
+          value: physical.stale || physical.value === null ? null : {
+            acpiZones: physical.value.thermalZones,
+            nvidiaGpu: physical.value.nvidia.map(g => g.temperatureC),
+          },
+          rule: 'ACPI thermal zones are not CPU die temperatures; unavailable values remain unknown',
+        },
+        gpuUtilization: {
+          ...physical,
+          value: physical.stale ? null : physical.value?.nvidia.map(g => g.utilizationPercent) ?? null,
+          inferenceVerified: false,
+          rule: 'driver GPU utilization does not identify inference workloads',
         },
       },
       network: {
@@ -1487,6 +1579,11 @@ export class RealityContextEngine {
         },
         probeTarget: internet.value?.target ?? 'https://example.com/',
         httpStatus: internet.value?.httpStatus ?? null,
+        negotiatedLinkMbps: {
+          ...physical,
+          value: physical.stale ? null : physical.value?.links ?? null,
+          rule: 'negotiated network adapter link speed is not measured internet throughput',
+        },
         bandwidthMbps: {
           value: null,
           source: 'not-measured-to-avoid-bulk-background-traffic',
