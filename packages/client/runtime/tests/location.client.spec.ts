@@ -104,4 +104,25 @@ describe('resolvedClientLocation', () => {
     clock.mockReturnValue(observedAt + 241_000)
     await expect(resolvedClientLocation()).resolves.toBeUndefined()
   })
+  it('publishes granted observations without a message and clears after permission loss', async () => {
+    let state = 'granted'
+    const observedAt = Date.now()
+    vi.stubGlobal('navigator', {
+      permissions: { query: async () => ({ state }) },
+      geolocation: { getCurrentPosition: (success: PositionCallback) =>
+        success({ coords: { latitude: 10, longitude: 20, accuracy: 25 }, timestamp: observedAt } as GeolocationPosition) },
+    })
+    const { startClientLocationMonitor } = await import('../src/client/location.ts')
+    const publish = vi.fn(async () => true)
+    const monitor = startClientLocationMonitor(() => 'session-a', publish)
+    try {
+      await monitor.refresh()
+      expect(publish).toHaveBeenCalledWith('session-a', expect.objectContaining({ observedAt }), expect.anything())
+      await monitor.refresh()
+      expect(publish).toHaveBeenCalledTimes(1)
+      state = 'denied'
+      await monitor.refresh()
+      expect(publish).toHaveBeenLastCalledWith('session-a', null, expect.anything())
+    } finally { monitor.dispose() }
+  })
 })

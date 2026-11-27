@@ -72,4 +72,15 @@ describe('ClientRealityService', () => {
       accuracyMeters: 15,
     })
   })
+  it('clears an observation without touching other sessions', () => {
+    const service = new ClientRealityService(new Context())
+    const a = 'session-a' as never
+    const b = 'session-b' as never
+    const fix = { latitude: 10, longitude: 20, accuracyMeters: 25, observedAt: Date.now() }
+    service.observeLocation(a, fix)
+    service.observeLocation(b, fix)
+    service.clearLocation(a)
+    expect(service.locationFor(a)).toBeUndefined()
+    expect(service.locationFor(b)).toMatchObject(fix)
+  })
 })

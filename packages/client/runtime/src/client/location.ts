@@ -141,3 +141,34 @@ export async function resolvedClientLocation(
   }
   return value
 }
+
+/** Periodic, permission-gated observations for only the selected live session.
+ * No prompt is sent. No position is persisted locally. Stop with the runtime. */
+export function startClientLocationMonitor<Id>(
+  currentSession: () => Id | undefined,
+  publish: (id: Id, location: BrowserClientLocation | null, signal: AbortSignal) => Promise<boolean>,
+): { refresh: () => Promise<void>; dispose: () => void } {
+  const lifecycle = new AbortController()
+  let busy = false
+  let last: { id: Id; observedAt: number | null } | undefined
+  const refresh = async (): Promise<void> => {
+    const id = currentSession()
+    if (lifecycle.signal.aborted || busy || id === undefined) return
+    busy = true
+    try {
+      const position = await resolvedClientLocation(lifecycle.signal)
+      if (lifecycle.signal.aborted || currentSession() !== id) return
+      const timestamp = position?.observedAt ?? null
+      if (last?.id === id && last.observedAt === timestamp) return
+      if (await publish(id, position ?? null, lifecycle.signal)) {
+        last = { id, observedAt: timestamp }
+      }
+    } catch { /* Reconnect or retry at the next bounded interval. */ }
+    finally { busy = false }
+  }
+  const timer = setInterval(() => { void refresh() }, 30_000)
+  return {
+    refresh,
+    dispose: () => { lifecycle.abort(); clearInterval(timer) },
+  }
+}

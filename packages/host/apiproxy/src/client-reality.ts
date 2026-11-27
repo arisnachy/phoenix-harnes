@@ -79,6 +79,11 @@ export class ClientRealityService extends Service {
     return { ...value }
   }
 
+  /** Drop a session's ephemeral fix after the client loses access or permission. */
+  clearLocation(sessionId: SessionId): void {
+    this.locations.delete(sessionId)
+  }
+
   private prune(now: number): void {
     for (const [sessionId, value] of this.locations) {
       if (value.expiresAt <= now) this.locations.delete(sessionId)
