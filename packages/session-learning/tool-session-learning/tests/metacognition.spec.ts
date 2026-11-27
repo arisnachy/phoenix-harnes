@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assessMetaEvidence, classifyMetaFailure, metaRecoveryHint, metaResultCallId } from '../src/metacognition.ts'
+import { assessMetaEvidence, classifyMetaFailure, compareMetaExperience, formatMetaComparison, metaRecoveryHint, metaResultCallId } from '../src/metacognition.ts'
 
 describe('PHOENIX META evidence', () => {
   it('does not equate unverified outcomes with success or failure', () => {
@@ -27,5 +27,22 @@ describe('PHOENIX META evidence', () => {
     expect(metaResultCallId({ source: { callId: 'actual' }, callId: 'legacy' })).toBe('actual')
     expect(metaResultCallId({ callId: 'legacy' })).toBe('legacy')
     expect(metaResultCallId({ source: { callId: 1 } })).toBeUndefined()
+  })
+})
+
+describe('META historical counterfactual baseline', () => {
+  const run = (verified: boolean, tokens: number, wallTimeMs: number) => ({
+    occurredAt: 1, wallTimeMs, totalTokens: tokens, toolCalls: 1, failedToolCalls: 0,
+    retries: 0, userInterventions: 0, verified, qualityPassed: verified,
+  })
+  it('keeps failed/unverified episodes in the denominator and does not infer causation', () => {
+    const rows = [run(true, 100, 100), run(true, 200, 200), run(false, 1, 1), run(true, 10, 10)]
+    expect(compareMetaExperience(rows)).toEqual({
+      earlier: { attempts: 2, verified: 2, averageWallMs: 150, averageReportedTokens: 150 },
+      recent: { attempts: 2, verified: 1, averageWallMs: null, averageReportedTokens: null },
+      causalConclusion: false,
+    })
+    expect(formatMetaComparison(rows)).toContain('not proof')
+    expect(compareMetaExperience(rows.slice(0, 3))).toBeUndefined()
   })
 })
