@@ -5,6 +5,7 @@ import { ReasoningEffortId, type ContentBlock } from '@phoenix-ai/dsh-llm'
 import type { ObjectJsonSchema, ToolRestriction } from '@phoenix-ai/dsh-tools'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import { resolveStructuredProvider } from '@phoenix-ai/dsh-subagent'
+import { META_REVIEW_PROTOCOL, uniqueMetaCriteria, validMetaVerdict } from './meta-review.ts'
 import type { HardnessMissionJudge, HardnessMissionJudgeInput } from './mission-orchestrator.ts'
 import type { MissionJudgeDecision } from './mission-kernel.ts'
 import { abstractGameReview, isAbstractGameNeed, isGameDevelopmentNeed, qualityRequirementsForNeed } from './quality-contract.ts'
@@ -115,8 +116,9 @@ function readDecision(value: unknown): MissionJudgeDecision | undefined {
     criteria: record.criteria.map(item => criterion(item) as MissionJudgeDecision['criteria'][number]),
     quality: qualityReview,
   }
-  if (decision.verdict === 'pass' && decision.evidence.length === 0) return undefined
-  if (decision.verdict === 'needs_changes' && decision.requiredChanges.length === 0) return undefined
+  if (!uniqueMetaCriteria(decision.criteria) || !validMetaVerdict({ ...decision,
+    failedCriterion: decision.criteria.some(row => row.verdict === 'fail' || row.evidence.length === 0),
+    qualityFailed: decision.quality.verdict !== 'pass' || decision.quality.evidence.length === 0 })) return undefined
   return decision
 }
 
@@ -151,6 +153,7 @@ function prompt(input: HardnessMissionJudgeInput): ContentBlock[] {
       + 'The qualityContract is task-specific and mandatory: do not pass the quality gate unless each relevant requirement has concrete evidence. '
       + 'Inspect structure, completeness, visual presentation, security, reproducibility, and relevant similar products. '
       + gameReview
+      + META_REVIEW_PROTOCOL + ' '
       + 'For product, UI, document, visual, or game requests, use web_search and web_fetch to inspect comparable work '
       + 'when the web tools are available, then require evidence that the candidate meets or exceeds the relevant bar. '
       + 'Do not accept scaffolds, mocks, partial substitutes, or untested assumptions. '
