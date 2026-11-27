@@ -18,3 +18,21 @@ export function confirmedOffload(log) {
   return [...log.matchAll(/offloaded\s+(\d+)\s*\/\s*\d+\s+layers\s+to\s+GPU/gi)]
     .some(match => Number(match[1]) > 0)
 }
+
+/** Parse the pinned llama.cpp --list-devices format; reject unknown memory. */
+export function parseDeviceMemory(output) {
+  return [...output.matchAll(/^\s*([\w.-]+):\s+[^\r\n]*?\((\d+) MiB, (\d+) MiB free\)\s*$/gm)]
+    .map(match => ({ name: match[1], totalMiB: Number(match[2]), freeMiB: Number(match[3]) }))
+    .filter(device => device.totalMiB > 0 && device.freeMiB >= 0 && device.freeMiB <= device.totalMiB)
+}
+
+/** Conservative candidate admission, not a prediction of exact model allocations. */
+export function candidateGpuLayers(freeMiB, modelBytes) {
+  if (!Number.isFinite(freeMiB) || !Number.isFinite(modelBytes) || modelBytes <= 0) return []
+  const weightMiB = Math.ceil(modelBytes / 1024 ** 2)
+  const layers = []
+  if (freeMiB >= Math.max(2048, Math.ceil(weightMiB / 2) + 1024)) layers.push(8)
+  if (freeMiB >= Math.max(3072, Math.ceil(weightMiB * 0.75) + 1024)) layers.push(16)
+  if (freeMiB >= weightMiB + 2048) layers.push(99)
+  return layers
+}
