@@ -1320,6 +1320,11 @@ export class RealityContextEngine {
     ])
   }
 
+  /** Read only the existing cached Windows activity signal, without new probes. */
+  initiativePresence(now=new Date()):Record<string,unknown>{
+    return presenceFromActivity(signal(this.userActivity,now.getTime()))
+  }
+
   /**
    * Materialize the current provenance-bearing Reality Context snapshot.
    * @param ctx - Cordis context supplying runtime and browser observations.

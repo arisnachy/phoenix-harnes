@@ -504,6 +504,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         systemPrompt as HardnessPromptRegistrar & InitiativePromptRegistrar,
         proactivity.engine,
         ctx,
+        now=>reality.engine.initiativePresence(now),
       ))
       disposers.push(installCapabilityOperatingProtocol(systemPrompt))
       disposers.push(systemPrompt.section({ name: 'phoenix:gnosis', order: 155, text: GNOSIS_PROTOCOL }))
