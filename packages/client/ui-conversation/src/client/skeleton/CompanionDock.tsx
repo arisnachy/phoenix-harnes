@@ -21,14 +21,14 @@ export function companionPose(items: readonly ProactivityAttentionItem[]): Masco
   return 'ready'
 }
 
-/** In-flow bottom seat: no overlay over chat, composer or generated artifacts. */
+/** Composer-aligned gutter presence; never reserves a new layout row. */
 export function CompanionDock({ open, onToggle, attention, onTasks, onReview, canReview }: Props) {
   const id = useId()
   const [name, setName] = useState(readCompanionName)
   const [editingName, setEditingName] = useState(false)
   const [draftName, setDraftName] = useState(name)
   return (
-    <aside className={css.dock} aria-label="Compañero Fénix">
+    <aside className={css.dock} data-finix-dock="" aria-label="Compañero Fénix">
       {open && <section id={id} className={css.panel} aria-label="Actividad de Fénix">
         <div className={css.heading}>
           <div><strong>{name}</strong><small>Tu compañero de trabajo</small></div>

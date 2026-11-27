@@ -185,3 +185,15 @@ describe('Centered new-session identity', () => {
     expect(css).toContain('transform: translateX(calc(0px - var(--dsh-chat-floating-overlay-axis-shift, 0px)))')
   })
 })
+
+
+describe('Finix composer gutter', () => {
+  it('does not allocate a second bottom row', () => {
+    const dockCss = readFileSync(fileURLToPath(new URL('../src/client/skeleton/CompanionDock.module.css', import.meta.url)), 'utf8')
+    const seat = conversationRoot.slice(conversationRoot.indexOf('const composerSeat = ('), conversationRoot.indexOf('  return (\n    <div ref={rootRef}'))
+    expect(seat).toContain('<CompanionDock')
+    expect(dockCss).toContain('.dock { position: absolute; inset: 0;')
+    expect(dockCss).toContain('pointer-events: none')
+    expect(dockCss).toContain('@container conversation-root (max-width: 960px)')
+  })
+})
