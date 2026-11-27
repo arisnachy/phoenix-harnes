@@ -32,6 +32,7 @@ import { installWakeProtocol } from './wake-protocol.ts'
 import { installHumanPresenceProtocol } from './presence-protocol.ts'
 import { installHumanOSSelfModel, type HumanOSPromptRegistrar } from './humanos-self-model.ts'
 import { installInitiativeContextProjection, type InitiativePromptRegistrar } from './initiative-context.ts'
+import { ensureFinixResident, executeFinixResident, finixAttention } from './companion-resident.ts'
 import { installConnectorProtocol } from './connector-protocol.ts'
 import { acquireBinancePaperAutomation } from './binance-paper-automation.ts'
 import { mountBinancePaperDashboardRoute } from './binance-paper-route.ts'
@@ -660,6 +661,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       }, baseRuntimeConfig)
       const runtimeConfig = {
         ...baseRuntimeConfig,
+        executeResident: (input: import('./proactivity-engine.ts').ProactivityExecution) => executeFinixResident(input, proactivity.engine, hardness, tools.schemas().length),
         mailReady: (key: string) => mailbox.preflight(key),
         sendMail: async (input: {
           readonly taskId: string
@@ -677,7 +679,8 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         proactivity.engine,
         runtimeConfig.pollMs,
         new AttentionStore(`${taskLedgerPath(config)}.attention.json`),
-        () => mailbox.attention(),
+        async () => [...await mailbox.attention(), ...finixAttention(proactivity.engine.peek())],
+        () => ensureFinixResident(proactivity.engine),
       ))
       wake.bindExecutor(createWakeExecutor(agents, {
         composeResumedAgent: (agentCtx: Context) => composeResumedScheduledAgent(ctx, agentCtx),
