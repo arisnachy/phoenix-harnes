@@ -14,6 +14,8 @@ Status: implemented
 
 排序拒绝没有正向层卸载诊断证据的 GPU 测量结果，且仅在估算工作负载加速比达到 1.10 时才选择 GPU，否则保留 CPU。部分比较标记为未完成。设置 PHOENIX_LOCAL_ACCELERATOR_AUTOINSTALL=0 可禁用部署。状态和 installer.log 位于 local-models/accelerators/b10964 下；node scripts/phoenix-local-accelerators.mjs --status 读取最近记录的结果。
 
+受管 GGUF 启动时，Host 接受与同一模型标识及固定安装凭据匹配的近期校准结果。Host 尝试使用测得的层数和线程设置，启动失败时回退到 CPU。加速进程退出后，当前 Host 后续启动将禁用该配置；不会重放正在进行的请求。运行上下文按物理 RAM 总量设定，保留独立的原生上限和显式上下文覆盖选项。现有保守的可用内存准入检查保持不变。
+
 ## Alternatives considered
 
 **选择第一个枚举出的加速器。** 设备枚举不能证明速度，因此校准改为比较等效工作负载。
@@ -22,4 +24,4 @@ Status: implemented
 
 ## Consequences
 
-不安装系统驱动程序。模型文件、Ollama、Orión 和当前推理运行时保持不变。生产管理器尚未使用校准结果。进程检查不能保证与并发启动互斥，崩溃的部署进程可能留下需要确认后手动清理的锁。Windows 压缩包解压、实际设备使用、基准测试诊断、内存安全、生产生命周期集成和推理期间的 CPU 回退仍为发布门槛。
+不安装系统驱动程序。模型文件、Ollama 和 Orión 保持不变。更新器不会替换正在运行的推理进程。进程检查不能保证与并发启动互斥，崩溃的部署进程可能留下需要确认后手动清理的锁。Windows 压缩包解压、实际设备使用、基准测试诊断、内存安全、真实硬件上的生产启动和 CPU 恢复仍为发布门槛。
