@@ -86,7 +86,7 @@ export function buildGnosisGraph(schemas: readonly ToolSchema[], atlas: Atlas): 
 }
 /** Deterministic BM25-style lexical retrieval with a small bilingual vocabulary. */
 export function searchGnosis(graph: Graph, query: string, limit = 10) {
-  const terms = [...new Set(tokens(query.slice(0, MAX_QUERY)).flatMap(t => [t, ...(ALIASES[t] ?? [])]))].slice(0, 32)
+  const terms = [...new Set(tokens(query.slice(0, MAX_QUERY)).flatMap(t => [t, ...(Object.hasOwn(ALIASES, t) ? ALIASES[t] ?? [] : [])]))].slice(0, 32)
   if (terms.length === 0) return []
   const docs = graph.nodes.map(node => ({ node, words: graph.index.get(node.id) ?? [] }))
   const avg = docs.reduce((sum, doc) => sum + doc.words.length, 0) / Math.max(1, docs.length)
