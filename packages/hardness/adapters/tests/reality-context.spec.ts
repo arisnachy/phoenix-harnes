@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { REALITY_OPERATING_PROTOCOL } from '../src/reality-protocol.ts'
 import {
   RealityContextEngine,
+  lastRecordedResponseRoute,
   quotaBudgetSnapshot,
   realityConfigFromEnvironment,
 } from '../src/reality-context.ts'
@@ -9,6 +10,18 @@ import {
 afterEach(() => vi.restoreAllMocks())
 
 describe('Phoenix reality context', () => {
+  it('uses the historical assistant message route without claiming current or underlying provider execution', () => {
+    const time = Date.parse('2026-11-27T10:00:00Z')
+    const entry = (model: string, interrupted = false) => ({
+      type: 'assistant/message', time, data: { turn: 1, step: 2, interrupted,
+        message: { source: { kind: 'model', provider: 'fixture', model, replayState: 'private' } } },
+    })
+    const result = lastRecordedResponseRoute({ events: [entry('completed'), entry('interrupted', true)] })
+    expect(result).toMatchObject({ provider: 'fixture', model: 'completed', observedAt: new Date(time).toISOString(), underlyingProviderVerified: false })
+    expect(JSON.stringify(result)).not.toContain('private')
+    expect(lastRecordedResponseRoute({ events: [entry('interrupted', true)] })).toBeNull()
+  })
+
   it('exempts simulated local previews from unnecessary remote verification', () => {
     expect(REALITY_OPERATING_PROTOCOL).toContain('A purely simulated or local UI preview never depends on network')
     expect(REALITY_OPERATING_PROTOCOL).toContain('Only access external tools if the requested result actually depends')
