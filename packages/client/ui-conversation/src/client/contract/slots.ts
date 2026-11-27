@@ -559,6 +559,7 @@ export interface ConversationUserProfileState {
 
 /** Business callbacks injected into the conversation slot. */
 export interface ConversationInjected {
+  loadFinixOutput?: (signal: AbortSignal) => Promise<readonly import('../input/finix-channel.ts').FinixOutput[]>
   /** Tell layout when writing or a live visualization requires focused space. */
   setSidebarFocus: (active: boolean) => void
   /** Persist acknowledgement of the exact home-feed revision. */

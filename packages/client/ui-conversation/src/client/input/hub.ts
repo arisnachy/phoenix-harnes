@@ -16,6 +16,8 @@ import type { ComposerKeyboard, DraftAttachmentId, SessionInputResolver, Session
 import type { InputSubmitMode } from '../contract/composer-submission.ts'
 import type { PopupDismissFace } from './facade.ts'
 import { SessionInputShell } from './facade.ts'
+import { finixInstruction } from './finix-channel.ts'
+import type { ConnectionHandle } from '@phoenix-ai/dsh-api-remotes/client'
 
 /** Structural command face for per-session popup resolution. */
 interface CommandFace {
@@ -170,6 +172,26 @@ export class InputHub implements SessionInputResolver {
     signal: AbortSignal,
   ): Promise<SubmitOutcome> {
     if (text === '' && imageIds.length === 0) return Promise.resolve({ kind: 'success' })
+    const instruction = finixInstruction(text)
+    if (instruction !== undefined) {
+      if (imageIds.length > 0) return { kind: 'error', text: 'Finix todavía no admite imágenes en este canal; tu borrador y adjuntos se conservan.' }
+      if (instruction.length === 0) return { kind: 'error', text: 'Escribe tu mensaje después de @finix.' }
+      try {
+        signal.throwIfAborted()
+        const connection = this.rootCtx.get('connection') as ConnectionHandle | undefined
+        if (!connection?.rpc) return { kind: 'error', text: 'Finix: Host desconectado.' }
+        const result = await connection.rpc.call('/phoenix-tasks', 'create', {
+          title: instruction.replace(/\s+/gu, ' ').slice(0, 110), instruction,
+          runAt: new Date(Date.now() + 1000).toISOString(), delivery: 'work',
+          executionPolicy: 'companion-local',
+        }, signal)
+        if (!result.ok) return { kind: 'error', text: result.error.message }
+        window.dispatchEvent(new Event('phoenix:open-companion'))
+        return { kind: 'success' }
+      } catch (error) {
+        return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
+      }
+    }
     const addressed = await this.rootCtx.bail(this.rootCtx, 'conversation/addressed-submit', { sessionId: session.sessionId, text, hasImages: imageIds.length > 0, signal })
     return addressed ?? this.conversation().sendSession(session, text, imageIds, mode, signal)
   }

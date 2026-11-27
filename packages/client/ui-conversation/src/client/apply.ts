@@ -39,6 +39,7 @@ import { ApprovalPanel } from './skeleton/ApprovalPanel.tsx'
 import { todoDockEntry } from './skeleton/TodoPanel.tsx'
 import { queueDockEntry } from './queue/QueueDock.tsx'
 import { ConversationRoot } from './skeleton/ConversationRoot.tsx'
+import { loadFinixOutput } from './input/finix-channel.ts'
 import { recordProactivityAttention, refreshProactivityAttention } from './skeleton/ProactivityAttention.ts'
 import { ConversationSession, ConversationSessionHeader } from './skeleton/ConversationSession.tsx'
 import { DetailsPanel } from './skeleton/DetailsPanel.tsx'
@@ -497,6 +498,7 @@ export function apply(ctx: Context): void {
     },
     inject: (sessionId: SessionId | undefined): ConversationInjected => ({
       setSidebarFocus: layout.setSidebarFocus,
+      loadFinixOutput: signal => loadFinixOutput(ctx.get('connection') as ConnectionHandle | undefined, signal),
       recordAttention: (item, state) => recordProactivityAttention(ctx.get('connection') as ConnectionHandle | undefined, proactivityAttention, item, state),
       hooks: {
         composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId),
