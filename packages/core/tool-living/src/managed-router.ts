@@ -79,15 +79,22 @@ export class ManagedRouter {
     if(!privateGateway(gateway))return null
     return parseProfile(await this.load(gateway),gateway)
   }
-  /** Report enrollment without decrypting credentials. */
-  async status(gateway:string) {
+  /** Report enrollment without decrypting credentials.
+   * @param gateway Current private gateway.
+   * @returns Enrollment state, not proof of authentication.
+   */
+  async status(gateway:string): Promise<Record<string, unknown>> {
     const p=await this.profile(gateway)
     return p?{ status:'enrolled',vendor:p.vendor,gateway:p.gateway,transport:'https',authenticated:false }
       :{ status:'enrollment-required',setup:'Run scripts/phoenix-router-enroll.ps1 -Graphical locally in Windows PowerShell. Never paste credentials into the chat.' }
   }
   private readonly failures = new Map<string,number>()
-  /** Read bounded vendor-specific telemetry using the locally enrolled account. */
-  async inspect(gateway:string, current:()=>Promise<string|null>) {
+  /** Read bounded vendor-specific telemetry using the locally enrolled account.
+   * @param gateway Current private gateway.
+   * @param current Revalidate the current gateway.
+   * @returns Filtered router telemetry or explicit failure.
+   */
+  async inspect(gateway:string, current:()=>Promise<string|null>): Promise<Record<string, unknown>> {
     const failedAt=this.failures.get(gateway)
     if(failedAt!==undefined && Date.now()-failedAt<60000)return { status:'unavailable',reason:'ROUTER_AUTH_COOLDOWN' }
     const p=await this.profile(gateway)
@@ -153,8 +160,12 @@ export class ManagedRouter {
       } finally {try{await call(session,'session','destroy',{ ubus_rpc_session:session })}catch{/* bounded server session expires */}}
     } catch {this.failures.set(gateway,Date.now());return { status:'unavailable',reason:'ROUTER_AUTH_TLS_OR_API_FAILED',next:'Verify the enrolled account, certificate and enabled API locally. Do not guess passwords or automatically retry.' }}
   }
-  /** Read only explicitly allowlisted RouterOS policy summaries. No configuration writes. */
-  async policy(gateway:string,current:()=>Promise<string|null>) {
+  /** Read explicitly allowlisted RouterOS policy summaries without changing configuration.
+   * @param gateway Current private gateway.
+   * @param current Revalidate the current gateway.
+   * @returns Read-only policy summary or explicit failure.
+   */
+  async policy(gateway:string,current:()=>Promise<string|null>): Promise<Record<string, unknown>> {
     const p=await this.profile(gateway)
     if(!p)return this.status(gateway)
     if(p.vendor!=='mikrotik')return {status:'unavailable',reason:'POLICY_ADAPTER_NOT_IMPLEMENTED',vendor:p.vendor}
@@ -201,8 +212,14 @@ export class ManagedRouter {
       return {status:'unavailable',reason:'ROUTER_AUTH_TLS_OR_API_FAILED'}
     }
   }
-  /** A separately approved restart; transport success is not proof of recovery. */
-  async reboot(gateway:string,current:()=>Promise<string|null>,approve:(detail:{ target:string;effect:string })=>Promise<boolean>,signal?:AbortSignal) {
+  /** Request a separately approved restart; transport success is not proof of recovery.
+   * @param gateway Current private gateway.
+   * @param current Revalidate the current gateway.
+   * @param approve Obtain human consent for this restart.
+   * @param signal Optional cancellation signal.
+   * @returns Dispatch receipt or explicit denial; not proof of recovery.
+   */
+  async reboot(gateway:string,current:()=>Promise<string|null>,approve:(detail:{ target:string;effect:string })=>Promise<boolean>,signal?:AbortSignal): Promise<Record<string, unknown>> {
     const p=await this.profile(gateway)
     if(!p)return this.status(gateway)
     if(signal?.aborted || await current()!==gateway)return { status:'denied',reason:'NETWORK_CHANGED_OR_CANCELLED' }
