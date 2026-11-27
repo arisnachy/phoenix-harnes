@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createLocalModelPaths } from '../src/local-model/paths.js'
-import { getLocalModel } from '../src/local-model/catalog.js'
+import { getLocalModel, resolveManagedGgufContext } from '../src/local-model/catalog.js'
 import {
   createLocalModelRuntimeManager,
   LocalModelRuntimeFault,
@@ -111,13 +111,37 @@ describe('LocalModelRuntimeManager', () => {
     expect(args).toEqual(expect.arrayContaining([
       '--host', '127.0.0.1',
       '--port', '17842',
-      '--ctx-size', '131072',
+      '--ctx-size', String(resolveManagedGgufContext(131072)),
       '--cache-type-k', 'q8_0',
       '--cache-type-v', 'q8_0',
       '--model', expect.stringContaining('gemma-4-E2B-it-Q4_0.gguf'),
     ]))
     expect(args).not.toContain('--reasoning')
     expect(manager.snapshot()).toMatchObject({ phase: 'running', pid: 4242, port: 17842 })
+  })
+
+  it('launches a calibrated GPU profile and passes measured layer and thread settings', async () => {
+    const { dependencies } = harness({ installedModelIds: ['gemma-4-e2b-it-q4-0'] })
+    const profile = { executable: 'C:\\PhoenixData\\local-models\\accelerators\\vulkan\\llama-server.exe', backend: 'vulkan', gpuLayers: 8, threads: 4 }
+    dependencies.readAccelerationProfile = vi.fn(async () => profile)
+    const manager = await createLocalModelRuntimeManager(dependencies)
+    await manager.ensureRunning()
+    expect(dependencies.spawnServer).toHaveBeenCalledWith(profile.executable, expect.arrayContaining(['--n-gpu-layers', '8', '--threads', '4']), expect.any(Function))
+  })
+
+  it('stops a failed accelerated launch and starts the CPU runtime without GPU flags', async () => {
+    const { dependencies, server } = harness({ installedModelIds: ['gemma-4-e2b-it-q4-0'] })
+    const profile = { executable: 'C:\\PhoenixData\\local-models\\accelerators\\vulkan\\llama-server.exe', backend: 'vulkan', gpuLayers: 8, threads: 4 }
+    dependencies.readAccelerationProfile = vi.fn(async () => profile)
+    vi.mocked(dependencies.probeHealth).mockRejectedValueOnce(new Error('GPU out of memory'))
+    const manager = await createLocalModelRuntimeManager(dependencies)
+    await manager.ensureRunning()
+    expect(server.stop).toHaveBeenCalledTimes(1)
+    expect(dependencies.spawnServer).toHaveBeenCalledTimes(2)
+    const [executable, args] = vi.mocked(dependencies.spawnServer).mock.calls[1]!
+    expect(executable).toContain('runtimes')
+    expect(args).not.toContain('--n-gpu-layers')
+    expect(manager.snapshot().phase).toBe('running')
   })
 
   it('keeps Qwen3.5-4B as an installable and selectable alternative', async () => {
@@ -131,7 +155,7 @@ describe('LocalModelRuntimeManager', () => {
 
     const [, args] = vi.mocked(dependencies.spawnServer).mock.calls[0]!
     expect(args).toEqual(expect.arrayContaining([
-      '--ctx-size', '262144',
+      '--ctx-size', String(resolveManagedGgufContext(262144)),
       '--reasoning', 'off',
       '--model', expect.stringContaining('Qwen_Qwen3.5-4B-Q4_K_M.gguf'),
     ]))
