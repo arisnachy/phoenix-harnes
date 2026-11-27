@@ -29,6 +29,11 @@ describe('AUTONOMIC resident governor', () => {
     expect(runtime.items(now+30_000)[0]?.id).toBe('autonomic:network')
     runtime.observe(signals(now+45_000,null),[],now+45_000)
     expect(runtime.items(now+45_000)).toEqual([])
+    runtime.observe(signals(now+60_000),[],now+60_000)
+    expect(runtime.read(now+60_000).mode).toBe('conserve')
+    runtime.observe({...signals(now+75_000),batteryKnownNotDischarging:true},[],now+75_000)
+    runtime.observe({...signals(now+90_000),batteryKnownNotDischarging:true},[],now+90_000)
+    expect(runtime.read(now+90_000).mode).toBe('normal')
   })
   it('forecasts visible user tasks without leaking surprise or instructions', () => {
     const tasks=[task('a'),task('b'),task('secret',{visibility:'surprise'}),task('off',{attentionMode:'off'}),task('auto',{createdBy:'harness'})]
