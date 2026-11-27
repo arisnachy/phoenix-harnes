@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { COMPANION_LOCAL_MODEL, COMPANION_LOCAL_TOOLS, COMPANION_LOCAL_PERSONA } from './companion-local-policy.ts'
+import { COMPANION_LOCAL_MODEL, companionAvailableTools, COMPANION_LOCAL_PERSONA } from './companion-local-policy.ts'
 import { AttentionStore, parseAttentionReceipt } from './proactivity-attention-store.ts'
 import { parseScheduledTaskCreation, parseScheduledTaskId } from './proactivity-rpc-input.ts'
 import { scheduledMissionScopeActive } from './mission-scope.ts'
@@ -420,7 +420,7 @@ export function createProactivityExecutor(
           prompt: [{ type: 'text', text: proactivePrompt(input, config, conditionEvidence, resolvedRecipient) }],
           parent,
           signal: controller.signal,
-          ...(companion ? { agentOptions: COMPANION_LOCAL_MODEL, toolFilter: COMPANION_LOCAL_TOOLS, persona: COMPANION_LOCAL_PERSONA } : {}),
+          ...(companion ? { agentOptions: COMPANION_LOCAL_MODEL, toolFilter: companionAvailableTools(parent.ctx.tools.schemas().map(schema => schema.name)), persona: COMPANION_LOCAL_PERSONA } : {}),
         })
         try {
           const result = await run.result
