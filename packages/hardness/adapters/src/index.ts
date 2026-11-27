@@ -80,6 +80,7 @@ import { PHOENIX_3D_ROUTING_PROTOCOL } from './scene3d-routing.ts'
 import { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
 import { createEvolutionStatusTool } from './evolution-status-tool.ts'
 import { createGnosisTool, GNOSIS_PROTOCOL } from './gnosis.ts'
+import { projectGnosisReality } from './gnosis-reality.ts'
 import { createConnectorListTool } from './connector-list-tool.ts'
 import { createConnectorDiscoverTool } from './connector-discover-tool.ts'
 import type { McpRegistryDiscoveryService } from './connector-discover-tool.ts'
@@ -556,7 +557,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       }
       disposers.push(ctx.tools.register(createCognitiveWorkflowTool()))
       disposers.push(ctx.tools.register(createEvolutionStatusTool()))
-      disposers.push(ctx.tools.register(createGnosisTool(hardness, () => ctx.tools.schemas())))
+      disposers.push(ctx.tools.register(createGnosisTool(hardness, () => ctx.tools.schemas(), exec => projectGnosisReality(reality.engine.snapshot(ctx, new Date(), exec.agent === undefined ? undefined : { agent: exec.agent })))))
       disposers.push(ctx.tools.register(createPhoenixVisualizerTool()))
       disposers.push(ctx.tools.register(createPhoenixSceneMapTool()))
       disposers.push(ctx.tools.register(createPhoenixGeoMapTool()))

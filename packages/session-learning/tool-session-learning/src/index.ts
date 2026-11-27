@@ -6,6 +6,7 @@
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import { defineTool } from '@phoenix-ai/dsh-tools'
+import { projectGnosisMemory } from './gnosis-memory.ts'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 import type {} from '@phoenix-ai/dsh-session-learning'
 import type { CognitiveMemoryKind, CognitiveMemoryLayer } from '@phoenix-ai/dsh-session-learning'
@@ -370,6 +371,25 @@ export function apply(ctx: Context, config: Config): void {
     },
     interpolateVariables: false,
   })
+  ctx.tools.register(defineTool({
+    name: 'phoenix_gnosis_memory',
+    description: 'Inspect stored technical memory relations and source event references in the owning conversation. Read-only, requires a specific query; no cross-session export, no raw memory text, no independent truth certification.',
+    parameters: { query: { type: 'string', required: true, description: 'Specific concept or technical relationship to retrieve.' } },
+    output: MEMORY_OUTPUT,
+    isConcurrencySafe: () => true,
+    execute: async (args, execution) => {
+      const session = execution.agent?.session
+      const query = args.query.trim().slice(0, 256)
+      if (session === undefined || query === '') return JSON.stringify({ state: 'unknown', reason: 'owning session and specific query required' })
+      const owner = learningOwnerSessionId(session)
+      await ctx.learningMemory.ready()
+      execution.signal.throwIfAborted()
+      const hits = filterProceduralSearchHits(filterAdaptiveSearchHits(ctx.learningMemory.searchCognitiveForSession(owner, query, 32)))
+      return JSON.stringify(projectGnosisMemory(hits.filter(hit => hit.reasons.some(reason => /^(?:lexical:|entity-match|relation-match)/.test(reason))), owner))
+    },
+    presentCall: () => ({ card: 'generic', title: 'GNOSIS memory relations', kind: 'read' }),
+  }))
+
   ctx.tools.register(defineTool({
     name: 'memory_search',
     description: 'Search Phoenix cognitive memory with bounded provenance, layers, project, temporal, entity, confidence, and validated procedural knowledge.',
