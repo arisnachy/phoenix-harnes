@@ -673,7 +673,7 @@ function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePat
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
-  if (result.status === 0 || !existsSync(path)) return true
+  if (!existsSync(path)) return true
 
   const detail = typeof result.stderr === 'string' ? result.stderr.trim() : ''
 
@@ -2298,7 +2298,6 @@ if (process.argv.includes('--live-storage-migration')) {
   if (readUpdateState()?.phase === 'staging-storage') cleanupBlockingStageQuarantines()
   cleanupObsoleteRuntimes([supervisorSourceRoot], {
     reportBusy: readUpdateState()?.phase === 'staging-storage',
-    reapDormantStage: true,
     liveMigration: true,
   })
   process.exit(0)
@@ -2570,7 +2569,7 @@ while (true) {
       // Defer first storage sweep until after the Host has had time to start;
       // run it only when a background update isn't compiling a new runtime.
       if (readUpdateState()?.status !== 'preparing' || !watcherSupervisor?.isActive()) {
-        cleanupObsoleteRuntimes([], { reapDormantStage: true })
+        cleanupObsoleteRuntimes()
       }
     } catch (error) {
       console.error(`[PHOENIX RECOVERY] warning: could not record healthy configuration checkpoint: ${error instanceof Error ? error.message : String(error)}`)
