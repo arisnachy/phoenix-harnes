@@ -28,6 +28,7 @@ import { fileURLToPath } from 'node:url'
 import process from 'node:process'
 import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'
 import { classifyStableUpdate } from './phoenix-update-policy.mjs'
+import { hasDetachedRuntimeReserve } from './phoenix-runtime-capacity.mjs'
 import { diagnoseStalledPhoenixActivation, recordPhoenixUpdateStep, writePhoenixUpdateState } from './phoenix-update-state.mjs'
 import { pinPhoenixUpdateLiveHelper, validPinnedPhoenixUpdateLiveHelper } from './phoenix-update-live-pin.mjs'
 
@@ -708,6 +709,15 @@ function updaterRuntimeStorageHasCapacity(root, target) {
     return false
   }
   if (remaining < MAX_RUNTIME_DIRECTORIES) return true
+  if (process.platform === 'win32' && process.env.PHOENIX_UPDATE_SUPERVISED === '1'
+    && !Number.isFinite(configuredRuntimeDirectoryLimit)
+    && hasDetachedRuntimeReserve({
+      directories: updaterRuntimeDirectories(root),
+      registered: updaterRegisteredWorktrees(root),
+      activePath: validatedActiveRuntime(root)?.path,
+      limit: MAX_RUNTIME_DIRECTORIES,
+      pathKey: runtimePathKey,
+    })) return true
 
   const now = Date.now()
   if (now - lastStorageWarningAt >= STORAGE_WARNING_INTERVAL_MS) {
