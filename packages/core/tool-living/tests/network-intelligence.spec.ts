@@ -1,4 +1,7 @@
 import { describe,expect,it } from 'vitest'
+import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+import process from 'node:process'
 import { NetworkIntelligence } from '../src/network-intelligence.ts'
 const host={gateway:'192.168.1.1',address:'192.168.1.2',prefix:29,index:4,received:100,sent:200,neighbors:[{IPAddress:'192.168.1.1',State:'Reachable'},{IPAddress:'192.168.1.3',State:'Stale'},{IPAddress:'8.8.8.8',State:'Reachable'}]}
 const ok=(stdout:string)=>({ok:true,stdout})
@@ -105,4 +108,11 @@ describe('Network Intelligence',()=>{
       nodes:[{role:'segment'},{role:'host'},{role:'gateway'},{role:'neighbor',address:'192.168.1.3'}],
       edges:[{evidence:'default-route'},{evidence:'local-interface'},{evidence:'neighbor-cache'}]}})
   })
+})
+
+it.skipIf(process.platform !== 'win32')('parses the router enrollment script without running it',()=>{
+  const path=fileURLToPath(new URL('../../../../scripts/phoenix-router-enroll.ps1',import.meta.url))
+  const quoted=path.replace(/'/gu,"''")
+  const script="$tokens=$null; $errors=$null; [void][System.Management.Automation.Language.Parser]::ParseFile('"+quoted+"',[ref]$tokens,[ref]$errors); if ($errors.Count -gt 0) { exit 1 }"
+  expect(()=>execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{timeout:15000,windowsHide:true})).not.toThrow()
 })
