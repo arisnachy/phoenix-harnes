@@ -98,4 +98,11 @@ describe('Network Intelligence',()=>{
     expect(after.devices?.[1]?.id).toBe(before.devices?.[1]?.id)
     expect(JSON.stringify(after)).not.toMatch(/02-AA-BB|02aabbccdde[e]/iu)
   })
+  it('maps logical on-link evidence without inventing physical connections', async()=>{
+    const t=new NetworkIntelligence(async()=>ok(JSON.stringify(host)),'win32')
+    const result=await t.inventory()
+    expect(result).toMatchObject({topology:{kind:'logical-on-link',scope:null,
+      nodes:[{role:'segment'},{role:'host'},{role:'gateway'},{role:'neighbor',address:'192.168.1.3'}],
+      edges:[{evidence:'default-route'},{evidence:'local-interface'},{evidence:'neighbor-cache'}]}})
+  })
 })
