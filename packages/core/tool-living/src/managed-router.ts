@@ -102,12 +102,12 @@ export class ManagedRouter {
         const info = obj(await this.send(p, 'GET', '/api/core/firmware/info', auth))
         if (typeof info?.product_id !== 'string' || !/^opnsense(?:-[a-z]+)?$/iu.test(info.product_id) ||
           typeof info.product_version !== 'string') return { status: 'unavailable', reason: 'OPNSENSE_NOT_VERIFIED' }
-        const cached = await Promise.allSettled([
+        const [cachedFirmware, cachedInterfaces] = await Promise.allSettled([
           this.send(p, 'GET', '/api/core/firmware/status', auth),
           this.send(p, 'GET', '/api/interfaces/overview/interfaces_info', auth),
         ])
-        const firmware = cached[0]?.status === 'fulfilled' ? obj(cached[0].value) : null
-        const interfaces = cached[1]?.status === 'fulfilled' ? cached[1].value : null
+        const firmware = cachedFirmware.status === 'fulfilled' ? obj(cachedFirmware.value) : null
+        const interfaces = cachedInterfaces.status === 'fulfilled' ? cachedInterfaces.value : null
         const firmwareState = firmware && typeof firmware.status === 'string' &&
           ['none', 'update', 'upgrade', 'error', 'ok', 'busy'].includes(firmware.status) ? firmware.status : null
         return { status: firmwareState !== null && interfaces !== null ? 'completed' : 'partial', vendor: p.vendor,
