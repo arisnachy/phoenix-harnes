@@ -45,7 +45,7 @@ function lastDiagnostic() {
 }
 function clearDiagnostic() { try { rmSync(diagnosticFile(), { force: true }) } catch { /* best effort */ } }
 export function hasMigrationCandidate(legacyRoot = legacyFastsdRoot(), currentRoot = fastsdRoot()) {
-  return existsSync(legacyRoot) || existsSync(currentRoot)
+  return [legacyRoot, currentRoot].some(path => { try { return lstatSync(path).isDirectory() } catch { return false } })
 }
 function claimMigration() {
   mkdirSync(fastsdRoot(), { recursive: true })
@@ -175,7 +175,15 @@ async function ensureInstalled() {
   const root = fastsdRoot()
   const python = join(root, 'env', process.platform === 'win32' ? 'Scripts' : 'bin',
     process.platform === 'win32' ? 'python.exe' : 'python')
-  if (existsSync(python) && ready()) return python
+  if (existsSync(python) && ready()) {
+    try {
+      await run(python, ['-c', 'import openvino, torch, fastapi, uvicorn; from diffusers import Flux2KleinPipeline; assert "CPU" in openvino.Core().available_devices'], root, 120_000)
+      return python
+    } catch (error) {
+      recordDiagnostic(error)
+      // A stale ready marker must not suppress a repair of the managed environment.
+    }
+  }
   if (process.platform !== 'win32' || process.env.PHOENIX_FASTSD_AUTOINSTALL === '0') {
     throw new Error('FastSD CPU no está instalado. En Windows: powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\phoenix-fastsd-setup.ps1')
   }
