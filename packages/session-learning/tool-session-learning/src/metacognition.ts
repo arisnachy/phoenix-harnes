@@ -26,7 +26,7 @@ export function assessMetaEvidence(state: Pick<ExperienceAggregate, 'runs' | 've
 }
 
 /** Failure category is an operational clue, never a diagnosis without inspection. */
-export type MetaFailure = 'permission' | 'quota' | 'context' | 'transport' | 'invalid-input' | 'cancelled' | 'unknown'
+export type MetaFailure = 'permission' | 'quota' | 'context' | 'output-limit' | 'transport' | 'invalid-input' | 'cancelled' | 'unknown'
 
 /** Categorize only machine error codes, not untrusted tool text or model speculation.
  * @param error - Structured error from a canonical session event.
@@ -39,7 +39,8 @@ export function classifyMetaFailure(error: unknown): MetaFailure {
   if (/^(?:TOOL_ABORTED(?:_BEFORE_DISPATCH)?|ABORT_ERR|ABORTED|CANCELLED)$/iu.test(code)) return 'cancelled'
   if (/(?:PERMISSION|FORBIDDEN|UNAUTHORIZED|APPROVAL|ACCESS_DENIED|AUTH_REQUIRED)/iu.test(code)) return 'permission'
   if (/(?:QUOTA|RATE_LIMIT|RESOURCE_EXHAUSTED)/iu.test(code)) return 'quota'
-  if (/(?:CONTEXT_WINDOW|CONTEXT_LENGTH|CONTEXT_LIMIT|TOKEN_LIMIT)/iu.test(code)) return 'context'
+  if (/(?:OUTPUT_TOKEN_LIMIT|MAX_OUTPUT_TOKENS|MAX_TOKENS)/iu.test(code)) return 'output-limit'
+  if (/(?:CONTEXT_WINDOW|CONTEXT_LENGTH|CONTEXT_LIMIT)/iu.test(code)) return 'context'
   if (/(?:TIMEOUT|ETIMEDOUT|ECONNRESET|ECONNREFUSED|NETWORK|TRANSPORT|STREAM_IDLE)/iu.test(code)) return 'transport'
   if (/(?:INVALID_ARG|INVALID_INPUT|VALIDATION|SCHEMA|BAD_REQUEST)/iu.test(code)) return 'invalid-input'
   return 'unknown'
@@ -54,6 +55,7 @@ export function metaRecoveryHint(failure: MetaFailure): string | undefined {
     case 'permission': return 'Permission or authentication failure: respect the denial; inspect existing authorization and request approval only through the normal policy. Never bypass it.'
     case 'quota': return 'Quota or rate limit signal: inspect live provider availability and retry timing. Use only an already-authorized alternative under the current routing policy.'
     case 'context': return 'Context limit signal: preserve current constraints and verified artifacts using existing checkpoint/compaction; do not invent a context limit or discard the task.'
+    case 'output-limit': return 'Output limit signal: preserve completed work and continue from the last verified boundary using the existing continuation mechanism. Do not treat output exhaustion as context exhaustion.'
     case 'transport': return 'Transport failure signal: check availability and connection state; use a bounded retry only when new evidence supports it.'
     case 'invalid-input': return 'Input validation signal: inspect the actual tool schema and correct the arguments before another call.'
     default: return undefined
