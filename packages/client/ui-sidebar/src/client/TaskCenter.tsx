@@ -26,7 +26,7 @@ interface Task {
   readonly nextRunAt: string
   readonly createdBy: 'user' | 'harness' | 'system'
   readonly delivery: 'chat' | 'work' | 'email'
-  readonly executionPolicy?: 'companion-local'
+  readonly executionPolicy?: 'companion-local' | 'companion-resident'
   readonly recurrence: Recurrence
   readonly recentHistory: readonly {
     readonly status: string
@@ -72,7 +72,7 @@ function decodeTasks(value: unknown): Task[] {
       id: raw.id, title: raw.title, status: raw.status as TaskStatus,
       nextRunAt: raw.nextRunAt,
       createdBy: raw.createdBy, delivery: raw.delivery,
-      ...(raw.executionPolicy === 'companion-local' ? { executionPolicy: raw.executionPolicy } : {}),
+      ...((raw.executionPolicy === 'companion-local' || raw.executionPolicy === 'companion-resident') ? { executionPolicy: raw.executionPolicy } : {}),
       recurrence: recurrence as Recurrence,
       recentHistory: history,
     }
@@ -314,7 +314,7 @@ export function TaskCenter({ connection, onClose, companion = false }: Props) {
                     const latest = task.recentHistory[task.recentHistory.length - 1]
                     return <li key={task.id} className={css.task}>
                       <div className={css.taskTop}>
-                        <strong>{task.title}{task.executionPolicy === 'companion-local' ? ' · Fénix local' : ''}</strong>
+                        <strong>{task.title}{task.executionPolicy === 'companion-local' ? ' · Fénix local' : task.executionPolicy === 'companion-resident' ? ' · Residente' : ''}</strong>
                         <span className={css.status} data-status={task.status}>{LABELS[task.status]}</span>
                       </div>
                       <div className={css.meta}>

@@ -32,6 +32,7 @@ import { installWakeProtocol } from './wake-protocol.ts'
 import { installHumanPresenceProtocol } from './presence-protocol.ts'
 import { installHumanOSSelfModel, type HumanOSPromptRegistrar } from './humanos-self-model.ts'
 import { installInitiativeContextProjection, type InitiativePromptRegistrar } from './initiative-context.ts'
+import { ensureFinixResident, executeFinixResident, finixAttention } from './companion-resident.ts'
 import { installConnectorProtocol } from './connector-protocol.ts'
 import { acquireBinancePaperAutomation } from './binance-paper-automation.ts'
 import { mountBinancePaperDashboardRoute } from './binance-paper-route.ts'
@@ -507,6 +508,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         proactivity.engine,
         ctx,
       ))
+      disposers.push(systemPrompt.section({ name: 'phoenix:finix-companion', order: 119, text: 'Finix is a distinct local companion. When the user addresses @Finix or explicitly requests its work, use phoenix_finix_delegate for bounded local read-only tasks. The receipt means queued, not completed. Use phoenix_finix_status to inspect its actual resident state. Do not substitute Kira or a remote provider for Finix silently. Review material findings in the shared initiative context; act only within current authorization.' }))
       disposers.push(installCapabilityOperatingProtocol(systemPrompt))
       disposers.push(systemPrompt.section({ name: 'phoenix:gnosis', order: 155, text: GNOSIS_PROTOCOL }))
       disposers.push(systemPrompt.section({ name: 'phoenix:3d-intent-router', order: 176, text: PHOENIX_3D_ROUTING_PROTOCOL }))
@@ -660,6 +662,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       }, baseRuntimeConfig)
       const runtimeConfig = {
         ...baseRuntimeConfig,
+        executeResident: (input: import('./proactivity-engine.ts').ProactivityExecution) => executeFinixResident(input, proactivity.engine, hardness, tools.schemas().length),
         mailReady: (key: string) => mailbox.preflight(key),
         sendMail: async (input: {
           readonly taskId: string
@@ -677,7 +680,8 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         proactivity.engine,
         runtimeConfig.pollMs,
         new AttentionStore(`${taskLedgerPath(config)}.attention.json`),
-        () => mailbox.attention(),
+        async () => [...await mailbox.attention(), ...finixAttention(proactivity.engine.peek())],
+        () => ensureFinixResident(proactivity.engine),
       ))
       wake.bindExecutor(createWakeExecutor(agents, {
         composeResumedAgent: (agentCtx: Context) => composeResumedScheduledAgent(ctx, agentCtx),
