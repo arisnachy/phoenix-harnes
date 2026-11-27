@@ -57,6 +57,7 @@ function macAddress(value: unknown): string | null {
   return /^[a-f0-9]{12}$/u.test(mac) && mac !== '000000000000' && mac !== 'ffffffffffff' &&
     (parseInt(mac.slice(0, 2), 16) & 1) === 0 ? mac : null
 }
+/** Observe the local Windows network and gate explicitly authorized router actions. */
 export class NetworkIntelligence {
   private readonly salt: Buffer
   private previous:{key:string;time:number;received:number|null;sent:number|null;ids:Set<string>}|null=null
@@ -92,7 +93,11 @@ export class NetworkIntelligence {
     const gatewayMac=h.neighbors.find(x=>x.address===h.gateway)?.mac
     return gatewayMac&&n.mac?this.id('mac|'+gatewayMac+'|'+n.mac):this.id('address|'+this.key(h)+'|'+n.address)
   }
-  async inventory(){
+  /** Observe the current private on-link inventory and logical topology.
+   * @returns Bounded inventory or an unavailable result.
+   */
+  async inventory(): ReturnType<NetworkIntelligence['inventoryResult']> { return this.inventoryResult() }
+  private async inventoryResult(){
     const h=await this.host()
     if(!h)return {status:'unavailable',reason:'PRIVATE_ON_LINK_WINDOWS_ROUTE_NOT_CONFIRMED'}
     const devices=h.neighbors.map(n=>({id:this.deviceId(h,n),identity:n.mac&&h.neighbors.some(x=>x.address===h.gateway&&x.mac)?'link-layer':'address-only',address:n.address,state:n.state,role:n.address===h.gateway?'gateway':'neighbor'}))
@@ -112,7 +117,11 @@ export class NetworkIntelligence {
     return {status:'completed',observedAt:new Date(this.now()).toISOString(),gateway:h.gateway,localAddress:h.address,prefix:h.prefix,topology,
       devices,link:{speed:h.linkSpeed,status:h.adapterStatus,dnsServerCount:h.dnsServerCount,ipv6NeighborCount:h.ipv6Neighbors},traffic:{receivedBytes:h.received,sentBytes:h.sent},limitations:['Neighbor cache is not a complete device list. Stale entries are not proof of online status. IP addresses can be reassigned; link-layer IDs are pseudonyms, can change or be spoofed, and do not prove identity. IPv6 count is a passive interface cache. Traffic counters are for the local host interface only.']}
   }
-  async monitor(){
+  /** Measure current host interface deltas and changes in the neighbor cache.
+   * @returns Current observation or an unavailable result.
+   */
+  async monitor(): Promise<Record<string, unknown>> { return this.monitorResult() }
+  private async monitorResult(){
     const h=await this.host()
     if(!h)return {status:'unavailable'}
     const scope=this.scope(h),key=this.key(h)+'|'+(scope??'unknown'),time=this.now(),ids=new Set(h.neighbors.map(n=>this.deviceId(h,n)))
@@ -125,7 +134,12 @@ export class NetworkIntelligence {
       newlyObserved:old?[...ids].filter(id=>!old.ids.has(id)):null,noLongerObserved:old?[...old.ids].filter(id=>!ids.has(id)):null,
       limitations:['Session-local samples only; missing cache entries do not prove disconnection. Not router-wide traffic.']}
   }
-  async discover(approve:Approval,signal?:AbortSignal){
+  /** Perform a bounded private subnet ICMP survey after consent.
+   * @param approve Obtain approval for the exact subnet.
+   * @param signal Optional cancellation signal.
+   * @returns Survey receipt or explicit denial.
+   */
+  async discover(approve:Approval,signal?:AbortSignal): Promise<Record<string, unknown>> {
     const before=await this.host()
     if(!before||before.prefix<24||signal?.aborted)return {status:'denied',reason:'CONFIRMED_PRIVATE_SUBNET_24_OR_SMALLER_REQUIRED'}
     const {start,end}=bounds(before.address,before.prefix)
@@ -154,7 +168,14 @@ export class NetworkIntelligence {
   private ssh(host:string,user:string,command:string){
     return this.call('ssh',['-F','none','-T','-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','ConnectTimeout=5','-o','ClearAllForwardings=yes','-o','ForwardAgent=no','-o','IdentitiesOnly=yes','-o','PasswordAuthentication=no','-o','KbdInteractiveAuthentication=no',user+'@'+host,command])
   }
-  async router(user:string,operation:'inspect'|'reboot'|'wifi-reload',approve:Approval,signal?:AbortSignal){
+  /** Use fixed commands with an existing verified OpenWrt SSH identity.
+   * @param user Explicit SSH login name.
+   * @param operation Supported router action.
+   * @param approve Human approval callback.
+   * @param signal Optional cancellation signal.
+   * @returns Filtered telemetry or dispatch receipt.
+   */
+  async router(user:string,operation:'inspect'|'reboot'|'wifi-reload',approve:Approval,signal?:AbortSignal): Promise<Record<string, unknown>> {
     const before=await this.host()
     if(!before||!/^[a-z_][a-z0-9_-]{0,31}$/u.test(user)||signal?.aborted)return {status:'denied',reason:'CONFIRMED_GATEWAY_AND_EXPLICIT_SSH_USER_REQUIRED'}
     if(operation!=='inspect'&&operation!=='reboot'&&operation!=='wifi-reload')return {status:'denied',reason:'UNSUPPORTED_OPERATION'}
