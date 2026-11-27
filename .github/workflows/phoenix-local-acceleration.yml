@@ -1,0 +1,45 @@
+name: Phoenix Local accelerator smoke
+on:
+  pull_request:
+    paths:
+      - 'scripts/phoenix-local-accelera*'
+      - 'packages/host/plugin-inventory/src/local-model/**'
+      - 'packages/host/plugin-inventory/tests/local-model-*'
+      - 'update-phoenix.ps1'
+      - '.github/workflows/phoenix-local-acceleration.yml'
+permissions:
+  contents: read
+jobs:
+  windows-smoke:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.19.0'
+      - name: Focused selection and device memory tests
+        run: node --test scripts/phoenix-local-acceleration-policy.test.mjs
+      - name: Syntax and update hook
+        shell: pwsh
+        run: |
+          node --check scripts/phoenix-local-accelerators.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $tokens = $null
+          $parseErrors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'update-phoenix.ps1'), [ref]$tokens, [ref]$parseErrors)
+          if ($parseErrors.Count -gt 0) { throw ($parseErrors | Out-String) }
+          if (-not (Select-String -Path update-phoenix.ps1 -SimpleMatch '& node $localAcceleratorAuto --ensure' -Quiet)) { throw 'Missing accelerator update hook' }
+      - name: Pinned CPU archive smoke (no physical GPU claim)
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'phoenix-local-cpu-smoke'
+          New-Item -ItemType Directory -Force -Path $root | Out-Null
+          $zip = Join-Path $root 'cpu.zip'
+          Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/ggml-org/llama.cpp/releases/download/b10964/llama-b10964-bin-win-cpu-x64.zip' -OutFile $zip
+          if ((Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant() -ne '917f39c076402c421224824607397af20f53625a60defc20e8dd22446bf4c5d7') { throw 'Pinned CPU archive digest mismatch' }
+          Expand-Archive -LiteralPath $zip -DestinationPath (Join-Path $root 'runtime')
+          $server = Get-ChildItem (Join-Path $root 'runtime') -Recurse -File -Filter llama-server.exe | Select-Object -First 1
+          if (-not $server) { throw 'Pinned CPU server executable missing' }
+          & $server.FullName --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
