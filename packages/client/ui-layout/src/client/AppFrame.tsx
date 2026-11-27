@@ -615,11 +615,14 @@ export function AppFrame({
   // solver stays breakpoint-free: a narrow re-expand passes the preference
   // (or the default when the wide preference is closed) and the center
   // absorbs the squeeze.
+  const previousLivingCompaction = useRef(false)
   const livingCompaction = livingNeedsCompactSidebar({
+    previouslyCompacted: previousLivingCompaction.current,
     enabled: LIVING_PRESENCE_ENABLED, viewport, sidebar: panels.sidebar,
     details: detailsSession === undefined ? 0 : panels.details,
     visualWork: adaptiveActive || spaceOpen, cordisOwnsLayout: panels.workspaceCordis,
   })
+  previousLivingCompaction.current = livingCompaction
   const narrow = viewport < SIDEBAR_AUTO_COLLAPSE || livingCompaction
   useEffect(() => { actions.setNarrow(narrow) }, [actions, narrow])
   const cordisOnLeft = panels.workspaceCordis && panels.workspaceCordisSide === 'left'

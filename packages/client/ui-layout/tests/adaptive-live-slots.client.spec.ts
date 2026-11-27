@@ -43,3 +43,14 @@ describe('Living presence reversible local presentation', () => {
     expect(livingNeedsCompactSidebar({ ...input, viewport: 1150, details: 0 })).toBe(false)
   })
 })
+
+describe('Living geometry stability', () => {
+  it('restores the original sidebar only after sufficient space returns', () => {
+    const base = { enabled: true, viewport: 1250, sidebar: 320, details: 0, visualWork: true, cordisOwnsLayout: false }
+    expect(livingNeedsCompactSidebar(base)).toBe(false)
+    expect(livingNeedsCompactSidebar({ ...base, previouslyCompacted: true })).toBe(true)
+    expect(livingNeedsCompactSidebar({ ...base, viewport: 1300, previouslyCompacted: true })).toBe(false)
+    expect(livingNeedsCompactSidebar({ ...base, visualWork: false, previouslyCompacted: true })).toBe(false)
+    expect(livingNeedsCompactSidebar({ ...base, cordisOwnsLayout: true, previouslyCompacted: true })).toBe(false)
+  })
+})

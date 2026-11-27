@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { Context } from '@phoenix-ai/cordis'
+import { installProactivityRuntime } from '../src/proactivity-runtime.ts'
 import { MemoryProactivityStore, ProactivityEngine } from '../src/proactivity-engine.ts'
 
 describe('HARDNESS proactivity concurrency', () => {
@@ -23,5 +25,32 @@ describe('HARDNESS proactivity concurrency', () => {
 
     await engine.runDue(new Date('2026-09-13T16:00:00.000Z'))
     expect((await engine.get('nonblocking'))?.status).toBe('completed')
+  })
+})
+
+describe('AUTONOMIC scheduling isolation', () => {
+  it('samples local observations while due work is still running', async () => {
+    vi.useFakeTimers()
+    const ctx = new Context()
+    let finish!: () => void
+    const pending = new Promise<void>(resolve => { finish=resolve })
+    const engine = new ProactivityEngine(new MemoryProactivityStore(), { execute: async () => ({ summary: 'done' }) })
+    const run = vi.spyOn(engine,'runDue').mockImplementation(() => pending)
+    const observe = vi.fn()
+    const dispose = installProactivityRuntime(ctx,engine,1000,undefined,undefined,observe)
+    try {
+      await vi.advanceTimersByTimeAsync(3500)
+      expect(observe).toHaveBeenCalledTimes(4)
+      expect(run).toHaveBeenCalledTimes(1)
+      dispose()
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(observe).toHaveBeenCalledTimes(4)
+    } finally {
+      dispose()
+      finish()
+      await pending
+      await ctx.fiber.dispose()
+      vi.useRealTimers()
+    }
   })
 })

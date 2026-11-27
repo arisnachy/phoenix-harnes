@@ -6,6 +6,9 @@ import type { AssistantMailControl } from './assistant-mail-runtime.ts'
 import { createAssistantMailIdentityTool, createAssistantMailSendTool, createAssistantMailInboxTool, createAssistantMailManageTool } from './assistant-mail-tool.ts'
 import { installAssistantMailProtocol } from './assistant-mail-protocol.ts'
 import { AttentionStore } from './proactivity-attention-store.ts'
+import { LivingResourceAttention } from './living-resource-attention.ts'
+import { curiosityAttention, LivingHomeAttention } from './living-curiosity.ts'
+import { AutonomicRuntime, registerAutonomicRuntime, readAutonomicRuntime, createAutonomicStatusTool } from './autonomic-runtime.ts'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
@@ -504,7 +507,15 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         systemPrompt as HardnessPromptRegistrar & InitiativePromptRegistrar,
         proactivity.engine,
         ctx,
+        now=>reality.engine.initiativePresence(now),
       ))
+      disposers.push(systemPrompt.context({ name: 'phoenix:autonomic-state', order: 26,
+        interpolateVariables: false, text: () => {
+          const state = readAutonomicRuntime(proactivity.engine)
+          if (state.observedAt === null || state.mode === 'normal' && state.internetReachable !== false && state.upcomingUserTasks < 2) return ''
+          return 'PHOENIX AUTONOMIC local observation: ' + JSON.stringify(state)
+            + '. Optional sensor work can be deferred; never skip required verification or change user commitments. Unknown is not evidence of failure.'
+        } }))
       disposers.push(installCapabilityOperatingProtocol(systemPrompt))
       disposers.push(systemPrompt.section({ name: 'phoenix:gnosis', order: 155, text: GNOSIS_PROTOCOL }))
       disposers.push(systemPrompt.section({ name: 'phoenix:3d-intent-router', order: 176, text: PHOENIX_3D_ROUTING_PROTOCOL }))
@@ -522,7 +533,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       // Capability projections and the mission/proactivity runtimes are host-owned.
       // Do not repeat them when several sessions mount full presets in one process.
       disposers.push(indexOpenClawExtensions(hardness))
-      disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run', 'hardness_workflow', 'hardness_evolution_status', 'phoenix_visualize', 'phoenix_scene_map', 'phoenix_geo_map', 'phoenix_diagram', 'phoenix_canvas', 'phoenix_game', 'phoenix_comic', 'phoenix_studio3d'] }))
+      disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run', 'hardness_workflow', 'hardness_evolution_status', 'phoenix_autonomic_status', 'phoenix_visualize', 'phoenix_scene_map', 'phoenix_geo_map', 'phoenix_diagram', 'phoenix_canvas', 'phoenix_game', 'phoenix_comic', 'phoenix_studio3d'] }))
       disposers.push(await indexSkills(skills, hardness))
     } else if (authorization !== undefined || mcpConnectors !== undefined) {
       // A preset contributes only its scoped connector inventory/discovery
@@ -579,6 +590,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       })))
       disposers.push(ctx.tools.register(createHardnessTool({ run: missionRunner.run })))
       disposers.push(ctx.tools.register(createRealitySnapshotTool(reality.engine, ctx)))
+      disposers.push(ctx.tools.register(createAutonomicStatusTool(proactivity.engine)))
       const resolveMailbox = () => (ctx.get as unknown as (name: string) => unknown)('assistantMail') as AssistantMailControl | undefined
       disposers.push(ctx.tools.register(createAssistantMailIdentityTool(resolveMailbox)))
       disposers.push(ctx.tools.register(createAssistantMailSendTool(resolveMailbox)))
@@ -652,12 +664,31 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       }
       proactivity.bindExecutor(createProactivityExecutor(agents, subagents, runtimeConfig))
       disposers.push(() => { void mailbox.dispose() })
+      const autonomic = new AutonomicRuntime()
+      disposers.push(registerAutonomicRuntime(proactivity.engine, autonomic))
+      const resourceAttention = new LivingResourceAttention()
+      let resourceItems: ReturnType<LivingResourceAttention['read']> = []
+      const homeAttention = new LivingHomeAttention(async signal => {
+        // Configuration must explicitly opt into repeated reads of physical-device state.
+        if (process.env.PHOENIX_HOME_MONITOR !== '1') return undefined
+        const home = (ctx.get as unknown as (name: string) => unknown)('home') as
+          { listDevices?: (signal: AbortSignal) => Promise<readonly { entityId: string; state: string }[]> } | undefined
+        return home?.listDevices?.(signal)
+      })
+      disposers.push(() => homeAttention.dispose())
       disposers.push(installProactivityRuntime(
         ctx,
         proactivity.engine,
         runtimeConfig.pollMs,
         new AttentionStore(`${taskLedgerPath(config)}.attention.json`),
-        () => mailbox.attention(),
+        async () => [...await mailbox.attention(), ...resourceItems, ...homeAttention.read(),
+          ...curiosityAttention(proactivity.engine.peek(), Date.now()), ...autonomic.items()],
+        () => {
+          const now = new Date()
+          autonomic.observe(reality.engine.autonomicSignals(now), proactivity.engine.peek({ now }), now.getTime())
+          resourceItems = resourceAttention.read()
+          if (process.env.PHOENIX_HOME_MONITOR === '1' && autonomic.takeOptionalHomeSlot(now.getTime())) void homeAttention.observe()
+        },
       ))
       wake.bindExecutor(createWakeExecutor(agents, {
         composeResumedAgent: (agentCtx: Context) => composeResumedScheduledAgent(ctx, agentCtx),
