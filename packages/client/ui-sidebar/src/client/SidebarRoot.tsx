@@ -57,8 +57,9 @@ export function SidebarRoot({
   // The old 150ms settle timer blocked the rail and retained costly wide rows.
   const wide = !collapsed
   const [tasksOpen, setTasksOpen] = useState(false)
+  const [companionTasks, setCompanionTasks] = useState(false)
   useEffect(() => {
-    const open = (): void => { setTasksOpen(true) }
+    const open = (): void => { setCompanionTasks(true); setTasksOpen(true) }
     window.addEventListener('phoenix:open-task-center', open)
     return () => window.removeEventListener('phoenix:open-task-center', open)
   }, [])
@@ -139,7 +140,7 @@ export function SidebarRoot({
   // Native self commands share the existing explicit chat preflight/apply channel.
   const navigateNative = (target:NativeTarget):void => {
     if(target==='home'){closeSpace();startSession()}
-    else if(target==='tasks'){closeSpace();setTasksOpen(true)}
+    else if(target==='tasks'){closeSpace();setCompanionTasks(false);setTasksOpen(true)}
     else if(target==='connectors')openFeature('connectors',t('nav.connectors'))
     else if(target==='team'){closeSpace();window.dispatchEvent(new Event('phoenix:toggle-team-directory'))}
     else if(target==='library')openLibrary()
@@ -416,7 +417,7 @@ export function SidebarRoot({
           {renderSlot('sidebar.settings', { wide })}
         </div>
       </div>
-      {tasksOpen && <TaskCenter connection={taskConnection} onClose={() => { setTasksOpen(false) }} />}
+      {tasksOpen && <TaskCenter key={companionTasks ? 'companion' : 'general'} companion={companionTasks} connection={taskConnection} onClose={() => { setTasksOpen(false) }} />}
     </div>
   )
 }
