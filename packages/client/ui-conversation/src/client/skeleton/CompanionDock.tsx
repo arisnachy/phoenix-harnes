@@ -47,7 +47,7 @@ export function CompanionDock({ open, onToggle, loadOutput }: Props) {
   return <aside className={css.dock} data-finix-dock="" aria-label="Compañero Finix">
     {open && <section id={id} className={css.panel} aria-label="Salida de Finix">
       <div className={css.heading}>
-        <div><strong>{name}</strong><small>{running ? 'Trabajando localmente' : 'Tu compañero autónomo'}</small></div>
+        <div><strong>{name}</strong><small>{running ? 'Trabajando localmente' : !error && rows.some(row => row.resident && row.status === 'scheduled') ? 'Supervisión residente programada' : 'Tu compañero autónomo'}</small></div>
         <button type="button" className={css.rename} aria-label="Personalizar nombre de Finix" onClick={() => { setDraftName(name); setEditingName(value => !value) }}>✎</button>
         <button type="button" className={css.close} aria-label="Cerrar salida de Finix" onClick={onToggle}>×</button>
       </div>
@@ -60,7 +60,7 @@ export function CompanionDock({ open, onToggle, loadOutput }: Props) {
         {!loaded && !error && <p>Consultando el Host…</p>}
         {loaded && rows.length === 0 && <p>Aún no hay respuestas registradas.</p>}
         {rows.map(row => <article className={css.item} key={row.id}>
-          <strong>{row.title}</strong><span>{statusText[row.status] ?? row.status}</span>
+          <strong>{row.title}</strong><span>{row.resident && row.status === 'scheduled' ? 'Supervisión residente · próxima comprobación pendiente' : statusText[row.status] ?? row.status}</span>
           {row.recentHistory.filter(item => item.summary !== undefined || item.error !== undefined).map((item, i) =>
             <div className={css.result} key={i}>{item.summary ?? item.error}</div>)}
         </article>)}

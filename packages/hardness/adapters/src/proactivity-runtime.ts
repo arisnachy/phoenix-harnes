@@ -654,6 +654,7 @@ function installProactivityRpc(connection: HostConnectionHandle,
  * @param pollMs Interval between due-task and retry scans.
  * @param attention Durable home-feed receipts.
  * @param extraAttention Material outcomes from the local assistant mailbox.
+ * @param ensureResident Idempotent initialization of resident companion work.
  * @returns A disposer that stops polling and unmounts lifecycle/RPC handlers.
  */
 export function installProactivityRuntime(ctx: Context,
