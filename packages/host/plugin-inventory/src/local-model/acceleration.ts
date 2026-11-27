@@ -71,7 +71,11 @@ export async function readLocalAccelerationProfile(root: string, version: string
     const executable = await findExecutable(target)
     if (executable === undefined) return undefined
     const actual = await realpath(executable)
-    const relative = path.relative(await realpath(base), actual)
+    const resolvedBase = await realpath(base)
+    const resolvedTarget = await realpath(target)
+    const backendRelative = path.relative(resolvedBase, resolvedTarget)
+    if (backendRelative !== selected.backend) return undefined
+    const relative = path.relative(resolvedTarget, actual)
     if (relative.startsWith('..') || path.isAbsolute(relative)) return undefined
     return { executable: actual, backend: selected.backend, gpuLayers: selected.gpuLayersRequested, threads: selected.threads }
   } catch {
