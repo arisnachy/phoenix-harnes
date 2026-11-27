@@ -6,7 +6,10 @@
  * model routing, quality gates, or the UI.
  */
 
+import { classifyMetaFailure, metaRecoveryHint, metaResultCallId, type MetaFailure } from './metacognition.ts'
+
 interface SessionEfficiency {
+  lastFailure?: MetaFailure | undefined
   contextWindow?: number | undefined
   pressureTokens?: number | undefined
   toolCalls: number
@@ -42,7 +45,7 @@ function stepKey(data: Record<string, unknown>): string | undefined {
 }
 
 function failedResult(data: Record<string, unknown>): boolean {
-  if (data.error !== undefined) return true
+  if (data.error !== undefined && data.error !== null) return true
   const message = record(data.message)
   if (message?.isError === true) return true
   return Array.isArray(message?.content) && message.content.some(part => {
@@ -143,18 +146,29 @@ export class LiveEfficiencyMonitor {
 
     if (type === 'tool/result') {
       const message = record(payload.message)
-      const callId = message?.callId
+      const callId = metaResultCallId(message)
       const toolName = typeof callId === 'string' ? state.pendingCalls.get(callId) : undefined
       if (typeof callId === 'string') state.pendingCalls.delete(callId)
       const failed = failedResult(payload)
-      if (failed) state.failedToolCalls += 1
+      const category = classifyMetaFailure(payload.error)
+      if (failed && category === 'cancelled') return
+      if (failed) {
+        state.failedToolCalls += 1
+        state.lastFailure = category
+      } else if (toolName !== undefined) {
+        state.lastFailure = undefined
+      }
       if (toolName !== undefined) {
         state.failuresByTool.set(toolName, failed ? (state.failuresByTool.get(toolName) ?? 0) + 1 : 0)
       }
       return
     }
 
-    if (type === 'llm/retry-started') state.retries += 1
+    if (type === 'llm/retry-started') {
+      state.retries += 1
+      const category = classifyMetaFailure(payload.error)
+      if (category !== 'unknown' && category !== 'cancelled') state.lastFailure = category
+    }
     if (type === 'compaction/summary') state.pressureTokens = undefined
   }
 
@@ -190,6 +204,8 @@ export class LiveEfficiencyMonitor {
     const state = this.sessions.get(sessionId)
     if (state === undefined) return ''
     const hints: string[] = []
+    const recovery = state.lastFailure === undefined ? undefined : metaRecoveryHint(state.lastFailure)
+    if (recovery !== undefined) hints.push(recovery)
     if (state.contextWindow !== undefined && state.pressureTokens !== undefined) {
       const ratio = state.pressureTokens / state.contextWindow
       if (ratio >= 0.9) {
@@ -203,6 +219,9 @@ export class LiveEfficiencyMonitor {
       hints.push('Repeated tool failures observed: inspect the error and change the approach; do not repeat the same failed call without new evidence.')
     } else if (state.toolCalls >= 24) {
       hints.push('Many tool calls observed: reuse validated results and batch independent safe checks where possible; keep necessary verification.')
+    }
+    if (state.retries >= 2) {
+      hints.push('Repeated provider retries observed: inspect the actual stop/error and available authorized alternatives. Do not blindly retry or switch providers outside the current selection policy.')
     }
     if (state.firstChunkSlowness.filter(Boolean).length >= 2) {
       hints.push('Repeated slow provider first-chunk responses: reduce avoidable model round trips; do not skip essential work to appear faster.')
