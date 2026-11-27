@@ -6,21 +6,27 @@ export interface WelcomeScene {
   readonly pose: MascotPose
   readonly subtitle: string
 }
-const QUIET: readonly WelcomeScene[] = [
-  { pose: 'welcome', subtitle: '¿Qué construimos hoy?' },
-  { pose: 'idea', subtitle: 'Una buena idea puede empezar aquí. ¿Exploramos?' },
-  { pose: 'welcome', subtitle: '¿En qué podemos trabajar hoy?' },
-  { pose: 'coffee', subtitle: 'Un buen momento para crear algo nuevo.' },
-]
-/** Real Host signals only; an upcoming task is not running, and no data is not evidence of health. */
-export function adaptiveWelcome(hour: number, variant: number, attention: readonly ProactivityAttentionItem[], celebration?: Celebration, blocked = false): WelcomeScene {
-  if (blocked) return { pose: 'ready', subtitle: 'Hay una condición que revisar antes de enviar un mensaje.' }
-  if (attention.some(item => item.kind === 'failure')) return { pose: 'tools', subtitle: 'Hay una tarea que necesita tu atención.' }
-  if (celebration?.tone === 'solemn') return { pose: 'respectful', subtitle: 'Un momento para recordar.' }
-  if (attention.some(item => item.kind === 'result')) return { pose: 'settled', subtitle: 'Tengo un resultado registrado para compartir contigo.' }
-  if (attention.some(item => item.kind === 'upcoming')) return { pose: 'plan', subtitle: 'Se acerca una tarea. ¿La preparamos?' }
-  if (celebration?.tone === 'festive') return { pose: 'celebrate', subtitle: 'Hoy es una ocasión especial.' }
+
+/** Keep untrusted task titles as short display text, not executable instructions. */
+function titleOf(item: ProactivityAttentionItem): string {
+  const title = item.title.replace(/\s+/gu, ' ').trim()
+  return title.length > 100 ? title.slice(0, 99) + '…' : title
+}
+
+/** An event-driven assistant welcome. No random scene selection, no invented work. */
+export function adaptiveWelcome(hour: number, attention: readonly ProactivityAttentionItem[], celebration?: Celebration, blocked = false): WelcomeScene {
+  if (blocked) return { pose: 'ready', subtitle: 'Hay una condición que revisar antes de que podamos continuar.' }
+  const failure = attention.find(item => item.kind === 'failure')
+  if (failure !== undefined) return { pose: 'tools', subtitle: 'Necesito avisarte de un problema en «' + titleOf(failure) + '». ¿Lo revisamos?' }
+  if (celebration?.tone === 'solemn') return { pose: 'respectful', subtitle: 'Estoy aquí para acompañarte en este día de recuerdo.' }
+  const result = attention.find(item => item.kind === 'result')
+  if (result !== undefined) return { pose: 'settled', subtitle: 'Tengo novedades de «' + titleOf(result) + '» para compartir contigo.' }
+  const upcoming = attention.find(item => item.kind === 'upcoming')
+  if (upcoming !== undefined) return { pose: 'plan', subtitle: 'Tenemos pendiente «' + titleOf(upcoming) + '». ¿Lo preparamos juntos?' }
+  if (celebration?.tone === 'festive') return { pose: 'celebrate', subtitle: 'Hoy es una ocasión especial. ¡Me alegra acompañarte!' }
   if (celebration) return { pose: 'respectful', subtitle: 'Hoy merece un reconocimiento especial.' }
-  if (hour < 6 || hour >= 22) return { pose: 'sleep', subtitle: 'Aquí estoy cuando me necesites.' }
-  return QUIET[Math.abs(Math.trunc(Number.isFinite(variant) ? variant : 0)) % QUIET.length] ?? { pose: 'welcome', subtitle: '¿Qué construimos hoy?' }
+  if (hour < 6 || hour >= 22) return { pose: 'welcome', subtitle: 'Sigo disponible. ¿Quieres retomar algo o conversar un rato?' }
+  if (hour < 12) return { pose: 'coffee', subtitle: 'Estoy aquí para ayudarte a organizar el día. ¿Por dónde empezamos?' }
+  if (hour < 19) return { pose: 'welcome', subtitle: 'Me alegra verte. Podemos retomar tus tareas o comenzar algo nuevo.' }
+  return { pose: 'welcome', subtitle: 'Estoy aquí contigo. ¿Revisamos lo pendiente o empezamos algo nuevo?' }
 }
