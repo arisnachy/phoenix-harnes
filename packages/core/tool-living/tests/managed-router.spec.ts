@@ -63,4 +63,28 @@ describe('Managed router local enrollment',()=>{
     expect(await router.inspect(gateway,async()=>gateway)).toMatchObject({ reason:'ROUTER_AUTH_COOLDOWN' })
     expect(calls).toBe(1)
   })
+  it('reads OPNsense cached firmware status without exposing keys or raw interface data', async () => {
+    const paths: string[] = []
+    const router = new ManagedRouter(async () => ({ ...profile, vendor: 'opnsense', username: 'A'.repeat(40) }),
+      async () => 'SECRET', async (_p, method, path) => {
+        paths.push(method + ' ' + path)
+        if (path.endsWith('/info')) return { product_id: 'OPNsense', product_version: '26.1', private: 'SECRET' }
+        if (path.endsWith('/status')) return { status: 'update', status_reboot: '1', private: 'SECRET' }
+        return { lan: { private: 'SECRET' } }
+      })
+    const value = await router.inspect(gateway, async () => gateway)
+    expect(value).toMatchObject({ status: 'completed', vendor: 'opnsense', firmwareState: 'update', rebootRequired: true })
+    expect(JSON.stringify(value)).not.toContain('SECRET')
+    expect(paths.every(path => path.startsWith('GET '))).toBe(true)
+  })
+  it('does not reboot OPNsense without a verified product', async () => {
+    const paths: string[] = []
+    const router = new ManagedRouter(async () => ({ ...profile, vendor: 'opnsense', username: 'A'.repeat(40) }),
+      async () => 'SECRET', async (_p, _m, path) => {
+        paths.push(path)
+        return { product_id: 'other', product_version: '1' }
+      })
+    expect(await router.reboot(gateway, async () => gateway, async () => true)).toMatchObject({ reason: 'OPNSENSE_NOT_VERIFIED' })
+    expect(paths).toEqual(['/api/core/firmware/info'])
+  })
 })
