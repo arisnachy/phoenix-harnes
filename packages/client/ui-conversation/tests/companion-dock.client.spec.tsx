@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { CompanionDock } from '../src/client/skeleton/CompanionDock.tsx'
@@ -10,6 +11,13 @@ describe('Finix output', () => {
     expect(view.queryByLabelText('Salida de Finix')).toBeNull()
     fireEvent.click(view.getByRole('button', { name: 'Abrir Finix' }))
     expect(toggle).toHaveBeenCalledOnce()
+  })
+  it('anchors the output outside the composer and uses the spare gutter', () => {
+    const root = readFileSync(new URL('../src/client/skeleton/ConversationRoot.tsx', import.meta.url), 'utf8')
+    const styles = readFileSync(new URL('../src/client/skeleton/CompanionDock.module.css', import.meta.url), 'utf8')
+    expect(root.indexOf('<CompanionDock')).toBeGreaterThan(root.indexOf('{composerSeat}'))
+    expect(styles).toContain('--finix-gutter: calc((100% - var(--dsh-composer-card-max-width')
+    expect(styles).toContain('overscroll-behavior: contain')
   })
   it('reads actual output and shows the shared-input instruction', async () => {
     const loadOutput = vi.fn(async () => [{id:'1',title:'Hola',status:'completed',recentHistory:[{status:'completed',summary:'Hola, soy Finix'}]}])
