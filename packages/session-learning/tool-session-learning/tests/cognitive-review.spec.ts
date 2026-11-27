@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { cognitionGuidance, reviewCognition } from '../src/cognitive-review.ts'
 import type { ExperienceAggregate, ExperienceRunMetrics } from '../src/experience.ts'
+import { fingerprintTask } from '../src/task-context.ts'
 
 const run = (verified = true, retries = 0, cost = 100): ExperienceRunMetrics => ({
   occurredAt: 1, wallTimeMs: cost, totalTokens: cost, toolCalls: 1,
   failedToolCalls: retries, retries, userInterventions: 0, verified, qualityPassed: verified,
 })
 const state = (rows: ExperienceRunMetrics[]): ExperienceAggregate => ({
-  version: 1, key: 'test', taskFingerprint: { tokens: [] } as ExperienceAggregate['taskFingerprint'],
+  version: 1, key: 'test', taskFingerprint: fingerprintTask('test task'),
   taskSummary: 'private', maturity: 'validated', runs: rows.length,
   verifiedSuccesses: rows.filter(row => row.verified).length, failures: 0,
   totalWallTimeMs: 0, totalTokens: 0, totalToolCalls: 0, totalFailedToolCalls: 0,
