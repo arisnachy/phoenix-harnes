@@ -14,7 +14,7 @@
   <Applications><Application Id="Kira" Executable="Phoenix.WindowsLauncher.exe" EntryPoint="Windows.FullTrustApplication">
     <uap:VisualElements DisplayName="PHOENIX · Kira" Description="Local agent review" BackgroundColor="transparent" Square150x150Logo="Assets\Square150.png" Square44x44Logo="Assets\Square44.png"/>
     <Extensions>
-      <com2:Extension Category="windows.comServer"><com2:ComServer><com3:ExeServer Executable="Phoenix.WindowsLauncher.exe" DisplayName="PHOENIX Kira"><com:Class Id="__CLSID__" DisplayName="PHOENIX Kira"/></com3:ExeServer></com2:ComServer></com2:Extension>
+      <com2:Extension Category="windows.comServer"><com2:ComServer><com3:ExeServer Executable="Phoenix.WindowsLauncher.exe" DisplayName="PHOENIX Kira"><com:Class Id="c85d8352-57a1-e846-85ed-e2389300f77e" DisplayName="PHOENIX Kira"/></com3:ExeServer></com2:ComServer></com2:Extension>
       <uap3:Extension Category="windows.appExtension"><uap3:AppExtension Name="com.microsoft.windows.ai.actions" Id="PhoenixActions" DisplayName="PHOENIX Actions" PublicFolder="Assets"><uap3:Properties><Registration xmlns="">registration.json</Registration></uap3:Properties></uap3:AppExtension></uap3:Extension>
       <uap3:Extension Category="windows.appExtension"><uap3:AppExtension Name="com.microsoft.windows.ai.agentInfo" Id="PhoenixKira" DisplayName="PHOENIX Kira" PublicFolder="Assets"><uap3:Properties><Registration xmlns="">agentRegistration.json</Registration></uap3:Properties></uap3:AppExtension></uap3:Extension>
     </Extensions>

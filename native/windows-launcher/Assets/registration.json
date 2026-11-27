@@ -1,0 +1,38 @@
+{
+  "version": 2,
+  "actions": [
+    {
+      "id": "PHOENIX.OpenKira",
+      "description": "Open PHOENIX for interactive review",
+      "icon": "ms-resource://Files/Assets/PhoenixLogo.png",
+      "usesGenerativeAI": false,
+      "allowedAppInvokers": [
+        "*"
+      ],
+      "inputs": [
+        {
+          "name": "agentName",
+          "kind": "Text"
+        },
+        {
+          "name": "prompt",
+          "kind": "Text"
+        }
+      ],
+      "inputCombinations": [
+        {
+          "inputs": [
+            "agentName",
+            "prompt"
+          ],
+          "description": "Open PHOENIX"
+        }
+      ],
+      "outputs": [],
+      "invocation": {
+        "type": "COM",
+        "clsid": "c85d8352-57a1-e846-85ed-e2389300f77e"
+      }
+    }
+  ]
+}

@@ -10,14 +10,16 @@ New-Item -ItemType Directory -Path $stage -Force | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Launcher build failed' }
 $definition = Get-Content "$project\Assets\registration.json" -Raw | ConvertFrom-Json
 $action = @($definition.actions | Where-Object { $_.id -eq 'PHOENIX.OpenKira' })
-if ($action.Count -ne 1 -or $action[0].invocation.type -ine 'com') { throw 'Expected generated COM action missing' }
+if ($action.Count -ne 1 -or $action[0].invocation.type -ine 'com') { throw 'Expected COM action missing' }
 $clsid = [Guid]::Parse($action[0].invocation.clsid).ToString()
-$action[0] | Add-Member -NotePropertyName allowedAppInvokers -NotePropertyValue @('*') -Force
+if ('*' -notin @($action[0].allowedAppInvokers)) { throw 'Expected discoverable review action' }
 $assets = Join-Path $stage Assets
 New-Item -ItemType Directory -Path $assets -Force | Out-Null
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 [IO.File]::WriteAllText((Join-Path $assets 'registration.json'),($definition | ConvertTo-Json -Depth 20),$utf8)
 Copy-Item "$repo\native\windows-actions\agentRegistration.json" "$assets\agentRegistration.json"
+$agentDefinition = Get-Content (Join-Path $assets 'agentRegistration.json') -Raw | ConvertFrom-Json
+if ($agentDefinition.action_id -cne $action[0].id) { throw 'Agent launcher action ID mismatch' }
 Add-Type -AssemblyName System.Drawing
 foreach ($spec in @(@{n='StoreLogo';s=50},@{n='Square150';s=150},@{n='Square44';s=44},@{n='PhoenixLogo';s=64})) {
   $bitmap = New-Object Drawing.Bitmap($spec.s,$spec.s)
@@ -28,7 +30,11 @@ foreach ($spec in @(@{n='StoreLogo';s=50},@{n='Square150';s=150},@{n='Square44';
     $bitmap.Save((Join-Path $assets ($spec.n+'.png')),[Drawing.Imaging.ImageFormat]::Png)
   } finally { $graphics.Dispose(); $bitmap.Dispose() }
 }
-$manifest = (Get-Content "$project\AppxManifest.template.xml" -Raw).Replace('__CLSID__',$clsid)
+$manifest = Get-Content "$project\Package.appxmanifest" -Raw
+[xml]$manifestXml = $manifest
+$classes = @($manifestXml.SelectNodes("//*[local-name()='Class' and namespace-uri()='http://schemas.microsoft.com/appx/manifest/com/windows10']"))
+if ($classes.Count -ne 1 -or [Guid]::Parse($classes[0].GetAttribute('Id')).ToString() -ne $clsid) { throw 'COM manifest CLSID mismatch' }
+if (-not (Test-Path (Join-Path $stage 'Phoenix.WindowsLauncher.exe') -PathType Leaf)) { throw 'Published launcher executable missing' }
 [IO.File]::WriteAllText((Join-Path $stage 'AppxManifest.xml'),$manifest,$utf8)
 if (-not $RegisterDevelopment) {
   [pscustomobject]@{status='staged-not-registered';stage=$stage;action='PHOENIX.OpenKira'} | ConvertTo-Json
