@@ -13,11 +13,12 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type {
   ConversationTimelineSnapshot, UserMessageNode,
 } from '@phoenix-ai/dsh-client-runtime/client'
-import { Button, IconChevronDownOutline14, Modal, PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
+import { Button, IconChevronDownOutline14, Modal } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
 import { PendingSteeringBubble } from './MessageItem.tsx'
 import { turnProgress } from './turn-progress.ts'
 import { ToolActivityFlow } from './ToolActivityFlow.tsx'
+import { LivingMascot } from './LivingMascot.tsx'
 import css from './ChatView.module.css'
 
 const FOLLOW_THRESHOLD = 24
@@ -624,10 +625,8 @@ export function ChatView({
               (ApprovalPanel) both take over the composer, so a flow card would
               double-render the same wait. */}
           {completionPulse && (
-            <div className={css.phoenixCompletion} aria-hidden="true">
-              <span className={css.phoenixActivity}>
-                <PhoenixLogo size={28} />
-              </span>
+            <div className={css.livingCompletion} aria-hidden="true">
+              <LivingMascot pose="settled" />
             </div>
           )}
           {visiblePendingSteering.map(item => (
