@@ -54,6 +54,12 @@ Esta integración expone herramientas que Kira puede usar a petición del usuari
 
 Para una app genérica, un input configurado hacia API, chat o IA solo abre una revisión explícita y prepara un borrador del chat. No envía valores clínicos ni concede permisos a conectores desde el DOM. Los formularios y su esquema permanecen separados de los datos clínicos de `/health`.
 
+### Persistent authorized router inspection
+
+On Windows, run `powershell -NoProfile -File .\scripts\phoenix-router-enroll.ps1` locally from the repository root. The enrollment script detects the current private gateway and asks for the router vendor, account, independently verified SHA-256 TLS certificate fingerprint, optional trusted PEM CA, explicit read authorization and a hidden password. Windows DPAPI protects the password for the current Windows account; no secrets are sent through chat, tool parameters, telemetry or source control. Run the same command with `-Remove` to revoke the local profile. A certificate replacement requires re-enrollment; do not disable TLS checks.
+
+`phoenix_network_intelligence router-profile-status` reports local enrollment without claiming authentication. `router-managed-inspect` revalidates the gateway, connects directly over HTTPS and reports bounded OpenWrt ubus or MikroTik RouterOS v7 REST telemetry. The router must expose its supported HTTPS API with a certificate trusted by Node or by the locally selected CA, valid for the gateway IP. OpenWrt reports board, firmware, uptime, WAN and radio state; MikroTik reports system resources, interface counts and DHCP lease counts. Failed authentication stops without guessing. Repeat read authorization is separate from write authorization; existing approved OpenWrt SSH reboot and reload are unchanged. Unknown brands, browser login, resident network polling, per-client traffic and configuration writes are not implemented by this adapter.
+
 ### Recuperación del supervisor en Windows (instalación voluntaria)
 
 `scripts/phoenix-windows-supervisor.mjs` ya es dueño del Host y gestiona sus reinicios. El guardián adicional sirve únicamente para el caso en que **también desaparezca ese supervisor**. Comprueba la identidad del PID mediante CIM y el heartbeat protegido de Git antes de iniciar una instancia; nunca mata procesos y deja de insistir ante arranques repetidamente fallidos. La instalación automática no forma parte de PHOENIX.
