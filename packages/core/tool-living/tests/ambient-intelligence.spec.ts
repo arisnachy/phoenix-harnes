@@ -30,3 +30,11 @@ describe('ambient intelligence',()=>{
     expect(await core.observe('world')).toMatchObject({status:'unavailable'})
   })
 })
+
+describe('NOAA feed formats', () => {
+  it('accepts a tabular header and numeric strings, and ignores malformed rows', async () => {
+    const now=Date.parse('2026-11-26T12:00:00Z')
+    const core=new AmbientIntelligence(async()=>[['time_tag','Kp'],['2026-11-26 09:00:00','5.33'],['2026-11-26 11:00:00','']],async()=>[],()=>({}),()=>now)
+    expect(await core.observe('space')).toMatchObject({status:'retrieved',data:{kp:5.33,stale:false}})
+  })
+})

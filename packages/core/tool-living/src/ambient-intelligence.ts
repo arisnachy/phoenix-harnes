@@ -111,7 +111,12 @@ export class AmbientIntelligence {
   }
   private async feed(key:string,url:string,project:(x:unknown)=>unknown){
     const now=this.now(), old=this.cache.get(key)
-    if(old&&now-old.at<300000)return {status:'cached',source:url,fetchedAt:new Date(old.at).toISOString(),data:old.data}
+    if(old&&now-old.at<300000){
+      const row=record(old.data)
+      const stamp=key==='space'?row.observedAt:row.generatedAt
+      const limit=key==='space'?21600000:3600000
+      return {status:'cached',source:url,fetchedAt:new Date(old.at).toISOString(),data:{...row,stale:typeof stamp!=='string'||now-Date.parse(stamp)>limit||row.stale===true}}
+    }
     try{
       const data=project(await this.read(url))
       this.cache.set(key,{at:now,data})
@@ -175,10 +180,16 @@ export class AmbientIntelligence {
     })}
     if(operation==='space')return {...base,...await this.feed('space',NOAA,raw=>{
       if(!Array.isArray(raw))throw Error('INVALID_FEED')
-      const rows=raw.slice(0,1000).flatMap(item=>{
+      const header=Array.isArray(raw[0])?raw[0]:null
+      const timeIndex=header?.indexOf('time_tag')??-1
+      const kpIndex=header?.indexOf('Kp')??-1
+      const rows=raw.slice(header?1:0,1000).flatMap(item=>{
         const x=record(item)
-        const time=typeof x.time_tag==='string'?Date.parse(x.time_tag.endsWith('Z')?x.time_tag:x.time_tag+'Z'):NaN
-        return finite(x.Kp,0,9)&&Number.isFinite(time)?[{kp:x.Kp,time}]:[]
+        const stamp=Array.isArray(item)&&timeIndex>=0?item[timeIndex]:x.time_tag
+        const rawKp=Array.isArray(item)&&kpIndex>=0?item[kpIndex]:x.Kp
+        const kp=typeof rawKp==='string'&&rawKp.trim()!==''?Number(rawKp):rawKp
+        const time=typeof stamp==='string'?Date.parse(stamp.endsWith('Z')?stamp:stamp+'Z'):NaN
+        return finite(kp,0,9)&&Number.isFinite(time)&&time<=this.now()+60000?[{kp,time}]:[]
       }).sort((a,b)=>b.time-a.time)
       const latest=rows[0]
       if(!latest)throw Error('INVALID_FEED')
