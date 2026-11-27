@@ -23,7 +23,7 @@ describe('managed accelerator profile', () => {
       const profile = {
         version: 'b10964', checkedAt: new Date().toISOString(),
         calibration: { state: 'measured', modelId: 'qwen', modelSize: metadata.size, modelModified: metadata.mtimeMs,
-          selected: { backend: 'vulkan', offloadConfirmed: true, speedup: 1.5, gpuLayersRequested: 8, threads: 4 } },
+          selected: { backend: 'vulkan', offloadConfirmed: true, speedup: 1.5, gpuLayersRequested: 8, threads: 4, deviceName: 'Vulkan0', deviceFreeMiB: 4096, deviceTotalMiB: 8192 } },
       }
       const status = path.join(base, 'status.json')
       const read = () => readLocalAccelerationProfile(root, 'b10964', 'qwen', model, 8)
