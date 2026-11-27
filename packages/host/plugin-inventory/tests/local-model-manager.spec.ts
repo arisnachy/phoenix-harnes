@@ -122,16 +122,16 @@ describe('LocalModelRuntimeManager', () => {
 
   it('launches a calibrated GPU profile and passes measured layer and thread settings', async () => {
     const { dependencies } = harness({ installedModelIds: ['gemma-4-e2b-it-q4-0'] })
-    const profile = { executable: 'C:\\PhoenixData\\local-models\\accelerators\\vulkan\\llama-server.exe', backend: 'vulkan', gpuLayers: 8, threads: 4 }
+    const profile = { executable: 'C:\\PhoenixData\\local-models\\accelerators\\vulkan\\llama-server.exe', backend: 'vulkan', gpuLayers: 8, threads: 4, deviceName: 'Vulkan0', deviceFreeMiB: 4096, deviceTotalMiB: 8192 }
     dependencies.readAccelerationProfile = vi.fn(async () => profile)
     const manager = await createLocalModelRuntimeManager(dependencies)
     await manager.ensureRunning()
-    expect(dependencies.spawnServer).toHaveBeenCalledWith(profile.executable, expect.arrayContaining(['--n-gpu-layers', '8', '--threads', '4']), expect.any(Function))
+    expect(dependencies.spawnServer).toHaveBeenCalledWith(profile.executable, expect.arrayContaining(['--n-gpu-layers', '8', '--threads', '4', '--device', 'Vulkan0', '--fit-target', '1024']), expect.any(Function))
   })
 
   it('stops a failed accelerated launch and starts the CPU runtime without GPU flags', async () => {
     const { dependencies, server } = harness({ installedModelIds: ['gemma-4-e2b-it-q4-0'] })
-    const profile = { executable: 'C:\\PhoenixData\\local-models\\accelerators\\vulkan\\llama-server.exe', backend: 'vulkan', gpuLayers: 8, threads: 4 }
+    const profile = { executable: 'C:\\PhoenixData\\local-models\\accelerators\\vulkan\\llama-server.exe', backend: 'vulkan', gpuLayers: 8, threads: 4, deviceName: 'Vulkan0', deviceFreeMiB: 4096, deviceTotalMiB: 8192 }
     dependencies.readAccelerationProfile = vi.fn(async () => profile)
     vi.mocked(dependencies.probeHealth).mockRejectedValueOnce(new Error('GPU out of memory'))
     const manager = await createLocalModelRuntimeManager(dependencies)
