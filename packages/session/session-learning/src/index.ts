@@ -156,6 +156,12 @@ export class LearningMemoryService extends Service {
     })
   }
 
+  /** Search only the explicit owning session, without the globally current project fallback. */
+  searchCognitiveForSession(sessionId: string, query: string, limit = 20): CognitiveMemoryHit[] {
+    if (sessionId.trim() === '' || query.trim() === '') return []
+    return this.cognitive.search({ sessionId, query, limit, includeHistory: false })
+  }
+
   /**
    * Read bounded, project-scoped cognitive context for automatic recall.
    * @param query - Optional query and filter set.
