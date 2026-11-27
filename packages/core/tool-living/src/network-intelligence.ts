@@ -88,7 +88,7 @@ export class NetworkIntelligence {
         if(!n||typeof n.IPAddress!=='string'||typeof n.State!=='string'||!states.has(n.State))continue
         const address=n.IPAddress.split('%')[0]?.toLowerCase()
         // Only expose link-local and unique-local IPv6 neighbors from the active interface.
-        if(!address||isIP(address)!==6||!(/^(fe[89ab]|f[cd][0-9a-f]{2}):/u.test(address)))continue
+        if(!address||isIP(address)!==6||!(/^(fe[89ab][0-9a-f]|f[cd][0-9a-f]{2}):/u.test(address)))continue
         if(!h.ipv6Devices.some(x=>x.address===address))h.ipv6Devices.push({address,state:n.State,mac:macAddress(n.LinkLayerAddress)})
       }
       h.ipv6Neighbors=h.ipv6Devices.length
