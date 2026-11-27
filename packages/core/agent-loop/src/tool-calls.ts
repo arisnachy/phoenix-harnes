@@ -57,8 +57,26 @@ const MAX_IDENTICAL_FAILURES = 3
 const MAX_TRACKED_FAILURES = 128
 const failureStreaks = new WeakMap<Session, { turn: number; counts: Map<string, number> }>()
 
+// Normalize harmless JSON serialization differences, not genuinely different inputs.
+// Bound parsing and recursion; large or malformed payloads retain the original digest.
+function canonicalToolArguments(raw: string): string {
+  if (raw.length > 65_536) return raw
+  function normalize(value: unknown, depth: number): string {
+    if (depth > 32) throw new Error('argument nesting limit')
+    if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null'
+    if (Array.isArray(value)) return '[' + value.map(item => normalize(item, depth + 1)).join(',') + ']'
+    const record = value as Record<string, unknown>
+    return '{' + Object.keys(record).sort().map(key => JSON.stringify(key) + ':' + normalize(record[key], depth + 1)).join(',') + '}'
+  }
+  try {
+    return normalize(JSON.parse(raw) as unknown, 0)
+  } catch {
+    return raw
+  }
+}
+
 function callFingerprint(block: ToolCallBlock): string {
-  return createHash('sha256').update(block.name).update('\0').update(block.arguments).digest('hex')
+  return createHash('sha256').update(block.name).update('\0').update(canonicalToolArguments(block.arguments)).digest('hex')
 }
 
 function recordToolOutcome(session: Session, turn: number, block: ToolCallBlock, result: ToolExecutionResult): void {
