@@ -1,6 +1,7 @@
 /** Local, bounded initiative policy. Reuses the existing cognitive, task and voice engines. */
 import { freemem, totalmem } from 'node:os'
 import { summarizeEvolutionEvents } from './evolution.ts'
+import type { InitiativeReceipt } from './initiative-feedback.ts'
 export type Presence='available'|'busy'|'away'|'unknown'
 type Candidate={id:string;kind:'diagnostic'|'resource'|'goal'|'creative';priority:number;reason:string;tools:string[];channel:'silent'|'chat'|'prepare'}
 type Row=Record<string,unknown>
@@ -58,11 +59,17 @@ export class LivingInitiative {
     }
     scope.touched=now;return scope
   }
-  inspect(id:string,events:readonly {type:string;data:unknown}[],registered:readonly string[],cognitive?:unknown){
+  inspect(id:string,events:readonly {type:string;data:unknown}[],registered:readonly string[],cognitive?:unknown,durable:readonly InitiativeReceipt[]=[]){
     const scope=this.scope(id),now=this.now(),mem=this.memory()
     const output=initiativeCandidates({events,registered,cognitive,now,...mem})
-    const candidates=output.candidates.filter(c=>!scope.receipts.some(r=>r.id===c.id&&r.kind!=='useful'&&now-r.at<(r.kind==='later'?3600000:86400000)))
-    return {...output,candidates,feedbackScope:'current-session-memory',feedback:scope.receipts.slice(-12)}
+    const merged=new Map<string,InitiativeReceipt>()
+    for(const receipt of [...durable,...scope.receipts]){
+      const previous=merged.get(receipt.id)
+      if(!previous||receipt.at>=previous.at)merged.set(receipt.id,receipt)
+    }
+    const feedback=[...merged.values()]
+    const candidates=output.candidates.filter(c=>!feedback.some(r=>r.id===c.id&&r.kind!=='useful'&&now-r.at<(r.kind==='later'?3600000:86400000))).map(c=>({...c,priority:c.priority+(feedback.some(r=>r.id===c.id&&r.kind==='useful'&&now-r.at<30*86400000)?5:0)})).sort((a,b)=>b.priority-a.priority)
+    return {...output,candidates,feedbackScope:durable.length?'approved-session-or-project-ledger':'current-session-memory',feedback:feedback.slice(-12)}
   }
   feedback(id:string,candidate:string,kind:Receipt['kind']){
     if(!['repeated-failure','memory-pressure','pending-goal','standing-goal','useful-presentation'].includes(candidate)||!['useful','dismissed','later'].includes(kind))throw Error('INITIATIVE_INVALID_FEEDBACK')
