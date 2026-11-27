@@ -14,6 +14,7 @@ import { filterAdaptiveSearchHits, installAdaptiveLearning } from './adaptive.ts
 import { ExperienceLearningEngine, experienceMemoryInput } from './experience.ts'
 import { LiveEfficiencyMonitor } from './live-efficiency.ts'
 import { classifyMetaFailure, formatMetaComparison, metaResultCallId } from './metacognition.ts'
+import { cognitionGuidance, reviewCognition } from './cognitive-review.ts'
 import { hasUnclearedGoal, isHumanTaskMessage, learningOwnerSessionId } from './team-learning-context.ts'
 import { assessHabitExperience, formatHabitGuidance, formatUnverifiedExperience } from './habit.ts'
 import { AutonomousMemoryCurator } from './autonomous-curator.ts'
@@ -358,7 +359,7 @@ export function apply(ctx: Context, config: Config): void {
       if (matched === undefined) return ''
       const assessment = assessHabitExperience(matched)
       return [formatHabitGuidance(assessment), formatUnverifiedExperience(matched),
-        assessment.mode === 'review' ? formatMetaComparison(matched.recentRuns) : ''].filter(Boolean).join(' ')
+        assessment.mode === 'review' ? formatMetaComparison(matched.recentRuns) : '', cognitionGuidance(matched)].filter(Boolean).join(' ')
     },
     interpolateVariables: false,
   })
@@ -374,6 +375,26 @@ export function apply(ctx: Context, config: Config): void {
     },
     interpolateVariables: false,
   })
+  ctx.tools.register(defineTool({
+    name: 'phoenix_cognitive_review',
+    description: 'Read evidence-backed cognitive review of the current task: consolidation, recurring friction, historical cost regression, candidate strategy and autobiographical counts. No live quotas, emotion inference or autonomous action.',
+    parameters: {},
+    output: MEMORY_OUTPUT,
+    isConcurrencySafe: () => true,
+    execute: async (_args, execution) => {
+      const session = execution.agent?.session
+      if (session === undefined) return JSON.stringify(reviewCognition(undefined))
+      await ctx.learningMemory.ready()
+      execution.signal.throwIfAborted()
+      const owner = learningOwnerSessionId(session)
+      const currentMessage = userTextForAssembly({ agent: execution.agent })
+      const taskContext = tasks.resolvedReference(owner)?.task.text ?? currentMessage
+      const projectId = ctx.learningMemory.projectIdForSession(owner)
+      return JSON.stringify(reviewCognition(taskContext === undefined ? undefined : experience.matchTask(taskContext, projectId)))
+    },
+    presentCall: () => ({ card: 'generic', title: 'Cognitive review', kind: 'read' }),
+  }))
+
   ctx.tools.register(defineTool({
     name: 'phoenix_gnosis_memory',
     description: 'Inspect stored technical memory relations and source event references in the owning conversation. Read-only, requires a specific query; no cross-session export, no raw memory text, no independent truth certification.',
