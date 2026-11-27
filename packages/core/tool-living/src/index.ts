@@ -8,7 +8,6 @@ import { AMPLIFIER_OPERATIONS, runAmplifier } from './amplifier.ts'
 import { saveNumericRecipe, runStoredNumericRecipe, type RecipeContext } from './amplifier-memory.ts'
 import { SessionToolFactory } from './session-tool-factory.ts'
 import { livingActionSafety } from './living-action-safety.ts'
-import { initiativeReceipts, persistInitiativeFeedback, type InitiativeMemory } from './initiative-feedback.ts'
 import { LivingInitiative } from './living-initiative.ts'
 import { loadInitiativeFeedback, persistInitiativeFeedback, type InitiativeMemory } from './initiative-feedback.ts'
 import { assessSelfInitiative, SELF_GOALS } from './self-initiative.ts'
@@ -314,6 +313,7 @@ export function apply(ctx: Context): void {
         if(candidate&&typeof candidate.allCognitiveRecords==='function'&&typeof candidate.projectIdForSession==='function'&&typeof candidate.rememberCognitive==='function')memory=candidate
       }catch{/* optional service */}
       if(args.operation==='remember-feedback'){
+        if(session.header.origin==='subagent')throw Error('INITIATIVE_FEEDBACK_OWNER_REQUIRED')
         if(!args.candidate||!args.feedback||!memory)throw Error('INITIATIVE_DURABLE_FEEDBACK_UNAVAILABLE')
         let ask:AdaptiveApprovalService|undefined
         try{ask=services.get('userQuestions') as AdaptiveApprovalService|undefined}catch{/* fail closed */}
