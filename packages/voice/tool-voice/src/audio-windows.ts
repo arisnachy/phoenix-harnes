@@ -75,8 +75,17 @@ async function callNative(
   const descriptor = process.env.PHOENIX_DESKTOP_CONTROL_DESCRIPTOR?.trim()
     || (appData ? join(appData, 'Phoenix', 'desktop-control.json') : '')
   if (!descriptor) throw new Error('AUDIO_WINDOWS_DESKTOP_REQUIRED')
-  const pipe = parseAudioDescriptor(await readFile(descriptor, 'utf8'))
-  const raw = await pipeQuery(pipe, { type, sessionId, seconds, source })
+  let raw: string
+  try {
+    const pipe = parseAudioDescriptor(await readFile(descriptor, 'utf8'))
+    raw = await pipeQuery(pipe, { type, sessionId, seconds, source })
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ENOENT' || code === 'ECONNREFUSED') {
+      throw new Error('AUDIO_DESKTOP_BROKER_OFFLINE: open PHOENIX Desktop in the interactive Windows session; web-only mode cannot capture native audio', { cause: error })
+    }
+    throw error
+  }
   const response: unknown = JSON.parse(raw)
   if (response === null || typeof response !== 'object' || Array.isArray(response)) {
     throw new Error('AUDIO_PIPE_RESPONSE_INVALID')
@@ -128,9 +137,9 @@ export async function trustedAudioCapturePath(file: string): Promise<string> {
   return actual
 }
 
-async function verifiedWav(file: string): Promise<void> {
+async function verifiedWav(file: string, expectedBytes: number): Promise<void> {
   const details = await stat(file)
-  if (!details.isFile() || details.size < 556 || details.size > 24_000_000) {
+  if (!details.isFile() || details.size !== expectedBytes || details.size < 556 || details.size > 24_000_000) {
     throw new Error('AUDIO_CAPTURE_SIZE_INVALID')
   }
   const wav = await readFile(file)
@@ -172,6 +181,8 @@ async function transcribeLocal(file: string): Promise<{ language?: string; cues:
       child.kill()
       finish(new Error('AUDIO_LOCAL_TRANSCRIPTION_TIMEOUT'))
     }, 180_000)
+    // Drain diagnostic output so Whisper cannot deadlock on a full stderr pipe.
+    child.stderr.resume()
     child.stdout.setEncoding('utf8')
     child.stdout.on('data', (chunk: string) => {
       stdout += chunk
@@ -226,7 +237,7 @@ export async function listenWindowsAudio(sessionId: string, seconds: number,
   const capturedFile = await trustedAudioCapturePath(receipt.file)
   // Cleanup even when media is corrupt, the model is unavailable, or transcription fails.
   try {
-    await verifiedWav(capturedFile)
+    await verifiedWav(capturedFile, receipt.bytes)
     const transcript = await transcribeLocal(capturedFile)
     return {
       source: receipt.source, device: receipt.device, seconds: receipt.seconds,
