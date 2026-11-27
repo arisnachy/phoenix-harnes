@@ -8,15 +8,17 @@ export interface BrowserClientLocation {
 }
 
 const CACHE_MAX_AGE_MS = 60_000
-const GEOLOCATION_TIMEOUT_MS = 1_200
+const GEOLOCATION_TIMEOUT_MS = 2_500
+const RETRY_TIMEOUT_MS = 3_500
+const FALLBACK_MAX_AGE_MS = 4 * 60_000
 
 let cached: BrowserClientLocation | undefined
 let inFlight: Promise<BrowserClientLocation | undefined> | undefined
 
-function usableCached(now: number): BrowserClientLocation | undefined {
+function usableCached(now: number, maxAge = CACHE_MAX_AGE_MS): BrowserClientLocation | undefined {
   if (cached === undefined) return undefined
   if (cached.observedAt > now + 60_000) return undefined
-  if (now - cached.observedAt > CACHE_MAX_AGE_MS) return undefined
+  if (now - cached.observedAt > maxAge) return undefined
   return cached
 }
 
@@ -34,7 +36,7 @@ async function permissionGranted(): Promise<boolean> {
   }
 }
 
-function samplePosition(signal?: AbortSignal): Promise<BrowserClientLocation | undefined> {
+function samplePosition(highAccuracy: boolean, timeout: number, signal?: AbortSignal): Promise<BrowserClientLocation | undefined> {
   return new Promise((resolve) => {
     if (signal?.aborted) {
       resolve(undefined)
@@ -44,10 +46,12 @@ function samplePosition(signal?: AbortSignal): Promise<BrowserClientLocation | u
     const finish = (value: BrowserClientLocation | undefined): void => {
       if (settled) return
       settled = true
+      clearTimeout(watchdog)
       signal?.removeEventListener('abort', onAbort)
       resolve(value)
     }
     const onAbort = (): void => { finish(undefined) }
+    const watchdog = setTimeout(() => finish(undefined), timeout + 100)
     signal?.addEventListener('abort', onAbort, { once: true })
     try {
       navigator.geolocation.getCurrentPosition(
@@ -81,9 +85,9 @@ function samplePosition(signal?: AbortSignal): Promise<BrowserClientLocation | u
         },
         () => { finish(undefined) },
         {
-          enableHighAccuracy: false,
+          enableHighAccuracy: highAccuracy,
           maximumAge: CACHE_MAX_AGE_MS,
-          timeout: GEOLOCATION_TIMEOUT_MS,
+          timeout,
         },
       )
     } catch {
@@ -110,19 +114,30 @@ export async function resolvedClientLocation(
   if (signal?.aborted) return undefined
   const cachedValue = usableCached(Date.now())
   if (cachedValue !== undefined) return cachedValue
-  if (inFlight !== undefined) {
-    const value = await inFlight
-    return !signal?.aborted && await permissionGranted() ? value : undefined
+  if (inFlight === undefined) {
+    // The shared probe is not cancelled by the first caller's abort signal.
+    // Each caller independently decides whether it can consume the observation.
+    const job = (async () => {
+      let value = await samplePosition(false, GEOLOCATION_TIMEOUT_MS)
+      if (value === undefined && await permissionGranted()) {
+        value = await samplePosition(true, RETRY_TIMEOUT_MS)
+      }
+      if (!(await permissionGranted())) {
+        cached = undefined
+        return undefined
+      }
+      // Keep the original observation timestamp; never renew an old fix.
+      return value ?? usableCached(Date.now(), FALLBACK_MAX_AGE_MS)
+    })().finally(() => {
+      if (inFlight === job) inFlight = undefined
+    })
+    inFlight = job
   }
-  const job = samplePosition(signal).then(async value => {
-    if (signal?.aborted || !(await permissionGranted())) {
-      cached = undefined
-      return undefined
-    }
-    return value
-  }).finally(() => {
-    if (inFlight === job) inFlight = undefined
-  })
-  inFlight = job
-  return job
+  const value = await inFlight
+  if (signal?.aborted) return undefined
+  if (!(await permissionGranted())) {
+    cached = undefined
+    return undefined
+  }
+  return value
 }
