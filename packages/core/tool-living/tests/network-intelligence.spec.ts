@@ -80,4 +80,22 @@ describe('Network Intelligence',()=>{
     expect(await t.router('root','wifi-reload',async()=>true)).toMatchObject({status:'command-accepted',verified:false})
     expect(calls).toEqual(['ubus call system board','wifi reload'])
   })
+  it('distinguishes stable link-layer pseudonyms from IP-only neighbors and reports local diagnostics', async () => {
+    let address = '192.168.1.3'
+    const t = new NetworkIntelligence(async () => ok(JSON.stringify({
+      ...host, linkSpeed: '1 Gbps', adapterStatus: 'Up', dnsServerCount: 2, ipv6Neighbors: 3,
+      neighbors: [
+        { IPAddress: '192.168.1.1', State: 'Reachable', LinkLayerAddress: '00-11-22-33-44-55' },
+        { IPAddress: address, State: 'Reachable', LinkLayerAddress: '02-AA-BB-CC-DD-EE' },
+        { IPAddress: '192.168.1.5', State: 'Stale', LinkLayerAddress: '00-00-00-00-00-00' },
+      ],
+    })), 'win32')
+    const before = await t.inventory()
+    expect(before).toMatchObject({ link: { speed: '1 Gbps', status: 'Up', dnsServerCount: 2, ipv6NeighborCount: 3 },
+      devices: [{ identity: 'link-layer' }, { identity: 'link-layer' }, { identity: 'address-only' }] })
+    address = '192.168.1.4'
+    const after = await t.inventory()
+    expect(after.devices?.[1]?.id).toBe(before.devices?.[1]?.id)
+    expect(JSON.stringify(after)).not.toMatch(/02-AA-BB|02aabbccdde[e]/iu)
+  })
 })
