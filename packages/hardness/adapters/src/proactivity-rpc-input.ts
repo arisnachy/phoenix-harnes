@@ -101,6 +101,24 @@ export function parseScheduledTaskCreation(value: unknown, now = Date.now()): Cr
 }
 
 /**
+ * Parse immediate companion chat separately from the general task form.
+ * @param input - Loopback submission from the current conversation.
+ * @param now - Host clock for immediate execution.
+ * @returns A session-addressed local-only companion mission.
+ */
+export function parseFinixChat(input: unknown, now = Date.now()): CreateProactivityTaskInput {
+  const row = record(input, 'Finix message')
+  exactKeys(row, ['sessionId', 'instruction'])
+  const sessionId = boundedString(row.sessionId, 'sessionId', 128)
+  if (!/^[a-zA-Z0-9_-]+$/.test(sessionId)) throw new Error('invalid sessionId')
+  const instruction = boundedString(row.instruction, 'instruction', 6000)
+  return { title: instruction.replace(/\s+/gu, ' ').slice(0, 110), instruction,
+    runAt: new Date(now).toISOString(), createdBy: 'user', targetAgentId: sessionId,
+    executionPolicy: 'companion-local', delivery: 'work', attentionMode: 'result',
+    visibility: 'visible', catchUp: 'latest' }
+}
+
+/**
  * Validate a browser-visible task id before a state transition.
  * @param input - RPC control payload.
  * @returns Validated task identifier.

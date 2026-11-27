@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { COMPANION_LOCAL_MODEL, companionAvailableTools, COMPANION_LOCAL_PERSONA } from './companion-local-policy.ts'
 import { AttentionStore, parseAttentionReceipt } from './proactivity-attention-store.ts'
-import { parseScheduledTaskCreation, parseScheduledTaskId } from './proactivity-rpc-input.ts'
+import { parseFinixChat, parseScheduledTaskCreation, parseScheduledTaskId } from './proactivity-rpc-input.ts'
 import { scheduledMissionScopeActive } from './mission-scope.ts'
 import type { Context } from '@phoenix-ai/cordis'
 import type { Agent, AgentRegistry } from '@phoenix-ai/dsh-agent'
@@ -606,6 +606,18 @@ function installProactivityRpc(connection: HostConnectionHandle,
       // content therefore never crosses the browser transport ahead of time.
       const tasks = await engine.list()
       if (endpoint === 'list') return { ok: true, value: tasks.map(taskView) }
+      if (endpoint === 'finix-chat') {
+        const request = parseFinixChat(input)
+        const active = tasks.find(task => task.executionPolicy === 'companion-local'
+          && task.targetAgentId === request.targetAgentId && task.instruction === request.instruction
+          && (task.status === 'scheduled' || task.status === 'running'))
+        if (active !== undefined) return { ok: true, value: taskView(active) }
+        if (tasks.filter(task => task.createdBy === 'user'
+          && (task.status === 'scheduled' || task.status === 'paused' || task.status === 'running')).length >= 200) {
+          return rpcFailure('scheduled task limit reached; archive or cancel an existing task')
+        }
+        return { ok: true, value: taskView(await engine.create(request)) }
+      }
       if (endpoint === 'create') {
         const request = parseScheduledTaskCreation(input)
         if (tasks.filter(task => task.createdBy === 'user'
