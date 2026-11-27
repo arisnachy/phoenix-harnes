@@ -15,9 +15,23 @@ describe('local accelerator provisioning', () => {
     ].join('\n')
     const output = execFileSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8' })
     expect(JSON.parse(output)).toEqual([
-      [], ['vulkan', 'cuda-12.4'], ['vulkan', 'rocm-10.0'],
+      [], ['vulkan', 'cuda-12.4', 'cuda-13.3'], ['vulkan', 'rocm-10.0'],
       ['vulkan', 'sycl', 'openvino-2026.3.1'], [],
     ])
+  })
+
+  it('chooses a measured GPU only with positive offload and a meaningful speedup', () => {
+    const policy = pathToFileURL(resolve(root, 'scripts/phoenix-local-acceleration-policy.mjs')).href
+    const script = [
+      'import { selectAccelerator, confirmedOffload } from ' + JSON.stringify(policy),
+      "const cpu = { backend: 'cpu', promptTokensPerSecond: 100, generationTokensPerSecond: 10 }",
+      "const gpu = { backend: 'vulkan', promptTokensPerSecond: 200, generationTokensPerSecond: 20, offloadConfirmed: true }",
+      "const fake = { ...gpu, backend: 'cuda', generationTokensPerSecond: 1000, offloadConfirmed: false }",
+      "const slow = { ...gpu, promptTokensPerSecond: 101, generationTokensPerSecond: 10.1 }",
+      "console.log(JSON.stringify([selectAccelerator([cpu, gpu, fake]).selected.backend, selectAccelerator([cpu, slow]).selected.backend, selectAccelerator([gpu]).state, confirmedOffload('offloaded 8/32 layers to GPU'), confirmedOffload('offloaded 0/32 layers to GPU')]))",
+    ].join('\n')
+    const output = execFileSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8' })
+    expect(JSON.parse(output)).toEqual(['vulkan', 'cpu', 'no-cpu-baseline', true, false])
   })
 
   it('starts the optional provisioner only after a successful updater result', () => {
