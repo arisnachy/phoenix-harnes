@@ -469,7 +469,7 @@ export async function reviewOrdinaryCompletion(input: {
 
 function isJudgeInfrastructureBlock(decision: OrdinaryCompletionJudgeDecision): boolean {
   if (decision.verdict !== 'blocked') return false
-  return /^Independent completion judge (?:is unavailable|did not complete|returned invalid evidence|failed)\.?$/i
+  return /^Independent completion judge (?:is unavailable|did not complete|failed)\.?$/i
     .test(decision.summary.trim())
 }
 
