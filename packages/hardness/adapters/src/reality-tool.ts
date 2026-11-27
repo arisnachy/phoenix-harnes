@@ -48,12 +48,12 @@ export function createRealitySnapshotTool(
 ): ToolDefinition {
   return defineTool({
     name: 'phoenix_reality_now',
-    description: 'Read Phoenix\'s current verified Reality Context. Use this before an environment-sensitive decision when the prompt snapshot is stale, unknown, or the action is high-impact. mode=fresh waits for due probes while respecting TTLs; mode=full forces all configured host/runtime probes to run again. mode=bandwidth explicitly runs a bounded 2 MB HTTPS download sample only when the user requests internet speed. This tool is read-only and never grants permissions.',
+    description: 'Read Phoenix\'s current verified Reality Context. Use this before an environment-sensitive decision when the prompt snapshot is stale, unknown, or the action is high-impact. mode=fresh waits for due probes while respecting TTLs; mode=full forces all configured host/runtime probes to run again. mode=location resolves geographic names locally from public GeoNames data for an authorized position. mode=bandwidth explicitly runs a bounded 2 MB HTTPS download sample only when the user requests internet speed. This tool is read-only and never grants permissions.',
     parameters: {
       mode: {
         type: 'string',
-        enum: ['fresh', 'full', 'bandwidth'],
-        description: 'fresh = refresh only expired/missing signals; full = force every configured Reality Context probe now; bandwidth = explicit 2 MB download measurement (not upload).',
+        enum: ['fresh', 'full', 'location', 'bandwidth'],
+        description: 'fresh = refresh only expired/missing signals; full = force every configured Reality Context probe now; location = resolve a permitted position to city, province, country and nearby district (downloads public datasets if missing); bandwidth = explicit 2 MB download measurement (not upload).',
       },
     },
     output: {
@@ -63,7 +63,8 @@ export function createRealitySnapshotTool(
     async execute(args, exec) {
       if (args.mode === 'bandwidth') return await measureInternetDownload(exec.signal)
       const assembly = exec.agent === undefined ? undefined : { agent: exec.agent }
-      await engine.refreshNow(ctx, args.mode === 'full', assembly)
+      if (args.mode === 'location') await engine.refreshLocationNames(ctx, assembly)
+      else await engine.refreshNow(ctx, args.mode === 'full', assembly)
       const snapshot = engine.snapshot(
         ctx,
         new Date(),
@@ -74,7 +75,7 @@ export function createRealitySnapshotTool(
     presentCall(args) {
       return {
         card: 'generic',
-        title: args.mode === 'bandwidth' ? 'Measure internet download speed' : args.mode === 'full' ? 'Refresh full reality state' : 'Refresh reality state',
+        title: args.mode === 'bandwidth' ? 'Measure internet download speed' : args.mode === 'location' ? 'Resolve geographic place' : args.mode === 'full' ? 'Refresh full reality state' : 'Refresh reality state',
         kind: 'read',
       }
     },

@@ -9,3 +9,7 @@ Reality Context separates client location, configured location and physical Host
 - To inspect the result, invoke `phoenix_reality_now` with mode=full. Verify source, status, observation time, expiry, accuracy, and civic provenance. No location is inferred from timezone.
 
 Native Windows access and real sensor quality must be validated on the target machine; CI unit tests are not a real sensor test.
+
+## Automatic place names
+
+Ask where you are, or call `phoenix_reality_now` with `mode=location`. PHOENIX downloads the public GeoNames `cities500.zip` and `admin1CodesASCII.txt` catalog on the first authorized lookup, and attempts a country detail file (for example `DO.zip`) to improve locality/sector coverage. The downloads use fixed dataset URLs; no coordinates are sent to GeoNames, but the country file request exposes the country code and usual connection metadata. No API key or paid service. Only public catalog files are cached in `~/.phoenix/geonames-v1`; sensor readings remain ephemeral. Local lookup is available after downloading, including offline. GeoNames provides nearest named places, not authoritative boundary or street-level proof. If uncertainty or coverage is insufficient, the relevant name remains unavailable. Source: [GeoNames](https://www.geonames.org/export/), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Existing weather calls remain separate.
