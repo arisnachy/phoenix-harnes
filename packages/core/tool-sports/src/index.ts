@@ -1,4 +1,5 @@
 /** Kira's sports-only model-facing tools. Cards belong in the existing chat. */
+export { collectNhlResearchHandoff, readNhlResearchHandoff } from './nhl-lab-research-handoff.ts'
 import type { Context } from '@phoenix-ai/cordis'
 import { scoutDailySports } from './daily-sports-scout.ts'
 import { probeFastFreeSports } from './sports-fast-free-probes.ts'
