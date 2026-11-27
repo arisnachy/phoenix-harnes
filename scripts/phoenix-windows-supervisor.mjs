@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url'
 import process from 'node:process'
 import { gitSafeDirectoryEnvironment, persistGitSafeDirectory } from './phoenix-git-safe-directory.mjs'
 import { isManagedReleaseBranch } from './phoenix-update-policy.mjs'
+import { hasDetachedRuntimeReserve } from './phoenix-runtime-capacity.mjs'
 import { assertPromotedStableTarget } from './phoenix-stable-freshness.mjs'
 import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'
 import { ensurePhoenixDesktopShortcut } from './phoenix-windows-shortcut.mjs'
@@ -1216,6 +1217,19 @@ function assertRuntimeStorageCapacity(nextRuntime) {
     )
   }
   if (runtimeCount < MAX_RUNTIME_DIRECTORIES) return
+  if (process.platform === 'win32' && !Number.isFinite(configuredRuntimeDirectoryLimit)) {
+    const active = readActiveRuntimeRecord()
+    if (active?.healthyAt && Number.isFinite(Date.parse(active.healthyAt))
+      && runtimePathKey(active.path) === runtimePathKey(runtimeRoot)
+      && gitValue(runtimeRoot, ['rev-parse', 'HEAD']) === active.target
+      && hasDetachedRuntimeReserve({
+        directories: runtimeDirectoriesForCleanup(),
+        registered: registeredWorktreePaths(),
+        activePath: active.path,
+        limit: MAX_RUNTIME_DIRECTORIES,
+        pathKey: runtimePathKey,
+      })) return
+  }
 
   throw new Error(
     `runtime storage safety limit reached (${String(runtimeCount)}/${String(MAX_RUNTIME_DIRECTORIES)} managed runtime directories); `
