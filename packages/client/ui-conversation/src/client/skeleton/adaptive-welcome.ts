@@ -17,10 +17,10 @@ function titleOf(item: ProactivityAttentionItem): string {
 export function adaptiveWelcome(hour: number, attention: readonly ProactivityAttentionItem[], celebration?: Celebration, blocked = false): WelcomeScene {
   if (blocked) return { pose: 'ready', subtitle: 'Hay una condición que revisar antes de que podamos continuar.' }
   const failure = attention.find(item => item.kind === 'failure')
-  if (failure !== undefined) return { pose: 'tools', subtitle: 'Necesito avisarte de un problema en «' + titleOf(failure) + '». ¿Lo revisamos?' }
+  if (failure !== undefined) return { pose: 'tools', subtitle: failure.title === 'Finix · revisión del sistema' && failure.detail !== undefined ? failure.detail : 'Necesito avisarte de un problema en «' + titleOf(failure) + '». ¿Lo revisamos?' }
   if (celebration?.tone === 'solemn') return { pose: 'respectful', subtitle: 'Estoy aquí para acompañarte en este día de recuerdo.' }
   const result = attention.find(item => item.kind === 'result')
-  if (result !== undefined) return { pose: 'settled', subtitle: 'Tengo novedades de «' + titleOf(result) + '» para compartir contigo.' }
+  if (result !== undefined) return { pose: 'settled', subtitle: result.title === 'Finix · revisión del sistema' && result.detail !== undefined ? result.detail : 'Tengo novedades de «' + titleOf(result) + '» para compartir contigo.' }
   const upcoming = attention.find(item => item.kind === 'upcoming')
   if (upcoming !== undefined) return { pose: 'plan', subtitle: 'Tenemos pendiente «' + titleOf(upcoming) + '». ¿Lo preparamos juntos?' }
   if (celebration?.tone === 'festive') return { pose: 'celebrate', subtitle: 'Hoy es una ocasión especial. ¡Me alegra acompañarte!' }
