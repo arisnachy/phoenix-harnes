@@ -452,6 +452,18 @@ describe('chat tool activity grouping', () => {
       .toBe('1 operation recorded · latest: search · reported an error')
   })
 
+  it('shows a compact clickable connector receipt from the tool identity alone', () => {
+    renderChat([context(1,'system'),{...settledTool(),call:{name:'mcp__magnific__show_creations',argsRaw:'{"secret":"private"}'}}])
+    const disclosure=screen.getByRole('button',{name:'Tools'})
+    const receipt=screen.getByTestId('tool-activity-receipt')
+    expect(disclosure.contains(receipt)).toBe(true)
+    expect(receipt.textContent).toBe('Magnific · show creations')
+    expect(receipt.textContent).not.toContain('private')
+    expect(disclosure.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(disclosure)
+    expect(screen.getByTestId('node-tool-call')).toBeTruthy()
+  })
+
   it('does not manufacture a completed milestone from context or a running tool', () => {
     renderChat([context(1, 'system')], [runningTool()])
     expect(screen.queryByTestId('tool-activity-receipt')).toBeNull()
