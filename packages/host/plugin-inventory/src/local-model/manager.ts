@@ -358,7 +358,7 @@ class RuntimeManager implements LocalModelRuntimeManager {
     const attempts = profile === undefined ? [undefined] : [profile, undefined]
     let lastError: unknown
     for (const accelerator of attempts) {
-      if (this.persistent.selectedModelId !== model.id || this.persistent.mode === 'off') {
+      if (this.persistent.selectedModelId !== model.id || this.snapshot().mode === 'off') {
         throw new LocalModelRuntimeFault('local-model-busy', 'Cambió la selección durante el inicio local.')
       }
       const port = await this.dependencies.allocatePort()
