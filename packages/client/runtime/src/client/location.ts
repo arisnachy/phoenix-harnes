@@ -15,7 +15,7 @@ const EXPLICIT_LOCATION_TIMEOUT_MS = 8_000
 export function isExplicitLocationRequest(text: string): boolean {
   const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
     .replace(/^[¿?¡!\s]+|[¿?¡!.\s]+$/g, '').replace(/\s+/g, ' ')
-  return /^(?:(?:kira|phoenix)[,:]? )?(?:y )?(?:(?:donde (?:estoy|estamos)(?: ubicad[oa]s?)?(?: ahora(?: mismo)?)?)|(?:cual es (?:mi|nuestra) ubicacion(?: actual)?)|(?:dime (?:mi|nuestra) ubicacion(?: actual)?)|(?:where (?:am i|are we)(?: right now)?)|(?:what is my (?:current )?location)|(?:show my (?:current )?location))$/.test(normalized)
+  return /^(?:(?:kira|phoenix)[,:]? [¿?¡!]*)?(?:y )?(?:(?:donde (?:estoy|estamos)(?: ubicad[oa]s?)?(?: ahora(?: mismo)?)?)|(?:cual es (?:mi|nuestra) ubicacion(?: actual)?)|(?:dime (?:mi|nuestra) ubicacion(?: actual)?)|(?:where (?:am i|are we)(?: right now)?)|(?:what is my (?:current )?location)|(?:show my (?:current )?location))$/.test(normalized)
 }
 
 let cached: BrowserClientLocation | undefined
