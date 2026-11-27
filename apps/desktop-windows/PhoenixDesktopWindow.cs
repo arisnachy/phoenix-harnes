@@ -37,6 +37,7 @@ internal sealed class PhoenixDesktopWindow : Form
     private readonly WebView2 phoenixView = new();
     private readonly WebView2 browserView = new();
     private readonly DesktopLivePane desktopLive = new();
+    private readonly DesktopWindowsState windowsState = new();
     private ToolStrip? browserToolbar;
     private ToolStrip? browserDebugStrip;
     private readonly ToolStripLabel browserDebugStatus = new("Kira · navegador sin iniciar");
@@ -112,7 +113,7 @@ internal sealed class PhoenixDesktopWindow : Form
         // SplitContainer validates min sizes against its current Width. During construction the
         // control has not been laid out yet, so apply geometry only after WinForms has a real size.
         // The chat owns the full window at startup; the compact browser appears only when invoked.
-        Shown += (_, _) => ApplyInitialSplitLayout();
+        Shown += (_, _) => { ApplyInitialSplitLayout(); windowsState.Start(); };
         split.Resize += (_, _) => { if (!split.Panel2Collapsed) ApplyBrowserSplitLayout(); };
         split.SplitterMoved += (_, _) =>
         {
@@ -679,6 +680,8 @@ internal sealed class PhoenixDesktopWindow : Form
     {
         switch (command.Type)
         {
+            case "phoenix.desktop.windows-state":
+                return windowsState.Snapshot();
             case "phoenix.desktop.windows":
                 return ListNativeDesktopWindows();
             case "phoenix.desktop.screenshot":
@@ -1363,7 +1366,10 @@ internal sealed class PhoenixDesktopWindow : Form
     protected override void Dispose(bool disposing)
     {
         if (disposing)
+        {
+            windowsState.Dispose();
             startupAnimationTimer.Dispose();
+        }
         base.Dispose(disposing);
     }
 
