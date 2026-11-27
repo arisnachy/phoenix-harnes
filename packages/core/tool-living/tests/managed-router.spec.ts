@@ -44,4 +44,23 @@ describe('Managed router local enrollment',()=>{
     expect(JSON.stringify(value)).not.toContain('SECRET')
     expect(calls.at(-1)).toBe('destroy')
   })
+  it('requires separate approval and never retries an uncertain restart',async()=>{
+    const calls:string[]=[]
+    const router=new ManagedRouter(async()=>profile,async()=> 'SECRET',async(_p,_m,path)=>{
+      calls.push(path)
+      if(path==='/rest/system/resource')return {version:'7.19','board-name':'Router'}
+      throw new Error('disconnected')
+    })
+    expect(await router.reboot(gateway,async()=>gateway,async()=>false)).toMatchObject({status:'denied'})
+    expect(calls).toHaveLength(0)
+    expect(await router.reboot(gateway,async()=>gateway,async()=>true)).toMatchObject({status:'unknown-outcome',verified:false})
+    expect(calls).toEqual(['/rest/system/resource','/rest/system/reboot'])
+  })
+  it('blocks repeat authentication immediately after a failed request',async()=>{
+    let calls=0
+    const router=new ManagedRouter(async()=>profile,async()=> 'SECRET',async()=>{calls++;throw new Error('auth failed')})
+    await router.inspect(gateway,async()=>gateway)
+    expect(await router.inspect(gateway,async()=>gateway)).toMatchObject({reason:'ROUTER_AUTH_COOLDOWN'})
+    expect(calls).toBe(1)
+  })
 })
