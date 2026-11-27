@@ -30,6 +30,23 @@ export const fastsdRoot = () => legacyFastsdRoot() + '-flux2'
 const readyFile = () => join(fastsdRoot(), '.phoenix-fastsd-ready')
 const verifiedFile = () => join(fastsdRoot(), '.phoenix-flux2-verified')
 const migratedFile = () => join(fastsdRoot(), '.phoenix-flux2-migrated')
+const diagnosticFile = () => join(fastsdRoot(), '.phoenix-flux2-error.log')
+export function diagnosticText(value) {
+  return String(value ?? '').replace(/https?:\/\/[^\s<>"']+/gi, '[URL]').replace(/(?:authorization|password|token|api[_-]?key)\s*[:=]\s*[^\r\n]+/gi, '[credencial oculta]').trim().slice(-6000)
+}
+function recordDiagnostic(error) {
+  try {
+    mkdirSync(fastsdRoot(), { recursive: true })
+    writeFileSync(diagnosticFile(), diagnosticText(error?.message ?? error), { mode: 0o600 })
+  } catch { /* diagnostics must not mask the real failure */ }
+}
+function lastDiagnostic() {
+  try { return diagnosticText(readFileSync(diagnosticFile(), 'utf8')) } catch { return null }
+}
+function clearDiagnostic() { try { rmSync(diagnosticFile(), { force: true }) } catch { /* best effort */ } }
+export function hasMigrationCandidate(legacyRoot = legacyFastsdRoot(), currentRoot = fastsdRoot()) {
+  return [legacyRoot, currentRoot].some(path => { try { return lstatSync(path).isDirectory() } catch { return false } })
+}
 function claimMigration() {
   mkdirSync(fastsdRoot(), { recursive: true })
   const lock = join(fastsdRoot(), '.phoenix-flux2-migration.lock')
@@ -60,7 +77,12 @@ export function legacyCacheCandidates(home, legacyRoot, env = process.env) {
   return owned
 }
 function retireLegacyModel() {
-  if (!existsSync(verifiedFile()) || !existsSync(join(legacyFastsdRoot(), '.phoenix-fastsd-ready'))) return
+  if (!existsSync(verifiedFile())) return
+  // An incomplete prior install can be repaired without deleting any old cache.
+  if (!existsSync(join(legacyFastsdRoot(), '.phoenix-fastsd-ready'))) {
+    writeFileSync(migratedFile(), FASTSD_REVISION + '\n')
+    return
+  }
   for (const target of legacyCacheCandidates(homedir(), legacyFastsdRoot())) {
     if (!existsSync(target)) continue
     // Refuse junctions/symlinks anywhere along the resolved target.
@@ -119,15 +141,20 @@ async function probe() {
   } catch { return false }
 }
 
-function run(command, args, cwd, timeoutMs) {
+export function run(command, args, cwd, timeoutMs) {
   return new Promise((resolveRun, reject) => {
-    const child = spawn(command, args, { cwd, windowsHide: true, stdio: 'ignore', shell: false })
+    const child = spawn(command, args, { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], shell: false })
+    let tail = ''
+    const collect = chunk => { tail = (tail + chunk.toString('utf8')).slice(-16000) }
+    child.stdout.on('data', collect)
+    child.stderr.on('data', collect)
+    const details = () => { const value = diagnosticText(tail); return value ? '\n' + value : '' }
     let settled = false
     const timer = setTimeout(() => {
       if (settled) return
       settled = true
       child.kill()
-      reject(new Error('Tiempo de instalación agotado. Consulta el instalador de FastSD CPU.'))
+      reject(new Error('Tiempo de instalación FLUX.2 agotado.' + details()))
     }, timeoutMs)
     child.once('error', error => {
       if (settled) return
@@ -139,7 +166,7 @@ function run(command, args, cwd, timeoutMs) {
       if (settled) return
       settled = true
       clearTimeout(timer)
-      code === 0 ? resolveRun() : reject(new Error('Instalación FastSD CPU terminada con código ' + code))
+      code === 0 ? resolveRun() : reject(new Error('Instalación FLUX.2 / FastSD CPU terminada con código ' + code + details()))
     })
   })
 }
@@ -148,13 +175,24 @@ async function ensureInstalled() {
   const root = fastsdRoot()
   const python = join(root, 'env', process.platform === 'win32' ? 'Scripts' : 'bin',
     process.platform === 'win32' ? 'python.exe' : 'python')
-  if (existsSync(python) && ready()) return python
+  if (existsSync(python) && ready()) {
+    try {
+      await run(python, ['-c', 'import openvino, torch, fastapi, uvicorn; from diffusers import Flux2KleinPipeline; assert "CPU" in openvino.Core().available_devices'], root, 120_000)
+      return python
+    } catch (error) {
+      recordDiagnostic(error)
+      // A stale ready marker must not suppress a repair of the managed environment.
+    }
+  }
   if (process.platform !== 'win32' || process.env.PHOENIX_FASTSD_AUTOINSTALL === '0') {
     throw new Error('FastSD CPU no está instalado. En Windows: powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\phoenix-fastsd-setup.ps1')
   }
-  await run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-    join(PROJECT_ROOT, 'scripts', 'phoenix-fastsd-setup.ps1')], PROJECT_ROOT, 30 * 60_000)
-  if (!existsSync(python) || !ready()) throw new Error('La instalación FastSD no se pudo verificar.')
+  try {
+    await run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+      join(PROJECT_ROOT, 'scripts', 'phoenix-fastsd-setup.ps1')], PROJECT_ROOT, 45 * 60_000)
+    if (!existsSync(python) || !ready()) throw new Error('La instalación FLUX.2 no se pudo verificar.')
+    clearDiagnostic()
+  } catch (error) { recordDiagnostic(error); throw error }
   return python
 }
 
@@ -168,7 +206,11 @@ async function startBackend() {
     const env = { ...process.env, HF_HUB_CACHE: join(root, 'hub'), HUGGINGFACE_HUB_CACHE: join(root, 'hub') }
     const libs = join(root, 'env', 'Lib', 'site-packages', 'openvino', 'libs')
     env.PATH = (env.PATH || env.Path || '') + (process.platform === 'win32' ? ';' : ':') + libs
-    backend = spawn(python, ['-c', script], { cwd: root, env, stdio: 'ignore', windowsHide: true })
+    backend = spawn(python, ['-c', script], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+    let backendTail = ''
+    const collect = chunk => { backendTail = (backendTail + chunk.toString('utf8')).slice(-16000) }
+    backend.stdout.on('data', collect)
+    backend.stderr.on('data', collect)
     let childError
     backend.once('error', e => { childError = e })
     const startedAt = Date.now()
@@ -179,9 +221,9 @@ async function startBackend() {
     }
     if (backend?.exitCode === null) backend.kill()
     throw new Error('FastSD CPU OpenVINO no inició en 127.0.0.1:' + PORT +
-      (childError ? ' (' + childError.message + ')' : '. Verifica Python, RAM y el modelo instalado.'))
+      (childError ? ' (' + childError.message + ')' : '. Verifica Python, RAM y el modelo instalado.') + '\n' + diagnosticText(backendTail))
   })()
-  try { await backendStart } finally { backendStart = undefined }
+  try { await backendStart } catch (error) { recordDiagnostic(error); throw error } finally { backendStart = undefined }
 }
 
 function releaseAfterIdle() {
@@ -226,6 +268,7 @@ async function generate(prompt, options) {
   // Never delete old model weights until the replacement has generated real pixels.
   mkdirSync(fastsdRoot(), { recursive: true })
   writeFileSync(verifiedFile(), FASTSD_REVISION + '\n')
+  clearDiagnostic()
   try { retireLegacyModel() } catch (error) {
     process.stderr.write('[PHOENIX FastSD] Limpieza pendiente: ' + error.message + '\n')
   }
@@ -263,13 +306,16 @@ async function invoke(name, args) {
     return {
       installed: existsSync(join(fastsdRoot(), 'env', process.platform === 'win32' ? 'Scripts' : 'bin',
         process.platform === 'win32' ? 'python.exe' : 'python')),
+      dependencies_ready: ready(),
+      model_verified: existsSync(verifiedFile()),
+      last_error: lastDiagnostic(),
       api_ready: await probe(),
       model: FASTSD_MODEL,
       engine: 'FastSD CPU / OpenVINO',
     }
   }
   if (name !== 'generate_image') throw new Error('Herramienta desconocida')
-  const task = () => generate(args?.prompt, args ?? {}).finally(releaseAfterIdle)
+  const task = () => generate(args?.prompt, args ?? {}).catch(error => { recordDiagnostic(error); throw error }).finally(releaseAfterIdle)
   const next = queue.then(task, task)
   queue = next.then(() => undefined, () => undefined)
   return next
@@ -314,17 +360,18 @@ if (entry) {
     let releaseMigration
     try {
       if (process.env.PHOENIX_FASTSD_AUTOINSTALL !== '0' && process.env.PHOENIX_FASTSD_ENABLE !== '0'
-        && existsSync(join(legacyFastsdRoot(), '.phoenix-fastsd-ready'))) {
+        && hasMigrationCandidate()) {
         releaseMigration = claimMigration()
         if (releaseMigration && existsSync(verifiedFile())) {
           if (!existsSync(migratedFile())) retireLegacyModel()
         } else if (releaseMigration) {
           await generate('A simple blue ceramic cup on a wooden table, soft daylight, photograph', { migrationOnly: true })
         }
-        process.stdout.write(JSON.stringify({ ok: true, model: FASTSD_MODEL }) + '\n')
+        process.stdout.write(JSON.stringify({ ok: existsSync(verifiedFile()), model: FASTSD_MODEL, in_progress: !releaseMigration }) + '\n')
       }
     } catch (error) {
-      process.stderr.write('[PHOENIX FastSD] Migración pendiente: ' + error.message + '\n')
+      recordDiagnostic(error)
+      process.stderr.write('[PHOENIX FastSD] Migración pendiente: ' + diagnosticText(error.message) + '\n')
       process.exitCode = 1
     } finally {
       if (backend?.exitCode === null) backend.kill()
@@ -346,8 +393,9 @@ if (entry) {
       const result = await generate(payload.prompt)
       process.stdout.write(JSON.stringify({ ok: true, markdown: result.markdown, model: result.model }) + '\n')
     } catch (error) {
+      recordDiagnostic(error)
       process.stdout.write(JSON.stringify({
-        ok: false, error: error instanceof Error ? error.message.slice(0, 280) : 'Error de imagen local',
+        ok: false, error: error instanceof Error ? diagnosticText(error.message).slice(-1800) : 'Error de imagen local',
       }) + '\n')
       process.exitCode = 1
     } finally {

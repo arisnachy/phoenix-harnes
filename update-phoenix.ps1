@@ -101,7 +101,7 @@ $fluxBase = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'PHOENIX' } els
 $fluxLegacy = if ($env:PHOENIX_FASTSD_HOME) { $env:PHOENIX_FASTSD_HOME } else { Join-Path $fluxBase 'fastsdcpu' }
 if (($null -eq $code -or $code -eq 0) -and $env:PHOENIX_FASTSD_AUTOINSTALL -ne '0' -and
     $env:PHOENIX_FASTSD_ENABLE -ne '0' -and (Test-Path -LiteralPath $fluxWorker) -and
-    (Test-Path -LiteralPath (Join-Path $fluxLegacy '.phoenix-fastsd-ready')) -and
+    ((Test-Path -LiteralPath $fluxLegacy -PathType Container) -or (Test-Path -LiteralPath ($fluxLegacy + '-flux2') -PathType Container)) -and
     -not (Test-Path -LiteralPath (Join-Path ($fluxLegacy + '-flux2') '.phoenix-flux2-migrated'))) {
   try {
     New-Item -ItemType Directory -Force -Path $fluxBase | Out-Null
