@@ -503,3 +503,10 @@
 @media (prefers-reduced-motion: reduce) {
   .celebrationArt { animation: none !important; }
 }
+
+/* Welcome-only cute rig; no metallic emblem behind the character. */
+.welcomeMascot { border: 0; padding: 0; background: transparent; cursor: pointer; color: inherit; }
+.welcomeMascot > svg { width: 100%; height: 100%; max-width: 100%; }
+.welcomeMascot:focus-visible { outline: 2px solid var(--dsw-specific-phoenix-accent); outline-offset: 5px; border-radius: 50%; }
+.welcomeDecoration { position: absolute; z-index: 1; width: 43%; height: 43%; object-fit: contain; right: -17%; bottom: 4%; pointer-events: none; }
+@media (max-width: 720px) { .welcomeDecoration { right: -9%; } }
