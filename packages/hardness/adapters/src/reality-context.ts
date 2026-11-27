@@ -12,6 +12,7 @@ import {
   uptime,
 } from 'node:os'
 import { performance } from 'node:perf_hooks'
+import { join } from 'node:path'
 import { promisify } from 'node:util'
 import type { Context } from '@phoenix-ai/cordis'
 
@@ -1096,13 +1097,17 @@ async function probeRuntimeServices(ctx: Context): Promise<RuntimeServiceTelemet
 async function probeClockSync(): Promise<{ value: boolean | null; source: string; confidence: number }> {
   try {
     if (platform() === 'win32') {
-      const { stdout } = await execFileAsync('w32tm', ['/query', '/status'], {
+      const { stdout } = await execFileAsync(join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'w32tm.exe'), ['/query', '/status'], {
         timeout: 2_000,
         windowsHide: true,
       })
       const text = String(stdout)
-      if (/free-running system clock/iu.test(text)) return { value: false, source: 'w32tm', confidence: 0.95 }
-      if (/source\s*:/iu.test(text)) return { value: true, source: 'w32tm', confidence: 0.9 }
+      if (/free-running system clock|local cmos clock|reloj cmos local/iu.test(text)) return { value: false, source: 'w32tm', confidence: 0.95 }
+      const leap = /^\s*(?:Leap Indicator|Indicador de salto)\s*:\s*(\d+)/imu.exec(text)
+      const stratum = /^\s*(?:Stratum|Estrato)\s*:\s*(\d+)/imu.exec(text)
+      if (leap?.[1] === '3' || (stratum && Number(stratum[1]) >= 16)) return { value: false, source: 'w32tm', confidence: 0.95 }
+      if (leap && Number(leap[1]) <= 2 && stratum && Number(stratum[1]) >= 1 && Number(stratum[1]) <= 15
+        && /^\s*(?:Source|Origen|Fuente)\s*:\s*\S+/imu.test(text)) return { value: true, source: 'w32tm', confidence: 0.9 }
       return { value: null, source: 'w32tm-unrecognized', confidence: 0 }
     }
     if (platform() === 'linux') {
@@ -1356,7 +1361,7 @@ export class RealityContextEngine {
     const sunset = weatherValue?.sunset ?? null
     const sunriseMs = sunrise === null ? Number.NaN : Date.parse(sunrise)
     const sunsetMs = sunset === null ? Number.NaN : Date.parse(sunset)
-    const daylightKnown = Number.isFinite(sunriseMs) && Number.isFinite(sunsetMs)
+    const daylightKnown = location !== undefined && !weather.stale && Number.isFinite(sunriseMs) && Number.isFinite(sunsetMs)
     const runtimeServices = signal(this.runtimeServices, epoch)
     const runtimeValue = runtimeServices.value
     const internet = signal(this.internet, epoch)
@@ -1413,7 +1418,7 @@ export class RealityContextEngine {
           source: 'none',
         }
         : {
-          status: weather.value === null ? 'unavailable' : 'available',
+          status: weather.value === null || weather.stale ? 'unavailable' : 'available',
           signal: weather,
           alerts: {
             value: null,
