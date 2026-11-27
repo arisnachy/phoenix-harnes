@@ -16,6 +16,7 @@ import {
   shouldCaptureAfterAction,
   systemBrowserOpenInvocation,
   validateComputerArgs,
+  validatedWindowsState,
   windowsComputerInvocation,
   computerVerificationTarget,
   computerActionWithPinnedTarget,
@@ -438,5 +439,31 @@ describe('Windows semantic UI Automation', () => {
     expect(invocation.stdin).toContain('applicationGoalVerified=$false')
     expect(invocation.timeoutMs).toBe(12_000)
     expect(shouldCaptureAfterAction('uia_invoke')).toBe(false)
+  })
+})
+
+describe('Resident Windows state', () => {
+  const receipt = {
+    schema:'phoenix.windows-state.v1', observedAt:123456,
+    events:{status:'active',revision:4,lastEventAt:123450,foregroundChanges:1,visibilityChanges:1,geometryChanges:1,minimizeChanges:1},
+    foreground:{processName:'EXCEL',minimized:false},
+    power:{line:'Online',batteryPresent:true,batteryPercent:80},
+    historyStored:false,contentCaptured:false,permissionsGranted:false,
+  }
+  it('reads through the existing native observation gate without opening a viewer', () => {
+    expect(legacyDesktopObservationCommandForAction('windows_state')).toEqual({type:'phoenix.desktop.windows-state'})
+    expect(() => assertComputerActionAllowed('observe','windows_state')).not.toThrow()
+    expect(() => assertComputerActionAllowed('off','windows_state')).toThrow()
+    expect(computerActionNeedsApproval('workspace-write','windows_state')).toBe(false)
+    expect(shouldCaptureAfterAction('windows_state')).toBe(false)
+    expect(computerActionWithPinnedTarget({action:'windows_state'},'hwnd:0x42')).toEqual({action:'windows_state'})
+    expect(() => windowsComputerInvocation({action:'windows_state'})).toThrow(/native desktop broker/)
+  })
+  it('validates native evidence without leaking unrelated data or trusting malformed state', () => {
+    const result = JSON.parse(validatedWindowsState(JSON.stringify({...receipt, windowTitle:'private document'})))
+    expect(result).toEqual(receipt)
+    expect(() => validatedWindowsState(JSON.stringify({...receipt, permissionsGranted:true}))).toThrow()
+    expect(() => validatedWindowsState(JSON.stringify({...receipt,power:{...receipt.power,batteryPercent:101}}))).toThrow()
+    expect(() => validatedWindowsState('{}')).toThrow()
   })
 })

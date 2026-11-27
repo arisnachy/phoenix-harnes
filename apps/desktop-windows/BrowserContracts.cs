@@ -145,6 +145,7 @@ public sealed record BrowserCommand(
         "phoenix.browser.click-text",
         "phoenix.browser.login",
         "phoenix.desktop.windows",
+        "phoenix.desktop.windows-state",
         "phoenix.desktop.screenshot",
         "phoenix.desktop.preview",
         "phoenix.desktop.live-state",
@@ -184,7 +185,7 @@ public sealed record BrowserCommand(
                 return true;
             }
 
-            if (type is "phoenix.browser.inspect" or "phoenix.desktop.windows" or "phoenix.desktop.screenshot")
+            if (type is "phoenix.browser.inspect" or "phoenix.desktop.windows" or "phoenix.desktop.screenshot" or "phoenix.desktop.windows-state")
             {
                 command = new BrowserCommand(type);
                 return true;
