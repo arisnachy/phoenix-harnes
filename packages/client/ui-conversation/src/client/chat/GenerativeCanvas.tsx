@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { PhoenixStatusPill, PhoenixUiIcon, choosePhoenixUiIcon, choosePhoenixUiTone, isPhoenixUiIconName, isPhoenixUiIconTone, isPhoenixUiHexColor, type PhoenixUiIconName, type PhoenixUiIconTone } from '@phoenix-ai/dsh-client-ui-primitives'
 import css from './GenerativeCanvas.module.css'
+import { AnimatedScene, validateAnimatedScene, type AnimatedSceneNode } from './AnimatedScene.tsx'
 import { ForecastFanChart } from './ForecastFanChart.tsx'
 // Actual ready-made React components from the MIT-licensed react-generative-ui library.
 // Imported from the upstream shadcn-style vendor copies, not rewritten templates.
@@ -19,6 +20,7 @@ import { Timeline } from './prebuilt/timeline/Timeline.tsx'
 type Status = 'positive' | 'neutral' | 'warning' | 'negative' | 'info'
 type Layout = 'column' | 'row' | 'grid'
 type CanvasNode =
+  | AnimatedSceneNode
   | { type: 'group'; layout?: Layout; children: CanvasNode[] }
   | { type: 'text' | 'heading' | 'caption'; text: string }
   | { type: 'divider' }
@@ -102,6 +104,7 @@ const MAX_DEPTH = 6
 function validateNode(value: unknown, depth: number, count: { n: number }, ids: Set<string>): boolean {
   if (!isObject(value) || !text(value.type, 30) || depth > MAX_DEPTH || ++count.n > MAX_NODES) return false
   switch (value.type) {
+    case 'animated_scene': return validateAnimatedScene(value)
     case 'group':
       return keys(value, ['type','layout','children'])
         && (value.layout === undefined || ['column','row','grid'].includes(String(value.layout)))
@@ -330,6 +333,7 @@ function Tabs({ tabs, values, setValue, onAction, onFilter, filters }: {
 
 function Node({ node, values, setValue, onAction, onFilter, filters }: RendererProps): ReactNode {
   switch (node.type) {
+    case 'animated_scene': return <AnimatedScene node={node} />
     case 'group': {
       // The upstream QuickReplyButtons template provides the horizontal
       // action pills; action/permission routing stays owned by Phoenix.

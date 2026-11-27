@@ -200,3 +200,7 @@
  .barTrack{grid-column:1 / -1;grid-row:2}
  .metric strong{font-size:18px}
 }
+
+.tableScroll th,.tableScroll td{vertical-align:top;line-height:1.5;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.tableScroll tbody tr:last-child td{border-bottom:0}
+.tableScroll tbody tr:hover td{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.05))}
