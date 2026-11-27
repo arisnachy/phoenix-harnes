@@ -7,6 +7,7 @@ import {
 } from '@phoenix-ai/dsh-tools'
 import type { ProactivityEngine, ProactivityRecurrence, ProactivityTask } from './proactivity-engine.ts'
 import { activeScheduledMissionScope } from './mission-scope.ts'
+import { latestFinixObservation } from './companion-resident.ts'
 
 /** Optional integrations used by the model-facing proactivity tools. */
 export interface ProactivityToolOptions {
@@ -54,6 +55,7 @@ function taskView(task: ProactivityTask): Record<string, JsonValue> {
     ...(task.condition === undefined ? {} : { condition: task.condition }),
     sender_identity: task.senderIdentity,
     created_by: task.createdBy,
+    ...(task.executionPolicy === undefined ? {} : { execution_policy: task.executionPolicy }),
     ...(task.attentionMode === undefined ? {} : { attention_mode: task.attentionMode }),
     ...(task.attentionPriority === undefined ? {} : { attention_priority: task.attentionPriority }),
     ...(task.attentionText === undefined ? {} : { attention_text: task.attentionText }),
@@ -314,6 +316,58 @@ function managementTool(
   })
 }
 
+/** Report the companion's last persisted self-observation without starting a model. */
+export function createFinixStatusTool(engine: ProactivityEngine): ToolDefinition {
+  return defineTool({
+    name: 'phoenix_finix_status',
+    description: 'Read Finix resident identity, scheduler state, last verified self-observation and its proposed next action. Absence of fresh evidence means unknown. Does not start a model.',
+    parameters: {},
+    output: {
+      schema: { type: 'object', additionalProperties: true },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    async execute() {
+      const tasks = await engine.list()
+      const task = tasks.find(item => item.executionPolicy === 'companion-resident')
+      const latest = latestFinixObservation(tasks)
+      return { identity: 'finix', status: task?.status ?? 'unknown', next_run_at: task?.nextRunAt ?? null,
+        observed_at: latest?.at ?? null, observation: latest === undefined ? null : { ...latest.observation } }
+    },
+    presentCall() { return { card: 'generic', title: 'Finix · status', kind: 'read' } },
+  })
+}
+
+/** Delegate bounded, local-only research via the durable scheduler, never another provider. */
+export function createFinixDelegateTool(engine: ProactivityEngine): ToolDefinition {
+  return defineTool({
+    name: 'phoenix_finix_delegate',
+    description: 'Queue one bounded read-only task for Finix using its isolated local companion policy. Use when the user addresses @Finix or explicitly requests Finix work. A queued receipt is not a completed answer. Results appear in the companion/task feed. No external writes, shell, or remote model fallback.',
+    parameters: {
+      title: { type: 'string', required: true },
+      instruction: { type: 'string', required: true },
+    },
+    output: {
+      schema: { type: 'object', additionalProperties: true },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    async execute(args, exec) {
+      const title = args.title.trim()
+      const instruction = args.instruction.trim()
+      const id = targetAgent(exec)
+      if (id === undefined || title.length === 0 || title.length > 120 || instruction.length === 0 || instruction.length > 6000) {
+        throw new ToolArgsError(['Finix requires a current session and a bounded title and instruction'])
+      }
+      const existing = (await engine.list()).find(task => task.executionPolicy === 'companion-local'
+        && task.targetAgentId === id && task.title === title && task.instruction === instruction
+        && (task.status === 'scheduled' || task.status === 'running'))
+      if (existing !== undefined) return taskView(existing)
+      return taskView(await engine.create({ title, instruction, createdBy: 'user', runAt: new Date().toISOString(),
+        targetAgentId: id, delivery: 'work', executionPolicy: 'companion-local', attentionMode: 'result' }))
+    },
+    presentCall(args) { return { card: 'generic', title: 'Finix · ' + args.title, kind: 'execute' } },
+  })
+}
+
 /**
  * Create all model-facing task tools backed by one host-owned engine.
  * @param engine - Host-owned proactivity engine shared by the returned task tools.
@@ -328,6 +382,8 @@ export function createProactivityTools(
     createProactivityCreateTool(engine, options),
     createProactivityWatchTool(engine),
     createProactivityListTool(engine),
+    createFinixStatusTool(engine),
+    createFinixDelegateTool(engine),
     managementTool('phoenix_task_pause', 'Pause a scheduled Phoenix task without changing its recurrence anchor.', 'Pause', id => engine.pause(id)),
     managementTool('phoenix_task_resume', 'Resume a paused or failed Phoenix task at its still-pending occurrence.', 'Resume', id => engine.resume(id)),
     managementTool('phoenix_task_cancel', 'Permanently cancel a Phoenix scheduled task.', 'Cancel', id => engine.cancel(id)),
