@@ -332,7 +332,7 @@ export function apply(ctx: Context): void {
         if(router.status==='enrollment-required')recommendations.push('Enroll your supported router locally with the graphical Router Vault. Never enter credentials into chat.')
         else recommendations.push('Use router-managed-inspect to verify the enrolled router and obtain current telemetry.')
         if(sameScope&&history.alerts.length>0)recommendations.push('Review the observed changes and compare against expected device or host activity. No intrusion is confirmed.')
-        return JSON.stringify({status:'completed',inventory,router,history:{status:sameScope?'completed':'unavailable-for-current-network',latest:sameScope?history.latest:null,alerts:sameScope?history.alerts:[]},recommendations,limitations:['Passive host observations only. No router-wide traffic or physical topology inferred. No network requests to the router, no scans, and no configuration changes performed.']})
+        return JSON.stringify({status:'completed',inventory,router,history:{status:sameScope?'completed':'unavailable-for-current-network',latest:sameScope?history.latest:null,alerts:sameScope?history.alerts:[],twin:sameScope?history.twin:null},recommendations,limitations:['Passive host observations only. No router-wide traffic or physical topology inferred. No network requests to the router, no scans, and no configuration changes performed.']})
       }
       if(args.operation==='router-profile-status'||args.operation==='router-managed-inspect'||args.operation==='router-managed-policy'){
         const gateway=await currentGateway()
