@@ -326,6 +326,16 @@ export function createProactivityTools(
 ): readonly ToolDefinition[] {
   return [
     createProactivityCreateTool(engine, options),
+    defineTool({
+      name: 'phoenix_finix_delegate',
+      description: 'Delegate authorized local research or preparation to Finix now. The result is returned in Finix’s independent output channel, not as a Kira answer. Do not use to bypass permissions, send messages, or consume remote model quota.',
+      parameters: { instruction: { type: 'string', required: true }, title: { type: 'string', required: true } },
+      output: { schema: { type: 'object', additionalProperties: true }, render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
+      async execute(args) {
+        return taskView(await engine.create({ title: args.title, instruction: args.instruction, createdBy: 'harness', runAt: new Date().toISOString(), executionPolicy: 'companion-local', delivery: 'work', visibility: 'visible', attentionMode: 'result' }))
+      },
+      presentCall: () => ({ card: 'generic', title: 'Delegar a Finix', kind: 'execute' }),
+    }),
     createProactivityWatchTool(engine),
     createProactivityListTool(engine),
     managementTool('phoenix_task_pause', 'Pause a scheduled Phoenix task without changing its recurrence anchor.', 'Pause', id => engine.pause(id)),
