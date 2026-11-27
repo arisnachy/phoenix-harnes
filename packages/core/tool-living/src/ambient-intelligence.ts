@@ -3,7 +3,7 @@ import { networkInterfaces } from 'node:os'
 import { execFile } from 'node:child_process'
 import process from 'node:process'
 import { AmbientExtensions, geoFeatures } from './ambient-extensions.ts'
-import { AmbientPlanet, discoverAdvertisements, sky, voiceCandidate } from './ambient-planet.ts'
+import { AmbientPlanet, AmbientPublicContext, discoverAdvertisements, sky, voiceCandidate } from './ambient-planet.ts'
 
 const USGS='https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson'
 const NOAA='https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json'
@@ -74,9 +74,11 @@ export class AmbientIntelligence {
   private readonly cache=new Map<string,{at:number;data:unknown}>()
   private readonly extensions:AmbientExtensions
   private readonly planet:AmbientPlanet
+  private readonly publicContext:AmbientPublicContext
   constructor(private readonly read:ReadJson=fetchJson,private readonly neighbors:()=>Promise<unknown>=neighborCache,private readonly config:()=>Row=()=>parseConfig(process.env.PHOENIX_AMBIENT_CONTEXT_JSON),private readonly now:()=>number=Date.now){
     this.extensions=new AmbientExtensions(read,config,now)
     this.planet=new AmbientPlanet(read,now)
+    this.publicContext=new AmbientPublicContext(read,now)
   }
   async observe(operation:string,query=''):Promise<unknown>{
     const result=await this.readObservation(operation,query)
@@ -120,7 +122,7 @@ export class AmbientIntelligence {
   }
   private async readObservation(operation:string,query=''):Promise<unknown>{
     if(['location','moon','ephemeris','weather','journal','graph'].includes(operation))return this.extensions.observe(operation,query)
-    const config=this.config(), fix=point(config.location)?null:['overview','places','route','map','sky'].includes(operation)&&config.allowWindowsLocation===true?await this.extensions.location():null
+    const config=this.config(), fix=point(config.location)?null:['overview','places','route','map','sky','nearby-online'].includes(operation)&&config.allowWindowsLocation===true?await this.extensions.location():null
     const origin=point(config.location)??point(fix), loc=record(config.location)
     const observedAt=new Date(this.now()).toISOString()
     const base={schema:'phoenix.ambient.v1',observedAt}
@@ -128,6 +130,7 @@ export class AmbientIntelligence {
       cosmicAddress:['Earth','Solar System','Milky Way','Local Group','Observable universe'],
       capabilities:{network:'passive private neighbor cache',places:'configured offline catalog',route:'optional local OSRM',world:'USGS earthquakes',space:'NOAA geomagnetic activity'},
       limitations:['OS location requires explicit opt-in and permission','Public feed monitoring requires explicit opt-in','No device access granted by observation']}
+    if(operation==='news'||operation==='nearby-online')return {...base,...await this.publicContext.get(operation,query,origin,config.allowPublicPlaces===true)}
     if(operation==='services')return {...base,...await discoverAdvertisements(config.allowLanAdvertisements===true)}
     if(operation==='satellites'||operation==='natural-events')return {...base,...await this.planet.get(operation)}
     if(operation==='sky')return origin?{...base,status:'computed',stars:sky(origin.lat,origin.lon,this.now()),method:'approximate geometric altitude of selected J2000 reference stars; no refraction, daylight, horizon obstruction or visibility guarantee'}:{...base,status:'location-not-configured'}

@@ -111,3 +111,57 @@ export function voiceCandidate(operation:string,raw:unknown,now:number){
   }
   return null
 }
+
+const NEWS_TOPICS:Record<string,string>={world:'(diplomacy OR election OR economy OR international)',science:'(astronomy OR science OR research OR spaceflight)',environment:'(earthquake OR wildfire OR hurricane OR flood)',technology:'(technology OR semiconductor OR robotics OR computing)'}
+export function newsUrl(topic:string){
+  const key=topic.trim().toLowerCase()||'world'
+  if(!Object.hasOwn(NEWS_TOPICS,key))return null
+  return 'https://api.gdeltproject.org/api/v2/doc/doc?'+new URLSearchParams({query:NEWS_TOPICS[key]!,mode:'artlist',format:'json',maxrecords:'20',timespan:'1d',sort:'DateDesc'})
+}
+export function newsArticles(raw:unknown){
+  const x=obj(raw),seen=new Set<string>()
+  if(!Array.isArray(x.articles))throw Error('INVALID_NEWS')
+  return x.articles.slice(0,20).flatMap(item=>{
+    const a=obj(item),title=text(a.title),url=typeof a.url==='string'&&a.url.length<=2048?a.url:''
+    try{const u=new URL(url);if(!['http:','https:'].includes(u.protocol)||u.username||u.password||!title||seen.has(url))return []}catch{return []}
+    seen.add(url)
+    return [{title,url,domain:text(a.domain),indexedAt:text(a.seendate),language:text(a.language),sourceCountry:text(a.sourcecountry)}]
+  })
+}
+const PLACE_TAGS:Record<string,string>={hospital:'amenity=hospital',pharmacy:'amenity=pharmacy',restaurant:'amenity=restaurant',cafe:'amenity=cafe',supermarket:'shop=supermarket',hotel:'tourism=hotel',bank:'amenity=bank',school:'amenity=school',fuel:'amenity=fuel',clinic:'amenity=clinic'}
+export function nearbyUrl(raw:unknown,category:string){
+  const p=position(raw),key=category.trim().toLowerCase()
+  if(!p||!Object.hasOwn(PLACE_TAGS,key))return null
+  const [tag,value]=PLACE_TAGS[key]!.split('=')
+  const query='[out:json][timeout:5];nwr['+tag+'='+value+'][name](around:2500,'+p.lat.toFixed(2)+','+p.lon.toFixed(2)+');out center 40;'
+  return 'https://overpass-api.de/api/interpreter?'+new URLSearchParams({data:query})
+}
+export function nearbyPlaces(raw:unknown){
+  const x=obj(raw)
+  if(!Array.isArray(x.elements))throw Error('INVALID_OSM')
+  return x.elements.slice(0,40).flatMap(item=>{
+    const e=obj(item),tag=obj(e.tags),p=position(e)??position(e.center),name=text(tag.name)
+    if(!p||!name||!['node','way','relation'].includes(String(e.type))||!Number.isSafeInteger(e.id))return []
+    return [{...p,name,category:text(tag.amenity??tag.shop??tag.tourism),sourceUrl:'https://www.openstreetmap.org/'+String(e.type)+'/'+String(e.id),openingHoursUnverified:text(tag.opening_hours)||null}]
+  })
+}
+export class AmbientPublicContext {
+  private readonly cache=new Map<string,{at:number;data:unknown}>()
+  private nextRequest=0
+  constructor(private readonly read:Read,private readonly now:()=>number){}
+  async get(operation:string,query:string,location:unknown,allowed:boolean){
+    const news=operation==='news',url=news?newsUrl(query):nearbyUrl(location,query)
+    if(!news&&!allowed)return {status:'permission-not-configured',reason:'Approximate coordinates would be sent to public OSM Overpass.'}
+    if(!url)return {status:'invalid-query-or-location',supported:Object.keys(news?NEWS_TOPICS:PLACE_TAGS)}
+    const now=this.now(),old=this.cache.get(url)
+    if(old&&now-old.at<900000)return {status:'cached',fetchedAt:new Date(old.at).toISOString(),data:old.data}
+    if(now<this.nextRequest)return {status:'rate-limited'}
+    this.nextRequest=now+60000
+    try{
+      const raw=await this.read(url),data=news?{articles:newsArticles(raw),source:'GDELT indexed media coverage; claims not independently verified'}:{places:nearbyPlaces(raw),source:'© OpenStreetMap contributors, ODbL',attribution:'https://www.openstreetmap.org/copyright',radiusMeters:2500,centerPrecision:'rounded to 0.01 degrees',complete:false}
+      if(this.cache.size>=32)this.cache.clear()
+      this.cache.set(url,{at:now,data})
+      return {status:'retrieved',fetchedAt:new Date(now).toISOString(),data}
+    }catch{return {status:'unavailable',previous:old?{fetchedAt:new Date(old.at).toISOString(),data:old.data}:null}}
+  }
+}
