@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { checkServerIdentity } from 'node:tls'
 
-type Vendor = 'openwrt' | 'mikrotik'
+type Vendor = 'openwrt' | 'mikrotik' | 'opnsense'
 type Profile = { vendor: Vendor; gateway: string; username: string; fingerprint: string; encrypted: string; ca?: string }
 type Query = (profile: Profile, method: 'GET' | 'POST', path: string, authorization?: string, body?: unknown) => Promise<unknown>
 const obj = (v: unknown): Record<string, unknown> | null => v !== null && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null
@@ -20,8 +20,8 @@ function privateGateway(v: string): boolean {
 }
 function parseProfile(raw: unknown, gateway: string): Profile | null {
   const p = obj(raw)
-  if (!p || p.gateway !== gateway || (p.vendor !== 'openwrt' && p.vendor !== 'mikrotik') ||
-      typeof p.username !== 'string' || !/^[a-zA-Z0-9_.@-]{1,64}$/u.test(p.username) ||
+  if (!p || p.gateway !== gateway || (p.vendor !== 'openwrt' && p.vendor !== 'mikrotik' && p.vendor !== 'opnsense') ||
+      typeof p.username !== 'string' || !(p.vendor === 'opnsense' ? /^[a-zA-Z0-9+/_=-]{16,128}$/u : /^[a-zA-Z0-9_.@-]{1,64}$/u).test(p.username) ||
       typeof p.fingerprint !== 'string' || !/^[A-Fa-f0-9]{64}$/u.test(p.fingerprint) ||
       typeof p.encrypted !== 'string' || !/^[a-fA-F0-9]{32,16384}$/u.test(p.encrypted)) return null
   if (p.ca !== undefined && (typeof p.ca !== 'string' || p.ca.length > 32768 || !p.ca.includes('-----BEGIN CERTIFICATE-----'))) return null
@@ -97,6 +97,25 @@ export class ManagedRouter {
     if(secret===null)return { status:'unavailable',reason:'LOCAL_VAULT_LOCKED' }
     if(await current()!==gateway)return { status:'denied',reason:'NETWORK_CHANGED' }
     try {
+      if (p.vendor === 'opnsense') {
+        const auth = 'Basic ' + Buffer.from(p.username + ':' + secret, 'utf8').toString('base64')
+        const info = obj(await this.send(p, 'GET', '/api/core/firmware/info', auth))
+        if (typeof info?.product_id !== 'string' || !/^opnsense(?:-[a-z]+)?$/iu.test(info.product_id) ||
+          typeof info.product_version !== 'string') return { status: 'unavailable', reason: 'OPNSENSE_NOT_VERIFIED' }
+        const cached = await Promise.allSettled([
+          this.send(p, 'GET', '/api/core/firmware/status', auth),
+          this.send(p, 'GET', '/api/interfaces/overview/interfaces_info', auth),
+        ])
+        const firmware = cached[0]?.status === 'fulfilled' ? obj(cached[0].value) : null
+        const interfaces = cached[1]?.status === 'fulfilled' ? cached[1].value : null
+        const firmwareState = firmware && typeof firmware.status === 'string' &&
+          ['none', 'update', 'upgrade', 'error', 'ok', 'busy'].includes(firmware.status) ? firmware.status : null
+        return { status: firmwareState !== null && interfaces !== null ? 'completed' : 'partial', vendor: p.vendor,
+          authenticated: true, version: label(info.product_version), firmwareState,
+          rebootRequired: firmware?.status_reboot === '1' || firmware?.status_reboot === 1 ? true :
+            firmware?.status_reboot === '0' || firmware?.status_reboot === 0 ? false : null,
+          interfacesResponseAvailable: interfaces !== null }
+      }
       if(p.vendor==='mikrotik'){
         const auth='Basic '+Buffer.from(p.username+':'+secret,'utf8').toString('base64')
         const resource=obj(await this.send(p,'GET','/rest/system/resource',auth))
@@ -150,7 +169,16 @@ export class ManagedRouter {
     if(secret===null)return { status:'unavailable',reason:'LOCAL_VAULT_LOCKED' }
     let dispatched=false
     try{
-      if(p.vendor==='mikrotik'){
+      if (p.vendor === 'opnsense') {
+        const auth = 'Basic ' + Buffer.from(p.username + ':' + secret, 'utf8').toString('base64')
+        const info = obj(await this.send(p, 'GET', '/api/core/firmware/info', auth))
+        if (typeof info?.product_id !== 'string' || !/^opnsense(?:-[a-z]+)?$/iu.test(info.product_id) ||
+          typeof info.product_version !== 'string') return { status: 'unavailable', reason: 'OPNSENSE_NOT_VERIFIED' }
+        if (signal?.aborted || await current() !== gateway) return { status: 'denied', reason: 'NETWORK_CHANGED_OR_CANCELLED' }
+        dispatched = true
+        const receipt = obj(await this.send(p, 'POST', '/api/core/firmware/reboot', auth, {}))
+        if (receipt?.status !== 'ok') return { status: 'unknown-outcome', verified: false }
+      } else if(p.vendor==='mikrotik'){
         const auth='Basic '+Buffer.from(p.username+':'+secret,'utf8').toString('base64')
         const resource=obj(await this.send(p,'GET','/rest/system/resource',auth))
         if(!resource||typeof resource.version!=='string'||typeof resource['board-name']!=='string')return { status:'unavailable',reason:'ROUTEROS_NOT_VERIFIED' }
