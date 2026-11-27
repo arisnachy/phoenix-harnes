@@ -462,6 +462,8 @@ describe('Resident Windows state', () => {
   it('validates native evidence without leaking unrelated data or trusting malformed state', () => {
     const result = JSON.parse(validatedWindowsState(JSON.stringify({...receipt, windowTitle:'private document'})))
     expect(result).toEqual(receipt)
+    expect(JSON.parse(validatedWindowsState(JSON.stringify({...receipt,foreground:{processName:'explorer',minimized:false}}))).foreground.processName).toBe('explorer')
+    expect(() => validatedWindowsState(JSON.stringify({...receipt,foreground:{processName:'bad\nname',minimized:false}}))).toThrow()
     expect(() => validatedWindowsState(JSON.stringify({...receipt, permissionsGranted:true}))).toThrow()
     expect(() => validatedWindowsState(JSON.stringify({...receipt,power:{...receipt.power,batteryPercent:101}}))).toThrow()
     expect(() => validatedWindowsState('{}')).toThrow()
