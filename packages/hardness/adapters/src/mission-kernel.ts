@@ -359,7 +359,8 @@ function decision(value: MissionJudgeDecision): MissionJudgeDecision {
 function reviewChanges(state: MissionKernelState, candidate: MissionJudgeDecision): string[] {
   const changes = [...candidate.requiredChanges]
   if (!uniqueMetaCriteria(candidate.criteria)) changes.push('remove duplicate judge criterion IDs and resolve contradictory rows')
-  if (candidate.verdict === 'pass' && candidate.criteria.some(row => row.verdict !== 'pass' || row.evidence.length === 0)) changes.push('resolve contradictory or unsupported judge criteria')
+  if (candidate.criteria.some(row => !state.criteria.some(item => item.id === row.id))) changes.push('remove unknown judge criterion IDs')
+  if (candidate.verdict === 'pass' && candidate.evidence.length === 0) changes.push('provide concrete overall judge evidence')
   for (const criterion of state.criteria) {
     if (!criterion.mandatory) continue
     const review = candidate.criteria.find(item => item.id === criterion.id)
@@ -371,8 +372,8 @@ function reviewChanges(state: MissionKernelState, candidate: MissionJudgeDecisio
 }
 
 function canPass(state: MissionKernelState, candidate: MissionJudgeDecision): boolean {
-  if (candidate.verdict !== 'pass' || !uniqueMetaCriteria(candidate.criteria) || !validMetaVerdict({ ...candidate,
-    failedCriterion: candidate.criteria.some(row => row.verdict !== 'pass' || row.evidence.length === 0),
+  if (candidate.verdict !== 'pass' || !uniqueMetaCriteria(candidate.criteria)
+    || candidate.criteria.some(row => !state.criteria.some(item => item.id === row.id)) || !validMetaVerdict({ ...candidate,
     qualityFailed: candidate.quality.verdict !== 'pass' || candidate.quality.evidence.length === 0 })) return false
   return state.criteria.filter(item => item.mandatory).every((item) => {
     const review = candidate.criteria.find(value => value.id === item.id)
