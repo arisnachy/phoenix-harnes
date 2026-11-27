@@ -8,6 +8,7 @@ import css from './ModelActivityAvatar.module.css'
 /** Deprecated animation props remain accepted for existing callers; portraits stay still. */
 type AvatarExpression = 'neutral' | 'warm' | 'focused' | 'happy' | 'concerned' | 'confident'
 type AvatarMotion = 'auto' | 'off'
+export type KiraPresenceState = 'thinking' | 'working' | 'responding' | 'interrupted' | 'settled'
 
 /** Exact visible identities from the user-approved 20-avatar KIRA reference. */
 export type ModelAvatarKind =
@@ -199,6 +200,8 @@ export interface ModelActivityAvatarProps {
   speaking?: boolean
   listening?: boolean
   motion?: AvatarMotion
+  /** Explicit author-row activity. Historical rows remain settled. */
+  presence?: KiraPresenceState
   /** Face pose: optional explicit look direction, with subtle autonomous movement otherwise. */
   pose?: 'auto' | 'forward' | 'left' | 'right' | 'up' | 'down'
 }
@@ -216,6 +219,8 @@ export function ModelActivityAvatar({
   ready = false,
   variant = 'compact',
   emotion,
+  presence,
+  motion = 'auto',
 }: ModelActivityAvatarProps) {
   const resolvedKind = kind
     ?? (agentId === undefined ? modelAvatarKind(activity?.model) : agentAvatarKind(agentId))
@@ -256,6 +261,9 @@ export function ModelActivityAvatar({
       data-avatar={resolvedKind}
       data-phase={phase}
       data-state={state}
+      data-presence={resolvedKind === 'kira' ? presence : undefined}
+      data-live-presence={resolvedKind === 'kira' && running && !pending && motion !== 'off'
+        && (presence === 'thinking' || presence === 'working' || presence === 'responding') ? 'true' : undefined}
       data-expression={emotion ?? (pending ? 'concerned' : running ? 'focused' : 'neutral')}
       aria-hidden="true"
     >
