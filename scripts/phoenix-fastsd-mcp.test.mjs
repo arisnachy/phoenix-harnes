@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { decodeImage, FASTSD_MODEL, FASTSD_SIZE, generationRequest, imageRoot, fastsdRoot, legacyFastsdRoot, legacyCacheCandidates } from './phoenix-fastsd-mcp.mjs'
+import { decodeImage, FASTSD_MODEL, FASTSD_SIZE, generationRequest, imageRoot, fastsdRoot, legacyFastsdRoot, legacyCacheCandidates, diagnosticText, run, hasMigrationCandidate } from './phoenix-fastsd-mcp.mjs'
 
 test('FLUX.2 Klein OpenVINO is a dedicated, fixed local image route', () => {
   const body = generationRequest('A detailed medical textbook diagram')
@@ -46,4 +46,28 @@ test('migration isolates the new runtime and scopes cleanup to exact legacy weig
   assert.equal(paths.length, 3)
   assert.ok(paths.every(path => path.endsWith('models--rupeshs--sd-turbo-openvino')))
   assert.equal(legacyCacheCandidates('/user', '/phoenix/fastsdcpu', { HF_HUB_CACHE: '/shared' }).length, 2)
+})
+
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+test('setup failure preserves useful stderr and redacts credential URLs', async () => {
+  await assert.rejects(run(process.execPath, ['-e', 'console.error("Missing dependency https://user:secret@example.invalid/wheel"); process.exit(1)'], process.cwd(), 5000), error => {
+    assert.match(error.message, /código 1/)
+    assert.match(error.message, /Missing dependency/)
+    assert.doesNotMatch(error.message, /secret/)
+    return true
+  })
+  assert.equal(diagnosticText('token=secret'), '[credencial oculta]')
+})
+
+test('partial legacy or FLUX directories are candidates without a ready marker', () => {
+  const root = mkdtempSync(join(tmpdir(), 'phoenix-flux-repair-'))
+  try {
+    const legacy = join(root, 'legacy'), current = join(root, 'current')
+    assert.equal(hasMigrationCandidate(legacy, current), false)
+    mkdirSync(current)
+    assert.equal(hasMigrationCandidate(legacy, current), true)
+  } finally { rmSync(root, { recursive: true, force: true }) }
 })
