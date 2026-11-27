@@ -32,6 +32,7 @@ export interface ProactivityRuntimeConfig {
   readonly pollMs: number
   readonly privateWorkProvider: string
   readonly privateWorkResultChars: number
+  readonly executeResident?: (input: ProactivityExecution) => ProactivityExecutionResult
   readonly userMailIdentity?: string
   readonly harnessMailIdentity?: string
   readonly resolveDefaultMailRecipient?: () => Promise<string | undefined>
@@ -343,6 +344,10 @@ export function createProactivityExecutor(
   requirePositive(config.privateWorkResultChars, 'privateWorkResultChars')
   return {
     async execute(input): Promise<ProactivityExecutionResult> {
+      if (input.task.executionPolicy === 'companion-resident') {
+        if (config.executeResident === undefined) throw new ProactivityDeferredError('Finix resident runtime unavailable')
+        return config.executeResident(input)
+      }
       const companion = input.task.executionPolicy === 'companion-local'
       if (companion && (input.task.delivery !== 'work' || input.task.condition !== undefined)) throw new Error('companion-local execution policy mismatch')
       if (companion && config.privateWorkProvider !== 'spawn') throw new ProactivityDeferredError('local companion requires the in-process spawn provider')
@@ -655,10 +660,12 @@ export function installProactivityRuntime(ctx: Context,
   engine: ProactivityEngine,
   pollMs: number,
   attention?: AttentionStore,
-  extraAttention?: () => Promise<readonly ProactivityAttentionItem[]>): () => void {
+  extraAttention?: () => Promise<readonly ProactivityAttentionItem[]>,
+  ensureResident?: () => Promise<void>): () => void {
   requirePositive(pollMs, 'pollMs')
   let disposed = false
   let pumping = false
+  let residentEnsured = false
   let activeConnection: HostConnectionHandle | undefined
   let rpcDispose: (() => Promise<void>) | undefined
 
@@ -679,6 +686,14 @@ export function installProactivityRuntime(ctx: Context,
     pumping = true
     try {
       const now = new Date()
+      if (!residentEnsured && ensureResident !== undefined) {
+        try {
+          await ensureResident()
+          residentEnsured = true
+        } catch (error: unknown) {
+          ctx.logger.warn('Finix resident registration failed: ' + (error instanceof Error ? error.message : String(error)))
+        }
+      }
       await retryFailedProactivityTasks(engine, now, DEFAULT_PROACTIVITY_RETRY_POLICY)
       await engine.runDue(now)
     } catch (error: unknown) {
