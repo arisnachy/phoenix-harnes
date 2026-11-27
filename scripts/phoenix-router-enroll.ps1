@@ -103,29 +103,10 @@ if ($Graphical) {
 try {
   $vendor = $vendor.ToLowerInvariant()
   if ($vendor -notin @('openwrt','mikrotik','opnsense')) { throw 'Unsupported HTTPS adapter.' }
-  if ($username -notmatch '^[a-zA-Z0-9_.@-]{1,64} -eq 0) { throw 'Empty password.' }
-  $profile.encrypted = ConvertFrom-SecureString -SecureString $password
-  New-Item -ItemType Directory -Path $dir -Force | Out-Null
-  $temp = Join-Path $dir ([Guid]::NewGuid().ToString()+'.tmp')
-  try {
-    $profile | ConvertTo-Json -Compress | Set-Content -LiteralPath $temp -Encoding UTF8
-    if (Test-Path -LiteralPath $file) { [IO.File]::Replace($temp,$file,$null) } else { [IO.File]::Move($temp,$file) }
-  } finally { if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp } }
-  Write-Host 'Profile saved locally. PHOENIX must verify HTTPS identity and authentication before declaring connected.'
-} finally { $password.Dispose() }
-) { throw 'Invalid username.' }
+  $usernamePattern = if ($vendor -eq 'opnsense') { '^[a-zA-Z0-9+/_=-]{16,128}$' } else { '^[a-zA-Z0-9_.@-]{1,64}$' }
+  if ($username -notmatch $usernamePattern) { throw 'Invalid username or API key.' }
   $fingerprint = $fingerprint.Replace(':','').Replace(' ','').ToUpperInvariant()
-  if ($fingerprint -notmatch '^[A-F0-9]{64} -eq 0) { throw 'Empty password.' }
-  $profile.encrypted = ConvertFrom-SecureString -SecureString $password
-  New-Item -ItemType Directory -Path $dir -Force | Out-Null
-  $temp = Join-Path $dir ([Guid]::NewGuid().ToString()+'.tmp')
-  try {
-    $profile | ConvertTo-Json -Compress | Set-Content -LiteralPath $temp -Encoding UTF8
-    if (Test-Path -LiteralPath $file) { [IO.File]::Replace($temp,$file,$null) } else { [IO.File]::Move($temp,$file) }
-  } finally { if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp } }
-  Write-Host 'Profile saved locally. PHOENIX must verify HTTPS identity and authentication before declaring connected.'
-} finally { $password.Dispose() }
-) { throw 'A verified SHA256 fingerprint is required.' }
+  if ($fingerprint -notmatch '^[A-F0-9]{64}$') { throw 'A verified SHA256 fingerprint is required.' }
   $profile = @{vendor=$vendor;gateway=$gateway;username=$username;fingerprint=$fingerprint}
   if ($caPath) {
     $ca = [IO.File]::ReadAllText($caPath)
