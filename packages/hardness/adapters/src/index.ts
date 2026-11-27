@@ -88,6 +88,7 @@ import { createConnectorInstallTool, createXMcpActivateTool } from './connector-
 import type { McpRegistryInstallerService, XMcpHostService } from './connector-install-tool.ts'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import { installOrdinaryCompletionJudgeBridge } from './ordinary-completion-judge.ts'
+import { metaRouteEligible } from './meta-review.ts'
 export { indexTools } from './tool-adapter.ts'
 export type { ToolAtlasIndexOptions, ToolChangeSource } from './tool-adapter.ts'
 export { indexSkills } from './skill-adapter.ts'
@@ -553,6 +554,21 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
           subagents,
           provider: config.judgeProvider?.trim() || 'spawn',
           maxPasses: config.maxOrdinaryJudgePasses ?? 2,
+          alternativeRoute: async (primary, signal) => {
+            // Only a deployment-selected alternative; registration alone is not health or quota.
+            const provider = process.env.PHOENIX_META_REVIEW_PROVIDER?.trim()
+            const model = process.env.PHOENIX_META_REVIEW_MODEL?.trim()
+            if (!provider || !model || signal.aborted) return undefined
+            const route = { provider, model }
+            const now = new Date()
+            if (!metaRouteEligible(route, primary, reality.engine.snapshot(ctx, now).ai, now.getTime())) return undefined
+            const llm = (ctx.get as unknown as (name: string) => unknown)('llm') as
+              { resolveModelInfo?: (provider: string, model: string, signal: AbortSignal) => Promise<{provider?:string;id?:string}> } | undefined
+            const resolved = await llm?.resolveModelInfo?.(provider, model, AbortSignal.any([signal, AbortSignal.timeout(2000)]))
+            if (signal.aborted || resolved?.provider !== provider || resolved.id !== model) return undefined
+            const fresh = new Date()
+            return metaRouteEligible(route, primary, reality.engine.snapshot(ctx, fresh).ai, fresh.getTime()) ? route : undefined
+          },
         }))
       }
       disposers.push(ctx.tools.register(createCognitiveWorkflowTool()))
