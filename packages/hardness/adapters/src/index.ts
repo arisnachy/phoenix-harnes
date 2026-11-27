@@ -7,6 +7,7 @@ import { createAssistantMailIdentityTool, createAssistantMailSendTool, createAss
 import { installAssistantMailProtocol } from './assistant-mail-protocol.ts'
 import { AttentionStore } from './proactivity-attention-store.ts'
 import { LivingResourceAttention } from './living-resource-attention.ts'
+import { curiosityAttention, LivingHomeAttention } from './living-curiosity.ts'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
@@ -655,12 +656,23 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       proactivity.bindExecutor(createProactivityExecutor(agents, subagents, runtimeConfig))
       disposers.push(() => { void mailbox.dispose() })
       const resourceAttention = new LivingResourceAttention()
+      let resourceItems: ReturnType<LivingResourceAttention['read']> = []
+      const homeAttention = new LivingHomeAttention(async signal => {
+        // Configuration must explicitly opt into repeated reads of physical-device state.
+        if (process.env.PHOENIX_HOME_MONITOR !== '1') return undefined
+        const home = (ctx.get as unknown as (name: string) => unknown)('home') as
+          { listDevices?: (signal: AbortSignal) => Promise<readonly { entityId: string; state: string }[]> } | undefined
+        return home?.listDevices?.(signal)
+      })
+      disposers.push(() => homeAttention.dispose())
       disposers.push(installProactivityRuntime(
         ctx,
         proactivity.engine,
         runtimeConfig.pollMs,
         new AttentionStore(`${taskLedgerPath(config)}.attention.json`),
-        async () => [...await mailbox.attention(), ...resourceAttention.read()],
+        async () => [...await mailbox.attention(), ...resourceItems, ...homeAttention.read(),
+          ...curiosityAttention(proactivity.engine.peek(), Date.now())],
+        () => { resourceItems = resourceAttention.read(); void homeAttention.observe() },
       ))
       wake.bindExecutor(createWakeExecutor(agents, {
         composeResumedAgent: (agentCtx: Context) => composeResumedScheduledAgent(ctx, agentCtx),
