@@ -739,12 +739,14 @@ export class VoiceRuntime extends TypertRemoteService {
       .catch(() => {})
       .then(async () => {
         if (controller.signal.aborted) return
-        spokenProvider = await this.speakThroughProviders(
+        const completedProvider = await this.speakThroughProviders(
           text,
           language,
           controller.signal,
           providers,
-        ) ?? spokenProvider
+        )
+        if (completedProvider === undefined) throw Error('voice: no provider completed playback')
+        spokenProvider = completedProvider
       })
       .catch((error: unknown) => {
         playbackError = error

@@ -532,10 +532,16 @@ type NexusObservedExecution = {
   reasoningEffort: string | null
   reasoningBasis: 'request-config' | 'provider-default-unconfirmed'
   usage: { inputTokens: number; outputTokens: number } | null
+  turn: number
+  step: number
+  finishReason: string | null
+  succeeded: boolean | null
 }
 
 type NexusActiveRoute = {
   key: string
+  turn: number
+  step: number
   exact?: string
   numeric?: string
   effort?: string
@@ -697,7 +703,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     }
     const exact = !hasImage ? nexusExactResponseTarget(text) : undefined
     const numeric = !hasImage && exact === undefined ? nexusNumericResponseTarget(text) : undefined
-    const activeRoute = (route: NexusRoute) => ({ key: routeKey(route.provider, route.model),
+    const activeRoute = (route: NexusRoute) => ({ key: routeKey(route.provider, route.model), turn: payload.turn, step: payload.step,
       ...(exact === undefined ? {} : { exact }), ...(numeric === undefined ? {} : { numeric }) })
     const buildRoute=async(route:NexusRoute):Promise<LlmCallConfig>=>{
       const { serviceTier: _tier, reasoningEffort: _effort, ...base }=selected
@@ -878,6 +884,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       let numericResponseAccepted: boolean | undefined
       let answer = ''
       let overflow = false
+      delete active.execution
       try {
         for await (const chunk of upstream) {
           // A selected route is not execution evidence. Observe real stream data;
@@ -888,7 +895,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
             reasoningEffort: active.effort ?? null,
             reasoningBasis: active.effort === undefined
               ? 'provider-default-unconfirmed' : 'request-config',
-            usage: null,
+            usage: null, turn: active.turn, step: active.step, finishReason: null, succeeded: null,
           }
           active.execution = execution
           if (chunk.type === 'usage') {
@@ -906,6 +913,8 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
             terminal = true
             execution.stage = 'finished'
             succeeded = chunk.reason.kind === 'stop' || chunk.reason.kind === 'tool-calls'
+            execution.finishReason = chunk.reason.kind
+            execution.succeeded = succeeded
             if (active.exact !== undefined && chunk.reason.kind === 'stop') {
               exactResponseAccepted = !overflow && answer.trim() === active.exact
             }

@@ -137,8 +137,12 @@ def generate(text: str, language: str, gender: str, pace: str):
 def play_audio(samples, sample_rate: int, request_id: str) -> None:
     import numpy as np
 
-    if not samples.size or is_cancelled(request_id):
-        return
+    if is_cancelled(request_id):
+        raise RuntimeError("Kokoro speech cancelled")
+    if not samples.size or not np.isfinite(samples).all():
+        raise RuntimeError("Kokoro returned empty or invalid audio")
+    if float(np.max(np.abs(samples))) < 0.001:
+        raise RuntimeError("Kokoro returned silent audio")
     audio = (np.clip(samples, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
     fd, filename = tempfile.mkstemp(prefix="phoenix-voice-", suffix=".wav")
     try:
@@ -152,7 +156,7 @@ def play_audio(samples, sample_rate: int, request_id: str) -> None:
             return
         if sys.platform == "win32":
             import winsound
-            winsound.PlaySound(filename, winsound.SND_FILENAME)
+            winsound.PlaySound(filename, winsound.SND_FILENAME | winsound.SND_NODEFAULT)
         else:
             import subprocess
             player = ["afplay", filename] if sys.platform == "darwin" else ["aplay", "-q", filename]
@@ -183,6 +187,8 @@ def worker() -> None:
                     break
                 samples, rate = generate(chunk, language, gender, pace)
                 play_audio(samples, rate, request_id)
+            if is_cancelled(request_id) or not task.get("chunks"):
+                raise RuntimeError("Kokoro speech cancelled or empty")
             emit({"type": "done", "id": request_id})
         except Exception as exc:
             emit({"type": "error", "id": request_id, "message": str(exc)[:320]})
