@@ -1,7 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createRealitySnapshotTool } from '../src/reality-tool.ts'
+import { createRealitySnapshotTool, measureInternetDownload } from '../src/reality-tool.ts'
 
 describe('phoenix_reality_now tool', () => {
+  it('measures a completed 2 MB download, not the negotiated link or upload', async () => {
+    const request = vi.fn(async () => new Response(new Uint8Array(2_000_000)))
+    const result = await measureInternetDownload(undefined, request as typeof fetch)
+    expect(result).toMatchObject({ status: 'measured', bytes: 2_000_000, uploadMbps: null })
+    expect(Number(result.downloadMbps)).toBeGreaterThan(0)
+    expect(request).toHaveBeenCalledOnce()
+  })
+  it('rejects incomplete download samples', async () => {
+    const request = vi.fn(async () => new Response(new Uint8Array(12)))
+    expect(await measureInternetDownload(undefined, request as typeof fetch)).toMatchObject({ status: 'unavailable', downloadMbps: null })
+  })
   it('waits for a full refresh and keeps active-agent context in the returned snapshot', async () => {
     const ctx = { get() { return undefined } } as never
     const agent = { id: 'agent-1', options: {}, session: { id: 'agent-1' } }
