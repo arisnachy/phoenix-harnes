@@ -87,4 +87,24 @@ describe('Managed router local enrollment',()=>{
     expect(await router.reboot(gateway, async () => gateway, async () => true)).toMatchObject({ reason: 'OPNSENSE_NOT_VERIFIED' })
     expect(paths).toEqual(['/api/core/firmware/info'])
   })
+  it('reads only allowlisted policy summaries and distinguishes denied from empty',async()=>{
+    const paths:string[]=[]
+    const router=new ManagedRouter(async()=>profile,async()=>'SECRET',async(_p,method,path)=>{
+      expect(method).toBe('GET')
+      paths.push(path)
+      if(path==='/rest/system/resource')return {version:'7.19','board-name':'Router'}
+      if(path.startsWith('/rest/ip/dns'))return {'allow-remote-requests':'false',private:'SECRET'}
+      if(path.startsWith('/rest/ipv6/firewall'))throw Error('denied')
+      if(path.startsWith('/rest/ip/dhcp-server'))return [{disabled:'false',private:'SECRET'},{disabled:'true'},{disabled:'unknown'}]
+      return []
+    })
+    const value=await router.policy(gateway,async()=>gateway)
+    expect(value).toMatchObject({status:'partial',dhcp:{total:3,enabled:1,disabled:1,unknown:1},firewallIPv6:null,queues:{total:0},dns:{allowRemoteRequests:false}})
+    expect(JSON.stringify(value)).not.toContain('SECRET')
+    expect(paths.every(p=>p.startsWith('/rest/'))).toBe(true)
+  })
+  it('does not read policy from an unsupported router vendor',async()=>{
+    const router=new ManagedRouter(async()=>({...profile,vendor:'openwrt'}),async()=>{throw Error('must not decrypt')})
+    expect(await router.policy(gateway,async()=>gateway)).toMatchObject({reason:'POLICY_ADAPTER_NOT_IMPLEMENTED'})
+  })
 })
