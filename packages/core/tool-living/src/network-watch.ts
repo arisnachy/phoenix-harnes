@@ -97,15 +97,19 @@ export class NetworkWatch {
       }
     } catch { this.unavailable = true /* report degraded sampling */ }
   }
-  /** Begin a passive one-minute Host-owned observer; the disposer stops future work. */
+  /** Begin a passive one-minute Host-owned observer.
+   * @returns Disposer that stops future sampling.
+   */
   start(): () => void {
     void this.tick()
     const timer = setInterval(() => { void this.tick() }, 60000)
     timer.unref()
     return () => { this.stopped = true; clearInterval(timer) }
   }
-  /** Read at most 60 aggregate samples and clearly disclose stale or mixed-network history. */
-  report() {
+  /** Read at most 60 aggregate samples and disclose stale or mixed-network history.
+   * @returns Bounded aggregate history, persistence status and observational alerts.
+   */
+  report(): { status: 'degraded' | 'completed'; persisted: boolean; retainedSamples: number; latest: Snapshot | null; history: Snapshot[]; alerts: { kind: string; evidence: string; observed: number; baseline?: number }[]; limitations: string[] } {
     const samples = this.trim(this.samples)
     const latest = samples.at(-1) ?? null
     const fresh = !!latest && !this.unavailable && this.now() - latest.at <= 180000
