@@ -8,7 +8,7 @@ import { installAssistantMailProtocol } from './assistant-mail-protocol.ts'
 import { AttentionStore } from './proactivity-attention-store.ts'
 import { LivingResourceAttention } from './living-resource-attention.ts'
 import { curiosityAttention, LivingHomeAttention } from './living-curiosity.ts'
-import { AutonomicRuntime, registerAutonomicRuntime, readAutonomicRuntime } from './autonomic-runtime.ts'
+import { AutonomicRuntime, registerAutonomicRuntime, readAutonomicRuntime, createAutonomicStatusTool } from './autonomic-runtime.ts'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
@@ -533,7 +533,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       // Capability projections and the mission/proactivity runtimes are host-owned.
       // Do not repeat them when several sessions mount full presets in one process.
       disposers.push(indexOpenClawExtensions(hardness))
-      disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run', 'hardness_workflow', 'hardness_evolution_status', 'phoenix_visualize', 'phoenix_scene_map', 'phoenix_geo_map', 'phoenix_diagram', 'phoenix_canvas', 'phoenix_game', 'phoenix_comic', 'phoenix_studio3d'] }))
+      disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run', 'hardness_workflow', 'hardness_evolution_status', 'phoenix_autonomic_status', 'phoenix_visualize', 'phoenix_scene_map', 'phoenix_geo_map', 'phoenix_diagram', 'phoenix_canvas', 'phoenix_game', 'phoenix_comic', 'phoenix_studio3d'] }))
       disposers.push(await indexSkills(skills, hardness))
     } else if (authorization !== undefined || mcpConnectors !== undefined) {
       // A preset contributes only its scoped connector inventory/discovery
@@ -590,6 +590,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       })))
       disposers.push(ctx.tools.register(createHardnessTool({ run: missionRunner.run })))
       disposers.push(ctx.tools.register(createRealitySnapshotTool(reality.engine, ctx)))
+      disposers.push(ctx.tools.register(createAutonomicStatusTool(proactivity.engine)))
       const resolveMailbox = () => (ctx.get as unknown as (name: string) => unknown)('assistantMail') as AssistantMailControl | undefined
       disposers.push(ctx.tools.register(createAssistantMailIdentityTool(resolveMailbox)))
       disposers.push(ctx.tools.register(createAssistantMailSendTool(resolveMailbox)))
