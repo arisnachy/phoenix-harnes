@@ -12,6 +12,8 @@ describe('PHOENIX META evidence', () => {
   })
   it('classifies machine codes without trusting payload text', () => {
     expect(classifyMetaFailure({ code: 'CONTEXT_WINDOW_EXCEEDED' })).toBe('context')
+    expect(classifyMetaFailure({ code: 'OUTPUT_TOKEN_LIMIT_REACHED' })).toBe('output-limit')
+    expect(classifyMetaFailure({ code: 'TOKEN_LIMIT' })).toBe('unknown')
     expect(classifyMetaFailure({ code: 'TOOL_ABORTED' })).toBe('cancelled')
     expect(classifyMetaFailure({ code: 'RATE_LIMIT_EXCEEDED' })).toBe('quota')
     expect(classifyMetaFailure({ code: 'PERMISSION_DENIED' })).toBe('permission')
