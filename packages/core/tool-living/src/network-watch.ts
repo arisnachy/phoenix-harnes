@@ -12,11 +12,14 @@ type Snapshot = {
   tx: number | null
   added: number | null
   missing: number | null
+  devices: string[] | null
 }
 type ReadSample = () => Promise<unknown>
 type Store = { read: () => Promise<unknown>; write: (rows: Snapshot[]) => Promise<void> }
 const MAX_ROWS = 1440
 const MAX_AGE = 86400000
+const MAX_DEVICE_SAMPLES = 60
+const validScope = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{24}$/u.test(v)
 const bounded = (v: unknown) => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : null
 function row(raw: unknown): Snapshot | null {
   if (!raw || typeof raw !== 'object') return null
@@ -24,7 +27,9 @@ function row(raw: unknown): Snapshot | null {
   const at = bounded(value.at)
   const neighbors = bounded(value.neighbors)
   if (at === null || neighbors === null || neighbors > 512) return null
-  return { at, neighbors, scope: typeof value.scope === 'string' && /^[a-f0-9]{24}$/u.test(value.scope) ? value.scope : null, rx: bounded(value.rx), tx: bounded(value.tx), added: bounded(value.added), missing: bounded(value.missing) }
+  const scope = validScope(value.scope) ? value.scope : null
+  const devices = scope && Array.isArray(value.devices) ? [...new Set(value.devices.slice(0,512).filter(validScope))] : null
+  return { at, neighbors, scope, rx: bounded(value.rx), tx: bounded(value.tx), added: bounded(value.added), missing: bounded(value.missing), devices }
 }
 function localStore(): Store | null {
   if (process.platform !== 'win32' || !process.env.LOCALAPPDATA) return null
@@ -33,7 +38,7 @@ function localStore(): Store | null {
     async read() {
       try {
         const bytes = await readFile(path)
-        return bytes.byteLength <= 262144 ? JSON.parse(bytes.toString('utf8')) as unknown : []
+        return bytes.byteLength <= 2097152 ? JSON.parse(bytes.toString('utf8')) as unknown : []
       } catch { return [] /* no usable history */ }
     },
     async write(rows) {
@@ -56,7 +61,8 @@ export class NetworkWatch {
     private readonly now: () => number = Date.now) {}
   private trim(rows: Snapshot[]) {
     const time = this.now()
-    return rows.filter(x => x.at <= time && x.at >= time - MAX_AGE).sort((a, b) => a.at - b.at).slice(-MAX_ROWS)
+    const recent = rows.filter(x => x.at <= time && x.at >= time - MAX_AGE).sort((a, b) => a.at - b.at).slice(-MAX_ROWS)
+    return recent.map((x,i)=>i<recent.length-MAX_DEVICE_SAMPLES&&x.devices!==null?{...x,devices:null}:x)
   }
   /** Sample once, coalescing simultaneous reads. */
   tick(): Promise<void> {
@@ -86,6 +92,7 @@ export class NetworkWatch {
         rx: p.receivedBytesPerSecond, tx: p.sentBytesPerSecond,
         added: Array.isArray(p.newlyObserved) ? p.newlyObserved.length : null,
         missing: Array.isArray(p.noLongerObserved) ? p.noLongerObserved.length : null,
+        devices: p.observedDeviceIds,
       })
       if (!fresh) return
       this.samples = this.trim([...this.samples, fresh])
@@ -109,7 +116,7 @@ export class NetworkWatch {
   /** Read at most 60 aggregate samples and disclose stale or mixed-network history.
    * @returns Bounded aggregate history, persistence status and observational alerts.
    */
-  report(): { status: 'degraded' | 'completed'; persisted: boolean; retainedSamples: number; latest: Snapshot | null; history: Snapshot[]; alerts: { kind: string; evidence: string; observed: number; baseline?: number }[]; limitations: string[] } {
+  report(): { status: 'degraded' | 'completed'; persisted: boolean; retainedSamples: number; latest: Snapshot | null; history: Snapshot[]; twin: { scope: string; observedAt: number; devices: { id:string; firstObserved:number; lastObserved:number; presentInLatestCache:boolean }[] } | null; alerts: { kind: string; evidence: string; observed: number; baseline?: number }[]; limitations: string[] } {
     const samples = this.trim(this.samples)
     const latest = samples.at(-1) ?? null
     const fresh = !!latest && !this.unavailable && this.now() - latest.at <= 180000
@@ -124,13 +131,26 @@ export class NetworkWatch {
       if(fresh && values.length>=10 && median!==undefined && current!=null && current>=1048576 && current>=5*Math.max(median,1))
         alerts.push({kind:'host-traffic-spike-'+metric,evidence:'Host bytes/s vs same-scope recent median; not evidence of intrusion',observed:current,baseline:median})
     }
+    const twinDevices = new Map<string,{id:string;firstObserved:number;lastObserved:number;presentInLatestCache:boolean}>()
+    const latestIds = new Set(latest?.devices??[])
+    if(fresh&&latest?.scope&&latest.devices!==null){
+      for(const sample of samples.slice(-MAX_DEVICE_SAMPLES)){
+        if(sample.scope!==latest.scope||sample.devices===null)continue
+        for(const id of sample.devices){
+          const existing=twinDevices.get(id)
+          if(existing)existing.lastObserved=sample.at
+          else twinDevices.set(id,{id,firstObserved:sample.at,lastObserved:sample.at,presentInLatestCache:latestIds.has(id)})
+        }
+      }
+    }
+    const twin=fresh&&latest?.scope&&latest.devices!==null?{scope:latest.scope,observedAt:latest.at,devices:[...twinDevices.values()].sort((a,b)=>b.lastObserved-a.lastObserved).slice(0,1024)}:null
     return {
-      alerts,
+      alerts,twin,
       status: this.unavailable || !latest || this.now() - latest.at > 180000 ? 'degraded' : 'completed',
       persisted: this.persistence, retainedSamples: samples.length, latest,
-      history: samples.slice(-60),
+      history: samples.slice(-60).map(x=>({...x,devices:null})),
       limitations: ['Passive neighbor cache, not a census. Missing entries do not prove disconnect.',
-        'Traffic is the host interface only. History can include multiple network scopes. Alerts are observational, not intrusion findings. No packet contents or device names stored.'],
+        'Traffic is the host interface only. History can include multiple network scopes. Alerts are observational, not intrusion findings. No packet contents or device names stored. Twin retains scoped pseudonyms for at most 60 samples; cache presence is not online status.'],
     }
   }
 }
