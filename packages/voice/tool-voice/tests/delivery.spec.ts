@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { deliverAgentSpeech, type SpeechHost } from '../src/delivery.ts'
+import { deliverAgentSpeech, InitiativeSpeechGate, type SpeechHost } from '../src/delivery.ts'
 
 function fakeHost(options: { enabled?: boolean; codex?: boolean; native?: boolean } = {}) {
   const conversationRealtimeSpeak = vi.fn(async () => options.codex
@@ -52,5 +52,22 @@ describe('Kira audio output', () => {
     const response = await deliverAgentSpeech(h.service, 'Hola. https://example.com', 'es-DO')
     expect(response.audioHardwareVerified).toBe(false)
     expect(h.conversationSpeak).toHaveBeenCalledWith(expect.objectContaining({ text: 'Hola.' }))
+  })
+})
+
+describe('spontaneous speech admission', () => {
+  it('defers absent clients, quiet hours, busy voice and repeated attempts', () => {
+    let now = new Date(2026, 10, 26, 14).getTime()
+    const gate = new InitiativeSpeechGate(() => now)
+    const ready = { foreground: true, enabled: true, queued: 0, speaking: false }
+    expect(gate.reserve({ ...ready, foreground: false })).toBe('no-foreground-client')
+    expect(gate.reserve({ ...ready, speaking: true })).toBe('voice-busy')
+    expect(gate.reserve({ ...ready, enabled: false })).toBe('voice-disabled')
+    expect(gate.reserve(ready)).toBeUndefined()
+    expect(gate.reserve(ready)).toBe('initiative-cooldown')
+    now += 120_001
+    expect(gate.reserve(ready)).toBeUndefined()
+    now = new Date(2026, 10, 26, 23).getTime()
+    expect(gate.reserve(ready)).toBe('quiet-hours')
   })
 })
