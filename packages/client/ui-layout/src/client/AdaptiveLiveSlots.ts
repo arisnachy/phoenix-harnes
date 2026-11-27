@@ -60,13 +60,16 @@ export function livingSeason(now: Date, enabled: boolean): LivingSeason {
 export function livingNeedsCompactSidebar(input: {
   enabled: boolean; viewport: number; sidebar: number; details: number
   visualWork: boolean; cordisOwnsLayout: boolean
+  previouslyCompacted?: boolean
 }): boolean {
   const { enabled, viewport, sidebar, details, visualWork, cordisOwnsLayout } = input
   if (!enabled || cordisOwnsLayout || sidebar <= 72
     || ![viewport, sidebar, details].every(Number.isFinite)
     || viewport <= 0 || details < 0) return false
   const target = visualWork ? 900 : 640
-  return (visualWork || details > 0) && viewport - sidebar - details < target
+  // Restore only after enough usable width returns; avoid oscillation during resize.
+  const releaseMargin = input.previouslyCompacted ? 64 : 0
+  return (visualWork || details > 0) && viewport - sidebar - details < target + releaseMargin
 }
 
 /** Bounded presentation metadata for the existing sidebar and self-inspection. */
