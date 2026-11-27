@@ -640,14 +640,16 @@ function installProactivityRpc(connection: HostConnectionHandle,
  * @param engine Durable proactivity engine whose scheduled work is pumped.
  * @param pollMs Interval between due-task and retry scans.
  * @param attention Durable home-feed receipts.
- * @param extraAttention Material outcomes from the local assistant mailbox.
+ * @param extraAttention Material outcomes from the local assistant mailbox and resident observations.
+ * @param observeLocal Optional nonblocking local observation step.
  * @returns A disposer that stops polling and unmounts lifecycle/RPC handlers.
  */
 export function installProactivityRuntime(ctx: Context,
   engine: ProactivityEngine,
   pollMs: number,
   attention?: AttentionStore,
-  extraAttention?: () => Promise<readonly ProactivityAttentionItem[]>): () => void {
+  extraAttention?: () => Promise<readonly ProactivityAttentionItem[]>,
+  observeLocal?: () => void): () => void {
   requirePositive(pollMs, 'pollMs')
   let disposed = false
   let pumping = false
@@ -671,6 +673,8 @@ export function installProactivityRuntime(ctx: Context,
     pumping = true
     try {
       const now = new Date()
+      // Local resident observations share this pump; they must not start another model or block scheduled work.
+      observeLocal?.()
       await retryFailedProactivityTasks(engine, now, DEFAULT_PROACTIVITY_RETRY_POLICY)
       await engine.runDue(now)
     } catch (error: unknown) {
