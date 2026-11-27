@@ -609,7 +609,7 @@ export function validatedWindowsState(raw: string): string {
     throw Error('WINDOWS_STATE_INVALID')
   }
   const name = foreground.processName
-  if (name !== null && (typeof name !== 'string' || name.length > 100 || /[\u0000-\u001f\u007f]/u.test(name))) throw Error('WINDOWS_STATE_INVALID')
+  if (name !== null && (typeof name !== 'string' || name.length > 100 || Array.from(name).some(character => { const code = character.charCodeAt(0); return code < 32 || code === 127 }))) throw Error('WINDOWS_STATE_INVALID')
   const percent = power.batteryPercent === null ? null : integer(power.batteryPercent)
   if (percent !== null && percent > 100) throw Error('WINDOWS_STATE_INVALID')
   return JSON.stringify({
