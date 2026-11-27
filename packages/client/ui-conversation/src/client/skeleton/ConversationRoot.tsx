@@ -452,10 +452,7 @@ export function ConversationRoot({
   const composerSeat = (
     <div ref={seatResizeRef} className={css.composerSeat} data-composer-seat="">
       {composer}
-      {activeApplication === 'general' && !visualActive && (!hero || companionOpen) && (
-        <CompanionDock open={companionOpen} onToggle={() => setCompanionOpen(value => !value)}
-          {...(loadFinixOutput === undefined ? {} : { loadOutput: loadFinixOutput })} />
-      )}
+
     </div>
   )
 
@@ -553,6 +550,7 @@ export function ConversationRoot({
           </button>
         </div>
       </div>
+      <div className={css.finixWorkspace}>
       <div className={css.scrollBody} data-conversation-scroll="">
         {/* This is the ONLY in-chat app host. The Host portals Healthia/App Studio
             here, above the composer; opening an app never splits AppFrame. */}
@@ -563,6 +561,11 @@ export function ConversationRoot({
         )}
         <SessionBodyOutlet sessionId={sessionId} renderSlot={renderSlot} />
         {composerSeat}
+      </div>
+      {activeApplication === 'general' && !visualActive && (!hero || companionOpen) && (
+        <CompanionDock open={companionOpen} hero={hero} onToggle={() => setCompanionOpen(value => !value)}
+          {...(loadFinixOutput === undefined ? {} : { loadOutput: loadFinixOutput })} />
+      )}
       </div>
 
     </div>
