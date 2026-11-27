@@ -24,11 +24,11 @@ function Read-RouterForm {
   $form.MaximizeBox = $false
   $fields = @{}
   $rows = @(
-    @('vendor','Fabricante (OpenWrt / MikroTik)'),
-    @('username','Usuario del router'),
+    @('vendor','Fabricante (OpenWrt / MikroTik / OPNsense)'),
+    @('username','Usuario o API key (OPNsense)'),
     @('fingerprint','SHA-256 verificado del certificado'),
     @('caPath','Archivo PEM de CA (opcional)'),
-    @('password','Contrasena del router')
+    @('password','Contrasena o API secret')
   )
   for ($i=0;$i -lt $rows.Count;$i++) {
     $key = $rows[$i][0]
@@ -42,6 +42,7 @@ function Read-RouterForm {
       $input.DropDownStyle = 'DropDownList'
       [void]$input.Items.Add('openwrt')
       [void]$input.Items.Add('mikrotik')
+      [void]$input.Items.Add('opnsense')
       $input.SelectedIndex = 0
     } else {
       $input = New-Object Windows.Forms.TextBox
@@ -92,16 +93,16 @@ if ($Graphical) {
   $caPath = $formValues.caPath
   $password = $formValues.password
 } else {
-  $vendor = Read-Host 'Vendor (openwrt or mikrotik)'
-  $username = Read-Host 'Router username'
+  $vendor = Read-Host 'Vendor (openwrt, mikrotik, or opnsense)'
+  $username = Read-Host 'Router username or OPNsense API key'
   $fingerprint = Read-Host 'Trusted SHA256 router certificate fingerprint (verify independently)'
   $caPath = Read-Host 'Optional trusted PEM CA certificate file (Enter to use Node trust store)'
   if ((Read-Host 'Authorize PHOENIX to read this router repeatedly using this account? Type AUTHORIZE') -cne 'AUTHORIZE') { return }
-  $password = Read-Host 'Router password (hidden; protected by Windows DPAPI)' -AsSecureString
+  $password = Read-Host 'Router password or API secret (hidden; protected by Windows DPAPI)' -AsSecureString
 }
 try {
   $vendor = $vendor.ToLowerInvariant()
-  if ($vendor -notin @('openwrt','mikrotik')) { throw 'Unsupported HTTPS adapter.' }
+  if ($vendor -notin @('openwrt','mikrotik','opnsense')) { throw 'Unsupported HTTPS adapter.' }
   if ($username -notmatch '^[a-zA-Z0-9_.@-]{1,64} -eq 0) { throw 'Empty password.' }
   $profile.encrypted = ConvertFrom-SecureString -SecureString $password
   New-Item -ItemType Directory -Path $dir -Force | Out-Null
