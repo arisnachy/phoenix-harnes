@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import type { ComponentProps } from 'react'
 import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
 import type { ToolCallBlock } from '@phoenix-ai/dsh-client-runtime/client'
-import { MarkdownText, PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
+import { MarkdownText } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { AssistantChatData, ToolChatData } from '../contract/chat-nodes.ts'
 import { isRunningTool, isSettledTool } from '../contract/chat-nodes.ts'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
@@ -21,6 +21,7 @@ import { TradingDashboard } from './TradingDashboard.tsx'
 import { TradingMarketChart } from './TradingMarketChart.tsx'
 import { tradingDashboardFromToolResult, tradingMarketFromToolResult, type TradingDashboardSnapshot, type TradingMarketSelection } from './trading-tool-cards.ts'
 import { toolActivity, type TurnActivity, type TurnProgress } from './turn-progress.ts'
+import { LivingMascot, mascotPose } from './LivingMascot.tsx'
 import chatCss from './ChatView.module.css'
 import css from './ToolActivityFlow.module.css'
 
@@ -1018,14 +1019,7 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }
         data-activity="generating-image"
         role="status" aria-label={label}>
         <div className={chatCss.imageGenerationPreview} aria-hidden="true">
-          <svg className={chatCss.imageGenerationPicture} viewBox="0 0 120 104" fill="none">
-            <rect x="8" y="8" width="104" height="88" rx="13" stroke="currentColor" strokeWidth="2" />
-            <circle cx="86" cy="34" r="10" fill="currentColor" fillOpacity=".52" />
-            <path d="M18 79 43 51 61 67 75 53 103 83" stroke="currentColor"
-              strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M19 85H101" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-          </svg>
-          <span className={chatCss.imageGenerationShimmer} />
+          <LivingMascot pose="paint" large />
         </div>
         <div className={chatCss.imageGenerationContent}>
           <div className={chatCss.imageGenerationHeader}>
@@ -1047,7 +1041,7 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }
   }
   return (
     <div
-      className={chatCss.turnStatus}
+      className={chatCss.turnStatus + ' ' + chatCss.livingStatus}
       data-centered={centered ? 'true' : undefined}
       data-phase={progress.phase}
       data-activity={progress.activity}
@@ -1055,9 +1049,7 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }
       aria-live="polite"
       title={technicalTitle}
     >
-      <span className={chatCss.phoenixActivity} data-activity={progress.activity} aria-hidden="true">
-        <PhoenixLogo size={28} />
-      </span>
+      <LivingMascot pose={mascotPose(progress)} />
       <span className={chatCss.turnStatusText}>
         {label.startsWith('Phoenix ') || label.startsWith('PHOENIX ')
           ? <><strong className={chatCss.turnStatusBrand}>{label.split(' ')[0]}</strong>{label.slice(label.indexOf(' '))}</>
