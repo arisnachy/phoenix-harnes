@@ -1,4 +1,5 @@
-import { useId } from 'react'
+import { useId, useState } from 'react'
+import { readCompanionName, saveCompanionName } from './companion-name.ts'
 import type { ProactivityAttentionItem } from '../contract/slots.ts'
 import { LivingMascot, type MascotPose } from '../chat/LivingMascot.tsx'
 import css from './CompanionDock.module.css'
@@ -23,18 +24,31 @@ export function companionPose(items: readonly ProactivityAttentionItem[]): Masco
 /** In-flow bottom seat: no overlay over chat, composer or generated artifacts. */
 export function CompanionDock({ open, onToggle, attention, onTasks, onReview, canReview }: Props) {
   const id = useId()
+  const [name, setName] = useState(readCompanionName)
+  const [editingName, setEditingName] = useState(false)
+  const [draftName, setDraftName] = useState(name)
   return (
     <aside className={css.dock} aria-label="Compañero Fénix">
       {open && <section id={id} className={css.panel} aria-label="Actividad de Fénix">
         <div className={css.heading}>
-          <div><strong>Fénix</strong><small>Tu compañero de trabajo</small></div>
+          <div><strong>{name}</strong><small>Tu compañero de trabajo</small></div>
+          <button type="button" className={css.rename} aria-label="Personalizar nombre de Finix" onClick={() => { setDraftName(name); setEditingName(value => !value) }}>✎</button>
           <button type="button" className={css.close} aria-label="Cerrar actividad de Fénix" onClick={onToggle}>×</button>
         </div>
+        {editingName && <form className={css.nameForm} onSubmit={event => {
+          event.preventDefault()
+          setName(saveCompanionName(draftName))
+          setEditingName(false)
+        }}>
+          <label>Nombre de tu compañero<input aria-label="Nombre de tu compañero" value={draftName} maxLength={24} onChange={event => setDraftName(event.currentTarget.value)} /></label>
+          <button type="submit">Guardar</button>
+        </form>}
         <div className={css.items}>
           {attention.length === 0 ? <p>No hay avisos recibidos. Consulta las tareas programadas para comprobar su estado.</p> : attention.slice(0, 3).map(item =>
             <button key={item.id} type="button" className={css.item} disabled={!canReview} onClick={() => onReview(item)}>
               <span>{item.kind === 'failure' ? 'Requiere atención' : item.kind === 'result' ? 'Resultado registrado' : 'Próxima tarea'}</span>
               <strong>{item.title}</strong>
+              {item.detail && <span className={css.result}>{item.detail}</span>}
             </button>
           )}
         </div>
@@ -43,7 +57,7 @@ export function CompanionDock({ open, onToggle, attention, onTasks, onReview, ca
       </section>}
       <button type="button" className={css.launcher} aria-label={open ? 'Ocultar Fénix' : 'Abrir Fénix'} aria-expanded={open}
         aria-controls={open ? id : undefined} onClick={onToggle}
-        title={attention.length ? 'Fénix · Avisos disponibles' : 'Fénix · Actividad y tareas'}>
+        title={name + (attention.length ? ' · Avisos disponibles' : ' · Actividad y tareas')}>
         <LivingMascot pose={companionPose(attention)} />
         {attention.length > 0 && <span className={css.dot} aria-label={attention.length + ' avisos'} />}
       </button>
