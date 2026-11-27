@@ -584,6 +584,17 @@ export class VoiceRuntime extends TypertRemoteService {
     }
   }
 
+  /** Check the existing visible-client heartbeat for the exact conversation.
+   * This does not prove human attention or grant microphone permission.
+   * @param key - Calling conversation identity.
+   * @param now - Current wall-clock milliseconds.
+   * @returns Whether a foreground client has polled within five seconds.
+   */
+  hasForegroundAgentClient(key: string, now = Date.now()): boolean {
+    const at = this.agentRealtimeClients.get(key)
+    return at !== undefined && now >= at && now - at <= 5_000
+  }
+
   /** Request speaker-only control from the actual calling conversation, never a raw thread id. */
   agentRealtimeControl(key: string, action: VoiceAgentRealtimeAction, text?: string): VoiceAgentRealtimeResult {
     const now = Date.now()
