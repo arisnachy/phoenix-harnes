@@ -84,6 +84,10 @@ export class NetworkIntelligence {
     return h
   }
   private key(h:Host){return h.gateway+'|'+h.address+'|'+h.prefix+'|'+h.index}
+  private scope(h:Host):string|null {
+    const mac=h.neighbors.find(n=>n.address===h.gateway)?.mac
+    return mac ? this.id('network|'+h.gateway+'|'+mac+'|'+h.prefix) : null
+  }
   private deviceId(h:Host,n:Host['neighbors'][number]){
     const gatewayMac=h.neighbors.find(x=>x.address===h.gateway)?.mac
     return gatewayMac&&n.mac?this.id('mac|'+gatewayMac+'|'+n.mac):this.id('address|'+this.key(h)+'|'+n.address)
@@ -92,18 +96,31 @@ export class NetworkIntelligence {
     const h=await this.host()
     if(!h)return {status:'unavailable',reason:'PRIVATE_ON_LINK_WINDOWS_ROUTE_NOT_CONFIRMED'}
     const devices=h.neighbors.map(n=>({id:this.deviceId(h,n),identity:n.mac&&h.neighbors.some(x=>x.address===h.gateway&&x.mac)?'link-layer':'address-only',address:n.address,state:n.state,role:n.address===h.gateway?'gateway':'neighbor'}))
-    return {status:'completed',observedAt:new Date(this.now()).toISOString(),gateway:h.gateway,localAddress:h.address,prefix:h.prefix,
+    const scope=this.scope(h)
+    const segment='segment:'+this.id('segment|'+(scope??this.key(h)))
+    const local='host:'+this.id('host|'+(scope??this.key(h)))
+    const gateway='gateway:'+this.id('gateway|'+(scope??this.key(h)))
+    const topology={
+      kind:'logical-on-link',scope,
+      nodes:[{id:segment,role:'segment'},{id:local,role:'host',address:h.address},{id:gateway,role:'gateway',address:h.gateway},
+        ...devices.filter(n=>n.role!=='gateway').map(n=>({id:n.id,role:'neighbor',address:n.address,state:n.state}))],
+      edges:[{source:local,target:gateway,evidence:'default-route'},
+        {source:local,target:segment,evidence:'local-interface'},
+        ...devices.filter(n=>n.role!=='gateway').map(n=>({source:segment,target:n.id,evidence:'neighbor-cache'}))],
+      limitations:['Logical observations only; no physical cabling, switch ports or mesh paths inferred.'],
+    }
+    return {status:'completed',observedAt:new Date(this.now()).toISOString(),gateway:h.gateway,localAddress:h.address,prefix:h.prefix,topology,
       devices,link:{speed:h.linkSpeed,status:h.adapterStatus,dnsServerCount:h.dnsServerCount,ipv6NeighborCount:h.ipv6Neighbors},traffic:{receivedBytes:h.received,sentBytes:h.sent},limitations:['Neighbor cache is not a complete device list. Stale entries are not proof of online status. IP addresses can be reassigned; link-layer IDs are pseudonyms, can change or be spoofed, and do not prove identity. IPv6 count is a passive interface cache. Traffic counters are for the local host interface only.']}
   }
   async monitor(){
     const h=await this.host()
     if(!h)return {status:'unavailable'}
-    const key=this.key(h),time=this.now(),ids=new Set(h.neighbors.map(n=>this.deviceId(h,n)))
+    const scope=this.scope(h),key=this.key(h)+'|'+(scope??'unknown'),time=this.now(),ids=new Set(h.neighbors.map(n=>this.deviceId(h,n)))
     const old=this.previous?.key===key?this.previous:null
     this.previous={key,time,received:h.received,sent:h.sent,ids}
     const seconds=old?(time-old.time)/1000:0
     const rate=(current:number|null,previous:number|null|undefined)=>seconds>0&&current!==null&&previous!==null&&previous!==undefined&&current>=previous?Math.round((current-previous)/seconds):null
-    return {status:'completed',observedAt:new Date(time).toISOString(),intervalSeconds:old&&seconds>0?seconds:null,neighborCount:ids.size,
+    return {status:'completed',observedAt:new Date(time).toISOString(),intervalSeconds:old&&seconds>0?seconds:null,networkScope:scope,neighborCount:ids.size,
       receivedBytesPerSecond:rate(h.received,old?.received),sentBytesPerSecond:rate(h.sent,old?.sent),
       newlyObserved:old?[...ids].filter(id=>!old.ids.has(id)):null,noLongerObserved:old?[...old.ids].filter(id=>!ids.has(id)):null,
       limitations:['Session-local samples only; missing cache entries do not prove disconnection. Not router-wide traffic.']}
