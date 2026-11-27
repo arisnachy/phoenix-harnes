@@ -45,9 +45,9 @@
 .launcher > svg { width: 39px; height: 35px; }
 .dot { position: absolute; right: 4px; top: 3px; width: 7px; height: 7px; border-radius: 50%; background: #ef5c20; }
 /* Insufficient gutter: explicit standalone reading surface, never resize the chat.
-   The sidebar and hero remain entry points; closing restores the unchanged composer. */
+   The sidebar and hero remain entry points; the active composer stays available below the independent output. */
 @container conversation-root (max-width: 1240px) {
-  .dock[data-open='true'] { background: var(--dsw-alias-bg-base); pointer-events: auto; }
+  .dock[data-open='true']:not([data-hero='true']) { inset-block-end: var(--finix-composer-height, 140px); }
   .panel { inset: 0; width: auto; border: 0; border-radius: 0; box-shadow: none; }
   .launcher { display: none; }
 }
