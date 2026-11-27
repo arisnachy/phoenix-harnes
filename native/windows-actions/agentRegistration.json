@@ -1,0 +1,10 @@
+{
+  "manifest_version": "0.1.0",
+  "version": "1.0.0",
+  "name": "PHOENIX.Kira",
+  "display_name": "PHOENIX · Kira",
+  "description": "Open the PHOENIX interactive workspace",
+  "placeholder_text": "What can Kira help you with?",
+  "icon": "ms-resource://Files/Assets/PhoenixLogo.png",
+  "action_id": "PHOENIX.OpenKira"
+}
