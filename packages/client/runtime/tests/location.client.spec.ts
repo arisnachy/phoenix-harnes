@@ -19,6 +19,27 @@ describe('resolvedClientLocation', () => {
     expect(getCurrentPosition).not.toHaveBeenCalled()
   })
 
+  it('allows the browser consent dialog only on an explicit location request', async () => {
+    let state = 'prompt'
+    const getCurrentPosition = vi.fn((success: PositionCallback) => {
+      state = 'granted'
+      success({ coords: { latitude: 19, longitude: -70, accuracy: 25 }, timestamp: Date.now() } as GeolocationPosition)
+    })
+    vi.stubGlobal('navigator', { permissions: { query: async () => ({ state }) }, geolocation: { getCurrentPosition } })
+    const { resolvedClientLocation, isExplicitLocationRequest } = await import('../src/client/location.ts')
+    expect(isExplicitLocationRequest('¿Y dónde estamos ubicado?')).toBe(true)
+    expect(isExplicitLocationRequest('Kira, ¿dónde estamos?')).toBe(true)
+    expect(isExplicitLocationRequest('Where am I?')).toBe(true)
+    expect(isExplicitLocationRequest('Traduce dónde estamos')).toBe(false)
+    expect(isExplicitLocationRequest('¿Dónde está Madrid?')).toBe(false)
+    expect(isExplicitLocationRequest('El usuario preguntó dónde estamos')).toBe(false)
+    await expect(resolvedClientLocation(undefined, true)).resolves.toMatchObject({ latitude: 19, longitude: -70 })
+    expect(getCurrentPosition).toHaveBeenCalledTimes(1)
+    state = 'denied'
+    await expect(resolvedClientLocation(undefined, true)).resolves.toBeUndefined()
+    expect(getCurrentPosition).toHaveBeenCalledTimes(1)
+  })
+
   it('returns a bounded browser observation when permission is already granted', async () => {
     const observedAt = Date.now()
     const getCurrentPosition = vi.fn((success: PositionCallback) => {
