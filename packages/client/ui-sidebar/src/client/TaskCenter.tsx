@@ -26,6 +26,7 @@ interface Task {
   readonly nextRunAt: string
   readonly createdBy: 'user' | 'harness' | 'system'
   readonly delivery: 'chat' | 'work' | 'email'
+  readonly executionPolicy?: 'companion-local'
   readonly recurrence: Recurrence
   readonly recentHistory: readonly {
     readonly status: string
@@ -38,6 +39,7 @@ interface Task {
 interface Props {
   readonly connection: TaskCenterConnection | undefined
   readonly onClose: () => void
+  readonly companion?: boolean
 }
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -70,6 +72,7 @@ function decodeTasks(value: unknown): Task[] {
       id: raw.id, title: raw.title, status: raw.status as TaskStatus,
       nextRunAt: raw.nextRunAt,
       createdBy: raw.createdBy, delivery: raw.delivery,
+      ...(raw.executionPolicy === 'companion-local' ? { executionPolicy: raw.executionPolicy } : {}),
       recurrence: recurrence as Recurrence,
       recentHistory: history,
     }
@@ -127,7 +130,7 @@ function scheduleRecurrence(frequency: string, minutes: number, timezone: string
  * @param props - Loopback RPC and close action.
  * @returns User-editable task form, execution history and task controls.
  */
-export function TaskCenter({ connection, onClose }: Props) {
+export function TaskCenter({ connection, onClose, companion = false }: Props) {
   const [tasks, setTasks] = useState<readonly Task[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -192,8 +195,9 @@ export function TaskCenter({ connection, onClose }: Props) {
       const recurrence = scheduleRecurrence(frequency, minutes, timezone)
       const response = await connection.rpc.call('/phoenix-tasks', 'create', {
         title: title.trim(), instruction: instruction.trim(),
-        runAt: date.toISOString(), recurrence, catchUp: 'latest', delivery,
-        ...(delivery === 'email' ? { recipient: recipient.trim() } : {}),
+        runAt: date.toISOString(), recurrence, catchUp: 'latest', delivery: companion ? 'work' : delivery,
+        ...(companion ? { executionPolicy: 'companion-local' } : {}),
+        ...(!companion && delivery === 'email' ? { recipient: recipient.trim() } : {}),
       })
       if (!response.ok) throw new Error(response.error.message)
       setTitle('')
@@ -238,20 +242,21 @@ export function TaskCenter({ connection, onClose }: Props) {
         <header className={css.header}>
           <div>
             <div className={css.eyebrow}>PHOENIX · Automatización</div>
-            <h2 id="phoenix-tasks-title">Tareas programadas</h2>
+            <h2 id="phoenix-tasks-title">{companion ? 'Misiones de Fénix' : 'Tareas programadas'}</h2>
             <p>Kira puede programar trabajos automáticamente, y tú puedes crearlos, supervisarlos y detenerlos aquí.</p>
           </div>
           <button type="button" aria-label="Cerrar tareas programadas" className={css.close} onClick={onClose}>×</button>
         </header>
         <div className={css.body}>
           <form className={css.form} onSubmit={(event) => { void create(event) }}>
-            <h3>Nueva tarea</h3>
+            <h3>{companion ? 'Delegar a Fénix' : 'Nueva tarea'}</h3>
+            {companion && <p>Modelo local de PHOENIX · investigación y preparación. Las acciones externas y modelos superiores requieren una revisión separada.</p>}
             <label>Título
               <input required maxLength={120} value={title}
                 onChange={(event) => { setTitle(event.target.value) }}
                 placeholder="Ej. Revisar avances de mi proyecto" />
             </label>
-            <label>Qué debe hacer Kira
+            <label>{companion ? 'Qué debe hacer Fénix' : 'Qué debe hacer Kira'}
               <textarea required maxLength={6000} rows={4} value={instruction} onChange={(event) => { setInstruction(event.target.value) }}
                 placeholder="Describe el trabajo, sus fuentes y qué resultado esperas." />
             </label>
@@ -272,13 +277,13 @@ export function TaskCenter({ connection, onClose }: Props) {
                 onChange={(event) => { setMinutes(Number(event.target.value)) }} />
             </label>}
             <label>Entrega
-              <select value={delivery} onChange={(event) => { setDelivery(event.target.value as 'chat' | 'work' | 'email') }}>
+              <select disabled={companion} value={companion ? 'work' : delivery} onChange={(event) => { setDelivery(event.target.value as 'chat' | 'work' | 'email') }}>
                 <option value="work">Trabajo autónomo · resultados en Inicio</option>
                 <option value="chat">Responder en una conversación de Kira</option>
                 <option value="email">Enviar por correo (requiere conexión autorizada)</option>
               </select>
             </label>
-            {delivery === 'email' && <label>Correo del destinatario
+            {!companion && delivery === 'email' && <label>Correo del destinatario
               <input type="email" required maxLength={320} value={recipient}
                 onChange={(event) => { setRecipient(event.target.value) }}
                 placeholder="destinatario@ejemplo.com" />
@@ -309,7 +314,7 @@ export function TaskCenter({ connection, onClose }: Props) {
                     const latest = task.recentHistory[task.recentHistory.length - 1]
                     return <li key={task.id} className={css.task}>
                       <div className={css.taskTop}>
-                        <strong>{task.title}</strong>
+                        <strong>{task.title}{task.executionPolicy === 'companion-local' ? ' · Fénix local' : ''}</strong>
                         <span className={css.status} data-status={task.status}>{LABELS[task.status]}</span>
                       </div>
                       <div className={css.meta}>

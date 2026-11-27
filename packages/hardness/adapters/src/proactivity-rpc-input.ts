@@ -69,7 +69,7 @@ function parseRecurrence(value: unknown): ProactivityRecurrence | undefined {
  */
 export function parseScheduledTaskCreation(value: unknown, now = Date.now()): CreateProactivityTaskInput {
   const raw = record(value, 'scheduled task')
-  exactKeys(raw, ['title', 'instruction', 'runAt', 'recurrence', 'catchUp', 'delivery', 'recipient'])
+  exactKeys(raw, ['title', 'instruction', 'runAt', 'recurrence', 'catchUp', 'delivery', 'recipient', 'executionPolicy'])
   const title = boundedString(raw.title, 'title', 120)
   const instruction = boundedString(raw.instruction, 'instruction', 6000)
   const runAt = boundedString(raw.runAt, 'runAt', 40)
@@ -83,6 +83,8 @@ export function parseScheduledTaskCreation(value: unknown, now = Date.now()): Cr
   if (catchUp !== 'latest' && catchUp !== 'skip' && catchUp !== 'all') throw new Error('invalid catchUp')
   const delivery = raw.delivery === undefined ? 'chat' : raw.delivery
   if (delivery !== 'chat' && delivery !== 'work' && delivery !== 'email') throw new Error('invalid delivery')
+  if (raw.executionPolicy !== undefined && raw.executionPolicy !== 'companion-local') throw new Error('invalid executionPolicy')
+  if (raw.executionPolicy === 'companion-local' && delivery !== 'work') throw new Error('companion-local requires work delivery')
   const recipient = raw.recipient === undefined ? undefined : boundedString(raw.recipient, 'recipient', 320)
   if (delivery === 'email' && (recipient === undefined || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient))) {
     throw new Error('email delivery requires an explicit valid recipient')
@@ -93,6 +95,7 @@ export function parseScheduledTaskCreation(value: unknown, now = Date.now()): Cr
     visibility: 'visible', senderIdentity: 'harness', attentionMode: 'auto',
     ...(recurrence === undefined ? {} : { recurrence }),
     catchUp, delivery,
+    ...(raw.executionPolicy === 'companion-local' ? { executionPolicy: raw.executionPolicy } : {}),
     ...(recipient === undefined ? {} : { recipient }),
   }
 }
