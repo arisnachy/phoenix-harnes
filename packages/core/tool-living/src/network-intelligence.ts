@@ -96,7 +96,7 @@ export class NetworkIntelligence {
   /** Observe the current private on-link inventory and logical topology.
    * @returns Bounded inventory or an unavailable result.
    */
-  async inventory(): ReturnType<NetworkIntelligence['inventoryResult']> { return this.inventoryResult() }
+  async inventory(): Promise<Awaited<ReturnType<NetworkIntelligence['inventoryResult']>>> { return this.inventoryResult() }
   private async inventoryResult(){
     const h=await this.host()
     if(!h)return {status:'unavailable',reason:'PRIVATE_ON_LINK_WINDOWS_ROUTE_NOT_CONFIRMED'}
