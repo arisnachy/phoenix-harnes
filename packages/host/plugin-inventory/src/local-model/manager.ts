@@ -374,6 +374,9 @@ class RuntimeManager implements LocalModelRuntimeManager {
         ...(accelerator === undefined ? [] : [
           '--n-gpu-layers', String(accelerator.gpuLayers),
           '--threads', String(accelerator.threads),
+          '--device', accelerator.deviceName,
+          '--flash-attn', 'auto',
+          '--fit', 'on', '--fit-target', '1024',
         ]),
       ]
       let handle: LocalServerHandle | undefined
