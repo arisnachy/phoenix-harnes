@@ -52,7 +52,7 @@ export interface HumanOSSelfModel {
 }
 
 /** Limit registry observation cost even when providers publish very large catalogs. */
-const MAX_VERIFICATION_CAPABILITIES = 64
+const MAX_VERIFICATION_CAPABILITIES = 4096
 const MAX_EVIDENCE_PER_CAPABILITY = 12
 
 function selected(value: string | undefined): boolean {
