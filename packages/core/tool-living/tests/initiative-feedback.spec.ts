@@ -21,3 +21,19 @@ describe('durable initiative feedback',()=>{
     expect(loadInitiativeFeedback(memory,'a',now+31*86400000)).toEqual([])
   })
 })
+
+describe('initiative ledger readback',()=>{
+  const now=Date.UTC(2026,10,26,12)
+  it('rejects a write receipt not present in the durable ledger',async()=>{
+    const memory:InitiativeMemory={projectIdForSession:()=>undefined,allCognitiveRecords:()=>[],rememberCognitive:async input=>({...input,status:'active'})}
+    await expect(persistInitiativeFeedback({memory,sessionId:'a',eventSeq:1,candidate:'pending-goal',kind:'dismissed',now,ask:{ask:async()=>({answers:[{id:'initiative-feedback-save',selected:['Guardar mi preferencia']}]})}})).rejects.toThrow('READBACK_FAILED')
+  })
+  it('ignores future timestamps and reads the legacy format only within scope',()=>{
+    const memory:InitiativeMemory={projectIdForSession:()=>undefined,allCognitiveRecords:()=>[
+      {sessionId:'a',status:'active',subject:'phoenix.initiative.feedback.pending-goal',value:'later',lastObservedAt:now-1},
+      {sessionId:'a',status:'active',subject:'phoenix.initiative.feedback.pending-goal',value:JSON.stringify({kind:'dismissed',at:now+1})},
+      {sessionId:'b',status:'active',subject:'phoenix.initiative.feedback.standing-goal',value:'useful',lastObservedAt:now-1},
+    ],rememberCognitive:async input=>({...input,status:'active'})}
+    expect(loadInitiativeFeedback(memory,'a',now)).toEqual([{id:'pending-goal',kind:'later',at:now-1}])
+  })
+})
