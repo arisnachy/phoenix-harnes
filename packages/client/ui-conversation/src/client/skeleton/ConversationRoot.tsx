@@ -253,13 +253,12 @@ export function ConversationRoot({
   }, [])
 
   const selectAttention = useCallback((item: (typeof proactiveAttention)[number]): void => {
-    if (inputActions === undefined) return
+    if (inputActions === undefined || (inputState?.draft ?? '').trim() !== '') return
     inputActions.setDraft(heroAttentionPrompt(item))
-    void recordAttention(item, 'handled')
     requestAnimationFrame(() => {
       rootRef.current?.querySelector('textarea')?.focus()
     })
-  }, [inputActions, recordAttention])
+  }, [inputActions, inputState?.draft])
 
   const selectMission = useCallback((mission: HeroMissionStarter): void => {
     // Never overwrite an unsent user draft and never trigger a model request.

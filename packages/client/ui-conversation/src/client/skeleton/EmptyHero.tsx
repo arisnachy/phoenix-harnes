@@ -266,7 +266,6 @@ function localeResidenceCountry(): string | undefined {
 export function HeroShell({ preferredName, profile, attention = [], blocked = false, children }: HeroShellProps) {
   const day = useCalendarDay()
   const [hour, setHour] = useState(() => new Date().getHours())
-  const [variant, setVariant] = useState(() => Math.floor(Math.random() * 4))
   useEffect(() => {
     const timer = window.setInterval(() => setHour(new Date().getHours()), 60_000)
     return () => window.clearInterval(timer)
@@ -300,7 +299,7 @@ export function HeroShell({ preferredName, profile, attention = [], blocked = fa
     '--phoenix-celebration-secondary': accent.secondary,
   } as CSSProperties
   const greeting = greetingForHour(hour)
-  const scene = adaptiveWelcome(hour, variant, attention, selected, blocked)
+  const scene = adaptiveWelcome(hour, attention, selected, blocked)
   const overlayId = selected === undefined ? undefined
     : selected.source === 'curated' ? selected.id
     : selected.source === 'personal' ? selected.id === 'birthday' ? 'birthday' : 'personal-default'
@@ -309,7 +308,7 @@ export function HeroShell({ preferredName, profile, attention = [], blocked = fa
   return (
     <div className={css.root}>
       <div className={css.stack}>
-        <button type="button" className={`${css.fishHitbox} ${css.welcomeMascot}`} aria-label="Saludar al fénix" data-celebration={selected?.theme} style={appearance} onClick={() => setVariant(value => (value + 1) % 4)}>
+        <button type="button" className={`${css.fishHitbox} ${css.welcomeMascot}`} aria-label="Abrir actividad de Fénix" data-celebration={selected?.theme} style={appearance} onClick={() => window.dispatchEvent(new Event('phoenix:open-companion'))}>
           <LivingMascot pose={scene.pose} large />
           {overlayId && <img src={`/assets/celebrations/${overlayId}.svg`} className={css.welcomeDecoration} alt="" aria-hidden="true" draggable={false} />}
         </button>

@@ -8,19 +8,24 @@ function signal(kind: ProactivityAttentionItem['kind']): ProactivityAttentionIte
 const holiday: Celebration = { id: 'birthday', label: 'Cumpleaños', date: '2026-11-27', country: 'DO', theme: 'birthday', tone: 'festive', source: 'personal' }
 describe('adaptive welcome', () => {
   it('prioritizes real blockers and failures', () => {
-    expect(adaptiveWelcome(10, 0, [signal('result')], holiday, true).pose).toBe('ready')
-    expect(adaptiveWelcome(10, 0, [signal('result'), signal('failure')], holiday).pose).toBe('tools')
+    expect(adaptiveWelcome(10, [signal('result')], holiday, true).pose).toBe('ready')
+    expect(adaptiveWelcome(10, [signal('result'), signal('failure')], holiday).pose).toBe('tools')
   })
   it('distinguishes results and future work', () => {
-    expect(adaptiveWelcome(10, 0, [signal('result')]).pose).toBe('settled')
-    expect(adaptiveWelcome(10, 0, [signal('upcoming')]).pose).toBe('plan')
+    expect(adaptiveWelcome(10, [signal('result')]).pose).toBe('settled')
+    expect(adaptiveWelcome(10, [signal('upcoming')]).pose).toBe('plan')
   })
   it('honors festive and solemn dates', () => {
-    expect(adaptiveWelcome(10, 0, [], holiday).pose).toBe('celebrate')
-    expect(adaptiveWelcome(10, 0, [signal('result')], { ...holiday, tone: 'solemn' }).pose).toBe('respectful')
+    expect(adaptiveWelcome(10, [], holiday).pose).toBe('celebrate')
+    expect(adaptiveWelcome(10, [signal('result')], { ...holiday, tone: 'solemn' }).pose).toBe('respectful')
   })
-  it('varies neutral scenes without claims of completed work', () => {
-    expect(new Set([0,1,2,3].map(seed => adaptiveWelcome(10, seed, []).subtitle)).size).toBe(4)
-    expect(adaptiveWelcome(23, 2, []).pose).toBe('sleep')
+  it('uses time and host events, not random variants or false completion', () => {
+    expect(adaptiveWelcome(10, []).pose).toBe('coffee')
+    expect(adaptiveWelcome(15, []).pose).toBe('welcome')
+    expect(adaptiveWelcome(23, []).pose).toBe('welcome')
+    expect(adaptiveWelcome(10, [signal('failure')]).subtitle).toContain('Tarea')
+    expect(adaptiveWelcome(10, [signal('result')]).subtitle).toContain('Tarea')
+    expect(adaptiveWelcome(10, [signal('upcoming')]).subtitle).toContain('pendiente')
+    expect(adaptiveWelcome(15, [])).toEqual(adaptiveWelcome(15, []))
   })
 })
