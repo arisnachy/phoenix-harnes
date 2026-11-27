@@ -1298,18 +1298,15 @@ describe('ChatView', () => {
     expect(status.textContent).toMatch(/^Phoenix 正在准备回复2分0\d秒$/)
   })
 
-  it('ignites the PHOENIX emblem while running and flashes it when the turn finishes', () => {
+  it('animates the living mascot during a turn and shows its settled pose on completion', () => {
     const h = makeHarness({ nodes: [user(1, 'go')], turnTimings: new Map([[1, { startTime: Date.now() }]]), running: true })
     const view = render(<h.ChatView {...h.props} />)
-    const activeLogo = view.getByRole('status').querySelector('img')
-    expect(activeLogo?.getAttribute('src')).toBe('/phoenix-emblem.png')
-    expect(activeLogo?.getAttribute('width')).toBe('28')
-    expect(activeLogo?.getAttribute('height')).toBe('28')
-
+    const activeMascot = view.getByRole('status').querySelector('svg[data-mascot-pose]')
+    expect(activeMascot).not.toBeNull()
+    expect(activeMascot?.getAttribute('data-mascot-pose')).not.toBe('settled')
     act(() => { h.set({ running: false }) })
-
     expect(view.queryByRole('status')).toBeNull()
-    expect(view.container.querySelector('img[src="/phoenix-emblem.png"]')).not.toBeNull()
+    expect(view.container.querySelector('svg[data-mascot-pose="settled"]')).not.toBeNull()
   })
 
   it('hands each ordered root call to the keyed business-node slot', () => {

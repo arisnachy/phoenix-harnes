@@ -180,10 +180,8 @@ export class InputHub implements SessionInputResolver {
         signal.throwIfAborted()
         const connection = this.rootCtx.get('connection') as ConnectionHandle | undefined
         if (!connection?.rpc) return { kind: 'error', text: 'Finix: Host desconectado.' }
-        const result = await connection.rpc.call('/phoenix-tasks', 'create', {
-          title: instruction.replace(/\s+/gu, ' ').slice(0, 110), instruction,
-          runAt: new Date(Date.now() + 1000).toISOString(), delivery: 'work',
-          executionPolicy: 'companion-local',
+        const result = await connection.rpc.call('/phoenix-tasks', 'finix-chat', {
+          sessionId: session.sessionId, instruction,
         }, signal)
         if (!result.ok) return { kind: 'error', text: result.error.message }
         window.dispatchEvent(new Event('phoenix:open-companion'))
