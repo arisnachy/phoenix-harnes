@@ -1,6 +1,7 @@
 /** Deterministic repeated-task habit policy for Phoenix. */
 
 import type { ExperienceAggregate, ExperienceRunMetrics } from './experience.ts'
+import { assessMetaEvidence, type MetaEvidence } from './metacognition.ts'
 
 /** How Phoenix should treat a repeated task before invoking expensive reasoning. */
 export type HabitMode = 'observe' | 'reuse' | 'review'
@@ -9,7 +10,9 @@ export type HabitMode = 'observe' | 'reuse' | 'review'
 export interface HabitAssessment {
   readonly mode: HabitMode
   readonly verifiedRuns: number
+  /** Historical maturity heuristic, not calibrated future success probability. */
   readonly confidence: number
+  readonly evidence: MetaEvidence
   readonly driftDetected: boolean
   readonly optimizationCandidate: boolean
   readonly averageWallTimeMs: number
@@ -37,7 +40,8 @@ export function assessHabitExperience(state: ExperienceAggregate): HabitAssessme
   ) / runs
   const mature = state.maturity === 'validated' || state.maturity === 'habitual'
   // A formerly successful habit is not evidence that the latest attempt passed.
-  const needsQualityReview = mature && state.recentRuns.at(-1)?.qualityPassed === false
+  const evidence = assessMetaEvidence(state)
+  const needsQualityReview = mature && (state.recentRuns.at(-1)?.qualityPassed === false || !evidence.sufficientForReuse)
   const driftDetected = needsQualityReview || detectDrift(state.recentRuns)
   const successRate = state.verifiedSuccesses / Math.max(1, state.verifiedSuccesses + state.failures)
   const confidence = Math.max(0, Math.min(1, maturityConfidence(state.maturity) * successRate))
@@ -47,13 +51,14 @@ export function assessHabitExperience(state: ExperienceAggregate): HabitAssessme
       mode: 'review',
       verifiedRuns: state.verifiedSuccesses,
       confidence,
+      evidence,
       driftDetected: true,
       optimizationCandidate: false,
       averageWallTimeMs,
       averageTokens,
       averageToolCalls,
       averageFriction,
-      reason: needsQualityReview ? 'latest attempt lacks verified quality; reassess before reusing the habit'
+      reason: needsQualityReview ? 'latest attempt or historical coverage lacks sufficient verified quality; reassess before reusing the habit'
         : 'recent resource use degraded relative to the earlier repeated-task baseline',
     }
   }
@@ -63,6 +68,7 @@ export function assessHabitExperience(state: ExperienceAggregate): HabitAssessme
       mode: 'reuse',
       verifiedRuns: state.verifiedSuccesses,
       confidence,
+      evidence,
       driftDetected: false,
       optimizationCandidate: state.maturity === 'habitual' && averageFriction > 0.25,
       averageWallTimeMs,
@@ -77,6 +83,7 @@ export function assessHabitExperience(state: ExperienceAggregate): HabitAssessme
     mode: 'observe',
     verifiedRuns: state.verifiedSuccesses,
     confidence,
+    evidence,
     driftDetected: false,
     optimizationCandidate: false,
     averageWallTimeMs,
@@ -97,7 +104,9 @@ export function formatHabitGuidance(assessment: HabitAssessment): string {
   if (assessment.mode === 'observe') return ''
   const baseline = [
     `verified_runs=${assessment.verifiedRuns}`,
-    `confidence=${assessment.confidence.toFixed(2)}`,
+    `verified_attempts=${assessment.evidence.verified}/${assessment.evidence.attempts}`,
+    `unverified_attempts=${assessment.evidence.unverified}`,
+    'Historical evidence only; not a probability of future success.',
     `avg_wall_ms=${assessment.averageWallTimeMs}`,
     `avg_tokens=${assessment.averageTokens}`,
     `avg_tool_calls=${assessment.averageToolCalls.toFixed(1)}`,
