@@ -86,7 +86,7 @@ async function unpack(stage, name, digest, destination) {
 }
 
 async function probe(server, backend) {
-  const { stdout, stderr } = await exec(server, ['--list-devices'], { ...execOptions, cwd: dirname(server) })
+  const { stdout } = await exec(server, ['--list-devices'], { ...execOptions, cwd: dirname(server) })
   // Require an enumerated accelerator entry, not merely a loaded library.
   const pattern = backend === 'vulkan' ? /Vulkan\d+\s*:/i
     : backend.startsWith('cuda') ? /CUDA\d+\s*:/i
