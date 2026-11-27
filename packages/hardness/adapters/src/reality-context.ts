@@ -17,6 +17,8 @@ import { promisify } from 'node:util'
 import type { Context } from '@phoenix-ai/cordis'
 import { loadCivicCatalog, probeWindowsLocation, resolveCivicLocation, type CivicArea, type WindowsLocationFix } from './windows-location.ts'
 
+import { RealityGazetteer } from './reality-geonames.ts'
+
 const execFileAsync = promisify(execFile)
 
 /** Configuration controlling Reality Context refresh cadence and optional location hints. */
@@ -1274,6 +1276,7 @@ export class RealityContextEngine {
   private windowsLocation: WindowsLocationFix | undefined
   private windowsLocationNextProbe = 0
   private readonly civicCatalog: readonly CivicArea[]
+  private readonly gazetteer = new RealityGazetteer()
 
   constructor(readonly config: RealityContextConfig) {
     this.civicCatalog = loadCivicCatalog(config.civicCatalogPath)
@@ -1483,6 +1486,18 @@ export class RealityContextEngine {
     await this.refreshBrowserWeather(ctx, assembly, full)
   }
 
+  /** Resolve current permitted position into human-readable geographic names. Downloads public gazetteer data only, on explicit lookup. */
+  async refreshLocationNames(ctx: Context, assembly?: RealityAssemblyContext): Promise<void> {
+    let location = effectiveLocation(ctx, this.config, assembly, this.windowsLocation)
+    if (location === undefined && this.config.windowsLocation === true) {
+      await this.refresh()
+      location = effectiveLocation(ctx, this.config, assembly, this.windowsLocation)
+    }
+    if (location !== undefined && location.accuracyMeters !== null) {
+      await this.gazetteer.prepare(location.latitude, location.longitude, location.accuracyMeters)
+    }
+  }
+
   /**
    * Materialize the current provenance-bearing Reality Context snapshot.
    * @param ctx - Cordis context supplying runtime and browser observations.
@@ -1501,7 +1516,9 @@ export class RealityContextEngine {
     const timezone = intl.timeZone || 'UTC'
     const dst = daylightSavings(now)
     const location = effectiveLocation(ctx, this.config, assembly, this.windowsLocation)
-    const civic = location === undefined ? undefined : resolveCivicLocation(this.civicCatalog, location.latitude, location.longitude, location.accuracyMeters)
+    const localCivic = location === undefined ? undefined : resolveCivicLocation(this.civicCatalog, location.latitude, location.longitude, location.accuracyMeters)
+    const mapped = location === undefined ? undefined : this.gazetteer.resolve(location.latitude, location.longitude, location.accuracyMeters)
+    const civic = localCivic?.city ? localCivic : mapped ?? localCivic
     if (location !== undefined && location.kind !== 'configured') void this.refreshBrowserWeather(ctx, assembly)
     const weather = location !== undefined && location.kind !== 'configured'
       ? this.browserWeatherKey === locationKey(location)
@@ -1563,7 +1580,12 @@ export class RealityContextEngine {
           sector: civic?.sector ?? null,
           civicSource: civic?.source ?? null,
           civicPrecision: civic?.precision ?? null,
-          label: location.label,
+          nearestPlace: mapped?.nearestPlace ?? null,
+          nearestPlaceDistanceMeters: mapped?.nearestPlaceDistanceMeters ?? null,
+          nearbyCityDistanceMeters: mapped?.cityDistanceMeters ?? null,
+          geoNamesId: mapped?.geonameId ?? null,
+          civicAttribution: mapped ? 'GeoNames (CC BY 4.0), https://www.geonames.org/' : null,
+          label: civic ? [civic.sector, civic.city, civic.region, civic.country].filter(Boolean).join(', ') : location.label,
           latitude: location.latitude,
           longitude: location.longitude,
           accuracyMeters: location.accuracyMeters,
@@ -1572,9 +1594,9 @@ export class RealityContextEngine {
           expiresAt: location.expiresAt === null ? null : new Date(location.expiresAt).toISOString(),
           retention: location.kind === 'configured' ? 'configuration' : 'ephemeral-host-cache',
           rule: location.kind === 'browser'
-            ? 'browser coordinates require granted permission; civic labels require local catalog evidence; do not persist coordinates as memory'
+            ? 'browser coordinates require granted permission; civic labels require local area or GeoNames evidence; do not persist coordinates as memory'
             : location.kind === 'windows-host'
-              ? 'opted-in physical Windows Host location, not proof of the user or remote client position; civic labels are approximate and require catalog evidence; do not persist coordinates as memory'
+              ? 'opted-in physical Windows Host location, not proof of the user or remote client position; civic labels are approximate and require geographic evidence; do not persist coordinates as memory'
               : 'configured coordinates are explicit host configuration, not a live fix',
         },
       weather: location === undefined
