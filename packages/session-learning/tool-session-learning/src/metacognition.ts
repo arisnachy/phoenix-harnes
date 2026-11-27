@@ -1,5 +1,5 @@
 /** Provider-neutral metacognitive evidence. No model calls, raw prompts or authority changes. */
-import type { ExperienceAggregate } from './experience.ts'
+import type { ExperienceAggregate, ExperienceRunMetrics } from './experience.ts'
 
 /** Evidence coverage of previous attempts, not a prediction of future correctness. */
 export interface MetaEvidence {
@@ -71,4 +71,30 @@ export function metaResultCallId(message: unknown): string | undefined {
   const value = message as { source?: { callId?: unknown }; callId?: unknown }
   const id = value.source?.callId ?? value.callId
   return typeof id === 'string' && id.length > 0 && id.length <= 512 ? id : undefined
+}
+
+/** Historical comparison, not a causal counterfactual. Only comparable quality-verified
+ * episodes supply cost and time statistics; failed/unverified runs remain in the denominator.
+ * @param runs - Earlier and later episodes of the same matched task.
+ * @returns A bounded comparison or undefined when no useful baseline exists.
+ */
+export function compareMetaExperience(runs: readonly ExperienceRunMetrics[]) {
+  if (runs.length < 4) return undefined
+  const split = Math.floor(runs.length / 2)
+  function cohort(rows: readonly ExperienceRunMetrics[]) {
+    const verified = rows.filter(row => row.verified && row.qualityPassed)
+    const mean = (values: number[]) => values.length < 2 ? null : Math.round(values.reduce((a,b) => a+b, 0) / values.length)
+    return { attempts: rows.length, verified: verified.length,
+      averageWallMs: mean(verified.map(row => row.wallTimeMs)),
+      averageReportedTokens: mean(verified.filter(row => row.totalTokens > 0).map(row => row.totalTokens)) }
+  }
+  return { earlier: cohort(runs.slice(0, split)), recent: cohort(runs.slice(split)), causalConclusion: false as const }
+}
+
+/** Present a bounded historical comparison only when deliberate review is warranted. */
+export function formatMetaComparison(runs: readonly ExperienceRunMetrics[]): string {
+  const comparison = compareMetaExperience(runs)
+  if (comparison === undefined) return ''
+  return 'META historical comparison: ' + JSON.stringify(comparison)
+    + '. This is observational, not proof the changed strategy caused the result. Compare a plausible alternative under the same acceptance criteria and identify a discriminating test before changing the habit.'
 }
