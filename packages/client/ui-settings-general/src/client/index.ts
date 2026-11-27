@@ -23,6 +23,7 @@ import { SettingsRoot } from './SettingsRoot.tsx'
 import { CloseLabel, HeaderContent, TriggerContent } from './chrome.tsx'
 import { GeneralSection } from './GeneralSection.tsx'
 import { DiagnosticsRow } from './DiagnosticsRow.tsx'
+import { LocationRow } from './LocationRow.tsx'
 import { VersionHistorySection, type VersionHistorySectionInjected } from './VersionHistorySection.tsx'
 import { TokenTelemetrySection, type TokenTelemetrySectionInjected } from './TokenTelemetrySection.tsx'
 import type { DiagnosticsRowInjected } from './DiagnosticsRow.tsx'
@@ -237,6 +238,13 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: () => telemetry,
   }, TokenTelemetrySection))
+
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'phoenix-location',
+    order: 85,
+    locale: NS,
+  }, LocationRow))
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',

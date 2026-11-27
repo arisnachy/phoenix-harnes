@@ -72,4 +72,36 @@ describe('resolvedClientLocation', () => {
     await expect(resolvedClientLocation()).resolves.toBeUndefined()
     expect(getCurrentPosition).toHaveBeenCalledTimes(1)
   })
+  it('retries a failed coarse fix with high accuracy and retains the real observation time', async () => {
+    const observedAt = Date.now()
+    const getCurrentPosition = vi.fn()
+      .mockImplementationOnce((_success: PositionCallback, failure: PositionErrorCallback) => failure({ code: 2 } as GeolocationPositionError))
+      .mockImplementationOnce((success: PositionCallback) => success({ coords: { latitude: 19, longitude: -70, accuracy: 15 }, timestamp: observedAt } as GeolocationPosition))
+    vi.stubGlobal('navigator', {
+      permissions: { query: async () => ({ state: 'granted' }) },
+      geolocation: { getCurrentPosition },
+    })
+    const { resolvedClientLocation } = await import('../src/client/location.ts')
+    await expect(resolvedClientLocation()).resolves.toMatchObject({ observedAt, accuracyMeters: 15 })
+    expect(getCurrentPosition.mock.calls[0]?.[2]).toMatchObject({ enableHighAccuracy: false })
+    expect(getCurrentPosition.mock.calls[1]?.[2]).toMatchObject({ enableHighAccuracy: true })
+  })
+
+  it('retains a recent previously validated fix without renewing its timestamp on transient failure', async () => {
+    const observedAt = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(observedAt)
+    const getCurrentPosition = vi.fn()
+      .mockImplementationOnce((success: PositionCallback) => success({ coords: { latitude: 19, longitude: -70, accuracy: 20 }, timestamp: observedAt } as GeolocationPosition))
+      .mockImplementation((_success: PositionCallback, failure: PositionErrorCallback) => failure({ code: 2 } as GeolocationPositionError))
+    vi.stubGlobal('navigator', {
+      permissions: { query: async () => ({ state: 'granted' }) },
+      geolocation: { getCurrentPosition },
+    })
+    const { resolvedClientLocation } = await import('../src/client/location.ts')
+    await expect(resolvedClientLocation()).resolves.toMatchObject({ observedAt })
+    clock.mockReturnValue(observedAt + 120_000)
+    await expect(resolvedClientLocation()).resolves.toMatchObject({ observedAt })
+    clock.mockReturnValue(observedAt + 241_000)
+    await expect(resolvedClientLocation()).resolves.toBeUndefined()
+  })
 })
