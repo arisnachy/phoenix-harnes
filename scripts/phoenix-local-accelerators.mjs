@@ -10,7 +10,7 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { promisify } from 'node:util'
 
-import { selectAccelerator, confirmedOffload } from './phoenix-local-acceleration-policy.mjs'
+import { selectAccelerator, confirmedOffload, parseDeviceMemory, candidateGpuLayers } from './phoenix-local-acceleration-policy.mjs'
 
 const exec = promisify(execFile)
 const version = 'b10964'
@@ -93,7 +93,9 @@ async function probe(server, backend) {
     : backend.startsWith('rocm') ? /(?:ROCm|HIP|CUDA)\d+\s*:/i
     : backend === 'sycl' ? /SYCL\d+\s*:/i
     : /(?:OpenVINO|GPU|NPU)[\w.]*\s*:/i
-  if (!pattern.test(stdout + '\n' + stderr)) throw new Error('No matching compute device enumerated')
+  const devices = parseDeviceMemory(stdout).filter(device => pattern.test(device.name + ':'))
+  if (!devices.length) throw new Error('No matching compute device with readable memory enumerated')
+  return devices.sort((a, b) => b.freeMiB - a.freeMiB)
 }
 
 async function ensure(backend) {
@@ -157,18 +159,20 @@ async function idleForBenchmark(target) {
   return stdout.trim() === '0'
 }
 
-async function measure(target, executable, backend, layers) {
+async function measure(target, executable, backend, layers, device) {
   if (!await idleForBenchmark(target)) throw new Error('Local inference busy or insufficient free RAM; calibration deferred')
   const { stdout, stderr } = await exec(executable, [
     '-m', target.model, '-p', '256', '-n', '64', '-r', '3', '-t', String(target.threads),
     '-ngl', String(layers), '-o', 'json', '-v',
+    ...(device ? ['--device', device.name] : []),
   ], { ...execOptions, timeout: 120_000, maxBuffer: 8 * 1024 * 1024, cwd: dirname(executable) })
   const rows = JSON.parse(stdout)
   const pp = rows.find(row => row.n_prompt === 256 && row.n_gen === 0)
   const tg = rows.find(row => row.n_prompt === 0 && row.n_gen === 64)
   if (![pp?.avg_ts, tg?.avg_ts].every(value => Number.isFinite(value) && value > 0)) throw new Error('Invalid throughput')
   return { backend, gpuLayersRequested: layers, threads: target.threads, promptTokensPerSecond: pp.avg_ts,
-    generationTokensPerSecond: tg.avg_ts, offloadConfirmed: backend !== 'cpu' && confirmedOffload(stderr) }
+    generationTokensPerSecond: tg.avg_ts, offloadConfirmed: backend !== 'cpu' && confirmedOffload(stderr),
+    ...(device ? { deviceName: device.name, deviceFreeMiB: device.freeMiB, deviceTotalMiB: device.totalMiB } : {}) }
 }
 
 async function worker() {
@@ -205,8 +209,17 @@ async function worker() {
         if (!measurements.length) break
         const bench = await findServer(join(base, backend), 'llama-bench.exe')
         if (!bench) throw new Error('llama-bench.exe missing')
-        for (const layers of [8, 16, 99]) {
-          try { measurements.push(await measure(target, bench, backend, layers)) }
+        const server = await findServer(join(base, backend))
+        if (!server) throw new Error('llama-server.exe missing')
+        const [device] = await probe(server, backend)
+        const layersToTry = candidateGpuLayers(device.freeMiB, target.size)
+        if (!layersToTry.length) results.push({ backend, state: 'benchmark-deferred', reason: 'Insufficient reported device memory' })
+        for (const layers of layersToTry) {
+          try {
+            const current = (await probe(server, backend)).find(entry => entry.name === device.name)
+            if (!current || !candidateGpuLayers(current.freeMiB, target.size).includes(layers)) throw new Error('Device memory changed; calibration deferred')
+            measurements.push(await measure(target, bench, backend, layers, current))
+          }
           catch (error) { results.push({ backend, gpuLayersRequested: layers, state: 'benchmark-deferred', reason: String(error.message).slice(0, 400) }) }
         }
       } catch (error) {
