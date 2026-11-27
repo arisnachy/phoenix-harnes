@@ -14,6 +14,8 @@ The successful managed PowerShell update launches a detached, user-scoped provis
 
 The ranking rejects GPU measurements without positive layer-offload diagnostics and retains CPU unless the estimated workload speedup is at least 1.10. Partial comparisons are marked incomplete. Set PHOENIX_LOCAL_ACCELERATOR_AUTOINSTALL=0 to disable provisioning. Status and installer.log are under local-models/accelerators/b10964; node scripts/phoenix-local-accelerators.mjs --status reads the last recorded result.
 
+At managed GGUF startup, the Host accepts a recent calibration for the same model identity and matching pinned installation receipt. It attempts the measured layer and thread settings, then falls back to CPU when startup fails. An accelerated process exit disables that profile for subsequent starts in the current Host; in-flight turns are not replayed. The operational context is sized by total physical RAM, with a separate native maximum and explicit context override. The conservative existing free-memory admission check remains in place.
+
 ## Alternatives considered
 
 **Choose the first enumerated accelerator.** Device enumeration does not establish speed, so calibration compares equivalent workloads instead.
@@ -22,4 +24,4 @@ The ranking rejects GPU measurements without positive layer-offload diagnostics 
 
 ## Consequences
 
-No system drivers are installed. Model files, Ollama, Orión and the active inference runtime remain unchanged. Calibration results are not yet consumed by the production manager. A process check does not guarantee exclusivity against a concurrent launch, and a crashed worker may leave a lock requiring verified manual cleanup. Windows archive extraction, actual device use, benchmark diagnostics, memory safety, production lifecycle integration and CPU fallback during inference remain release gates.
+No system drivers are installed. Model files, Ollama and Orión remain unchanged. The existing active inference process is not replaced by the updater. A process check does not guarantee exclusivity against a concurrent launch, and a crashed worker may leave a lock requiring verified manual cleanup. Windows archive extraction, actual device use, benchmark diagnostics, memory safety, production startup and CPU recovery on real hardware remain release gates.
