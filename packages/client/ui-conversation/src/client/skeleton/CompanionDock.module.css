@@ -1,0 +1,20 @@
+.dock { flex: none; min-width: 0; display: flex; flex-direction: column; align-items: flex-end; padding: 0 18px 4px; background: var(--dsw-alias-bg-base); }
+.launcher { position: relative; flex: none; display: grid; place-items: center; width: 48px; height: 40px; border: 0; border-radius: 12px; background: transparent; cursor: pointer; padding: 2px; }
+.launcher > svg { width: 39px; height: 35px; }
+.launcher:hover, .close:hover, .item:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.launcher:focus-visible, .close:focus-visible, .item:focus-visible, .delegate:focus-visible { outline: 2px solid var(--dsw-specific-phoenix-accent, #ef5c20); outline-offset: 2px; }
+.dot { position: absolute; right: 4px; top: 3px; width: 7px; height: 7px; border-radius: 50%; background: #ef5c20; }
+.panel { width: min(100%, 340px); max-height: min(30vh, 230px); overflow: auto; box-sizing: border-box; border: 1px solid var(--dsw-alias-border-l2); border-radius: 15px; padding: 12px; margin-bottom: 3px; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-base); }
+.heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.heading strong { font-size: 14px; }
+.heading small, .hint { display: block; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.close { background: transparent; border: 0; color: inherit; border-radius: 6px; font-size: 20px; line-height: 1; cursor: pointer; }
+.items { display: grid; gap: 3px; margin-block: 8px; }
+.items p { margin: 0; font-size: 12px; color: var(--dsw-alias-label-secondary); line-height: 1.4; }
+.item { display: grid; gap: 2px; width: 100%; text-align: start; padding: 6px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.item span { font-size: 10px; color: var(--dsw-alias-label-secondary); }
+.item strong { font-size: 12px; overflow-wrap: anywhere; }
+.item:disabled { opacity: .65; cursor: default; }
+.delegate { width: 100%; margin-top: 6px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; background: transparent; color: inherit; font: inherit; font-size: 12px; padding: 8px; cursor: pointer; }
+@media (max-height: 550px) { .dock { padding-bottom: 0; } .launcher { height: 32px; } .launcher > svg { width: 32px; height: 29px; } .panel { max-height: 24vh; } }
+@media (prefers-reduced-motion: reduce) { .dock svg, .dock svg * { animation: none !important; } }
