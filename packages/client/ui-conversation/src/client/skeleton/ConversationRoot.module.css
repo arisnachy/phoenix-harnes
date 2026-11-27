@@ -992,3 +992,8 @@
 .root .scrollBody:has(> .adaptiveInlineHost > *):not(:has(> [data-slot='conversation.session'] > .viewArea)){grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto}
 .root .scrollBody:has(> .adaptiveInlineHost > *):not(:has(> [data-slot='conversation.session'] > .viewArea))>.composerSeat{grid-column:1/-1;grid-row:2}
 .root .scrollBody:has(> .adaptiveInlineHost > *):not(:has(> [data-slot='conversation.session'] > .viewArea))>.adaptiveInlineHost{grid-column:1/-1;grid-row:1}
+
+/* Independent right-gutter output; the scroll body and resident composer retain their full width. */
+.finixWorkspace { position: relative; display: flex; flex: 1; min-height: 0; min-width: 0; width: 100%; }
+
+.finixWorkspace > .scrollBody { min-width: 0; }

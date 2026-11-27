@@ -281,6 +281,7 @@ export function ConversationRoot({
     if (seat === null || scroller === null) return
     seatObserver.current = new ResizeObserver(() => {
       scroller.style.setProperty('--dsh-composer-height', `${seat.offsetHeight}px`)
+      scroller.parentElement?.style.setProperty('--finix-composer-height', `${seat.offsetHeight}px`)
     })
     seatObserver.current.observe(seat)
   }, [])
@@ -452,10 +453,6 @@ export function ConversationRoot({
   const composerSeat = (
     <div ref={seatResizeRef} className={css.composerSeat} data-composer-seat="">
       {composer}
-      {activeApplication === 'general' && !visualActive && (!hero || companionOpen) && (
-        <CompanionDock open={companionOpen} onToggle={() => setCompanionOpen(value => !value)}
-          {...(loadFinixOutput === undefined ? {} : { loadOutput: loadFinixOutput })} />
-      )}
     </div>
   )
 
@@ -553,16 +550,22 @@ export function ConversationRoot({
           </button>
         </div>
       </div>
-      <div className={css.scrollBody} data-conversation-scroll="">
-        {/* This is the ONLY in-chat app host. The Host portals Healthia/App Studio
-            here, above the composer; opening an app never splits AppFrame. */}
-        <div className={css.adaptiveInlineHost} data-adaptive-inline-host="" />
-        <div className={css.studioInlineHost} data-live-studio-host="" />
-        {settling && summaryBlank !== false && (
-          <div className={css.recoveryStatus} role="status">{t('chat.loadingHistory')}</div>
+      <div className={css.finixWorkspace}>
+        <div className={css.scrollBody} data-conversation-scroll="">
+          {/* This is the ONLY in-chat app host. The Host portals Healthia/App Studio
+              here, above the composer; opening an app never splits AppFrame. */}
+          <div className={css.adaptiveInlineHost} data-adaptive-inline-host="" />
+          <div className={css.studioInlineHost} data-live-studio-host="" />
+          {settling && summaryBlank !== false && (
+            <div className={css.recoveryStatus} role="status">{t('chat.loadingHistory')}</div>
+          )}
+          <SessionBodyOutlet sessionId={sessionId} renderSlot={renderSlot} />
+          {composerSeat}
+        </div>
+        {activeApplication === 'general' && !visualActive && (!hero || companionOpen) && (
+          <CompanionDock open={companionOpen} hero={hero} onToggle={() => setCompanionOpen(value => !value)}
+            {...(loadFinixOutput === undefined ? {} : { loadOutput: loadFinixOutput })} />
         )}
-        <SessionBodyOutlet sessionId={sessionId} renderSlot={renderSlot} />
-        {composerSeat}
       </div>
 
     </div>
