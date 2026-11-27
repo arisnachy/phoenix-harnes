@@ -1,0 +1,33 @@
+name: PHOENIX Native Windows pilot
+
+on:
+  pull_request:
+    paths:
+      - 'native/windows-actions/**'
+      - 'native/windows-launcher/**'
+      - 'scripts/phoenix-windows-native*.ps1'
+      - 'scripts/phoenix-windows-launcher-build.ps1'
+      - '.github/workflows/phoenix-windows-native.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  native-windows:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build official App Actions consumer
+        run: dotnet build native/windows-actions/Phoenix.WindowsActions.csproj -c Release
+      - name: Stage packaged Kira launcher without registering
+        shell: powershell
+        run: .\scripts\phoenix-windows-launcher-build.ps1
+      - name: Inspect real synthetic WPF window and check mutation guard
+        shell: powershell
+        run: .\scripts\phoenix-windows-native-smoke.ps1
