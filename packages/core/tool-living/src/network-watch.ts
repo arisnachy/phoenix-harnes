@@ -6,6 +6,7 @@ import process from 'node:process'
 
 type Snapshot = {
   at: number
+  scope: string | null
   neighbors: number
   rx: number | null
   tx: number | null
@@ -23,7 +24,7 @@ function row(raw: unknown): Snapshot | null {
   const at = bounded(value.at)
   const neighbors = bounded(value.neighbors)
   if (at === null || neighbors === null || neighbors > 512) return null
-  return { at, neighbors, rx: bounded(value.rx), tx: bounded(value.tx), added: bounded(value.added), missing: bounded(value.missing) }
+  return { at, neighbors, scope: typeof value.scope === 'string' && /^[a-f0-9]{24}$/u.test(value.scope) ? value.scope : null, rx: bounded(value.rx), tx: bounded(value.tx), added: bounded(value.added), missing: bounded(value.missing) }
 }
 function localStore(): Store | null {
   if (process.platform !== 'win32' || !process.env.LOCALAPPDATA) return null
@@ -81,7 +82,7 @@ export class NetworkWatch {
       this.unavailable = p.status !== 'completed' || count === null
       if (this.unavailable || count === null) return
       const fresh = row({
-        at: this.now(), neighbors: count,
+        at: this.now(), neighbors: count, scope: p.networkScope,
         rx: p.receivedBytesPerSecond, tx: p.sentBytesPerSecond,
         added: Array.isArray(p.newlyObserved) ? p.newlyObserved.length : null,
         missing: Array.isArray(p.noLongerObserved) ? p.noLongerObserved.length : null,
@@ -107,12 +108,25 @@ export class NetworkWatch {
   report() {
     const samples = this.trim(this.samples)
     const latest = samples.at(-1) ?? null
+    const fresh = !!latest && !this.unavailable && this.now() - latest.at <= 180000
+    const earlier = fresh && latest && latest.scope ? samples.slice(0,-1).filter(x=>x.scope===latest.scope && latest.at-x.at<=3600000) : []
+    const alerts: { kind: string; evidence: string; observed: number; baseline?: number }[] = []
+    if (fresh && latest && latest.scope && latest.added !== null && latest.added >= 5)
+      alerts.push({ kind:'neighbor-cache-growth', evidence:'New cache entries, not verified new devices', observed:latest.added })
+    for (const metric of ['rx','tx'] as const) {
+      const values=earlier.map(x=>x[metric]).filter((v):v is number=>v!==null).sort((a,b)=>a-b)
+      const median=values[Math.floor(values.length/2)]
+      const current=latest?.[metric]
+      if(fresh && values.length>=10 && median!==undefined && current!=null && current>=1048576 && current>=5*Math.max(median,1))
+        alerts.push({kind:'host-traffic-spike-'+metric,evidence:'Host bytes/s vs same-scope recent median; not evidence of intrusion',observed:current,baseline:median})
+    }
     return {
+      alerts,
       status: this.unavailable || !latest || this.now() - latest.at > 180000 ? 'degraded' : 'completed',
       persisted: this.persistence, retainedSamples: samples.length, latest,
       history: samples.slice(-60),
       limitations: ['Passive neighbor cache, not a census. Missing entries do not prove disconnect.',
-        'Traffic is the host interface only. History may include different local networks. No packet contents or device names stored.'],
+        'Traffic is the host interface only. History can include multiple network scopes. Alerts are observational, not intrusion findings. No packet contents or device names stored.'],
     }
   }
 }
