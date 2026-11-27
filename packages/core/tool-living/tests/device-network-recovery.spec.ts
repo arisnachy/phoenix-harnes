@@ -25,4 +25,20 @@ describe('device network and recovery adapters',()=>{
     expect(await tool.remoteLinux('192.168.1.2','admin',async()=>true)).toMatchObject({status:'completed',rootUsagePercent:50})
     expect(calls).toBe(1)
   })
+
+  it('requires authorization and stable hardware identity for remote Android restart',async()=>{
+    let serial='SERIAL_A',calls=0
+    const tool=new DeviceNetworkRecovery(async(_file,args)=>{
+      if(args[0]==='devices')return {ok:true,stdout:'192.168.1.2:5555 device model:TV'}
+      if(args.includes('ro.serialno'))return {ok:true,stdout:serial}
+      if(args.includes('reboot'))calls++
+      return {ok:true,stdout:''}
+    })
+    const id=(await tool.networkInventory()).devices[0]!.id
+    expect(await tool.androidNetworkRestart(id,async()=>false)).toMatchObject({status:'denied'})
+    expect(await tool.androidNetworkRestart(id,async()=>{serial='SERIAL_B';return true})).toMatchObject({reason:'TARGET_CHANGED'})
+    expect(calls).toBe(0)
+    expect(await tool.androidNetworkRestart(id,async()=>true)).toMatchObject({status:'command-accepted',verified:false})
+    expect(calls).toBe(1)
+  })
 })

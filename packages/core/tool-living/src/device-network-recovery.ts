@@ -46,6 +46,26 @@ export class DeviceNetworkRecovery {
     const kind=value(characteristics)
     return {status:product?.ok&&version?.ok?'completed':'partial',id,model:value(product),androidVersion:value(version),television:kind===null?null:kind.split(',').some(x=>x.trim()==='tv'),repairVerified:false}
   }
+
+  async androidNetworkRestart(id:string,approve:Approval,signal?:AbortSignal){
+    const before=(await this.wifiAndroid()).found.find(d=>d.id===id&&d.state==='device')
+    if(!before||signal?.aborted)return {status:'denied',reason:'TARGET_NOT_AUTHORIZED_OR_CHANGED'}
+    const serial=async(endpoint:string)=>{
+      const r=await this.call('adb',['-s',endpoint,'shell','getprop','ro.serialno'])
+      const v=r.stdout.trim()
+      return r.ok&&/^[A-Za-z0-9_.-]{4,120}$/u.test(v)&&!/^unknown$/iu.test(v)?v:null
+    }
+    const identity=await serial(before.endpoint)
+    if(!identity)return {status:'denied',reason:'DEVICE_IDENTITY_NOT_VERIFIED'}
+    let allowed=false
+    try{allowed=await approve({target:id,effect:'Restart the selected authorized Android/TV device '+(before.model??'unknown model')+'. Save unsaved work; the network connection will be interrupted.'})}catch{/* deny */}
+    if(!allowed||signal?.aborted)return {status:'denied',reason:'HUMAN_APPROVAL_NOT_GIVEN'}
+    const after=(await this.wifiAndroid()).found.find(d=>d.id===id&&d.state==='device')
+    if(!after||after.endpoint!==before.endpoint||after.model!==before.model||await serial(after.endpoint)!==identity||signal?.aborted)return {status:'denied',reason:'TARGET_CHANGED'}
+    const result=await this.call('adb',['-s',after.endpoint,'reboot'])
+    return {status:result.ok?'command-accepted':'unknown-outcome',verified:false,id,next:'Verify the same device reconnects and test the reported issue; do not retry automatically.'}
+  }
+
   async recoveryModes(){
     const [samsung,apple]=await Promise.all([this.call('heimdall',['detect']),this.call('irecovery',['-q'])])
     const raw=apple.stdout+'\n'+(apple.stderr??'')
