@@ -183,9 +183,13 @@ export class HomeAssistantGateway {
     if (!this.config.allowedServices.includes(service)) {
       throw new HomeGatewayError(`service "${service}" is not allowlisted`, 'HOME_SERVICE_DENIED')
     }
+    // Routing belongs exclusively to the allowlisted entity, never model-supplied service data.
+    if (['entity_id', 'device_id', 'area_id', 'floor_id', 'label_id', 'target'].some(key => Object.hasOwn(request.data, key))) {
+      throw new HomeGatewayError('service data cannot override the approved target', 'HOME_TARGET_OVERRIDE')
+    }
     const value = await this.request(`/api/services/${encodeURIComponent(entityDomain)}/${encodeURIComponent(request.service)}`, 'POST', {
-      entity_id: request.entityId,
       ...request.data,
+      entity_id: request.entityId,
     }, signal)
     return {
       entityId: request.entityId,
@@ -203,7 +207,9 @@ export class HomeAssistantGateway {
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
       },
       ...body === undefined ? {} : { body: JSON.stringify(body) },
-      signal: signal ?? AbortSignal.timeout(this.config.requestTimeoutMs),
+      redirect: 'error',
+      signal: signal === undefined ? AbortSignal.timeout(this.config.requestTimeoutMs)
+        : AbortSignal.any([signal, AbortSignal.timeout(this.config.requestTimeoutMs)]),
     })
     let value: unknown
     try {

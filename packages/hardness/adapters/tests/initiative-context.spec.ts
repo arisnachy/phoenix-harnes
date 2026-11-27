@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { MemoryProactivityStore, ProactivityEngine } from '../src/proactivity-engine.ts'
-import { renderInitiativeContext } from '../src/initiative-context.ts'
+import { initiativeDeliveryPolicy, renderInitiativeContext } from '../src/initiative-context.ts'
 
 function contextWithState(state: unknown) {
   return {
@@ -109,5 +109,18 @@ describe('Phoenix initiative context', () => {
     )
 
     expect(rendered).toBe('')
+  })
+})
+
+describe('initiative delivery timing',()=>{
+  const now=new Date(2026,10,26,14)
+  const state={status:'active',stale:false,observedAt:now.toISOString(),expiresAt:new Date(now.getTime()+30000).toISOString(),screenLocked:{value:null,stale:true},doNotDisturb:{value:null,stale:true}}
+  it('does not confuse input activity with permission to interrupt',()=>{
+    expect(initiativeDeliveryPolicy(state,now)).toMatchObject({activity:'active',discretionaryInterruption:'defer'})
+    expect(initiativeDeliveryPolicy({...state,screenLocked:{value:false,stale:false},doNotDisturb:{value:false,stale:false}},now)).toMatchObject({discretionaryInterruption:'eligible-not-authorized'})
+  })
+  it('defers while absent or stale without stopping authorized work',()=>{
+    expect(initiativeDeliveryPolicy({...state,status:'away'},now)).toMatchObject({activity:'away',discretionaryInterruption:'defer',safeBackgroundWork:'continue-with-existing-authorization'})
+    expect(initiativeDeliveryPolicy({...state,stale:true},now)).toMatchObject({activity:'unknown',discretionaryInterruption:'defer'})
   })
 })

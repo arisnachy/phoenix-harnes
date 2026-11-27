@@ -3,7 +3,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 import type {} from '@phoenix-ai/dsh-voice'
-import { deliverAgentSpeech } from './delivery.ts'
+import { deliverAgentSpeech, InitiativeSpeechGate } from './delivery.ts'
 import { windowsAudioStatus, listenWindowsAudio, windowsSensesStatus, transcribeApprovedAudioFile } from './audio-windows.ts'
 
 
@@ -29,10 +29,11 @@ export const inject = ['tools', 'voice', 'systemPrompt']
 
 /** Register explicit, safe, deterministic speech tools discoverable by tool_search. */
 export function apply(ctx: Context): void {
+  const initiativeSpeech = new InitiativeSpeechGate()
   ctx.systemPrompt.section({
     name: 'tool:voice',
     order: 119,
-    text: 'For ordinary speech and authorized spontaneous spoken notifications, call phoenix_voice_speak with engine=local and short natural text in the configured language. You may take initiative to speak a brief useful notification when appropriate without starting Live. Only when the user explicitly requests Codex voice or a Codex test, use engine=codex or phoenix_codex_live_control. '
+    text: 'For ordinary speech and authorized spontaneous spoken notifications, call phoenix_voice_speak with engine=local and short natural text; for spontaneous announcements always set purpose=initiative in the configured language. You may take initiative to speak a brief useful notification when appropriate without starting Live. Only when the user explicitly requests Codex voice or a Codex test, use engine=codex or phoenix_codex_live_control. '
       + 'Use phoenix_voice_status for diagnostics. Use phoenix_codex_live_control to open, speak through, inspect or close Codex Live independently of the text model. Do not open Codex Live for proactive speech or a generic request to speak; local is the default. Never activate the microphone implicitly. If login is required for an explicit Codex request, use authorize to request the official connector dialog; only the user may complete it. A queued or claimed control is not a playback receipt. Use status to check the result before claiming success. Do not silently substitute local speech during an explicit Codex test. '
       + 'Never claim that the speaker was audible or that microphone audio was heard based solely on a successful synthesis receipt. '
       + 'When asked to hear Windows audio or the microphone, use phoenix_audio_status and phoenix_audio_listen (source output or microphone), not phoenix_voice_speak. The Windows host must be open and the user approves every 3-12 second clip in a native dialog. Never activate a microphone implicitly or listen continuously. '
@@ -129,6 +130,7 @@ export function apply(ctx: Context): void {
         type: 'string', required: true,
         description: 'Frase corta, natural y pronunciable en el idioma configurado, máximo 300 caracteres. No incluir identificadores ni secretos.',
       },
+      purpose: { type: 'string', enum: ['requested', 'initiative'], description: 'Use initiative for spontaneous speech, requested only when the user explicitly requests speech.' },
       language: {
         type: 'string',
         description: 'Idioma BCP-47 de la interfaz, por ejemplo es-DO. Omitir para usar PHOENIX_VOICE_LANGUAGE (es-DO).',
@@ -139,6 +141,14 @@ export function apply(ctx: Context): void {
     async execute(args, exec) {
       const language = args.language?.trim() || process.env.PHOENIX_VOICE_LANGUAGE?.trim() || 'es-DO'
       const key = exec.agent?.id
+      if (args.purpose === 'initiative') {
+        if (args.engine === 'codex') return JSON.stringify({ accepted: false, reason: 'initiative-local-only' })
+        if (exec.agent?.session.header.origin === 'subagent') return JSON.stringify({ accepted: false, reason: 'initiative-owner-required' })
+        const reason = initiativeSpeech.reserve({
+          ...ctx.voice.status(), foreground: typeof key === 'string' && ctx.voice.hasForegroundAgentClient(key),
+        })
+        if (reason !== undefined) return JSON.stringify({ accepted: false, reason, fallback: 'silent-chat-or-attention-feed' })
+      }
       if (agentSpeechUsesCodex(args.engine)) {
         if (typeof key !== 'string' || !/^[A-Za-z0-9_:-]{1,128}$/u.test(key)) {
           return JSON.stringify({ accepted: false, state: 'failed', reason: 'no-foreground-client' })
@@ -152,7 +162,7 @@ export function apply(ctx: Context): void {
       return JSON.stringify({
         ...receipt,
         instruction: receipt.accepted
-          ? 'El proveedor aceptó la salida de audio. Pregunta al usuario si realmente oyó la voz; no afirmes audibilidad sin su confirmación.'
+          ? (args.purpose === 'initiative' ? 'Salida aceptada. No interrumpas para pedir confirmación; no afirmes audibilidad.' : 'El proveedor aceptó la salida de audio. Pregunta al usuario si realmente oyó la voz; no afirmes audibilidad sin su confirmación.')
           : 'No hubo reproducción aceptada. Informa el motivo literal y usa phoenix_voice_status para diagnosticar. No simules voz.',
       })
     },
