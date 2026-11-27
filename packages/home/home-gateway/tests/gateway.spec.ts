@@ -86,3 +86,31 @@ describe('Home Assistant gateway operations', () => {
     expect(await request?.json()).toEqual({ entity_id: 'light.office', brightness: 80 })
   })
 })
+
+describe('Home Assistant target confinement', () => {
+  it('rejects every routing override before any network call', async () => {
+    let requests = 0
+    const gateway = new HomeAssistantGateway(config, {
+      token: 'test-token',
+      fetch: async () => { requests++; return new Response('[]') },
+    })
+    for (const key of ['entity_id', 'device_id', 'area_id', 'floor_id', 'label_id', 'target']) {
+      await expect(gateway.control({ entityId: 'light.office', service: 'turn_on', data: { [key]: 'unapproved' } }))
+        .rejects.toThrow(/cannot override/u)
+    }
+    expect(requests).toBe(0)
+  })
+  it('retains cancellation and disables redirects even with a caller signal', async () => {
+    const controller = new AbortController()
+    let init: RequestInit | undefined
+    const gateway = new HomeAssistantGateway(config, {
+      token: 'test-token',
+      fetch: async (_input, options) => { init = options; return new Response('[]') },
+    })
+    await gateway.listDevices(controller.signal)
+    expect(init?.redirect).toBe('error')
+    expect(init?.signal?.aborted).toBe(false)
+    controller.abort()
+    expect(init?.signal?.aborted).toBe(true)
+  })
+})
