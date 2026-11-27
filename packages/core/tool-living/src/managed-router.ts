@@ -153,6 +153,54 @@ export class ManagedRouter {
       } finally {try{await call(session,'session','destroy',{ ubus_rpc_session:session })}catch{/* bounded server session expires */}}
     } catch {this.failures.set(gateway,Date.now());return { status:'unavailable',reason:'ROUTER_AUTH_TLS_OR_API_FAILED',next:'Verify the enrolled account, certificate and enabled API locally. Do not guess passwords or automatically retry.' }}
   }
+  /** Read only explicitly allowlisted RouterOS policy summaries. No configuration writes. */
+  async policy(gateway:string,current:()=>Promise<string|null>) {
+    const p=await this.profile(gateway)
+    if(!p)return this.status(gateway)
+    if(p.vendor!=='mikrotik')return {status:'unavailable',reason:'POLICY_ADAPTER_NOT_IMPLEMENTED',vendor:p.vendor}
+    const failedAt=this.failures.get(gateway)
+    if(failedAt!==undefined&&Date.now()-failedAt<60000)return {status:'unavailable',reason:'ROUTER_AUTH_COOLDOWN'}
+    if(await current()!==gateway)return {status:'denied',reason:'NETWORK_CHANGED'}
+    const secret=await this.decrypt(p.encrypted)
+    if(secret===null)return {status:'unavailable',reason:'LOCAL_VAULT_LOCKED'}
+    if(await current()!==gateway)return {status:'denied',reason:'NETWORK_CHANGED'}
+    const auth='Basic '+Buffer.from(p.username+':'+secret,'utf8').toString('base64')
+    const flag=(v:unknown)=>v===true||v==='true'?true:v===false||v==='false'?false:null
+    try {
+      const resource=obj(await this.send(p,'GET','/rest/system/resource',auth))
+      if(!resource||typeof resource.version!=='string'||typeof resource['board-name']!=='string')return {status:'unavailable',reason:'ROUTEROS_NOT_VERIFIED'}
+      const summary=async(path:string)=>{
+        try {
+          if(await current()!==gateway)return null
+          const raw=await this.send(p,'GET',path,auth)
+          if(!Array.isArray(raw))return null
+          const flags=raw.map(x=>flag(obj(x)?.disabled))
+          return {total:raw.length,enabled:flags.filter(x=>x===false).length,disabled:flags.filter(x=>x===true).length,unknown:flags.filter(x=>x===null).length}
+        }catch{return null}
+      }
+      const dhcp=await summary('/rest/ip/dhcp-server?.proplist=disabled')
+      const firewallIPv4=await summary('/rest/ip/firewall/filter?.proplist=disabled')
+      const firewallIPv6=await summary('/rest/ipv6/firewall/filter?.proplist=disabled')
+      const queues=await summary('/rest/queue/simple?.proplist=disabled')
+      const queueTree=await summary('/rest/queue/tree?.proplist=disabled')
+      const wifi=await summary('/rest/interface/wifi?.proplist=disabled')
+      const legacyWireless=wifi===null?await summary('/rest/interface/wireless?.proplist=disabled'):null
+      let dns:null|{allowRemoteRequests:boolean|null}=null
+      try {
+        if(await current()===gateway){
+          const raw=obj(await this.send(p,'GET','/rest/ip/dns?.proplist=allow-remote-requests',auth))
+          if(raw)dns={allowRemoteRequests:flag(raw['allow-remote-requests'])}
+        }
+      }catch{/* unavailable */}
+      if(await current()!==gateway)return {status:'denied',reason:'NETWORK_CHANGED'}
+      return {status:dhcp&&firewallIPv4&&firewallIPv6&&queues&&queueTree&&(wifi||legacyWireless)&&dns?'completed':'partial',
+        vendor:p.vendor,authenticated:true,dhcp,dns,firewallIPv4,firewallIPv6,queues,queueTree,wifi:wifi??legacyWireless,
+        limitations:['Read-only counts; unavailable is not zero. Rule counts do not establish firewall effectiveness. No SSIDs, passwords, client addresses, rule contents or changes.']}
+    }catch{
+      this.failures.set(gateway,Date.now())
+      return {status:'unavailable',reason:'ROUTER_AUTH_TLS_OR_API_FAILED'}
+    }
+  }
   /** A separately approved restart; transport success is not proof of recovery. */
   async reboot(gateway:string,current:()=>Promise<string|null>,approve:(detail:{ target:string;effect:string })=>Promise<boolean>,signal?:AbortSignal) {
     const p=await this.profile(gateway)
