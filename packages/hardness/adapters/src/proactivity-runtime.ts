@@ -669,12 +669,13 @@ export function installProactivityRuntime(ctx: Context,
   }
 
   const pump = async (): Promise<void> => {
-    if (disposed || pumping) return
+    if (disposed) return
+    // Resident observation must keep running even while an authorized task awaits a model.
+    try { observeLocal?.() } catch { /* optional local observations cannot block scheduled work */ }
+    if (pumping) return
     pumping = true
     try {
       const now = new Date()
-      // Local resident observations share this pump; they must not start another model or block scheduled work.
-      observeLocal?.()
       await retryFailedProactivityTasks(engine, now, DEFAULT_PROACTIVITY_RETRY_POLICY)
       await engine.runDue(now)
     } catch (error: unknown) {
