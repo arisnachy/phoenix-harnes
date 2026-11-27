@@ -26,7 +26,7 @@ import type { SessionRemotes } from './remotes.ts'
 import { ProjectionValueStore } from './projection-store.ts'
 import type { ProjectionsBaseline } from './projection-store.ts'
 import { resolvedClientTimeZone } from '../time-zone.ts'
-import { resolvedClientLocation } from '../location.ts'
+import { isExplicitLocationRequest, resolvedClientLocation } from '../location.ts'
 import { SessionQueueMirror } from './queue-mirror.ts'
 
 /** Messages requested per history page. */
@@ -201,7 +201,9 @@ export class Session implements SessionFace {
     this.promptAttempted = true
     if (this.blankBit) this.firstPromptPendingTurn = true
     this.notifier.markDirty()
-    const clientLocation = await resolvedClientLocation(signal)
+    const explicitLocation = this.address === undefined && content.length === 1 && content[0]?.type === 'text'
+      && isExplicitLocationRequest(content[0].text)
+    const clientLocation = await resolvedClientLocation(signal, explicitLocation)
     let result: RpcResult<{ accepted: true }>
     try {
       if (this.address === undefined) {
