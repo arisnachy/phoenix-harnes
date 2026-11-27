@@ -3,6 +3,7 @@ import { networkInterfaces } from 'node:os'
 import { execFile } from 'node:child_process'
 import process from 'node:process'
 import { AmbientExtensions, geoFeatures } from './ambient-extensions.ts'
+import { AmbientPlanet, discoverAdvertisements, sky, voiceCandidate } from './ambient-planet.ts'
 
 const USGS='https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson'
 const NOAA='https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json'
@@ -72,25 +73,39 @@ function parseConfig(raw:string|undefined):Row{
 export class AmbientIntelligence {
   private readonly cache=new Map<string,{at:number;data:unknown}>()
   private readonly extensions:AmbientExtensions
+  private readonly planet:AmbientPlanet
   constructor(private readonly read:ReadJson=fetchJson,private readonly neighbors:()=>Promise<unknown>=neighborCache,private readonly config:()=>Row=()=>parseConfig(process.env.PHOENIX_AMBIENT_CONTEXT_JSON),private readonly now:()=>number=Date.now){
     this.extensions=new AmbientExtensions(read,config,now)
+    this.planet=new AmbientPlanet(read,now)
   }
   async observe(operation:string,query=''):Promise<unknown>{
     const result=await this.readObservation(operation,query)
     if(['network','world','space'].includes(operation))await this.extensions.remember(result)
     return result
   }
-  start(){
+  start(announce?:(event:{key:string;text:string})=>void){
     if(this.config().monitorPublicFeeds!==true)return ()=>undefined
-    let running=false
+    let running=false, stopped=false
+    const announced=new Map<string,number>()
     const tick=async()=>{
-      if(running)return
+      if(running||stopped||this.config().monitorPublicFeeds!==true)return
       running=true
-      try{await this.observe('world');await this.observe('space')}catch{/* isolated ambient observation */}finally{running=false}
+      try{
+        for(const op of ['world','space']){
+          if(stopped)break
+          const result=await this.observe(op)
+          if(stopped||this.config().allowAmbientVoice!==true||!announce)continue
+          const now=this.now(),candidate=voiceCandidate(op,result,now)
+          for(const [key,at] of announced)if(now-at>21600000)announced.delete(key)
+          if(candidate&&!announced.has(candidate.key)&&announced.size<64){
+            announced.set(candidate.key,now);announce(candidate)
+          }
+        }
+      }catch{/* isolated ambient observation */}finally{running=false}
     }
     const timer=setInterval(()=>void tick(),15*60*1000)
     timer.unref()
-    return ()=>clearInterval(timer)
+    return ()=>{stopped=true;clearInterval(timer)}
   }
   private async feed(key:string,url:string,project:(x:unknown)=>unknown){
     const now=this.now(), old=this.cache.get(key)
@@ -105,7 +120,7 @@ export class AmbientIntelligence {
   }
   private async readObservation(operation:string,query=''):Promise<unknown>{
     if(['location','moon','ephemeris','weather','journal','graph'].includes(operation))return this.extensions.observe(operation,query)
-    const config=this.config(), fix=point(config.location)?null:['overview','places','route','map'].includes(operation)&&config.allowWindowsLocation===true?await this.extensions.location():null
+    const config=this.config(), fix=point(config.location)?null:['overview','places','route','map','sky'].includes(operation)&&config.allowWindowsLocation===true?await this.extensions.location():null
     const origin=point(config.location)??point(fix), loc=record(config.location)
     const observedAt=new Date(this.now()).toISOString()
     const base={schema:'phoenix.ambient.v1',observedAt}
@@ -113,6 +128,9 @@ export class AmbientIntelligence {
       cosmicAddress:['Earth','Solar System','Milky Way','Local Group','Observable universe'],
       capabilities:{network:'passive private neighbor cache',places:'configured offline catalog',route:'optional local OSRM',world:'USGS earthquakes',space:'NOAA geomagnetic activity'},
       limitations:['OS location requires explicit opt-in and permission','Public feed monitoring requires explicit opt-in','No device access granted by observation']}
+    if(operation==='services')return {...base,...await discoverAdvertisements(config.allowLanAdvertisements===true)}
+    if(operation==='satellites'||operation==='natural-events')return {...base,...await this.planet.get(operation)}
+    if(operation==='sky')return origin?{...base,status:'computed',stars:sky(origin.lat,origin.lon,this.now()),method:'approximate geometric altitude of selected J2000 reference stars; no refraction, daylight, horizon obstruction or visibility guarantee'}:{...base,status:'location-not-configured'}
     if(operation==='network'){
       const interfaces=Object.values(networkInterfaces()).flat().filter(x=>x&&!x.internal).length
       try{return {...base,status:'observed',interfaceAddressCount:interfaces,...summarizeNeighbors(await this.neighbors())}}
@@ -126,7 +144,7 @@ export class AmbientIntelligence {
       })
       const q=label(query).toLowerCase()
       const nearby=places.filter(x=>!q||(x.name+' '+x.category).toLowerCase().includes(q)).map(x=>({...x,distanceKm:distanceKm(origin,x)})).sort((a,b)=>a.distanceKm-b.distanceKm).slice(0,20)
-      if(operation==='map')return {...base,status:places.length?'configured-catalog':'catalog-not-configured',geojson:{type:'FeatureCollection',features:nearby.map(x=>({type:'Feature',geometry:{type:'Point',coordinates:[x.lon,x.lat]},properties:{name:x.name,category:x.category,distanceKm:x.distanceKm}}))},rendered:false}
+      if(operation==='map')return {...base,status:places.length?'configured-catalog':'catalog-not-configured',mapTool:'phoenix_geo_map',map:{source:'User-configured offline catalog',subtitle:'Straight-line distance; opening hours and road routes unverified',layers:[{id:'ambient-nearby',name:'Nearby places',kind:'points',features:nearby.filter(x=>Math.abs(x.lat)<=85).map((x,i)=>({id:'place-'+i,label:x.name,coordinates:[[x.lon,x.lat]],detail:x.category+' · '+x.distanceKm+' km'}))}]},geojson:{type:'FeatureCollection',features:nearby.map(x=>({type:'Feature',geometry:{type:'Point',coordinates:[x.lon,x.lat]},properties:{name:x.name,category:x.category,distanceKm:x.distanceKm}}))},rendered:false}
       return {...base,status:places.length?'configured-catalog':'catalog-not-configured',source:'user-configured offline catalog',distanceType:'straight-line, not road travel',places:nearby}
     }
     if(operation==='route'){
