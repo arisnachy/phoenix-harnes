@@ -1,4 +1,7 @@
 import { describe,expect,it } from 'vitest'
+import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+import process from 'node:process'
 import { NetworkIntelligence } from '../src/network-intelligence.ts'
 const host={gateway:'192.168.1.1',address:'192.168.1.2',prefix:29,index:4,received:100,sent:200,neighbors:[{IPAddress:'192.168.1.1',State:'Reachable'},{IPAddress:'192.168.1.3',State:'Stale'},{IPAddress:'8.8.8.8',State:'Reachable'}]}
 const ok=(stdout:string)=>({ok:true,stdout})
@@ -80,4 +83,46 @@ describe('Network Intelligence',()=>{
     expect(await t.router('root','wifi-reload',async()=>true)).toMatchObject({status:'command-accepted',verified:false})
     expect(calls).toEqual(['ubus call system board','wifi reload'])
   })
+  it('distinguishes stable link-layer pseudonyms from IP-only neighbors and reports local diagnostics', async () => {
+    let address = '192.168.1.3'
+    const t = new NetworkIntelligence(async () => ok(JSON.stringify({
+      ...host, linkSpeed: '1 Gbps', adapterStatus: 'Up', dnsServerCount: 2, ipv6Neighbors: 3,
+      neighbors: [
+        { IPAddress: '192.168.1.1', State: 'Reachable', LinkLayerAddress: '00-11-22-33-44-55' },
+        { IPAddress: address, State: 'Reachable', LinkLayerAddress: '02-AA-BB-CC-DD-EE' },
+        { IPAddress: '192.168.1.5', State: 'Stale', LinkLayerAddress: '00-00-00-00-00-00' },
+      ],
+    })), 'win32')
+    const before = await t.inventory()
+    expect(before).toMatchObject({ link: { speed: '1 Gbps', status: 'Up', dnsServerCount: 2, ipv6NeighborCount: 3 },
+      devices: [{ identity: 'link-layer' }, { identity: 'link-layer' }, { identity: 'address-only' }] })
+    address = '192.168.1.4'
+    const after = await t.inventory()
+    expect(after.devices?.[1]?.id).toBe(before.devices?.[1]?.id)
+    expect(JSON.stringify(after)).not.toMatch(/02-AA-BB|02aabbccdde[e]/iu)
+  })
+  it('observes only local IPv6 neighbors, merges link-layer pseudonyms across address families', async()=>{
+    const t=new NetworkIntelligence(async()=>ok(JSON.stringify({...host,
+      neighbors:[{IPAddress:'192.168.1.1',State:'Reachable',LinkLayerAddress:'00-11-22-33-44-55'},{IPAddress:'192.168.1.3',State:'Stale',LinkLayerAddress:'02-AA-BB-CC-DD-EE'}],
+      ipv6Devices:[{IPAddress:'fe80::1234%4',State:'Reachable',LinkLayerAddress:'02-AA-BB-CC-DD-EE'},{IPAddress:'fd00::2',State:'Stale'},{IPAddress:'2001:db8::1',State:'Reachable'},{IPAddress:'ff02::1',State:'Reachable'}]})),'win32')
+    const result=await t.inventory()
+    expect(result).toMatchObject({ipv6Devices:[{address:'fe80::1234',identity:'link-layer'},{address:'fd00::2',identity:'address-only'}],link:{ipv6NeighborCount:2}})
+    expect(result.ipv6Devices?.[0]?.id).toBe(result.devices?.[1]?.id)
+    expect(JSON.stringify(result)).not.toMatch(/2001:db8|ff02::1|02-AA-BB/u)
+    expect(await t.monitor()).toMatchObject({observedDeviceIds:[expect.any(String),expect.any(String)]})
+  })
+  it('maps logical on-link evidence without inventing physical connections', async()=>{
+    const t=new NetworkIntelligence(async()=>ok(JSON.stringify(host)),'win32')
+    const result=await t.inventory()
+    expect(result).toMatchObject({topology:{kind:'logical-on-link',scope:null,
+      nodes:[{role:'segment'},{role:'host'},{role:'gateway'},{role:'neighbor',address:'192.168.1.3'}],
+      edges:[{evidence:'default-route'},{evidence:'local-interface'},{evidence:'neighbor-cache'}]}})
+  })
+})
+
+it.skipIf(process.platform !== 'win32')('parses the router enrollment script without running it',()=>{
+  const path=fileURLToPath(new URL('../../../../scripts/phoenix-router-enroll.ps1',import.meta.url))
+  const quoted=path.replace(/'/gu,"''")
+  const script="$tokens=$null; $errors=$null; [void][System.Management.Automation.Language.Parser]::ParseFile('"+quoted+"',[ref]$tokens,[ref]$errors); if ($errors.Count -gt 0) { exit 1 }"
+  expect(()=>execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{timeout:15000,windowsHide:true})).not.toThrow()
 })
