@@ -87,3 +87,29 @@ test('duplicate declarations are unresolved rather than assigned arbitrarily', a
   assert.equal(cognitiveGenome.edges.length, 0)
   assert.equal(cognitiveGenome.unresolved[0].reason, 'ambiguous-package')
 }))
+
+test('workspace graph maps declared dependency kinds and transitive impact independently of injections', async () => fixture(async root => {
+  const add = async (folder, manifest) => {
+    await mkdir(join(root, 'packages', 'client', folder), { recursive: true })
+    await writeFile(join(root, 'packages', 'client', folder, 'package.json'), JSON.stringify(manifest))
+  }
+  await add('runtime', { name: '@phoenix-ai/runtime', peerDependencies: { '@phoenix-ai/leaf': 'workspace:^' } })
+  await add('leaf', { name: '@phoenix-ai/leaf', optionalDependencies: { '@phoenix-ai/absent': 'workspace:*' } })
+  await add('consumer', { name: '@phoenix-ai/consumer',
+    dependencies: { '@phoenix-ai/runtime': 'workspace:^', external: 'https://example.invalid/SECRET_SENTINEL' },
+    devDependencies: { '@phoenix-ai/runtime': 'workspace:*' } })
+  const { workspaceGraph: graph } = await inspectAdaptiveSource(root)
+  assert.equal(graph.edges.length, 3)
+  assert.equal(graph.unresolved.length, 1)
+  assert.equal(graph.unresolved[0].reason, 'outside-inventory-or-missing')
+  assert.deepEqual(graph.impact.find(item => item.source.endsWith('/leaf')).potentialDependents,
+    ['packages/client/consumer', 'packages/client/runtime'])
+  assert.equal(graph.runtimeHealthChecked, false)
+  assert.equal(graph.mayApply, false)
+  assert.ok(!JSON.stringify(graph).includes('SECRET_SENTINEL'))
+  assert.equal(graph.fingerprint, (await inspectAdaptiveSource(root)).workspaceGraph.fingerprint)
+  await add('duplicate', { name: '@phoenix-ai/runtime' })
+  const changed = (await inspectAdaptiveSource(root)).workspaceGraph
+  assert.notEqual(changed.fingerprint, graph.fingerprint)
+  assert.equal(changed.unresolved.filter(item => item.reason === 'ambiguous-package').length, 2)
+}))
