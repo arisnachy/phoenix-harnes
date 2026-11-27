@@ -18,6 +18,7 @@ import type {
   ToolRestriction,
 } from '@phoenix-ai/dsh-tools'
 import { resolveStructuredProvider, type SubagentRuntime } from '@phoenix-ai/dsh-subagent'
+import { combineMetaVerdicts, META_REVIEW_PROTOCOL, validMetaVerdict, type MetaReviewRoute } from './meta-review.ts'
 import { abstractGameReview, isAbstractGameNeed, isGameDevelopmentNeed, qualityRequirementsForNeed, requestsGameAssets } from './quality-contract.ts'
 
 const OUTPUT_SCHEMA: ObjectJsonSchema = {
@@ -153,6 +154,8 @@ export interface OrdinaryCompletionJudgeDecision {
     readonly reportIntegrity: boolean
   }
   readonly requiredChanges: readonly string[]
+  /** Observed request route from the child transcript, not a claimed identity. */
+  readonly servingRoute?: MetaReviewRoute
 }
 
 type JudgeRuntime = Pick<SubagentRuntime, 'getProvider' | 'start'> & Partial<Pick<SubagentRuntime, 'list'>>
@@ -350,9 +353,8 @@ function parseDecision(value: unknown): OrdinaryCompletionJudgeDecision | undefi
   const knownLimitations = uniqueList(record.known_limitations)
   const requiredChanges = uniqueList(record.required_changes)
   if (evidence === undefined || knownLimitations === undefined || requiredChanges === undefined) return undefined
-  if (record.verdict === 'pass' && (evidence.length === 0
-    || !riskRecord.ambiguity || !riskRecord.limitations || !riskRecord.report_integrity)) return undefined
-  if (record.verdict === 'needs_changes' && requiredChanges.length === 0) return undefined
+  if (!validMetaVerdict({ verdict: record.verdict as OrdinaryCompletionJudgeDecision['verdict'], evidence, requiredChanges })) return undefined
+  if (record.verdict === 'pass' && (!riskRecord.ambiguity || !riskRecord.limitations || !riskRecord.report_integrity)) return undefined
   return {
     verdict: record.verdict as OrdinaryCompletionJudgeDecision['verdict'],
     summary: record.summary,
@@ -380,12 +382,13 @@ export async function reviewOrdinaryCompletion(input: {
   readonly mutations: readonly string[]
   readonly verifications: readonly string[]
   readonly signal: AbortSignal
+  readonly route?: MetaReviewRoute
 }): Promise<OrdinaryCompletionJudgeDecision> {
   const resolved = resolveStructuredProvider({
     getProvider: name => input.subagents.getProvider(name),
     list: () => input.subagents.list?.() ?? [],
   }, input.provider)
-  if (resolved === undefined) {
+  if (resolved === undefined || (input.route !== undefined && resolved.provider.inheritsParentContext !== false)) {
     return {
       verdict: 'blocked', summary: 'Independent completion judge is unavailable.', evidence: [],
       knownLimitations: [], riskCoverage: { ambiguity: false, limitations: false, reportIntegrity: false }, requiredChanges: [],
@@ -407,6 +410,7 @@ export async function reviewOrdinaryCompletion(input: {
       signal: input.signal,
       outputSchema: OUTPUT_SCHEMA,
       toolFilter,
+      ...(input.route === undefined ? {} : { agentOptions: { provider: input.route.provider, model: input.route.model } }),
       prompt: [{
         type: 'text',
         text: '<phoenix_ordinary_completion_judge>\n'
@@ -417,6 +421,7 @@ export async function reviewOrdinaryCompletion(input: {
           + 'Act as a fresh, read-only completion judge. Inspect the actual changed artifact and durable session evidence. '
           + 'Optimize for quality first, then latency, then token cost: reuse concrete supplied evidence, inspect only material uncovered risks, do not repeat passing checks or initiate unrelated work, and return concise non-duplicated findings. '
           + gameReview
+          + META_REVIEW_PROTOCOL + ' '
           + 'First derive an immutable literal checklist from the original request. Every explicitly named library, API, CLI flag, function name, format, wording, limit, and required behavior is mandatory and may not disappear during review. '
           + 'Map every explicit mandatory requirement to concrete evidence; passing tests are evidence, not blanket proof. Audit material assertions for expected-value provenance: '
           + 'an expected result must come from the specification, a reference implementation/standard, a mathematical or metamorphic invariant, or an independent fixture. '
@@ -440,8 +445,15 @@ export async function reviewOrdinaryCompletion(input: {
         knownLimitations: [], riskCoverage: { ambiguity: false, limitations: false, reportIntegrity: false }, requiredChanges: [],
       }
     }
-    return parseDecision(result.structured)
-      ?? {
+    const parsed = parseDecision(result.structured)
+    const served = run.localAgent?.session.events.findLast(event => event.type === 'assistant/message')
+    const source = served?.type === 'assistant/message' ? served.data.message.source : undefined
+    const servingRoute = typeof source?.provider === 'string' && typeof source.model === 'string'
+      ? { provider: source.provider, model: source.model } : undefined
+    if (parsed !== undefined && (input.route === undefined || (servingRoute?.provider === input.route.provider && servingRoute.model === input.route.model))) {
+      return { ...parsed, ...(servingRoute === undefined ? {} : { servingRoute }) }
+    }
+    return {
         verdict: 'blocked', summary: 'Independent completion judge returned invalid evidence.', evidence: [],
         knownLimitations: [], riskCoverage: { ambiguity: false, limitations: false, reportIntegrity: false }, requiredChanges: [],
       }
@@ -451,7 +463,7 @@ export async function reviewOrdinaryCompletion(input: {
       knownLimitations: [], riskCoverage: { ambiguity: false, limitations: false, reportIntegrity: false }, requiredChanges: [],
     }
   } finally {
-    if (run !== undefined) await run.dispose()
+    if (run !== undefined) { try { await run.dispose() } catch { /* preserve completed evidence */ } }
   }
 }
 
@@ -485,7 +497,8 @@ function judgeNotice(decision: OrdinaryCompletionJudgeDecision): UserMessage {
  */
 export function installOrdinaryCompletionJudgeBridge(
   ctx: Context,
-  input: { readonly subagents: JudgeRuntime; readonly provider: string; readonly maxPasses?: number },
+  input: { readonly subagents: JudgeRuntime; readonly provider: string; readonly maxPasses?: number;
+    readonly alternativeRoute?: (primary: MetaReviewRoute, signal: AbortSignal) => Promise<MetaReviewRoute | undefined> },
 ): () => void {
   const maxPasses = input.maxPasses ?? 2
   const states = new WeakMap<Agent, BridgeState>()
@@ -608,7 +621,7 @@ export function installOrdinaryCompletionJudgeBridge(
     if (reviewBudget.maxPasses === 0 || state.judgePasses >= reviewBudget.maxPasses) return
 
     state.judgePasses += 1
-    const decision = await reviewOrdinaryCompletion({
+    let decision = await reviewOrdinaryCompletion({
       subagents: input.subagents,
       provider: input.provider,
       parent: agent,
@@ -618,6 +631,22 @@ export function installOrdinaryCompletionJudgeBridge(
       signal,
     })
     if (signal.aborted) return
+    // Independent second opinion uses an existing pass slot, never an unbounded additional review.
+    if (decision.verdict === 'pass' && decision.servingRoute !== undefined && reviewBudget.mode === 'deep'
+      && state.judgePasses < reviewBudget.maxPasses && input.alternativeRoute !== undefined) {
+      const route = await input.alternativeRoute(decision.servingRoute, signal).catch(() => undefined)
+      if (signal.aborted) return
+      if (route !== undefined && (route.provider !== decision.servingRoute.provider || route.model !== decision.servingRoute.model)) {
+        state.judgePasses += 1
+        const second = await reviewOrdinaryCompletion({ subagents: input.subagents, provider: input.provider,
+          parent: agent, request: state.request, mutations: state.mutations, verifications: state.verifications, signal, route })
+        if (signal.aborted) return
+        const verdict = combineMetaVerdicts(decision.verdict, second.verdict)
+        if (verdict !== 'pass') decision = second.verdict === 'blocked'
+          ? { ...second, summary: 'Collective META review could not verify the configured independent route; do not claim two-model agreement.' }
+          : second
+      }
+    }
     state.judgedGeneration = state.generation
     state.reviewNeedsFollowup = independentReviewNeedsFollowup(decision.verdict, state.judgePasses, reviewBudget.maxPasses)
     if (decision.verdict === 'needs_changes'
