@@ -1,5 +1,9 @@
 import { readFile, readdir, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+
+const exec = promisify(execFile)
 
 const assets = {
   cpu: ['917f39c076402c421224824607397af20f53625a60defc20e8dd22446bf4c5d7'],
@@ -19,6 +23,9 @@ export interface LocalAccelerationProfile {
   backend: string
   gpuLayers: number
   threads: number
+  deviceName: string
+  deviceFreeMiB: number
+  deviceTotalMiB: number
 }
 
 async function findExecutable(dir: string): Promise<string | undefined> {
@@ -49,7 +56,7 @@ export async function readLocalAccelerationProfile(root: string, version: string
     const status = JSON.parse(await readFile(path.join(base, 'status.json'), 'utf8')) as {
       version?: string; checkedAt?: string; calibration?: {
         state?: string; modelId?: string; modelSize?: number; modelModified?: number;
-        selected?: { backend?: string; offloadConfirmed?: boolean; speedup?: number; gpuLayersRequested?: number; threads?: number }
+        selected?: { backend?: string; offloadConfirmed?: boolean; speedup?: number; gpuLayersRequested?: number; threads?: number; deviceName?: string; deviceFreeMiB?: number; deviceTotalMiB?: number }
       }
     }
     const c = status.calibration
@@ -61,6 +68,9 @@ export async function readLocalAccelerationProfile(root: string, version: string
       || !Number.isFinite(selected.speedup) || selected.speedup < 1.10
       || typeof selected.backend !== 'string' || selected.backend === 'cpu' || !Object.hasOwn(assets, selected.backend)
       || typeof selected.gpuLayersRequested !== 'number' || ![8, 16, 99].includes(selected.gpuLayersRequested)
+      || typeof selected.deviceName !== 'string' || !/^[\w.-]{1,64}$/.test(selected.deviceName)
+      || typeof selected.deviceFreeMiB !== 'number' || !Number.isSafeInteger(selected.deviceFreeMiB) || selected.deviceFreeMiB <= 0
+      || typeof selected.deviceTotalMiB !== 'number' || !Number.isSafeInteger(selected.deviceTotalMiB) || selected.deviceTotalMiB < selected.deviceFreeMiB
       || typeof selected.threads !== 'number' || !Number.isInteger(selected.threads) || selected.threads < 1 || selected.threads > maxThreads) return undefined
     const metadata = await stat(modelPath)
     if (metadata.size !== c.modelSize || metadata.mtimeMs !== c.modelModified) return undefined
@@ -77,9 +87,34 @@ export async function readLocalAccelerationProfile(root: string, version: string
     if (backendRelative !== selected.backend) return undefined
     const relative = path.relative(resolvedTarget, actual)
     if (relative.startsWith('..') || path.isAbsolute(relative)) return undefined
-    return { executable: actual, backend: selected.backend, gpuLayers: selected.gpuLayersRequested, threads: selected.threads }
+    return { executable: actual, backend: selected.backend, gpuLayers: selected.gpuLayersRequested, threads: selected.threads, deviceName: selected.deviceName, deviceFreeMiB: selected.deviceFreeMiB, deviceTotalMiB: selected.deviceTotalMiB }
   } catch {
     // Optional calibration is never required for CPU inference.
     return undefined
+  }
+}
+
+/**
+ * Recheck the exact measured device immediately before runtime startup.
+ * @param profile - Validated acceleration profile.
+ * @param modelBytes - Size of the managed model.
+ * @returns Whether the device still meets conservative memory admission.
+ */
+export async function hasLocalAcceleratorMemory(profile: LocalAccelerationProfile, modelBytes: number): Promise<boolean> {
+  try {
+    const { stdout } = await exec(profile.executable, ['--list-devices'], {
+      windowsHide: true, timeout: 15_000, maxBuffer: 2 * 1024 * 1024, cwd: path.dirname(profile.executable),
+    })
+    const devices = [...stdout.matchAll(/^\s*([\w.-]+):\s+[^\r\n]*?\((\d+) MiB, (\d+) MiB free\)\s*$/gm)]
+    const device = devices.find(entry => entry[1] === profile.deviceName)
+    if (device === undefined || Number(device[2]) !== profile.deviceTotalMiB) return false
+    const free = Number(device[3])
+    const weight = Math.ceil(modelBytes / 1024 ** 2)
+    const minimum = profile.gpuLayers === 99 ? weight + 2048
+      : profile.gpuLayers === 16 ? Math.max(3072, Math.ceil(weight * 0.75) + 1024)
+      : Math.max(2048, Math.ceil(weight / 2) + 1024)
+    return Number.isSafeInteger(free) && free >= minimum && free <= profile.deviceTotalMiB
+  } catch {
+    return false
   }
 }
