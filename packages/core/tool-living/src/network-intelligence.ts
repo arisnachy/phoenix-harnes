@@ -9,12 +9,12 @@ import process from 'node:process'
 type Reply={ok:boolean;stdout:string}
 type Runner=(file:string,args:string[])=>Promise<Reply>
 type Approval=(detail:{target:string;effect:string})=>Promise<boolean>
-type Host={gateway:string;address:string;prefix:number;index:number;received:number|null;sent:number|null;neighbors:{address:string;state:string;mac:string|null}[];ipv6Neighbors:number|null;linkSpeed:string|null;adapterStatus:string|null;dnsServerCount:number|null}
+type Host={gateway:string;address:string;prefix:number;index:number;received:number|null;sent:number|null;neighbors:{address:string;state:string;mac:string|null}[];ipv6Neighbors:number|null;ipv6Devices:{address:string;state:string;mac:string|null}[];linkSpeed:string|null;adapterStatus:string|null;dnsServerCount:number|null}
 const runLocal:Runner=(file,args)=>new Promise(resolve=>{
   execFile(file,args,{encoding:'utf8',windowsHide:true,shell:false,timeout:12000,maxBuffer:262144},
     (error,stdout)=>resolve({ok:!error,stdout:error?'':stdout}))
 })
-const PROBE="$ErrorActionPreference='Stop'; $r=Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' | Where-Object {$_.NextHop -ne '0.0.0.0'} | Sort-Object RouteMetric | Select-Object -First 1; if (!$r) {throw 'No default route'}; $i=$r.InterfaceIndex; $a=Get-NetIPAddress -AddressFamily IPv4 -InterfaceIndex $i | Where-Object {$_.AddressState -eq 'Preferred' -and $_.IPAddress -notlike '169.254.*'} | Select-Object -First 1; if (!$a) {throw 'No address'}; $s=$null; try {$n=Get-NetAdapter -InterfaceIndex $i; $s=Get-NetAdapterStatistics -Name $n.Name} catch {}; @{gateway=$r.NextHop;address=$a.IPAddress;prefix=$a.PrefixLength;index=$i;received=$s.ReceivedBytes;sent=$s.SentBytes;linkSpeed=[string]$n.LinkSpeed;adapterStatus=[string]$n.Status;dnsServerCount=@(Get-DnsClientServerAddress -InterfaceIndex $i -ErrorAction SilentlyContinue | ForEach-Object {$_.ServerAddresses}).Count;ipv6Neighbors=@(Get-NetNeighbor -AddressFamily IPv6 -InterfaceIndex $i -ErrorAction SilentlyContinue | Where-Object {$_.State -in @('Reachable','Stale','Delay','Probe','Permanent') -and $_.IPAddress -notlike 'ff*' -and $_.IPAddress -ne '::'} | Select-Object -First 512).Count;neighbors=@(Get-NetNeighbor -AddressFamily IPv4 -InterfaceIndex $i | Select-Object -First 512 IPAddress,LinkLayerAddress,@{n='State';e={[string]$_.State}})} | ConvertTo-Json -Depth 4 -Compress"
+const PROBE="$ErrorActionPreference='Stop'; $r=Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' | Where-Object {$_.NextHop -ne '0.0.0.0'} | Sort-Object RouteMetric | Select-Object -First 1; if (!$r) {throw 'No default route'}; $i=$r.InterfaceIndex; $a=Get-NetIPAddress -AddressFamily IPv4 -InterfaceIndex $i | Where-Object {$_.AddressState -eq 'Preferred' -and $_.IPAddress -notlike '169.254.*'} | Select-Object -First 1; if (!$a) {throw 'No address'}; $s=$null; try {$n=Get-NetAdapter -InterfaceIndex $i; $s=Get-NetAdapterStatistics -Name $n.Name} catch {}; @{gateway=$r.NextHop;address=$a.IPAddress;prefix=$a.PrefixLength;index=$i;received=$s.ReceivedBytes;sent=$s.SentBytes;linkSpeed=[string]$n.LinkSpeed;adapterStatus=[string]$n.Status;dnsServerCount=@(Get-DnsClientServerAddress -InterfaceIndex $i -ErrorAction SilentlyContinue | ForEach-Object {$_.ServerAddresses}).Count;ipv6Devices=@(Get-NetNeighbor -AddressFamily IPv6 -InterfaceIndex $i -ErrorAction SilentlyContinue | Where-Object {$_.State -in @('Reachable','Stale','Delay','Probe','Permanent') -and $_.IPAddress -notlike 'ff*' -and $_.IPAddress -ne '::'} | Select-Object -First 512 IPAddress,LinkLayerAddress,@{n='State';e={[string]$_.State}});neighbors=@(Get-NetNeighbor -AddressFamily IPv4 -InterfaceIndex $i | Select-Object -First 512 IPAddress,LinkLayerAddress,@{n='State';e={[string]$_.State}})} | ConvertTo-Json -Depth 4 -Compress"
 const states=new Set(['Reachable','Stale','Delay','Probe','Permanent','Unreachable','Incomplete'])
 function privateIP(v:unknown):v is string {
   if(typeof v!=='string'||isIP(v)!==4)return false
@@ -74,13 +74,24 @@ export class NetworkIntelligence {
     if(!p||!privateIP(p.gateway)||!privateIP(p.address))return null
     const prefix=integer(p.prefix),index=integer(p.index)
     if(prefix===null||prefix<16||prefix>30||index===null)return null
-    const h:Host={gateway:p.gateway,address:p.address,prefix,index,received:integer(p.received),sent:integer(p.sent),neighbors:[],ipv6Neighbors:integer(p.ipv6Neighbors),linkSpeed:label(p.linkSpeed),adapterStatus:label(p.adapterStatus),dnsServerCount:integer(p.dnsServerCount)}
+    const h:Host={gateway:p.gateway,address:p.address,prefix,index,received:integer(p.received),sent:integer(p.sent),neighbors:[],ipv6Neighbors:integer(p.ipv6Neighbors),ipv6Devices:[],linkSpeed:label(p.linkSpeed),adapterStatus:label(p.adapterStatus),dnsServerCount:integer(p.dnsServerCount)}
     if(!onLink(h.gateway,h))return null
     const neighbors=Array.isArray(p.neighbors)?p.neighbors:[]
     for(const raw of neighbors.slice(0,512)){
       const n=record(raw)
       if(!n||!privateIP(n.IPAddress)||!onLink(n.IPAddress,h)||n.IPAddress===h.address||typeof n.State!=='string'||!states.has(n.State))continue
       if(!h.neighbors.some(x=>x.address===n.IPAddress))h.neighbors.push({address:n.IPAddress,state:n.State,mac:macAddress(n.LinkLayerAddress)})
+    }
+    if(Array.isArray(p.ipv6Devices)){
+      for(const raw of p.ipv6Devices.slice(0,512)){
+        const n=record(raw)
+        if(!n||typeof n.IPAddress!=='string'||typeof n.State!=='string'||!states.has(n.State))continue
+        const address=n.IPAddress.split('%')[0]?.toLowerCase()
+        // Only expose link-local and unique-local IPv6 neighbors from the active interface.
+        if(!address||isIP(address)!==6||!(/^(fe[89ab]|f[cd][0-9a-f]{2}):/u.test(address)))continue
+        if(!h.ipv6Devices.some(x=>x.address===address))h.ipv6Devices.push({address,state:n.State,mac:macAddress(n.LinkLayerAddress)})
+      }
+      h.ipv6Neighbors=h.ipv6Devices.length
     }
     return h
   }
@@ -102,6 +113,7 @@ export class NetworkIntelligence {
     if(!h)return {status:'unavailable',reason:'PRIVATE_ON_LINK_WINDOWS_ROUTE_NOT_CONFIRMED'}
     const devices=h.neighbors.map(n=>({id:this.deviceId(h,n),identity:n.mac&&h.neighbors.some(x=>x.address===h.gateway&&x.mac)?'link-layer':'address-only',address:n.address,state:n.state,role:n.address===h.gateway?'gateway':'neighbor'}))
     const scope=this.scope(h)
+    const ipv6Devices=h.ipv6Devices.map(n=>({id:this.deviceId(h,n),identity:n.mac&&scope?'link-layer':'address-only',address:n.address,state:n.state}))
     const segment='segment:'+this.id('segment|'+(scope??this.key(h)))
     const local='host:'+this.id('host|'+(scope??this.key(h)))
     const gateway='gateway:'+this.id('gateway|'+(scope??this.key(h)))
@@ -115,7 +127,7 @@ export class NetworkIntelligence {
       limitations:['Logical observations only; no physical cabling, switch ports or mesh paths inferred.'],
     }
     return {status:'completed',observedAt:new Date(this.now()).toISOString(),gateway:h.gateway,localAddress:h.address,prefix:h.prefix,topology,
-      devices,link:{speed:h.linkSpeed,status:h.adapterStatus,dnsServerCount:h.dnsServerCount,ipv6NeighborCount:h.ipv6Neighbors},traffic:{receivedBytes:h.received,sentBytes:h.sent},limitations:['Neighbor cache is not a complete device list. Stale entries are not proof of online status. IP addresses can be reassigned; link-layer IDs are pseudonyms, can change or be spoofed, and do not prove identity. IPv6 count is a passive interface cache. Traffic counters are for the local host interface only.']}
+      devices,ipv6Devices,link:{speed:h.linkSpeed,status:h.adapterStatus,dnsServerCount:h.dnsServerCount,ipv6NeighborCount:h.ipv6Neighbors},traffic:{receivedBytes:h.received,sentBytes:h.sent},limitations:['Neighbor cache is not a complete device list. Stale entries are not proof of online status. IP addresses can be reassigned; link-layer IDs are pseudonyms, can change or be spoofed, and do not prove identity. IPv6 observations are limited to passive link-local and unique-local interface cache entries; no global addresses or active IPv6 probes. Traffic counters are for the local host interface only.']}
   }
   /** Measure current host interface deltas and changes in the neighbor cache.
    * @returns Current observation or an unavailable result.
@@ -125,11 +137,12 @@ export class NetworkIntelligence {
     const h=await this.host()
     if(!h)return {status:'unavailable'}
     const scope=this.scope(h),key=this.key(h)+'|'+(scope??'unknown'),time=this.now(),ids=new Set(h.neighbors.map(n=>this.deviceId(h,n)))
+    const observedDeviceIds=scope?[...new Set([...h.neighbors,...h.ipv6Devices].filter(n=>n.mac).map(n=>this.deviceId(h,n)))].slice(0,512):null
     const old=this.previous?.key===key?this.previous:null
     this.previous={key,time,received:h.received,sent:h.sent,ids}
     const seconds=old?(time-old.time)/1000:0
     const rate=(current:number|null,previous:number|null|undefined)=>seconds>0&&current!==null&&previous!==null&&previous!==undefined&&current>=previous?Math.round((current-previous)/seconds):null
-    return {status:'completed',observedAt:new Date(time).toISOString(),intervalSeconds:old&&seconds>0?seconds:null,networkScope:scope,neighborCount:ids.size,
+    return {status:'completed',observedAt:new Date(time).toISOString(),intervalSeconds:old&&seconds>0?seconds:null,networkScope:scope,neighborCount:ids.size,observedDeviceIds,
       receivedBytesPerSecond:rate(h.received,old?.received),sentBytesPerSecond:rate(h.sent,old?.sent),
       newlyObserved:old?[...ids].filter(id=>!old.ids.has(id)):null,noLongerObserved:old?[...old.ids].filter(id=>!ids.has(id)):null,
       limitations:['Session-local samples only; missing cache entries do not prove disconnection. Not router-wide traffic.']}
