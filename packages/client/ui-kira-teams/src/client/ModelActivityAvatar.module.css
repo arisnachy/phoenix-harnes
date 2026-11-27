@@ -158,3 +158,44 @@
 @media (max-width: 620px) {
   .card { width: 44px; height: 44px; }
 }
+
+/* KIRA Presence / Signature: the portrait pixels never animate. */
+.avatar[data-avatar='kira'] {
+  --avatar-accent: #c59a60;
+  --presence-accent: #91a19b;
+  --presence-ring: #c59a60;
+}
+.avatar[data-avatar='kira'] .portraitImage { inset: 2px; width: calc(100% - 4px); height: calc(100% - 4px); }
+.avatar[data-avatar='kira'] .ring {
+  border: 1px solid var(--presence-ring);
+  box-shadow: 0 1px 5px rgb(55 38 20 / 9%);
+}
+.avatar[data-avatar='kira'] .badge {
+  width: 8px; height: 8px; right: 0; bottom: 0;
+  border-width: 1.5px;
+  box-shadow: 0 1px 2px rgb(52 37 19 / 10%);
+}
+.avatar[data-avatar='kira'][data-presence='settled'] .badge { background: #91a19b; }
+.avatar[data-avatar='kira'][data-presence='interrupted'] .badge { background: #b87950; }
+.avatar[data-avatar='kira'][data-presence='thinking'] { --presence-accent: #c59a60; }
+.avatar[data-avatar='kira'][data-presence='working'] { --presence-accent: #6c88b1; }
+.avatar[data-avatar='kira'][data-presence='responding'] { --presence-accent: #36a878; }
+.avatar[data-avatar='kira'][data-presence='thinking'],
+.avatar[data-avatar='kira'][data-presence='working'],
+.avatar[data-avatar='kira'][data-presence='responding'] { --presence-ring: var(--presence-accent); }
+.avatar[data-avatar='kira'][data-presence='thinking'] .badge,
+.avatar[data-avatar='kira'][data-presence='working'] .badge,
+.avatar[data-avatar='kira'][data-presence='responding'] .badge { background: var(--presence-accent); }
+.avatar[data-avatar='kira'][data-live-presence='true'] .ring::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border: 1px solid var(--presence-accent);
+  border-radius: inherit;
+  animation: kira-presence-breathe 2.8s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes kira-presence-breathe { 0%, 100% { opacity: .24; } 50% { opacity: .7; } }
+@media (prefers-reduced-motion: reduce) {
+  .avatar[data-avatar='kira'][data-live-presence='true'] .ring::after { animation: none; opacity: .4; }
+}
