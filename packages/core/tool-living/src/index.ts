@@ -8,6 +8,7 @@ import { AMPLIFIER_OPERATIONS, runAmplifier } from './amplifier.ts'
 import { saveNumericRecipe, runStoredNumericRecipe, type RecipeContext } from './amplifier-memory.ts'
 import { SessionToolFactory } from './session-tool-factory.ts'
 import { livingActionSafety } from './living-action-safety.ts'
+import { LivingInitiative } from './living-initiative.ts'
 import { assessSelfInitiative, SELF_GOALS } from './self-initiative.ts'
 import { inspectSystemEnvironment, searchLocalApps } from './system-proprioception.ts'
 import { DeviceNetworkRecovery } from './device-network-recovery.ts'
@@ -288,6 +289,36 @@ function assertTargetReached(snapshot: LivingCreationSnapshot): void {
 
 /** Register the universal living-creation policy and model controls. */
 export function apply(ctx: Context): void {
+  const initiative = new LivingInitiative()
+  ctx.systemPrompt.section({name:'phoenix:living-initiative',order:117,text:'Across every model, use phoenix_living_initiative inspect when real repeated failures, a pending goal, resource pressure or a meaningful opportunity warrants proactive attention. It reads existing session and cognitive metadata only. Prefer quiet preparation over interruptions; unknown presence is not availability. Respect the existing user profile, memory and task/watch/wake-trigger tools. Do not create recurring work for casual interests; list existing tasks first, respect standing authorization, and use existing voice tools only for relevant authorized notices. Feedback is session-local and must reflect explicit user feedback, never inferred acceptance. Treat candidates as proposals, not permission or verified outcomes. Use existing adaptive UI receipts, sandbox verification and approval mechanisms for changes. Do not activate microphones or record activity. No new model routing or external privileges.'})
+  ctx.tools.register(defineTool({
+    name:'phoenix_living_initiative',
+    description:'Evaluate real calling-session failures, host resource pressure, local time and existing cognitive goal metadata to prioritize useful initiative. Inspect or record explicit user feedback (useful, dismissed, later). Does not run actions, schedule tasks or grant permission.',
+    parameters:{
+      operation:{type:'string',required:true,enum:['inspect','feedback']},
+      candidate:{type:'string',description:'Candidate id from inspect, for explicit user feedback only.'},
+      feedback:{type:'string',enum:['useful','dismissed','later'],description:'Actual user feedback; never infer it.'},
+    },
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>false,
+    execute(args,exec){
+      const session=exec.agent?.session
+      if(!session)throw Error('INITIATIVE_SESSION_REQUIRED')
+      const id=String(session.id)
+      if(args.operation==='feedback'){
+        if(!args.candidate||!args.feedback)throw Error('INITIATIVE_FEEDBACK_REQUIRED')
+        return Promise.resolve(JSON.stringify(initiative.feedback(id,args.candidate,args.feedback)))
+      }
+      let cognitive:unknown
+      try{
+        const runtime=(ctx as unknown as {get(name:string):unknown}).get('cognitiveRuntime') as {get(id:string):unknown}|undefined
+        cognitive=runtime?.get(id)
+      }catch{/* optional service */}
+      return Promise.resolve(JSON.stringify(initiative.inspect(id,session.events,ctx.tools.schemas().map(x=>x.name),cognitive)))
+    },
+    presentCall:()=>({card:'generic',title:'PHOENIX · Iniciativa contextual',kind:'read' as const}),
+  }))
+
 
 
 
