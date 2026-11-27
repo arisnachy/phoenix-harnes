@@ -79,6 +79,7 @@ import { createResearchDeliverTool } from './research-delivery.ts'
 import { PHOENIX_3D_ROUTING_PROTOCOL } from './scene3d-routing.ts'
 import { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
 import { createEvolutionStatusTool } from './evolution-status-tool.ts'
+import { createGnosisTool, GNOSIS_PROTOCOL } from './gnosis.ts'
 import { createConnectorListTool } from './connector-list-tool.ts'
 import { createConnectorDiscoverTool } from './connector-discover-tool.ts'
 import type { McpRegistryDiscoveryService } from './connector-discover-tool.ts'
@@ -504,6 +505,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         ctx,
       ))
       disposers.push(installCapabilityOperatingProtocol(systemPrompt))
+      disposers.push(systemPrompt.section({ name: 'phoenix:gnosis', order: 155, text: GNOSIS_PROTOCOL }))
       disposers.push(systemPrompt.section({ name: 'phoenix:3d-intent-router', order: 176, text: PHOENIX_3D_ROUTING_PROTOCOL }))
       disposers.push(systemPrompt.section({ name: 'phoenix:map-publication-router', order: 178, text: 'For ALL requests to create or show an imaginary or fictional interactive map, island, fantasy world, game map or Isla Bruma, immediately CALL the phoenix_scene_map tool: demo:true for a requested demonstration, or map:{places:[{id,name,x,y,kind,description}],routes:[]} for custom worlds. This tool publishes a real replayable chat artifact; NEVER merely say you published the map, NEVER open MiniBrowser or an about:blank tab to verify. Tool execution and artifactId prove emission only, not client rendering. AFTER a successful tool result, provide a short final assistant message acknowledging the real artifact ID. Do not claim screen verification without it. Geographic WGS84 real-world tasks must use the geo engine, not the fictional scene tool.' }))
       disposers.push(systemPrompt.section({ name: 'phoenix:geographic-map-publication-router', order: 179, text: 'For requests to CREATE or SHOW real-world geographic interactive maps (provinces, countries, public-health areas, businesses, logistics), call the phoenix_geo_map tool with verified WGS84 coordinates, documented source and data. The tool creates a native chat artifact. NEVER claim publication based only on prose or an empty browser. For local clinical-study evidence, do not claim province-wide prevalence or fabricate a ranking. If comparable regional data or coordinates are absent, state the limitation and do not invent a map. The returned artifactId confirms payload emission only, not visible client rendering. phoenix_scene_map is only for fictional worlds.' }))
@@ -554,6 +556,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       }
       disposers.push(ctx.tools.register(createCognitiveWorkflowTool()))
       disposers.push(ctx.tools.register(createEvolutionStatusTool()))
+      disposers.push(ctx.tools.register(createGnosisTool(hardness, () => ctx.tools.schemas())))
       disposers.push(ctx.tools.register(createPhoenixVisualizerTool()))
       disposers.push(ctx.tools.register(createPhoenixSceneMapTool()))
       disposers.push(ctx.tools.register(createPhoenixGeoMapTool()))
