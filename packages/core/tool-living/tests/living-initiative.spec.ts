@@ -29,3 +29,10 @@ describe('living initiative',()=>{
     expect(initiativeCandidates({events:[],registered:[],now,free:80,total:100}).candidates).toEqual([])
   })
 })
+
+  // Persistent receipts are detached and applied before ranking.
+  it('applies scoped persisted feedback without inferring permission',()=>{
+    const now=Date.now(),subject=new LivingInitiative(()=>now,()=>({free:50,total:100}))
+    const events=[{type:'llm/retry-started',data:{}},{type:'llm/retry-started',data:{}}]
+    expect(subject.inspect('s',events,['phoenix_self_assess'],undefined,[{id:'repeated-failure',kind:'dismissed',at:now}]).candidates).toEqual([])
+  })

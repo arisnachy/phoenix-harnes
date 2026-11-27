@@ -8,6 +8,7 @@ import { AMPLIFIER_OPERATIONS, runAmplifier } from './amplifier.ts'
 import { saveNumericRecipe, runStoredNumericRecipe, type RecipeContext } from './amplifier-memory.ts'
 import { SessionToolFactory } from './session-tool-factory.ts'
 import { livingActionSafety } from './living-action-safety.ts'
+import { initiativeReceipts, persistInitiativeFeedback, type InitiativeMemory } from './initiative-feedback.ts'
 import { LivingInitiative } from './living-initiative.ts'
 import { loadInitiativeFeedback, persistInitiativeFeedback, type InitiativeMemory } from './initiative-feedback.ts'
 import { assessSelfInitiative, SELF_GOALS } from './self-initiative.ts'
@@ -490,9 +491,34 @@ export function apply(ctx: Context): void {
     parameters:{operation:{type:'string',required:true,enum:['create','run','list','remove']},input_json:{type:'string',required:true}},
     output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
     isConcurrencySafe:()=>false,
-    execute(args,exec){
-      if(!exec.agent||exec.agent.session.header.origin==='subagent')throw Error('FACTORY_OWNER_REQUIRED')
-      return Promise.resolve(JSON.stringify(sessionTools.execute(String(exec.agent.session.id),args.operation,args.input_json)))
+    async execute(args,exec){
+      const session=exec.agent?.session
+      if(!session)throw Error('INITIATIVE_SESSION_REQUIRED')
+      const id=String(session.id)
+      const services=ctx as unknown as {get(name:string):unknown}
+      let memory:InitiativeMemory|undefined
+      try{
+        const value=services.get('learningMemory') as InitiativeMemory|undefined
+        if(value&&typeof value.projectIdForSession==='function'&&typeof value.allCognitiveRecords==='function'&&typeof value.rememberCognitive==='function')memory=value
+      }catch{/* optional service */}
+      if(args.operation==='feedback'||args.operation==='remember-feedback'){
+        if(!args.candidate||!args.feedback)throw Error('INITIATIVE_FEEDBACK_REQUIRED')
+        if(args.operation==='feedback')return JSON.stringify(initiative.feedback(id,args.candidate,args.feedback))
+        if(!memory)return JSON.stringify({recorded:false,persistent:false,reason:'memory-unavailable'})
+        let ask:AdaptiveApprovalService|undefined
+        try{ask=services.get('userQuestions') as AdaptiveApprovalService|undefined}catch{/* fail closed */}
+        const result=await persistInitiativeFeedback({memory,sessionId:id,eventSeq:session.seq,candidate:args.candidate,kind:args.feedback,...(ask===undefined?{}:{ask}),agent:exec.agent,...(exec.signal===undefined?{}:{signal:exec.signal})})
+        if(result.recorded)initiative.feedback(id,args.candidate,args.feedback)
+        return JSON.stringify(result)
+      }
+      let cognitive:unknown
+      try{
+        const runtime=services.get('cognitiveRuntime') as {get(id:string):unknown}|undefined
+        cognitive=runtime?.get(id)
+      }catch{/* optional service */}
+      let receipts:ReturnType<typeof initiativeReceipts>=[]
+      try{if(memory)receipts=initiativeReceipts(memory,id)}catch{/* no durable feedback available */}
+      return JSON.stringify(initiative.inspect(id,session.events,ctx.tools.schemas().map(x=>x.name),cognitive,receipts))
     },
     presentCall:()=>({card:'generic',title:'PHOENIX · Herramienta creada y verificada',kind:'other' as const}),
   }))
