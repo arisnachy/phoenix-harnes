@@ -979,8 +979,29 @@ describe('PHOENIX runtime garbage collector health and quota regression', () => 
     cleanupObsoleteRuntimes([], { releaseRollback: true })
     expect(removed).toEqual(['backup-new', 'backup-old'])
     expect(removed).not.toContain('active')
-    expect(supervisor).toContain('cleanupObsoleteRuntimes([], { reapDormantStage: true })')
     expect(supervisor).toContain('healthyCheckpointWritten = true')
+  })
+
+  it('does not count a directory left behind by Git as reclaimed', () => {
+    const start = supervisor.indexOf('function removeManagedWorktree(')
+    const end = supervisor.indexOf('\n}\n', start) + 2
+    let pathExists = true
+    const { removeManagedWorktree } = runInNewContext(
+      supervisor.slice(start, end) + '\n({ removeManagedWorktree })',
+      {
+        runtimePathKey: (path: string) => path,
+        registeredWorktreePaths: () => new Set(['stage']),
+        existsSync: (path: string) => path === 'stage' && pathExists,
+        join,
+        sameRepository: () => true,
+        spawnSync: () => ({ status: 0 }),
+        root: 'source',
+        console: { error: () => {} },
+      },
+    ) as { removeManagedWorktree: (path: string) => boolean }
+    expect(removeManagedWorktree('stage')).toBe(false)
+    pathExists = false
+    expect(removeManagedWorktree('stage')).toBe(true)
   })
 
   it('only removes the current stage offline/after orderly shutdown and with no lease or process', () => {
@@ -994,10 +1015,14 @@ describe('PHOENIX runtime garbage collector health and quota regression', () => 
     const { cleanupObsoleteRuntimes } = runInNewContext(
       supervisor.slice(start, end) + '\n({ cleanupObsoleteRuntimes })',
       {
+        liveStorageMigrationAllowed: () => true,
         runtimePathKey: (path: string) => path,
         readActiveRuntimeRecord: () => ({ path: 'active' }),
         runtimeRoot: 'active',
         root: 'source',
+        supervisorSourceRoot: 'source',
+        existsSync: () => false,
+        join,
         process: { env: {}, platform: 'win32' },
         registeredWorktreePaths: () => new Set(['stage']),
         runtimeDirectoriesForCleanup: () => ['active'],
@@ -1015,13 +1040,17 @@ describe('PHOENIX runtime garbage collector health and quota regression', () => 
         removeManagedWorktree: (path: string) => { removed.push(path); return true },
         spawnSync: () => ({ status: 0 }),
         cleanupDetachedLegacyStorage: () => {},
+        retireIntegratedWorkspaces: () => {},
+        runtimeBaseDirectory: () => 'base',
         console: { error: () => {} },
         STAGE_STORAGE_RETENTION_MS: 60 * 60 * 1000,
       },
     ) as { cleanupObsoleteRuntimes: (keep?: string[], opts?: {
       reapDormantStage?: boolean
+      liveMigration?: boolean
     }) => void }
     cleanupObsoleteRuntimes()
+    cleanupObsoleteRuntimes([], { liveMigration: true })
     stageLease = true
     cleanupObsoleteRuntimes([], { reapDormantStage: true })
     stageLease = false
@@ -1040,7 +1069,15 @@ describe('PHOENIX runtime garbage collector health and quota regression', () => 
     cleanupObsoleteRuntimes([], { reapDormantStage: true })
     expect(removed).toEqual(['stage'])
     expect(storageRepair).toContain("SetEnvironmentVariable('PHOENIX_OFFLINE_STORAGE_REPAIR', '1'")
-    expect(supervisor).toContain('reapDormantStage: offlineRepair')
+    const liveRepair = supervisor.indexOf("if (process.argv.includes('--live-storage-migration'))")
+    const offlineRepair = supervisor.indexOf("if (process.argv.includes('--cleanup-storage'))", liveRepair)
+    expect(supervisor.slice(liveRepair, offlineRepair)).not.toContain('reapDormantStage')
+    const healthyCheckpoint = supervisor.indexOf('healthyCheckpointWritten = true')
+    const nextHostEvent = supervisor.indexOf('await waitForHostEvent(', healthyCheckpoint)
+    const healthySweep = supervisor.slice(healthyCheckpoint, nextHostEvent)
+    expect(healthySweep).toContain('cleanupObsoleteRuntimes()')
+    expect(healthySweep).not.toContain('reapDormantStage')
+    expect(supervisor).toMatch(/reapDormantStage: (?:offlineRepair|process\.env\.PHOENIX_OFFLINE_STORAGE_REPAIR === '1')/)
   })
 
   it('enumerates old evidence/workspace folders separately and requires explicit named purge', () => {
@@ -1127,7 +1164,7 @@ describe('staging quarantine recovery', () => {
     const api = runInNewContext(updater.slice(start, end) + '\n({stagingStorageError, stagingQuarantineBlocks})', {
       stageDirectory: () => 'stage', existsSync: () => existing, sameRepositoryWorktree: () => owned,
       stageIdentity: () => '1234567890', stageBaseDirectory: () => 'base', readdirSync: () => entries,
-    }) as {stagingStorageError: (message: string) => Error & {code: string}; stagingQuarantineBlocks: (root: string) => boolean}
+    }) as { stagingStorageError: (message: string) => Error & { code: string }; stagingQuarantineBlocks: (root: string) => boolean }
     expect(api.stagingStorageError('blocked').code).toBe('PHOENIX_STAGING_STORAGE')
     expect(api.stagingQuarantineBlocks('root')).toBe(true)
     owned = true
@@ -1166,10 +1203,10 @@ describe('staging quarantine recovery', () => {
     const api = runInNewContext(supervisor.slice(start, end) + '\n({ownedOrphanedStageQuarantine})', {
       root: '/repo', runtimePathKey: (p:string) => p, join: (...p:string[]) => p.join('/'), resolve: (_a:string,b:string) => b, dirname: (p:string) => p.slice(0,p.lastIndexOf('/')),
       existsSync: (p:string) => p.endsWith('.phoenix-keep') ? keep : metadataExists,
-      lstatSync: () => ({isDirectory: () => true, isFile: () => linkedFile, isSymbolicLink: () => symlink}),
+      lstatSync: () => ({ isDirectory: () => true, isFile: () => linkedFile, isSymbolicLink: () => symlink }),
       readFileSync: () => pointer, absoluteGitPath: () => '/repo/.git',
       gitValue: () => '/repo/.git', detachedWorktreeMetadata: () => true,
-    }) as {ownedOrphanedStageQuarantine: (p:string, registered?:Set<string>) => boolean}
+    }) as { ownedOrphanedStageQuarantine: (p:string, registered?:Set<string>) => boolean }
     expect(api.ownedOrphanedStageQuarantine(candidate, new Set())).toBe(true)
     expect(api.ownedOrphanedStageQuarantine(candidate, undefined)).toBe(false)
     expect(api.ownedOrphanedStageQuarantine(candidate, new Set([candidate]))).toBe(false)

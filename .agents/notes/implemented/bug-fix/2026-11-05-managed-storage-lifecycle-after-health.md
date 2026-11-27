@@ -10,6 +10,7 @@ Windows PHOENIX isolated runtimes are full worktrees with build outputs and depe
 
 - Keep active, executing and owned-by-other-checkout runtimes protected at all times. During preparation and before health confirmation, keep the existing rollback cushion.
 - After the replacement Host passes the verified health checkpoint, release *inactive* versions by default. Respect an explicit `PHOENIX_UPDATE_RUNTIME_BACKUPS` preference.
+- Preserve the current staging worktree during online cleanup. A process census cannot reserve the tree between the check and Git removal. On Windows, removal can leave a directory after Git metadata disappears; report reclamation only after the path is gone.
 - On orderly shutdown after the watcher and Host have stopped, retire the current checkout's idle stage and inactive copies. On unexpected exit, retain rollback evidence.
 - An explicitly offline PowerShell repair (with confirmed no PHOENIX processes or port owner) may request stage reclamation. The supervisor still refuses a prepared or actively building stage, foreign worktrees, and a stage with unverified or live Windows process references.
 - The background updater checks the same cross-checkout global runtime directory cap as the supervisor *before* preparing another runtime. A reached cap blocks allocating additional copies; it does not justify deleting arbitrary directories.
