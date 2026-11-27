@@ -23,6 +23,7 @@ describe('PHOENIX GNOSIS', () => {
     expect(searchGnosis(graph, 'buscar')[0]?.name).toBe('web_search')
     expect(searchGnosis(graph, 'file_read')[0]?.name).toBe('file_read')
     expect(searchGnosis(graph, 'no-such-entity')).toEqual([])
+    expect(searchGnosis(graph, 'constructor')).toEqual([])
   })
   it('does not disclose hidden capability records, evidence payloads or raw descriptions', () => {
     const graph = buildGnosisGraph(schemas, atlas([descriptor('image_generation', ['tool:hidden']), descriptor('hidden')], [proof('image_generation','passed'), proof('hidden','passed')]))
