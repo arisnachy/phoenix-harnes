@@ -324,12 +324,12 @@ export function apply(ctx: Context): void {
   }))
 
   const networkRecovery = new DeviceNetworkRecovery()
-  ctx.systemPrompt.section({name:'phoenix:device-network-recovery',order:118,text:'For explicitly authorized device support use phoenix_device_network for already-connected private IPv4 Android/TV devices, Samsung Download Mode or Apple Recovery/DFU detection, and approved read-only SSH diagnostics on a private Linux host. Do not initiate ADB pairing or network scans, bypass locks, guess addresses, use arbitrary commands, or claim firmware repair. For remote Linux ask the user for the actual host and account and use the interactive authorization gate; do not weaken host key verification.'})
+  ctx.systemPrompt.section({name:'phoenix:device-network-recovery',order:118,text:'For explicitly authorized device support use phoenix_device_network for already-connected private IPv4 Android/TV devices, Samsung Download Mode or Apple Recovery/DFU detection, approved Android/TV restart with stable hardware identity, and approved read-only SSH diagnostics on a private Linux host. Do not initiate ADB pairing or network scans, bypass locks, guess addresses, use arbitrary commands, or claim firmware repair. For remote Linux ask the user for the actual host and account and use the interactive authorization gate; do not weaken host key verification.'})
   ctx.tools.register(defineTool({
     name:'phoenix_device_network',
-    description:'Detect existing private IPv4 ADB connections, read model/OS/TV classification, detect Samsung Download Mode or Apple Recovery/DFU, or approved read-only Linux SSH diagnostics. No remote writes, new pairings, public host access or firmware flashing.',
+    description:'Detect existing private IPv4 ADB connections, read model/OS/TV classification, detect Samsung Download Mode or Apple Recovery/DFU, approved Android/TV restart, or approved read-only Linux SSH diagnostics. No remote writes, new pairings, public host access or firmware flashing.',
     parameters:{
-      operation:{type:'string',required:true,enum:['inventory','android-diagnose','recovery-modes','remote-linux']},
+      operation:{type:'string',required:true,enum:['inventory','android-diagnose','android-restart','recovery-modes','remote-linux']},
       target:{type:'string',description:'Opaque network ADB target ID from current inventory.'},
       host:{type:'string',description:'Explicit user-supplied private IPv4 address for SSH.'},
       user:{type:'string',description:'Explicit user-supplied SSH login name.'},
@@ -343,16 +343,23 @@ export function apply(ctx: Context): void {
         if(!args.target||!/^[a-f0-9]{24}$/u.test(args.target))return JSON.stringify({status:'denied',reason:'CURRENT_TARGET_REQUIRED'})
         return JSON.stringify(await networkRecovery.androidNetworkDiagnose(args.target))
       }
-      if(args.operation!=='remote-linux'||!args.host||!args.user)return JSON.stringify({status:'denied',reason:'EXPLICIT_HOST_AND_USER_REQUIRED'})
       let provider:AdaptiveApprovalService|undefined
       try{provider=(ctx as unknown as {get(name:string):unknown}).get('userQuestions') as AdaptiveApprovalService|undefined}
       catch{return JSON.stringify({status:'denied',reason:'HUMAN_APPROVAL_NOT_AVAILABLE'})}
+      if(args.operation==='android-restart'){
+        if(!args.target||!/^[a-f0-9]{24}$/u.test(args.target))return JSON.stringify({status:'denied',reason:'CURRENT_TARGET_REQUIRED'})
+        return JSON.stringify(await networkRecovery.androidNetworkRestart(args.target,detail=>confirmAdaptiveExternalAction({
+          ...(provider===undefined?{}:{ask:provider}),creationId:args.target!,action:'network-android-restart',inputJson:JSON.stringify(detail),
+          ...(exec.agent===undefined?{}:{agent:exec.agent}),...(exec.signal===undefined?{}:{signal:exec.signal}),
+        }),exec.signal))
+      }
+      if(args.operation!=='remote-linux'||!args.host||!args.user)return JSON.stringify({status:'denied',reason:'EXPLICIT_HOST_AND_USER_REQUIRED'})
       return JSON.stringify(await networkRecovery.remoteLinux(args.host,args.user,detail=>confirmAdaptiveExternalAction({
         ...(provider===undefined?{}:{ask:provider}),creationId:'private-linux-host',action:'ssh-read-diagnostics',inputJson:JSON.stringify(detail),
         ...(exec.agent===undefined?{}:{agent:exec.agent}),...(exec.signal===undefined?{}:{signal:exec.signal}),
       }),exec.signal))
     },
-    presentCall:args=>({card:'generic',title:'PHOENIX · Device Network: '+args.operation,kind:'read' as const}),
+    presentCall:args=>({card:'generic',title:'PHOENIX · Device Network: '+args.operation,kind:args.operation==='android-restart'?'execute' as const:'read' as const}),
   }))
 
   const deviceAdapters = new DeviceAdapters()
