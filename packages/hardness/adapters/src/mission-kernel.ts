@@ -1,4 +1,5 @@
 /** Durable mission state machine for HARDNESS recovery, evidence, and verification. */
+import { uniqueMetaCriteria, validMetaVerdict } from './meta-review.ts'
 
 import type { CallId } from '@phoenix-ai/dsh-llm'
 import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
@@ -357,6 +358,8 @@ function decision(value: MissionJudgeDecision): MissionJudgeDecision {
 
 function reviewChanges(state: MissionKernelState, candidate: MissionJudgeDecision): string[] {
   const changes = [...candidate.requiredChanges]
+  if (!uniqueMetaCriteria(candidate.criteria)) changes.push('remove duplicate judge criterion IDs and resolve contradictory rows')
+  if (candidate.verdict === 'pass' && candidate.criteria.some(row => row.verdict !== 'pass' || row.evidence.length === 0)) changes.push('resolve contradictory or unsupported judge criteria')
   for (const criterion of state.criteria) {
     if (!criterion.mandatory) continue
     const review = candidate.criteria.find(item => item.id === criterion.id)
@@ -368,7 +371,9 @@ function reviewChanges(state: MissionKernelState, candidate: MissionJudgeDecisio
 }
 
 function canPass(state: MissionKernelState, candidate: MissionJudgeDecision): boolean {
-  if (candidate.verdict !== 'pass' || candidate.evidence.length === 0 || candidate.quality.verdict !== 'pass' || candidate.quality.evidence.length === 0) return false
+  if (candidate.verdict !== 'pass' || !uniqueMetaCriteria(candidate.criteria) || !validMetaVerdict({ ...candidate,
+    failedCriterion: candidate.criteria.some(row => row.verdict !== 'pass' || row.evidence.length === 0),
+    qualityFailed: candidate.quality.verdict !== 'pass' || candidate.quality.evidence.length === 0 })) return false
   return state.criteria.filter(item => item.mandatory).every((item) => {
     const review = candidate.criteria.find(value => value.id === item.id)
     return (item.status === 'TESTED' || item.status === 'VERIFIED') && review?.verdict === 'pass' && review.evidence.length > 0
