@@ -453,6 +453,18 @@ export function ConversationRoot({
   const composerSeat = (
     <div ref={seatResizeRef} className={css.composerSeat} data-composer-seat="">
       {composer}
+      {activeApplication === 'general' && !visualActive && (!hero || companionOpen) && (
+        <CompanionDock open={companionOpen} onToggle={() => setCompanionOpen(value => !value)}
+          attention={proactiveAttention}
+          canReview={!inert && !blocked && (inputState?.draft ?? '').trim() === ''}
+          onTasks={() => { setCompanionOpen(false); window.dispatchEvent(new Event('phoenix:open-task-center')) }}
+          onReview={item => {
+            if (inert || blocked || (inputState?.draft ?? '').trim() !== '' || inputActions === undefined) return
+            inputActions.setDraft(heroAttentionPrompt(item))
+            setCompanionOpen(false)
+            requestAnimationFrame(() => rootRef.current?.querySelector('textarea')?.focus())
+          }} />
+      )}
     </div>
   )
 
@@ -561,18 +573,7 @@ export function ConversationRoot({
         <SessionBodyOutlet sessionId={sessionId} renderSlot={renderSlot} />
         {composerSeat}
       </div>
-      {activeApplication === 'general' && !visualActive && (!hero || companionOpen) && (
-        <CompanionDock open={companionOpen} onToggle={() => setCompanionOpen(value => !value)}
-          attention={proactiveAttention}
-          canReview={!inert && !blocked && (inputState?.draft ?? '').trim() === ''}
-          onTasks={() => { setCompanionOpen(false); window.dispatchEvent(new Event('phoenix:open-task-center')) }}
-          onReview={item => {
-            if (inert || blocked || (inputState?.draft ?? '').trim() !== '' || inputActions === undefined) return
-            inputActions.setDraft(heroAttentionPrompt(item))
-            setCompanionOpen(false)
-            requestAnimationFrame(() => rootRef.current?.querySelector('textarea')?.focus())
-          }} />
-      )}
+
     </div>
   )
 }

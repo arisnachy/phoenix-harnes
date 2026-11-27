@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { COMPANION_LOCAL_MODEL, companionAvailableTools, COMPANION_LOCAL_PERSONA } from './companion-local-policy.ts'
+import { ensureFinixMonitor, finixMonitorTools, isFinixMonitor } from './finix-monitor.ts'
 import { AttentionStore, parseAttentionReceipt } from './proactivity-attention-store.ts'
 import { parseScheduledTaskCreation, parseScheduledTaskId } from './proactivity-rpc-input.ts'
 import { scheduledMissionScopeActive } from './mission-scope.ts'
@@ -420,7 +421,7 @@ export function createProactivityExecutor(
           prompt: [{ type: 'text', text: proactivePrompt(input, config, conditionEvidence, resolvedRecipient) }],
           parent,
           signal: controller.signal,
-          ...(companion ? { agentOptions: COMPANION_LOCAL_MODEL, toolFilter: companionAvailableTools(parent.ctx.tools.schemas().map(schema => schema.name)), persona: COMPANION_LOCAL_PERSONA } : {}),
+          ...(companion ? { agentOptions: COMPANION_LOCAL_MODEL, toolFilter: (isFinixMonitor(input.task) ? finixMonitorTools : companionAvailableTools)(parent.ctx.tools.schemas().map(schema => schema.name)), persona: COMPANION_LOCAL_PERSONA } : {}),
         })
         try {
           const result = await run.result
@@ -655,10 +656,12 @@ export function installProactivityRuntime(ctx: Context,
   engine: ProactivityEngine,
   pollMs: number,
   attention?: AttentionStore,
-  extraAttention?: () => Promise<readonly ProactivityAttentionItem[]>): () => void {
+  extraAttention?: () => Promise<readonly ProactivityAttentionItem[]>,
+  residentFinix = false): () => void {
   requirePositive(pollMs, 'pollMs')
   let disposed = false
   let pumping = false
+  let finixProvisioned = false
   let activeConnection: HostConnectionHandle | undefined
   let rpcDispose: (() => Promise<void>) | undefined
 
@@ -679,6 +682,14 @@ export function installProactivityRuntime(ctx: Context,
     pumping = true
     try {
       const now = new Date()
+      if (residentFinix && !finixProvisioned) {
+        try {
+          await ensureFinixMonitor(engine, now)
+          finixProvisioned = true
+        } catch (error: unknown) {
+          ctx.logger.warn(`Finix resident provisioning failed: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }
       await retryFailedProactivityTasks(engine, now, DEFAULT_PROACTIVITY_RETRY_POLICY)
       await engine.runDue(now)
     } catch (error: unknown) {
