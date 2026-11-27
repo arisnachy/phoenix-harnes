@@ -99,7 +99,7 @@ function quality(value: unknown): MissionJudgeDecision['quality'] | undefined {
   return { verdict: record.verdict as 'pass' | 'fail', summary: record.summary, evidence: record.evidence, findings: record.findings }
 }
 
-function readDecision(value: unknown): MissionJudgeDecision | undefined {
+function readDecision(value: unknown, expected: HardnessMissionJudgeInput['criteria']): MissionJudgeDecision | undefined {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
   const record = value as Record<string, unknown>
   if (!text(record.verdict) || !['pass', 'needs_changes', 'blocked'].includes(record.verdict)
@@ -116,8 +116,9 @@ function readDecision(value: unknown): MissionJudgeDecision | undefined {
     criteria: record.criteria.map(item => criterion(item) as MissionJudgeDecision['criteria'][number]),
     quality: qualityReview,
   }
-  if (!uniqueMetaCriteria(decision.criteria) || !validMetaVerdict({ ...decision,
-    failedCriterion: decision.criteria.some(row => row.verdict === 'fail' || row.evidence.length === 0),
+  if (!uniqueMetaCriteria(decision.criteria) || decision.criteria.some(row => !expected.some(item => item.id === row.id))
+    || !validMetaVerdict({ ...decision,
+    failedCriterion: expected.some(item => item.mandatory && !decision.criteria.some(row => row.id === item.id && row.verdict === 'pass' && row.evidence.length > 0)),
     qualityFailed: decision.quality.verdict !== 'pass' || decision.quality.evidence.length === 0 })) return undefined
   return decision
 }
@@ -204,7 +205,7 @@ export function createSubagentMissionJudge(input: {
         })
         const result = await run.result
         if (result.stopReason !== 'completed') return unavailable()
-        return readDecision(result.structured) ?? unavailable()
+        return readDecision(result.structured, mission.criteria) ?? unavailable()
       } catch {
         if (mission.context.signal.aborted || run !== undefined || attempt >= MISSION_JUDGE_START_ATTEMPTS) {
           return unavailable()
