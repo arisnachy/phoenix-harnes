@@ -103,14 +103,23 @@ describe('Phoenix HumanOS grounded self-model', () => {
   })
 
   it('bounds verification work and explicitly discloses unexamined capabilities', () => {
-    const input = sources(Array.from({ length: 70 }, () => 'verified'))
+    const input = sources(Array.from({ length: 4102 }, () => 'verified'))
     const snapshot = vi.fn(() => input.hardness.snapshot())
     const model = inspectHumanOSSelfModel({ ...input, hardness: { snapshot } }, scoped, time)
-    expect(model?.atlas.registered).toBe(70)
-    expect(model?.verification.examinedCapabilities).toBe(64)
+    expect(model?.atlas.registered).toBe(4102)
+    expect(model?.verification.examinedCapabilities).toBe(4096)
     expect(model?.verification.unexaminedCapabilities).toBe(6)
-    expect(model?.verification.capabilitiesWithoutCurrentEvidence).toBe(64)
+    expect(model?.verification.capabilitiesWithoutCurrentEvidence).toBe(4096)
     expect(snapshot).toHaveBeenCalledOnce()
+  })
+
+  it('examines evidence beyond the former 64-entry boundary', () => {
+    const input = sources(Array.from({ length: 853 }, () => 'testing'), [], {
+      'cap-852': [{ descriptorVersion: 'v1', outcome: 'passed' }],
+    })
+    expect(inspectHumanOSSelfModel(input, scoped, time)?.verification).toMatchObject({
+      examinedCapabilities: 853, unexaminedCapabilities: 0, currentPasses: 1, capabilitiesWithoutCurrentEvidence: 852,
+    })
   })
 
   it('filters other-agent tasks and counts only visible agent/global tasks', () => {
