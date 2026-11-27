@@ -687,8 +687,12 @@ export function installProactivityRuntime(ctx: Context,
     try {
       const now = new Date()
       if (!residentEnsured && ensureResident !== undefined) {
-        await ensureResident()
-        residentEnsured = true
+        try {
+          await ensureResident()
+          residentEnsured = true
+        } catch (error: unknown) {
+          ctx.logger.warn('Finix resident registration failed: ' + (error instanceof Error ? error.message : String(error)))
+        }
       }
       await retryFailedProactivityTasks(engine, now, DEFAULT_PROACTIVITY_RETRY_POLICY)
       await engine.runDue(now)
