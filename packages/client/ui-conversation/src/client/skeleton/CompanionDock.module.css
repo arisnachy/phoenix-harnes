@@ -1,10 +1,10 @@
-.dock { flex: none; min-width: 0; display: flex; flex-direction: column; align-items: flex-end; padding: 0 18px 4px; background: var(--dsw-alias-bg-base); }
-.launcher { position: relative; flex: none; display: grid; place-items: center; width: 48px; height: 40px; border: 0; border-radius: 12px; background: transparent; cursor: pointer; padding: 2px; }
+.dock { position: absolute; inset: 0; display: block; pointer-events: none; z-index: 2; }
+.launcher { position: absolute; inset-inline-end: 14px; inset-block-end: 28px; pointer-events: auto; display: grid; place-items: center; width: 48px; height: 40px; border: 0; border-radius: 12px; background: transparent; cursor: pointer; padding: 2px; }
 .launcher > svg { width: 39px; height: 35px; }
 .launcher:hover, .close:hover, .item:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .launcher:focus-visible, .close:focus-visible, .item:focus-visible, .delegate:focus-visible { outline: 2px solid var(--dsw-specific-phoenix-accent, #ef5c20); outline-offset: 2px; }
 .dot { position: absolute; right: 4px; top: 3px; width: 7px; height: 7px; border-radius: 50%; background: #ef5c20; }
-.panel { width: min(100%, 340px); max-height: min(30vh, 230px); overflow: auto; box-sizing: border-box; border: 1px solid var(--dsw-alias-border-l2); border-radius: 15px; padding: 12px; margin-bottom: 3px; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-base); }
+.panel { position: absolute; inset-inline-end: 14px; inset-block-end: calc(100% + 8px); pointer-events: auto; width: min(calc(100% - 28px), 340px); max-height: min(30vh, 230px); overflow: auto; box-sizing: border-box; border: 1px solid var(--dsw-alias-border-l2); border-radius: 15px; padding: 12px; margin-bottom: 3px; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-base); }
 .heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .heading strong { font-size: 14px; }
 .heading small, .hint { display: block; font-size: 11px; color: var(--dsw-alias-label-secondary); }
@@ -16,7 +16,7 @@
 .item strong { font-size: 12px; overflow-wrap: anywhere; }
 .item:disabled { opacity: .65; cursor: default; }
 .delegate { width: 100%; margin-top: 6px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; background: transparent; color: inherit; font: inherit; font-size: 12px; padding: 8px; cursor: pointer; }
-@media (max-height: 550px) { .dock { padding-bottom: 0; } .launcher { height: 32px; } .launcher > svg { width: 32px; height: 29px; } .panel { max-height: 24vh; } }
+@media (max-height: 550px) { .launcher { height: 32px; inset-block-end: 18px; } .launcher > svg { width: 32px; height: 29px; } .panel { max-height: 24vh; } }
 @media (prefers-reduced-motion: reduce) { .dock svg, .dock svg * { animation: none !important; } }
 
 .rename { border: 0; border-radius: 6px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; font: inherit; margin-left: auto; }
@@ -24,3 +24,10 @@
 .nameForm label { display: grid; gap: 3px; flex: 1; min-width: 0; }
 .nameForm input, .nameForm button { min-width: 0; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); border-radius: 6px; padding: 5px; font: inherit; }
 .item .result { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; font-size: 12px; }
+
+/* In tight workspaces the sidebar remains the entry point. No collision with the composer. */
+@container conversation-root (max-width: 960px) { .launcher { display: none; } }
+@container conversation-root (max-width: 1160px) { :global([data-phase='hero']) .launcher { display: none; } }
+
+/* The blank welcome seat fills the viewport, so its open panel anchors inside it. */
+:global([data-phase='hero']) .panel { inset-block-start: 12px; inset-block-end: auto; }

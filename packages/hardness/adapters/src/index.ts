@@ -678,6 +678,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         runtimeConfig.pollMs,
         new AttentionStore(`${taskLedgerPath(config)}.attention.json`),
         () => mailbox.attention(),
+        true,
       ))
       wake.bindExecutor(createWakeExecutor(agents, {
         composeResumedAgent: (agentCtx: Context) => composeResumedScheduledAgent(ctx, agentCtx),
