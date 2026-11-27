@@ -1,12 +1,14 @@
 /** PHOENIX AUTONOMIC: bounded host-owned observation and reversible optional-work regulation. */
 import { createHash } from 'node:crypto'
 import { freemem, totalmem } from 'node:os'
+import { defineTool, type ToolDefinition, type JsonValue } from '@phoenix-ai/dsh-tools'
 import type { ProactivityEngine, ProactivityTask } from './proactivity-engine.ts'
 import type { ProactivityAttentionItem } from './proactivity-runtime.ts'
 
 export interface AutonomicSignals {
   readonly internetReachable: boolean | null
   readonly batteryDischargingPercent: number | null
+  readonly batteryKnownNotDischarging?: boolean
   readonly observedAt: number
 }
 type Mode = 'normal' | 'conserve' | 'unknown'
@@ -47,6 +49,7 @@ export class AutonomicRuntime {
   private snapshot: AutonomicSnapshot = empty
   private sampledAt = -Infinity
   private recoverySamples = 0
+  private batteryPressure = false
   private nextHome = -Infinity
   private networkEpisode: { at: number; count: number; revision: string } | undefined
   private networkObservation: number | undefined
@@ -58,15 +61,17 @@ export class AutonomicRuntime {
     if (!Number.isFinite(now)) return
     if (now < this.sampledAt) {
       this.sampledAt = -Infinity; this.nextHome = -Infinity; this.networkEpisode = undefined
-      this.networkObservation = undefined; this.recoverySamples = 0; this.snapshot = empty; this.attention = []
+      this.networkObservation = undefined; this.recoverySamples = 0; this.batteryPressure = false; this.snapshot = empty; this.attention = []
     }
     if (now - this.sampledAt < 10_000) return
     this.sampledAt = now
     const memory = this.memory()
     const available = ratio(memory.free, memory.total)
     const battery = percent(signals.batteryDischargingPercent)
-    const critical = (available !== null && available < 0.08) || (battery !== null && battery <= 15)
-    const recovered = available !== null && available >= 0.12 && (battery === null || battery >= 25)
+    if (battery !== null && battery <= 15) this.batteryPressure = true
+    else if ((battery !== null && battery >= 25) || signals.batteryKnownNotDischarging === true) this.batteryPressure = false
+    const critical = (available !== null && available < 0.08) || this.batteryPressure
+    const recovered = available !== null && available >= 0.12 && !this.batteryPressure
     let mode: Mode = available === null ? 'unknown' : 'normal'
     if (critical) { mode = 'conserve'; this.recoverySamples = 0 }
     else if (this.snapshot.mode === 'conserve') {
@@ -125,4 +130,16 @@ export function registerAutonomicRuntime(engine: ProactivityEngine, runtime: Aut
 }
 export function readAutonomicRuntime(engine: ProactivityEngine, now = Date.now()): AutonomicSnapshot {
   return runtimes.get(engine)?.read(now) ?? { ...empty }
+}
+
+/** Read-only tool scoped to the existing shared host engine. Never starts or changes work. */
+export function createAutonomicStatusTool(engine: ProactivityEngine): ToolDefinition {
+  return defineTool({
+    name: 'phoenix_autonomic_status',
+    description: 'Inspect the cached host-owned PHOENIX AUTONOMIC state, local memory/battery/connectivity signals and optional observation policy. Unknown/stale states do not imply a healthy or failed system. No probes or new model work are started.',
+    parameters: {},
+    output: { schema: { type: 'object', additionalProperties: true }, render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
+    async execute() { return JSON.parse(JSON.stringify(readAutonomicRuntime(engine))) as Record<string, JsonValue> },
+    presentCall: () => ({ card: 'generic', title: 'PHOENIX AUTONOMIC status', kind: 'read' }),
+  })
 }
