@@ -188,3 +188,13 @@ describe('quality and resource metacognition', () => {
     expect(assessHabitExperience(state)).toMatchObject({ mode: 'review', driftDetected: true })
   })
 })
+
+describe('META verification coverage', () => {
+  it('demotes historically mature habits when most attempts were unverified', () => {
+    const assessment = assessHabitExperience(aggregate('habitual', { runs: 15, verifiedSuccesses: 5, failures: 0 }))
+    expect(assessment.mode).toBe('review')
+    expect(assessment.evidence.unverified).toBe(10)
+    expect(formatHabitGuidance(assessment)).toContain('verified_attempts=5/15')
+    expect(formatHabitGuidance(assessment)).not.toContain('confidence=')
+  })
+})
