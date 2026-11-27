@@ -534,7 +534,7 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
 
   it('caps obsolete isolated runtimes without deleting the active runtime', () => {
     expect(source).toContain('function runtimeDirectoriesForCleanup()')
-    expect(source).toContain('function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false, reapDormantStage = false } = {})')
+    expect(source).toContain('function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false, reapDormantStage = false, liveMigration = false } = {})')
     expect(source).toContain('const active = readActiveRuntimeRecord()')
     expect(source).toContain('keep.add(runtimePathKey(active.path))')
     expect(source).toContain('const inheritedRuntimeRoot = process.env.PHOENIX_RUNTIME_ROOT?.trim()')
@@ -545,7 +545,9 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('if (registeredWorktrees === undefined) return')
     expect(source).toContain('if (runtimeProtectedByOwningCheckout(candidate)) continue')
     expect(source).toContain('.sort((left, right) => managedDirectoryMtimeMs(right) - managedDirectoryMtimeMs(left))')
-    expect(source).toContain('if (retainedInactiveRuntimes < MAX_INACTIVE_RUNTIME_BACKUPS)')
+    expect(source).toContain('if (retainedInactiveRuntimes < inactiveBackupLimit)')
+    expect(source).toContain('if (liveMigration && !liveStorageMigrationAllowed()) return')
+    expect(source).toContain('const inactiveBackupLimit = Math.max(MAX_INACTIVE_RUNTIME_BACKUPS,')
     expect(source).not.toContain('if (managedDirectoryAgeMs(candidate) < UPDATE_STORAGE_RETENTION_MS) continue')
     expect(source).toContain("spawnSync('git', ['-c', 'core.longpaths=true', 'worktree', 'remove', '--force', path]")
     expect(source).toContain("spawnSync('git', ['worktree', 'prune', '--expire', 'now']")
