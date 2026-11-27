@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-11-27-local-accelerator-provisioning-pilot.md
-2026-11-27-local-accelerator-provisioning-pilot.md: b0a8bc4a3057ef35bcb68c7e02ad4b7a3b728682
-2026-11-27-local-accelerator-provisioning-pilot.zh.md: 0562f12be977936445b8eefbf0a157a3306ff30e
+2026-11-27-local-accelerator-provisioning-pilot.md: 5cedfb6c5f15205959b9eb749da7ddd51b007c68
+2026-11-27-local-accelerator-provisioning-pilot.zh.md: 8982fc4370e43db13bc47989768aaf0cbfd9dae1
