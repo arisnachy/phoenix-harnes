@@ -89,6 +89,7 @@ import type { McpRegistryInstallerService, XMcpHostService } from './connector-i
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import { installOrdinaryCompletionJudgeBridge } from './ordinary-completion-judge.ts'
 import { metaRouteEligible } from './meta-review.ts'
+import { createMetaScenarioTool } from './meta-scenarios.ts'
 export { indexTools } from './tool-adapter.ts'
 export type { ToolAtlasIndexOptions, ToolChangeSource } from './tool-adapter.ts'
 export { indexSkills } from './skill-adapter.ts'
@@ -572,6 +573,9 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         }))
       }
       disposers.push(ctx.tools.register(createCognitiveWorkflowTool()))
+      disposers.push(ctx.tools.register(createMetaScenarioTool()))
+      disposers.push(systemPrompt.section({ name: 'phoenix:meta-counterfactual', order: 156,
+        text: 'For material competing strategies, causal disputes or conflicting evaluations, use phoenix_meta_compare when a structured scenario audit improves the decision. Hold the original criteria and constraints fixed, distinguish declared observations from hypotheses, and test disconfirming alternatives. The tool checks structure, not truth; never claim its input sources were independently verified. Skip this on straightforward tasks and reuse existing evidence.' }))
       disposers.push(ctx.tools.register(createEvolutionStatusTool()))
       disposers.push(ctx.tools.register(createGnosisTool(hardness, () => ctx.tools.schemas(), exec => projectGnosisReality(reality.engine.snapshot(ctx, new Date(), exec.agent === undefined ? undefined : { agent: exec.agent })))))
       disposers.push(ctx.tools.register(createPhoenixVisualizerTool()))
