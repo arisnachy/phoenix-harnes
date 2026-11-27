@@ -55,7 +55,7 @@ interface ToolActivityFlowProps extends SeatProps {
 }
 
 type ActivityItem =
-  | { readonly kind: 'node'; readonly key: string; readonly liveTool: boolean; readonly receipt?: { readonly activity: TurnActivity; readonly failed: boolean } }
+  | { readonly kind: 'node'; readonly key: string; readonly liveTool: boolean; readonly receipt?: { readonly activity: TurnActivity; readonly failed: boolean; readonly toolName: string } }
   | {
     readonly kind: 'reasoning'
     readonly key: string
@@ -166,6 +166,7 @@ function activityNode(node: OrderedChatNode): ActivityItem {
     kind: 'node', key: node.key, liveTool: false,
     ...(isSettledTool(root) ? { receipt: {
       activity: toolActivity(root.call?.name ?? ''),
+      toolName: root.call?.name ?? '',
       failed: root.isError,
     } } : {}),
   }
@@ -818,6 +819,21 @@ function ToolActivityIcon() {
   )
 }
 
+/** Only registered tool identity supplies the receipt label. Never display arguments or raw output. */
+function connectorReceipt(name: string): { provider: string; action: string } | null {
+  const match = /^mcp__([a-z0-9][a-z0-9_-]{0,49})__([a-z0-9][a-z0-9_-]{0,79})$/i.exec(name)
+  const provider = match?.[1], action = match?.[2]
+  if (!provider || !action) return null
+  const readable = (value: string) => value.replace(/[_-]+/g, ' ').trim()
+  const known: Record<string,string> = { github:'GitHub', gmail:'Gmail', google_drive:'Google Drive', google_calendar:'Google Calendar', magnific:'Magnific', chrome:'Chrome', figma:'Figma', canva:'Canva' }
+  const key = provider.toLowerCase()
+  return { provider: Object.prototype.hasOwnProperty.call(known,key) ? known[key]! : readable(provider), action: readable(action) }
+}
+
+function ReceiptIcon({ provider }: { readonly provider?: string | undefined }) {
+  return provider ? <span className={css.receiptIcon} aria-hidden="true">{provider.slice(0,1).toUpperCase()}</span> : <ToolActivityIcon />
+}
+
 function ToolActivityChevron({ open }: { readonly open: boolean }) {
   return (
     <span className={css.chevron} data-open={open || undefined} aria-hidden="true">
@@ -890,6 +906,7 @@ function ToolActivityGroup({
   const receipts = history.flatMap(item =>
     item.kind === 'node' && item.receipt !== undefined ? [item.receipt] : [])
   const latest = receipts.at(-1)
+  const connector = latest === undefined ? null : connectorReceipt(latest.toolName)
   const activityKey = latest?.activity === 'searching' ? 'activity.searching'
     : latest?.activity === 'browsing' ? 'activity.browsing'
       : latest?.activity === 'reading' ? 'activity.reading'
@@ -919,20 +936,22 @@ function ToolActivityGroup({
           type="button"
           className={css.toggle}
           aria-expanded={open}
+          aria-label={t('context.tools')}
+          title={t('context.tools')}
           onClick={() => { setOpen(value => !value) }}
         >
-          <ToolActivityIcon />
-          <span>{t('context.tools')}</span>
+          <ReceiptIcon provider={connector?.provider} />
+          {latest === undefined ? <span>{t('context.tools')}</span> : (
+            <span className={css.receipt} data-testid="tool-activity-receipt">
+              {connector ? <>{connector.provider} · {connector.action}{receipts.length > 1 && <> · {receipts.length}</>}</>
+                : receipts.length === 1
+                  ? t('activity.latestOne', { action: t(activityKey) })
+                  : t('activity.latest', { count: receipts.length, action: t(activityKey) })}
+              {latest.failed && <> · {t('activity.failed')}</>}
+            </span>
+          )}
           <ToolActivityChevron open={open} />
         </button>
-      )}
-      {latest !== undefined && (
-        <div className={css.receipt} role="status" aria-live="polite" data-testid="tool-activity-receipt">
-          {receipts.length === 1
-            ? t('activity.latestOne', { action: t(activityKey) })
-            : t('activity.latest', { count: receipts.length, action: t(activityKey) })}
-          {latest.failed && <> · {t('activity.failed')}</>}
-        </div>
       )}
       {open && hasHistory && (
         <div className={css.body}>
