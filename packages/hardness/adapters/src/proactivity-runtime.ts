@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { COMPANION_LOCAL_MODEL, COMPANION_LOCAL_TOOLS, COMPANION_LOCAL_PERSONA } from './companion-local-policy.ts'
 import { AttentionStore, parseAttentionReceipt } from './proactivity-attention-store.ts'
 import { parseScheduledTaskCreation, parseScheduledTaskId } from './proactivity-rpc-input.ts'
 import { scheduledMissionScopeActive } from './mission-scope.ts'
@@ -82,6 +83,7 @@ export interface ProactivityTaskView {
   readonly delivery: ProactivityTask['delivery']
   readonly senderIdentity: ProactivityTask['senderIdentity']
   readonly createdBy: ProactivityTask['createdBy']
+  readonly executionPolicy?: ProactivityTask['executionPolicy']
   readonly attentionMode?: ProactivityTask['attentionMode']
   readonly attentionPriority?: ProactivityTask['attentionPriority']
   readonly attentionText?: string
@@ -341,6 +343,10 @@ export function createProactivityExecutor(
   requirePositive(config.privateWorkResultChars, 'privateWorkResultChars')
   return {
     async execute(input): Promise<ProactivityExecutionResult> {
+      const companion = input.task.executionPolicy === 'companion-local'
+      if (companion && (input.task.delivery !== 'work' || input.task.condition !== undefined)) throw new Error('companion-local execution policy mismatch')
+      if (companion && config.privateWorkProvider !== 'spawn') throw new ProactivityDeferredError('local companion requires the in-process spawn provider')
+      if (companion && (!subagents?.getProvider('spawn')?.capabilities.toolFilter || !subagents.getProvider('spawn')?.capabilities.persona)) throw new ProactivityDeferredError('local companion requires tool filtering and persona support')
       const lease = await acquireExecutionAgent(agents, input.task.targetAgentId, config)
       const parent = lease.agent
       const missionStillActive = (): boolean => input.task.missionScope === undefined
@@ -414,6 +420,7 @@ export function createProactivityExecutor(
           prompt: [{ type: 'text', text: proactivePrompt(input, config, conditionEvidence, resolvedRecipient) }],
           parent,
           signal: controller.signal,
+          ...(companion ? { agentOptions: COMPANION_LOCAL_MODEL, toolFilter: COMPANION_LOCAL_TOOLS, persona: COMPANION_LOCAL_PERSONA } : {}),
         })
         try {
           const result = await run.result
@@ -457,6 +464,7 @@ function taskView(task: ProactivityTask): ProactivityTaskView {
     delivery: task.delivery,
     senderIdentity: task.senderIdentity,
     createdBy: task.createdBy,
+    ...(task.executionPolicy === undefined ? {} : { executionPolicy: task.executionPolicy }),
     ...(task.attentionMode === undefined ? {} : { attentionMode: task.attentionMode }),
     ...(task.attentionPriority === undefined ? {} : { attentionPriority: task.attentionPriority }),
     ...(task.attentionText === undefined ? {} : { attentionText: task.attentionText }),

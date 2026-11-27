@@ -64,6 +64,7 @@ export interface ProactivityTask {
   readonly senderIdentity: ProactivitySenderIdentity
   readonly recipient?: string
   readonly targetAgentId?: string
+  readonly executionPolicy?: 'companion-local'
   /** An automatic task that belongs to a finite UME mission (not a user recurring task). */
   readonly missionScope?: ScheduledMissionScope
   /** Optional home-feed policy; omitted keeps the adaptive default. */
@@ -94,6 +95,7 @@ export interface CreateProactivityTaskInput {
   readonly senderIdentity?: ProactivitySenderIdentity
   readonly recipient?: string
   readonly targetAgentId?: string
+  readonly executionPolicy?: 'companion-local'
   /** Scope applied only to non-user followups created within an active mission. */
   readonly missionScope?: ScheduledMissionScope
   /** Optional home-feed policy; omitted keeps the adaptive default. */
@@ -406,6 +408,8 @@ function parseTask(raw: unknown): ProactivityTask {
   if (raw.condition !== undefined && typeof raw.condition !== 'string') throw new Error('invalid condition')
   if (raw.recipient !== undefined && typeof raw.recipient !== 'string') throw new Error('invalid recipient')
   if (raw.targetAgentId !== undefined && typeof raw.targetAgentId !== 'string') throw new Error('invalid targetAgentId')
+  if (raw.executionPolicy !== undefined && raw.executionPolicy !== 'companion-local') throw new Error('invalid executionPolicy')
+  if (raw.executionPolicy === 'companion-local' && raw.delivery !== 'work') throw new Error('companion-local requires work delivery')
   const missionScope = raw.missionScope
   if (missionScope !== undefined && (!isRecord(missionScope)
     || typeof missionScope.sessionId !== 'string' || missionScope.sessionId.length === 0
@@ -438,6 +442,7 @@ function parseTask(raw: unknown): ProactivityTask {
     senderIdentity: raw.senderIdentity,
     ...(raw.recipient === undefined ? {} : { recipient: nonEmpty(raw.recipient, 'recipient') }),
     ...(raw.targetAgentId === undefined ? {} : { targetAgentId: nonEmpty(raw.targetAgentId, 'targetAgentId') }),
+    ...(raw.executionPolicy === 'companion-local' ? { executionPolicy: raw.executionPolicy } : {}),
     ...(missionScope === undefined ? {} : { missionScope: missionScope as unknown as ScheduledMissionScope }),
     ...(raw.attentionMode === undefined ? {} : { attentionMode: raw.attentionMode }),
     ...(raw.attentionPriority === undefined ? {} : { attentionPriority: raw.attentionPriority }),
@@ -611,6 +616,7 @@ export class ProactivityEngine {
             } : {}),
           }
           : { ...recurrence }
+      if (input.executionPolicy === 'companion-local' && (input.delivery !== 'work' || input.condition !== undefined)) throw new Error('companion-local requires private work without a condition watch')
       const task: ProactivityTask = {
         id: nonEmpty(this.id(), 'id'),
         title: nonEmpty(input.title, 'title'),
@@ -630,6 +636,7 @@ export class ProactivityEngine {
         senderIdentity: input.senderIdentity ?? 'auto',
         ...(input.recipient === undefined ? {} : { recipient: nonEmpty(input.recipient, 'recipient') }),
         ...(input.targetAgentId === undefined ? {} : { targetAgentId: nonEmpty(input.targetAgentId, 'targetAgentId') }),
+        ...(input.executionPolicy === undefined ? {} : { executionPolicy: input.executionPolicy }),
         ...(input.missionScope === undefined || input.createdBy === 'user' ? {} : {
           missionScope: {
             sessionId: nonEmpty(input.missionScope.sessionId, 'missionScope.sessionId'),
@@ -655,6 +662,7 @@ export class ProactivityEngine {
           && candidate.delivery === task.delivery
           && candidate.recipient === task.recipient
           && candidate.targetAgentId === task.targetAgentId
+          && candidate.executionPolicy === task.executionPolicy
           && candidate.missionScope?.missionId === task.missionScope?.missionId
           && candidate.missionScope?.epoch === task.missionScope?.epoch
           && JSON.stringify(candidate.recurrence) === JSON.stringify(task.recurrence))
