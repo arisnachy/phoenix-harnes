@@ -995,3 +995,5 @@
 
 /* Independent right-gutter output; the scroll body and resident composer retain their full width. */
 .finixWorkspace { position: relative; display: flex; flex: 1; min-height: 0; min-width: 0; width: 100%; }
+
+.finixWorkspace > .scrollBody { min-width: 0; }
