@@ -109,6 +109,17 @@ if (($null -eq $code -or $code -eq 0) -and $env:PHOENIX_FASTSD_AUTOINSTALL -ne '
   } catch { Write-Warning 'FLUX.2 migration deferred; existing model files retained.' }
 }
 
+# Optional local inference accelerators: provision in a detached, user-scoped
+# worker only after a successful update. The active CPU runtime remains untouched.
+$localAcceleratorAuto = Join-Path $root 'scripts\phoenix-local-accelerators.mjs'
+if (($null -eq $code -or $code -eq 0) -and $env:PHOENIX_LOCAL_ACCELERATOR_AUTOINSTALL -ne '0' -and
+    (Test-Path -LiteralPath $localAcceleratorAuto)) {
+  try {
+    & node $localAcceleratorAuto --ensure
+    if ($LASTEXITCODE -ne 0) { Write-Warning 'PHOENIX Local accelerator provisioning deferred.' }
+  } catch { Write-Warning 'PHOENIX Local accelerator provisioning deferred; CPU runtime retained.' }
+}
+
 # Preserve the semantic exit code from the Node updater. The desktop launcher
 # uses 12 for unrecoverable rollback failure and 13 for a known-stale runtime.
 if ($null -ne $code -and $code -ne 0) { exit $code }
