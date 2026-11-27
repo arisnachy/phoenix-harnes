@@ -304,7 +304,7 @@ describe('Hero chrome', () => {
     )
     expect(view.getByText('Profile User')).toBeTruthy()
     expect(renderSlot).not.toHaveBeenCalled()
-    expect(view.getByRole('button', { name: 'Saludar al fénix' }).querySelector('[data-mascot-pose]')).not.toBeNull()
+    expect(view.getByRole('button', { name: 'Abrir actividad de Fénix' }).querySelector('[data-mascot-pose]')).not.toBeNull()
     expect(view.container.querySelector('[data-welcome-subtitle]')?.textContent).toBeTruthy()
   })
 })
