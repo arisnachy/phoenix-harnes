@@ -32,6 +32,19 @@ describe('NetworkWatch', () => {
     await watch.tick()
     expect(watch.report()).toMatchObject({ status: 'degraded', retainedSamples: 0, latest: null })
   })
+  it('restores the scoped pseudonym twin without claiming device connectivity',async()=>{
+    const scope='a'.repeat(24),id='b'.repeat(24),other='c'.repeat(24),now=1000000
+    const watch=new NetworkWatch(async()=>({status:'completed',neighborCount:1,networkScope:scope,observedDeviceIds:[id,'not-valid']}),{
+      read:async()=>[{at:now-60000,scope,neighbors:2,devices:[id,other]},{at:now-30000,scope:'d'.repeat(24),neighbors:1,devices:['e'.repeat(24)]}],
+      write:async()=>{},
+    },()=>now)
+    await watch.tick()
+    expect(watch.report().twin).toEqual({scope,observedAt:now,devices:[
+      {id,firstObserved:now-60000,lastObserved:now,presentInLatestCache:true},
+      {id:other,firstObserved:now-60000,lastObserved:now-60000,presentInLatestCache:false},
+    ]})
+    expect(watch.report().history.every(x=>x.devices===null)).toBe(true)
+  })
   it('reports spikes only against recent same-network host baselines', async () => {
     const scope='a'.repeat(24)
     let now=1000000
