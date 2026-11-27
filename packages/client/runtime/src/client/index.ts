@@ -1,4 +1,5 @@
 /** Browser runtime services for slots, sessions, workspaces, and connection-stream delivery. */
+import { startClientLocationMonitor } from './location.ts'
 import type { Context } from '@phoenix-ai/cordis'
 import type { ConnectionHandle, SessionId } from '@phoenix-ai/dsh-api-remotes/client'
 // Type-only: the ctx.remote merge. Deliberately the gateway's Client half rather
@@ -201,6 +202,23 @@ export function apply(ctx: Context): void {
     () => workspaces.startInitialSelection(),
     'runtime: initial Workspace selection',
   )
+  let locationConnected = false
+  const locationMonitor = startClientLocationMonitor(
+    () => locationConnected ? sessions.list.getSnapshot().current : undefined,
+    async (sessionId, location, signal) => {
+      const result = await connection.api.sessions.observeLocation?.({ sessionId, location }, signal)
+      return result?.result.ok === true
+    },
+  )
+  let previousLocationSession = sessions.list.getSnapshot().current
+  const unsubscribeLocation = sessions.list.subscribe(() => {
+    const current = sessions.list.getSnapshot().current
+    if (current !== previousLocationSession) {
+      previousLocationSession = current
+      void locationMonitor.refresh()
+    }
+  })
+  ctx.effect(() => () => { unsubscribeLocation(); locationMonitor.dispose() }, 'runtime: browser location monitor')
   const loop = connection.start({
     onMuxEnvelope: (envelope) => {
       sessions.handleMuxEnvelope(envelope)
@@ -216,6 +234,8 @@ export function apply(ctx: Context): void {
       if (frame.type === 'host/remote-event') ctx.remote.$dispatch(frame.event, frame.args)
     },
     onConnected: () => {
+      locationConnected = true
+      void locationMonitor.refresh()
       sessions.handleConnected()
       workspaces.handleConnected()
       ctx.emit('connection/reset')
@@ -225,6 +245,7 @@ export function apply(ctx: Context): void {
       // (reconnect replays flow from stream open, ahead of onConnected):
       // the only safe moment to drop generation-scoped interaction state.
       if (state === 'reconnecting') {
+        locationConnected = false
         sessions.handleDisconnected()
         workspaces.handleDisconnected()
       }

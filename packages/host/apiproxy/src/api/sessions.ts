@@ -307,6 +307,10 @@ export interface SessionsApi {
   history(request: RpcRequest<{ sessionId: SessionId; beforeSeq?: number; maxMessages?: number }>):
   Promise<RpcResponse<{ events: HistoryEntry[]; hasMore: boolean; projections?: SessionProjectionsBlock }>>
 
+  /** Ephemeral position update for a live session, without creating a chat message. Null clears the observation. */
+  observeLocation?(request: RpcRequest<{ sessionId: SessionId; location: ClientLocation | null }>):
+  Promise<RpcResponse<{ accepted: true }>>
+
   /**
    * Reads a fresh advisory model directory for an ordinary session. Provider
    * lookups run independently; subagents reject with `agent-busy`.
