@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseScheduledTaskCreation } from '../src/proactivity-rpc-input.ts'
-import { COMPANION_LOCAL_MODEL, COMPANION_LOCAL_TOOLS } from '../src/companion-local-policy.ts'
+import { COMPANION_LOCAL_MODEL, COMPANION_LOCAL_TOOLS, companionAvailableTools } from '../src/companion-local-policy.ts'
 const payload = { title: 'Revisar proyecto', instruction: 'Revisa avances', runAt: '2026-11-28T10:00:00Z', delivery: 'work' }
 describe('local companion admission', () => {
   it('persists explicit local-only requests without changing ordinary tasks', () => {
@@ -15,5 +15,13 @@ describe('local companion admission', () => {
     expect(COMPANION_LOCAL_MODEL).toEqual({ provider: 'phoenix-local', model: 'phoenix-local' })
     expect(COMPANION_LOCAL_TOOLS.allow).not.toContain('bash')
     expect(COMPANION_LOCAL_TOOLS.allow).not.toContain('phoenix_task_create')
+  })
+})
+
+describe('Finix live capability selection', () => {
+  it('does not fail when optional diagnostics are absent or expose unauthorized tools', () => {
+    expect(companionAvailableTools(['read', 'bash', 'mcp__mail__send']).allow).toEqual(['read'])
+    expect(companionAvailableTools(['phoenix_self_assess', 'system_runtime_inspect']).allow).toEqual(['system_runtime_inspect', 'phoenix_self_assess'])
+    expect(companionAvailableTools([]).allow).toEqual([])
   })
 })
