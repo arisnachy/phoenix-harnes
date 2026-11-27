@@ -1,6 +1,38 @@
+import { performance } from 'node:perf_hooks'
 import type { Context } from '@phoenix-ai/cordis'
 import { defineTool, type JsonValue, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 import type { RealityContextEngine } from './reality-context.ts'
+
+const DOWNLOAD_BYTES = 2_000_000
+const DOWNLOAD_URL = 'https://speed.cloudflare.com/__down?bytes=2000000'
+
+/** Explicit, bounded HTTPS throughput sample. No upload or periodic traffic. */
+export async function measureInternetDownload(signal?: AbortSignal, request: typeof fetch = fetch): Promise<Record<string, JsonValue>> {
+  const started = performance.now()
+  let bytes = 0
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+  try {
+    const timeout = AbortSignal.timeout(12_000)
+    const response = await request(DOWNLOAD_URL, { redirect: 'error', cache: 'no-store', signal: signal ? AbortSignal.any([signal, timeout]) : timeout })
+    if (!response.ok || !response.body) throw Error('download-unavailable')
+    reader = response.body.getReader()
+    while (true) {
+      const chunk = await reader.read()
+      if (chunk.done) break
+      bytes += chunk.value.byteLength
+      if (bytes > DOWNLOAD_BYTES) throw Error('download-size-mismatch')
+    }
+    if (bytes !== DOWNLOAD_BYTES) throw Error('download-incomplete')
+    const elapsedMs = Math.max(1, performance.now() - started)
+    return { status: 'measured', downloadMbps: Math.round(bytes * 8 / elapsedMs / 1000 * 100) / 100,
+      uploadMbps: null, bytes, elapsedMs: Math.round(elapsedMs), source: DOWNLOAD_URL, observedAt: new Date().toISOString(),
+      rule: 'Single HTTPS download sample including connection overhead; not maximum ISP capacity or upload speed.' }
+  } catch {
+    return { status: 'unavailable', downloadMbps: null, uploadMbps: null, bytes, source: DOWNLOAD_URL, observedAt: new Date().toISOString() }
+  } finally {
+    if (reader) { await reader.cancel().catch(() => undefined); reader.releaseLock() }
+  }
+}
 
 /**
  * Create the read-only tool that waits for current Reality Context evidence.
@@ -16,12 +48,12 @@ export function createRealitySnapshotTool(
 ): ToolDefinition {
   return defineTool({
     name: 'phoenix_reality_now',
-    description: 'Read Phoenix\'s current verified Reality Context. Use this before an environment-sensitive decision when the prompt snapshot is stale, unknown, or the action is high-impact. mode=fresh waits for due probes while respecting TTLs; mode=full forces all configured host/runtime probes to run again. This tool is read-only and never grants permissions.',
+    description: 'Read Phoenix\'s current verified Reality Context. Use this before an environment-sensitive decision when the prompt snapshot is stale, unknown, or the action is high-impact. mode=fresh waits for due probes while respecting TTLs; mode=full forces all configured host/runtime probes to run again. mode=bandwidth explicitly runs a bounded 2 MB HTTPS download sample only when the user requests internet speed. This tool is read-only and never grants permissions.',
     parameters: {
       mode: {
         type: 'string',
-        enum: ['fresh', 'full'],
-        description: 'fresh = refresh only expired/missing signals; full = force every configured Reality Context probe now.',
+        enum: ['fresh', 'full', 'bandwidth'],
+        description: 'fresh = refresh only expired/missing signals; full = force every configured Reality Context probe now; bandwidth = explicit 2 MB download measurement (not upload).',
       },
     },
     output: {
@@ -29,6 +61,7 @@ export function createRealitySnapshotTool(
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute(args, exec) {
+      if (args.mode === 'bandwidth') return await measureInternetDownload(exec.signal)
       const assembly = exec.agent === undefined ? undefined : { agent: exec.agent }
       await engine.refreshNow(ctx, args.mode === 'full', assembly)
       const snapshot = engine.snapshot(
@@ -41,7 +74,7 @@ export function createRealitySnapshotTool(
     presentCall(args) {
       return {
         card: 'generic',
-        title: args.mode === 'full' ? 'Refresh full reality state' : 'Refresh reality state',
+        title: args.mode === 'bandwidth' ? 'Measure internet download speed' : args.mode === 'full' ? 'Refresh full reality state' : 'Refresh reality state',
         kind: 'read',
       }
     },
