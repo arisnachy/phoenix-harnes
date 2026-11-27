@@ -1,4 +1,5 @@
 import path from 'node:path'
+import type { LocalAccelerationProfile } from './acceleration.js'
 import { forgetOllamaCandidate, getLocalModel, getRuntimeManifest, registerOllamaCandidate, synchronizeOllamaCatalog, type OllamaDiscoveredModel } from './catalog.js'
 import {
   LocalModelRuntimeFault,
@@ -46,6 +47,8 @@ export interface LocalModelRuntimeManagerDependencies {
   listOllamaModels?(): Promise<OllamaDiscoveredModel[]>
   pullOllamaModel?(tag: string, onProgress: (progress: { receivedBytes: number; totalBytes?: number }) => void): Promise<void>
   deleteOllamaModel?(tag: string): Promise<void>
+  /** Optional validated local accelerator; CPU remains the default. */
+  readAccelerationProfile?(modelId: string, modelPath: string): Promise<LocalAccelerationProfile | undefined>
   freeMemoryBytes(): number
 }
 
@@ -88,6 +91,7 @@ class RuntimeManager implements LocalModelRuntimeManager {
   private persistent: LocalModelPersistentState
   private current: LocalModelRuntimeSnapshot
   private server: LocalServerHandle | undefined
+  private readonly failedAccelerators = new Set<string>()
   private ensureRunningPromise: Promise<string> | undefined
   private lastOllamaCatalogRead = 0
   private ollamaCatalogInflight: Promise<LocalModelRuntimeSnapshot> | undefined
@@ -349,55 +353,76 @@ class RuntimeManager implements LocalModelRuntimeManager {
     }
 
     this.publishPhase('starting')
-    const port = await this.dependencies.allocatePort()
-    const base = `http://127.0.0.1:${String(port)}`
-    const args = [
-      '--model', modelPath,
-      '--host', '127.0.0.1',
-      '--port', String(port),
-      '--ctx-size', String(model.contextWindow),
-      // Qwen3.5-4B is a hybrid thinking model. llama-server defaults to
-      // automatic reasoning, which can spend the entire completion budget on
-      // hidden thinking and return no visible answer. Disable it at process
-      // startup for this exact model; leave Gemma and other backends untouched.
-      ...(model.id === 'qwen3.5-4b-q4-k-m' ? ['--reasoning', 'off'] : []),
-      // Keep long local contexts affordable on CPU-first machines by halving
-      // the default f16 KV-cache footprint without changing model weights.
-      '--cache-type-k', 'q8_0',
-      '--cache-type-v', 'q8_0',
-    ]
-    let handle: LocalServerHandle | undefined
-    try {
-      handle = this.dependencies.spawnServer(executablePath, args, (processError) => {
-        if (this.server !== handle) return
-        this.server = undefined
-        if (this.current.phase === 'stopping') return
-        const exitFault = new LocalModelRuntimeFault(
-          'runtime-exited',
-          processError?.message ?? 'El proceso de Phoenix Local terminó inesperadamente.',
-        )
-        const publicError: LocalModelRuntimeError = { code: exitFault.code, message: exitFault.message }
-        const { pid: _pid, port: _port, baseUrl: _baseUrl, progress: _progress, ...rest } = this.current
-        this.publish({ ...rest, phase: 'error', error: publicError })
-      })
-      this.server = handle
-      await this.dependencies.probeHealth(base, HEALTH_TIMEOUT_MS)
-      const pid = handle.pid
-      this.publish({
-        ...this.current,
-        phase: 'running',
-        port,
-        baseUrl: `${base}/v1`,
-        ...(pid === undefined ? {} : { pid }),
-      })
-      return this.snapshot()
-    } catch (error) {
-      if (handle !== undefined) await handle.stop().catch(() => undefined)
-      if (this.server === handle) this.server = undefined
-      const runtimeError = fault(error, 'start-failed', 'Phoenix Local no pudo iniciar llama-server.')
-      this.publishError(runtimeError)
-      throw runtimeError
+    const profile = this.failedAccelerators.has(model.id) ? undefined
+      : await this.dependencies.readAccelerationProfile?.(model.id, modelPath)
+    const attempts = profile === undefined ? [undefined] : [profile, undefined]
+    let lastError: unknown
+    for (const accelerator of attempts) {
+      if (this.persistent.selectedModelId !== model.id || this.snapshot().mode === 'off') {
+        throw new LocalModelRuntimeFault('local-model-busy', 'Cambió la selección durante el inicio local.')
+      }
+      const port = await this.dependencies.allocatePort()
+      const base = `http://127.0.0.1:${String(port)}`
+      const args = [
+        '--model', modelPath,
+        '--host', '127.0.0.1',
+        '--port', String(port),
+        '--ctx-size', String(model.contextWindow),
+        ...(model.id === 'qwen3.5-4b-q4-k-m' ? ['--reasoning', 'off'] : []),
+        '--cache-type-k', 'q8_0',
+        '--cache-type-v', 'q8_0',
+        ...(accelerator === undefined ? [] : [
+          '--n-gpu-layers', String(accelerator.gpuLayers),
+          '--threads', String(accelerator.threads),
+          '--device', accelerator.deviceName,
+          '--flash-attn', 'auto',
+          '--fit', 'on', '--fit-target', '1024',
+        ]),
+      ]
+      let handle: LocalServerHandle | undefined
+      try {
+        handle = this.dependencies.spawnServer(accelerator?.executable ?? executablePath, args, (processError) => {
+          if (handle === undefined || this.server !== handle) return
+          this.server = undefined
+          if (this.current.phase === 'stopping') return
+          if (accelerator !== undefined) this.failedAccelerators.add(model.id)
+          const exitFault = new LocalModelRuntimeFault(
+            'runtime-exited',
+            processError?.message ?? 'El proceso de Phoenix Local terminó inesperadamente.',
+          )
+          const publicError: LocalModelRuntimeError = { code: exitFault.code, message: exitFault.message }
+          const { pid: _pid, port: _port, baseUrl: _baseUrl, progress: _progress, ...rest } = this.current
+          this.publish({ ...rest, phase: 'error', error: publicError })
+        })
+        this.server = handle
+        await this.dependencies.probeHealth(base, HEALTH_TIMEOUT_MS)
+        if (this.server !== handle) throw new Error('Local server exited before health verification')
+        const pid = handle.pid
+        const { error: _error, ...rest } = this.current
+        this.publish({
+          ...rest,
+          phase: 'running',
+          port,
+          baseUrl: `${base}/v1`,
+          ...(pid === undefined ? {} : { pid }),
+        })
+        return this.snapshot()
+      } catch (error) {
+        if (handle !== undefined) {
+          // Detach the failed child before stopping it so its exit cannot overwrite the next attempt.
+          if (this.server === handle) this.server = undefined
+          await handle.stop()
+        }
+        lastError = error
+        if (accelerator !== undefined) {
+          this.failedAccelerators.add(model.id)
+          this.publishPhase('starting')
+        }
+      }
     }
+    const runtimeError = fault(lastError, 'start-failed', 'Phoenix Local no pudo iniciar llama-server.')
+    this.publishError(runtimeError)
+    throw runtimeError
   }
 
   async ensureRunning(): Promise<string> {

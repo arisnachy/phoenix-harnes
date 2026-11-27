@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getLocalModelCatalog, getRuntimeManifest, resolveQwen35RuntimeContextWindow } from '../src/local-model/catalog.js'
+import { getLocalModelCatalog, getRuntimeManifest, resolveManagedGgufContext, resolveQwen35RuntimeContextWindow } from '../src/local-model/catalog.js'
 
 describe('Phoenix Local catalog', () => {
   it('recommends the existing CPU-friendly Ollama Qwen 2B and keeps native GGUF models selectable', () => {
@@ -25,7 +25,8 @@ describe('Phoenix Local catalog', () => {
       expect.objectContaining({
         id: 'qwen3.5-4b-q4-k-m',
         displayName: 'Qwen3.5-4B Q4_K_M',
-        contextWindow: 262144,
+        contextWindow: resolveManagedGgufContext(262144),
+        nativeContextWindow: 262144,
         maxTokens: 2048,
         recommended: false,
       }),
@@ -41,6 +42,15 @@ describe('Phoenix Local catalog', () => {
     expect(resolveQwen35RuntimeContextWindow('1010000')).toBe(16384)
     expect(resolveQwen35RuntimeContextWindow('0')).toBe(16384)
     expect(resolveQwen35RuntimeContextWindow('invalid')).toBe(16384)
+  })
+
+  it('sizes managed GGUF context from physical RAM and permits an explicit native window', () => {
+    expect(resolveManagedGgufContext(262144, 4 * 1024 ** 3, '')).toBe(4096)
+    expect(resolveManagedGgufContext(262144, 8 * 1024 ** 3, '')).toBe(8192)
+    expect(resolveManagedGgufContext(262144, 16 * 1024 ** 3, '')).toBe(16384)
+    expect(resolveManagedGgufContext(262144, 32 * 1024 ** 3, '')).toBe(32768)
+    expect(resolveManagedGgufContext(131072, 8 * 1024 ** 3, '131072')).toBe(131072)
+    expect(resolveManagedGgufContext(131072, 8 * 1024 ** 3, '262144')).toBe(8192)
   })
 
   it('pins the verified Windows x64 llama.cpp runtime', () => {
