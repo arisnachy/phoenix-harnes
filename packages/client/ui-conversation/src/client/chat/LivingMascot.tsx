@@ -1,7 +1,7 @@
 import type { TurnProgress } from './turn-progress.ts'
 import css from './ChatView.module.css'
 
-export type MascotPose = 'ready' | 'thinking' | 'search' | 'browse' | 'read' | 'code' | 'tools' | 'verify' | 'paint' | 'calculate' | 'plan' | 'listen' | 'talk' | 'settled'
+export type MascotPose = 'ready' | 'thinking' | 'search' | 'browse' | 'read' | 'code' | 'tools' | 'verify' | 'paint' | 'calculate' | 'plan' | 'listen' | 'talk' | 'settled' | 'welcome' | 'idea' | 'coffee' | 'sleep' | 'celebrate' | 'respectful'
 
 /** Use only the observed activity and tool identity, never prompt or reasoning text. */
 export function mascotPose(progress: TurnProgress): MascotPose {
@@ -67,6 +67,7 @@ export function LivingMascot({ pose, large = false }: { readonly pose: MascotPos
               <circle cx="77" cy="38" r="3.2" fill="white"/>
             </g>
           </g>
+          {pose === 'sleep' && <g className={css.mascotClosedEyes} stroke="#60301d" strokeWidth="2.4" fill="none" strokeLinecap="round"><path d="M35 43q8 7 16 0M69 43q8 7 16 0"/></g>}
           <ellipse cx="35" cy="55" rx="7" ry="3.5" fill="#ed9778" opacity=".8"/>
           <ellipse cx="85" cy="55" rx="7" ry="3.5" fill="#ed9778" opacity=".8"/>
           <path className={css.mascotBeak} d="M53 55Q60 68 67 55Z" fill="#86351c"/>
@@ -124,7 +125,10 @@ export function LivingMascot({ pose, large = false }: { readonly pose: MascotPos
         </g>}
         {pose === 'listen' && <g fill="#8495a5" stroke="#8495a5" strokeWidth="4"><path d="M26 47a34 34 0 0 1 68 0" fill="none"/><rect x="22" y="42" width="9" height="18" rx="4"/><rect x="89" y="42" width="9" height="18" rx="4"/></g>}
         {pose === 'talk' && <g className={css.mascotProp} fill="none" stroke="#d68d40" strokeWidth="2.5" strokeLinecap="round"><path d="M99 43q10 8 0 16M106 38q15 13 0 26"/></g>}
-        {pose === 'settled' && <g className={css.mascotProp} fill="#fbc34c"><path d="M99 10l3 8 8 3-8 3-3 8-3-8-8-3 8-3Z"/><path d="M13 25l2 5 5 2-5 2-2 5-2-5-5-2 5-2Z"/></g>}
+        {pose === 'idea' && <g className={css.mascotProp}><circle cx="105" cy="18" r="9" fill="#ffce52"/><path d="M102 26h6m-5 3h4" stroke="#9e7850" strokeWidth="2" strokeLinecap="round"/></g>}
+        {pose === 'coffee' && <g><path d="M84 75q14-2 12 8-1 7-12 7" fill="none" stroke="#b78960" strokeWidth="3"/><rect x="64" y="72" width="23" height="22" rx="5" fill="#fff5df"/><ellipse cx="75.5" cy="73" rx="10" ry="3" fill="#98633c"/><path className={css.mascotProp} d="M72 66q-4-5 0-10M80 66q-4-5 0-10" fill="none" stroke="#ac9887" strokeWidth="1.8" strokeLinecap="round"/></g>}
+        {pose === 'sleep' && <g className={css.mascotProp} fill="#c09469" fontSize="10" fontWeight="bold"><text x="95" y="27">z</text><text x="105" y="16">z</text></g>}
+        {(pose === 'settled' || pose === 'celebrate') && <g className={css.mascotProp} fill="#fbc34c"><path d="M99 10l3 8 8 3-8 3-3 8-3-8-8-3 8-3Z"/><path d="M13 25l2 5 5 2-5 2-2 5-2-5-5-2 5-2Z"/></g>}
       </g>
     </svg>
   )

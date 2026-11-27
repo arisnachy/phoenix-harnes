@@ -9,7 +9,7 @@ import { useEffect, useId, useState } from 'react'
 import type { CSSProperties, ReactNode, RefObject } from 'react'
 import {
   IconChevronDownOutline14, IconChevronRightOutline14, IconFolderClose16, IconFolderOpen16,
-  IconSparkle16, IconWarningOutline16, PhoenixLogo,
+  IconSparkle16, IconWarningOutline16,
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import { workspaceTitleOf } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ConversationSlotProps, ProactivityAttentionItem } from '../contract/slots.ts'
@@ -18,6 +18,8 @@ import type { ConversationUserProfileState } from '../contract/slots.ts'
 import { useCalendarDay } from '../chat/use-calendar-day.ts'
 import { CELEBRATION_ACCENTS, celebrationGreeting, celebrationsOn, fetchCountryHolidays, normalizedCountry } from './celebrations.ts'
 import type { CalendarProfile, Celebration } from './celebrations.ts'
+import { LivingMascot } from '../chat/LivingMascot.tsx'
+import { adaptiveWelcome } from './adaptive-welcome.ts'
 
 /** The owner's locale seat type, passed to hero chrome as a plain prop. */
 type HeroTranslate = ConversationSlotProps['t']
@@ -234,6 +236,8 @@ export interface HeroShellProps {
   preferredName?: string | undefined
   /** Consented private profile fields already mirrored by the conversation owner. */
   profile?: ConversationUserProfileState | undefined
+  attention?: readonly ProactivityAttentionItem[] | undefined
+  blocked?: boolean | undefined
   /** Overlay content after the stack (modals). */
   children?: ReactNode
 }
@@ -257,11 +261,16 @@ function localeResidenceCountry(): string | undefined {
 }
 
 /**
- * Hero-only celebratory overlay. The official silver PHOENIX PNG remains intact;
- * color rings and a tasteful motif change instead of swapping brand identity.
+ * Hero-only cute mascot with contextual decoration. Shared branding remains intact elsewhere.
  */
-export function HeroShell({ renderSlot, preferredName, profile, children }: HeroShellProps) {
+export function HeroShell({ preferredName, profile, attention = [], blocked = false, children }: HeroShellProps) {
   const day = useCalendarDay()
+  const [hour, setHour] = useState(() => new Date().getHours())
+  const [variant, setVariant] = useState(() => Math.floor(Math.random() * 4))
+  useEffect(() => {
+    const timer = window.setInterval(() => setHour(new Date().getHours()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
   const displayName = preferredNameForHero(preferredName)
   const countryOfOrigin = normalizedCountry(profile?.countryCode)
   const countryOfResidence = localeResidenceCountry()
@@ -290,7 +299,8 @@ export function HeroShell({ renderSlot, preferredName, profile, children }: Hero
     '--phoenix-celebration-primary': accent.color,
     '--phoenix-celebration-secondary': accent.secondary,
   } as CSSProperties
-  const greeting = greetingForHour(new Date().getHours())
+  const greeting = greetingForHour(hour)
+  const scene = adaptiveWelcome(hour, variant, attention, selected, blocked)
   const overlayId = selected === undefined ? undefined
     : selected.source === 'curated' ? selected.id
     : selected.source === 'personal' ? selected.id === 'birthday' ? 'birthday' : 'personal-default'
@@ -299,13 +309,10 @@ export function HeroShell({ renderSlot, preferredName, profile, children }: Hero
   return (
     <div className={css.root}>
       <div className={css.stack}>
-        <span className={css.fishHitbox} aria-hidden="true" data-celebration={selected?.theme} style={appearance}>
-          {renderSlot('conversation.hero.brand.mark', { size: 64, className: css.fish }, {
-            fallback: <PhoenixLogo size={64} {...(css.fish === undefined ? {} : { className: css.fish })} />,
-          })}
-          {overlayId && <img src={`/assets/celebrations/${overlayId}.svg`}
-            className={css.celebrationArt} alt="" aria-hidden="true" draggable={false} />}
-        </span>
+        <button type="button" className={`${css.fishHitbox} ${css.welcomeMascot}`} aria-label="Saludar al fénix" data-celebration={selected?.theme} style={appearance} onClick={() => setVariant(value => (value + 1) % 4)}>
+          <LivingMascot pose={scene.pose} large />
+          {overlayId && <img src={`/assets/celebrations/${overlayId}.svg`} className={css.welcomeDecoration} alt="" aria-hidden="true" draggable={false} />}
+        </button>
         <h1 className={css.headline}>
           <span>{greeting}</span>
           {displayName === undefined ? null : (
@@ -318,7 +325,7 @@ export function HeroShell({ renderSlot, preferredName, profile, children }: Hero
         {selected && <p className={css.celebrationGreeting} role="status">
           {celebrationGreeting(selected, displayName)}
         </p>}
-        <p className={css.subtitle}>¿En qué podemos trabajar hoy?</p>
+        <p className={css.subtitle} data-welcome-subtitle="" aria-live="polite">{scene.subtitle}</p>
       </div>
       {children}
     </div>

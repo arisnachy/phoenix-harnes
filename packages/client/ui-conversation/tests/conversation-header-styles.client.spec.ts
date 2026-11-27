@@ -139,7 +139,9 @@ describe('Metallic welcome and aligned Session log controls', () => {
     const mark = readFileSync(
       fileURLToPath(new URL('../src/client/skeleton/EmptyHero.tsx', import.meta.url)), 'utf8',
     )
-    expect(mark).toContain("renderSlot('conversation.hero.brand.mark'")
+    expect(mark).toContain('<LivingMascot pose={scene.pose} large />')
+    expect(mark).not.toContain("renderSlot('conversation.hero.brand.mark'")
+    expect(heroCss).toContain('.welcomeMascot > svg')
   })
 
   it('aligns the Session log export and global actions only in the expanded session header', () => {
