@@ -13,6 +13,7 @@ import type { CognitiveMemoryKind, CognitiveMemoryLayer } from '@phoenix-ai/dsh-
 import { filterAdaptiveSearchHits, installAdaptiveLearning } from './adaptive.ts'
 import { ExperienceLearningEngine, experienceMemoryInput } from './experience.ts'
 import { LiveEfficiencyMonitor } from './live-efficiency.ts'
+import { classifyMetaFailure, metaResultCallId } from './metacognition.ts'
 import { hasUnclearedGoal, isHumanTaskMessage, learningOwnerSessionId } from './team-learning-context.ts'
 import { assessHabitExperience, formatHabitGuidance, formatUnverifiedExperience } from './habit.ts'
 import { AutonomousMemoryCurator } from './autonomous-curator.ts'
@@ -174,13 +175,14 @@ export function apply(ctx: Context, config: Config): void {
 
     if (eventType === 'tool/result') {
       const message = isRecord(data) && isRecord(data.message) ? data.message : undefined
-      const source = isRecord(message?.source) ? message.source : undefined
-      const callId = typeof source?.callId === 'string' ? source.callId : undefined
+      const callId = metaResultCallId(message)
       const names = pendingToolNames.get(learningOwnerId)
       const key = callId === undefined ? undefined : `${sessionId}:${callId}`
       const toolName = key === undefined ? undefined : names?.get(key)
       if (key !== undefined) names?.delete(key)
-      experience.observeToolResult(learningOwnerId, toolResultFailed(data), toolName)
+      if (classifyMetaFailure(isRecord(data) ? data.error : undefined) !== 'cancelled') {
+        experience.observeToolResult(learningOwnerId, toolResultFailed(data), toolName)
+      }
       return
     }
 
@@ -573,7 +575,9 @@ function assistantUsage(data: unknown): {
 
 function toolResultFailed(data: unknown): boolean {
   if (!isRecord(data)) return false
-  if (data.error !== undefined) return true
-  if (!isRecord(data.message) || !Array.isArray(data.message.content)) return false
+  if (data.error !== undefined && data.error !== null) return true
+  if (!isRecord(data.message)) return false
+  if (data.message.isError === true) return true
+  if (!Array.isArray(data.message.content)) return false
   return data.message.content.some(part => isRecord(part) && part.type === 'tool-result' && part.isError === true)
 }
