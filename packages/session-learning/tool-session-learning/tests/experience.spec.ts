@@ -414,3 +414,19 @@ describe('ExperienceLearningEngine', () => {
     expect(fingerprintKey({ normalized: 'fallback', tokens: [] })).toMatch(/^[0-9a-f]{8}$/u)
   })
 })
+
+describe('META habit promotion coverage', () => {
+  it('does not promote a task after three verified and many unverified runs', () => {
+    const engine = new ExperienceLearningEngine()
+    for (let i = 0; i < 7; i++) {
+      engine.beginTask({ sessionId: 's', text: 'Compile monthly clinic report', occurredAt: i * 100 + 1 })
+      engine.observeToolCall('s')
+      engine.finishUnverified('s', i * 100 + 20)
+    }
+    for (let i = 7; i < 10; i++) {
+      engine.beginTask({ sessionId: 's', text: 'Compile monthly clinic report', occurredAt: i * 100 + 1 })
+      engine.completeVerified('s', i * 100 + 20)
+    }
+    expect(engine.matchTask('Compile monthly clinic report')).toMatchObject({ runs: 10, verifiedSuccesses: 3, failures: 0, maturity: 'candidate' })
+  })
+})

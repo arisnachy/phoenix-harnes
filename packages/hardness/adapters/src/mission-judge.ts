@@ -5,6 +5,7 @@ import { ReasoningEffortId, type ContentBlock } from '@phoenix-ai/dsh-llm'
 import type { ObjectJsonSchema, ToolRestriction } from '@phoenix-ai/dsh-tools'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import { resolveStructuredProvider } from '@phoenix-ai/dsh-subagent'
+import { META_REVIEW_PROTOCOL, uniqueMetaCriteria, validMetaVerdict } from './meta-review.ts'
 import type { HardnessMissionJudge, HardnessMissionJudgeInput } from './mission-orchestrator.ts'
 import type { MissionJudgeDecision } from './mission-kernel.ts'
 import { abstractGameReview, isAbstractGameNeed, isGameDevelopmentNeed, qualityRequirementsForNeed } from './quality-contract.ts'
@@ -98,7 +99,7 @@ function quality(value: unknown): MissionJudgeDecision['quality'] | undefined {
   return { verdict: record.verdict as 'pass' | 'fail', summary: record.summary, evidence: record.evidence, findings: record.findings }
 }
 
-function readDecision(value: unknown): MissionJudgeDecision | undefined {
+function readDecision(value: unknown, expected: HardnessMissionJudgeInput['criteria']): MissionJudgeDecision | undefined {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
   const record = value as Record<string, unknown>
   if (!text(record.verdict) || !['pass', 'needs_changes', 'blocked'].includes(record.verdict)
@@ -115,8 +116,10 @@ function readDecision(value: unknown): MissionJudgeDecision | undefined {
     criteria: record.criteria.map(item => criterion(item) as MissionJudgeDecision['criteria'][number]),
     quality: qualityReview,
   }
-  if (decision.verdict === 'pass' && decision.evidence.length === 0) return undefined
-  if (decision.verdict === 'needs_changes' && decision.requiredChanges.length === 0) return undefined
+  if (!uniqueMetaCriteria(decision.criteria) || decision.criteria.some(row => !expected.some(item => item.id === row.id))
+    || !validMetaVerdict({ ...decision,
+    failedCriterion: expected.some(item => item.mandatory && !decision.criteria.some(row => row.id === item.id && row.verdict === 'pass' && row.evidence.length > 0)),
+    qualityFailed: decision.quality.verdict !== 'pass' || decision.quality.evidence.length === 0 })) return undefined
   return decision
 }
 
@@ -151,6 +154,7 @@ function prompt(input: HardnessMissionJudgeInput): ContentBlock[] {
       + 'The qualityContract is task-specific and mandatory: do not pass the quality gate unless each relevant requirement has concrete evidence. '
       + 'Inspect structure, completeness, visual presentation, security, reproducibility, and relevant similar products. '
       + gameReview
+      + META_REVIEW_PROTOCOL + ' '
       + 'For product, UI, document, visual, or game requests, use web_search and web_fetch to inspect comparable work '
       + 'when the web tools are available, then require evidence that the candidate meets or exceeds the relevant bar. '
       + 'Do not accept scaffolds, mocks, partial substitutes, or untested assumptions. '
@@ -201,7 +205,7 @@ export function createSubagentMissionJudge(input: {
         })
         const result = await run.result
         if (result.stopReason !== 'completed') return unavailable()
-        return readDecision(result.structured) ?? unavailable()
+        return readDecision(result.structured, mission.criteria) ?? unavailable()
       } catch {
         if (mission.context.signal.aborted || run !== undefined || attempt >= MISSION_JUDGE_START_ATTEMPTS) {
           return unavailable()
