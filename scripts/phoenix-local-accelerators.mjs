@@ -3,12 +3,14 @@ import { createHash } from 'node:crypto'
 import { createReadStream, createWriteStream, openSync, closeSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, statfs, writeFile } from 'node:fs/promises'
 import { execFile, spawn } from 'node:child_process'
-import { homedir } from 'node:os'
+import { homedir, freemem, availableParallelism } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { promisify } from 'node:util'
+
+import { selectAccelerator, confirmedOffload } from './phoenix-local-acceleration-policy.mjs'
 
 const exec = promisify(execFile)
 const version = 'b10964'
@@ -24,7 +26,8 @@ const assets = {
   sycl: ['18820bc29cd38ceb664034acd426a59b3bae3704c580added5fd17dd1ddd632e'],
   'openvino-2026.3.1': ['f607ea279c0ffd85c13bcd050768631c73b400d16c6e5e1de9ff468ad33c6456'],
 }
-const base = join(resolve(process.env.PHOENIX_HOME?.trim() || join(homedir(), '.phoenix')), 'local-models', 'accelerators', version)
+const localRoot = join(resolve(process.env.PHOENIX_HOME?.trim() || join(homedir(), '.phoenix')), 'local-models')
+const base = join(localRoot, 'accelerators', version)
 const statusPath = join(base, 'status.json')
 const execOptions = { windowsHide: true, timeout: 30_000, maxBuffer: 2 * 1024 * 1024 }
 
@@ -32,7 +35,7 @@ const execOptions = { windowsHide: true, timeout: 30_000, maxBuffer: 2 * 1024 * 
 export function candidatesForHardware(pnpIds) {
   const ids = pnpIds.map(id => String(id).toUpperCase())
   const choices = []
-  if (ids.some(id => id.includes('VEN_10DE'))) choices.push('cuda-12.4')
+  if (ids.some(id => id.includes('VEN_10DE'))) choices.push('cuda-12.4', 'cuda-13.3')
   if (ids.some(id => id.includes('VEN_1002'))) choices.push('rocm-10.0')
   if (ids.some(id => id.includes('VEN_8086'))) choices.push('sycl', 'openvino-2026.3.1')
   if (choices.length) choices.unshift('vulkan')
@@ -46,12 +49,12 @@ async function hardware() {
   return Array.isArray(parsed) ? parsed : typeof parsed === 'string' ? [parsed] : []
 }
 
-async function findServer(dir) {
+async function findServer(dir, filename = 'llama-server.exe') {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     const candidate = join(dir, entry.name)
-    if (entry.isFile() && entry.name.toLowerCase() === 'llama-server.exe') return candidate
+    if (entry.isFile() && entry.name.toLowerCase() === filename) return candidate
     if (entry.isDirectory()) {
-      const nested = await findServer(candidate)
+      const nested = await findServer(candidate, filename)
       if (nested) return nested
     }
   }
@@ -127,6 +130,47 @@ async function ensure(backend) {
   }
 }
 
+// Benchmark only known managed GGUF models; never pull a model or touch an external Ollama service.
+async function benchmarkTarget() {
+  const names = {
+    'gemma-4-e2b-it-q4-0': 'gemma-4-E2B-it-Q4_0.gguf',
+    'qwen3.5-4b-q4-k-m': 'Qwen_Qwen3.5-4B-Q4_K_M.gguf',
+  }
+  let state
+  try { state = JSON.parse(await readFile(join(localRoot, 'state.json'), 'utf8')) }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error }
+  if (state.mode !== 'on-demand' || !Array.isArray(state.installedModelIds) ||
+      !state.installedModelIds.includes(state.selectedModelId) || !Object.hasOwn(names, state.selectedModelId)) return null
+  const model = join(localRoot, 'models', names[state.selectedModelId])
+  const metadata = await stat(model)
+  if (!metadata.isFile() || freemem() < metadata.size + 2_000_000_000) return null
+  const cpu = await findServer(join(localRoot, 'runtimes', version), 'llama-bench.exe')
+  if (!cpu) return null
+  return { model, cpu, modelId: state.selectedModelId, size: metadata.size, modified: metadata.mtimeMs,
+    threads: Math.max(1, Math.floor(availableParallelism() / 2)) }
+}
+
+async function idleForBenchmark(target) {
+  if (freemem() < target.size + 2_000_000_000) return false
+  const { stdout } = await exec('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+    '@(Get-Process -Name llama-server,llama-bench,ollama -ErrorAction SilentlyContinue).Count'], execOptions)
+  return stdout.trim() === '0'
+}
+
+async function measure(target, executable, backend, layers) {
+  if (!await idleForBenchmark(target)) throw new Error('Local inference busy or insufficient free RAM; calibration deferred')
+  const { stdout, stderr } = await exec(executable, [
+    '-m', target.model, '-p', '256', '-n', '64', '-r', '3', '-t', String(target.threads),
+    '-ngl', String(layers), '-o', 'json', '-v',
+  ], { ...execOptions, timeout: 120_000, maxBuffer: 8 * 1024 * 1024, cwd: dirname(executable) })
+  const rows = JSON.parse(stdout)
+  const pp = rows.find(row => row.n_prompt === 256 && row.n_gen === 0)
+  const tg = rows.find(row => row.n_prompt === 0 && row.n_gen === 64)
+  if (![pp?.avg_ts, tg?.avg_ts].every(value => Number.isFinite(value) && value > 0)) throw new Error('Invalid throughput')
+  return { backend, gpuLayersRequested: layers, threads: target.threads, promptTokensPerSecond: pp.avg_ts,
+    generationTokensPerSecond: tg.avg_ts, offloadConfirmed: backend !== 'cpu' && confirmedOffload(stderr) }
+}
+
 async function worker() {
   await mkdir(base, { recursive: true })
   const lock = join(base, 'worker.lock')
@@ -142,22 +186,42 @@ async function worker() {
     return
   }
   const results = []
+  const measurements = []
+  let calibration = { state: 'deferred-no-idle-managed-model', selected: null }
+  let target = null
   try {
     const candidates = candidatesForHardware(await hardware())
-    // Vulkan first. If it works, avoid multi-gigabyte vendor SDK downloads during updates.
+    try { target = await benchmarkTarget() } catch (error) {
+      results.push({ state: 'calibration-deferred', reason: String(error.message).slice(0, 400) })
+    }
+    if (target) {
+      try { measurements.push(await measure(target, target.cpu, 'cpu', 0)) }
+      catch (error) { results.push({ backend: 'cpu', state: 'benchmark-deferred', reason: String(error.message).slice(0, 400) }) }
+    }
     for (const backend of candidates) {
       try {
         const state = await ensure(backend)
         results.push({ backend, state })
-        break
+        if (!measurements.length) break
+        const bench = await findServer(join(base, backend), 'llama-bench.exe')
+        if (!bench) throw new Error('llama-bench.exe missing')
+        for (const layers of [8, 16, 99]) {
+          try { measurements.push(await measure(target, bench, backend, layers)) }
+          catch (error) { results.push({ backend, gpuLayersRequested: layers, state: 'benchmark-deferred', reason: String(error.message).slice(0, 400) }) }
+        }
       } catch (error) {
         results.push({ backend, state: 'unavailable', reason: String(error.message).slice(0, 400) })
       }
     }
+    if (measurements.length) {
+      calibration = { ...selectAccelerator(measurements), modelId: target.modelId,
+        modelSize: target.size, modelModified: target.modified, measurements,
+        complete: candidates.every(backend => measurements.filter(row => row.backend === backend && row.offloadConfirmed).length === 3) }
+    }
   } finally {
     try {
       const temporary = statusPath + '.' + process.pid + '.tmp'
-      await writeFile(temporary, JSON.stringify({ version, results, cpuFallbackUnchanged: true, activeRuntimeChanged: false, checkedAt: new Date().toISOString() }, null, 2) + '\n')
+      await writeFile(temporary, JSON.stringify({ version, results, calibration, cpuFallbackUnchanged: true, activeRuntimeChanged: false, checkedAt: new Date().toISOString() }, null, 2) + '\n')
       await rename(temporary, statusPath)
     } finally { await rm(lock, { force: true }) }
   }
