@@ -28,3 +28,6 @@
 /* In tight workspaces the sidebar remains the entry point. No collision with the composer. */
 @container conversation-root (max-width: 960px) { .launcher { display: none; } }
 @container conversation-root (max-width: 1160px) { :global([data-phase='hero']) .launcher { display: none; } }
+
+/* The blank welcome seat fills the viewport, so its open panel anchors inside it. */
+:global([data-phase='hero']) .panel { inset-block-start: 12px; inset-block-end: auto; }
