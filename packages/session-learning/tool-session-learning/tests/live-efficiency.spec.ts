@@ -79,3 +79,30 @@ describe('LiveEfficiencyMonitor', () => {
     expect(implementation).toContain('efficiency.guidance(String(agent.id))')
   })
 })
+
+describe('META canonical event supervision', () => {
+  it('correlates real result envelopes, distinguishes cancellation and diagnoses actual error codes', () => {
+    const monitor = new LiveEfficiencyMonitor()
+    monitor.startTask(id)
+    for (let i = 0; i < 3; i++) {
+      monitor.observe(id, 'tool/call', { callId: 'cancel-' + i, name: 'read' })
+      monitor.observe(id, 'tool/result', { message: { source: { callId: 'cancel-' + i }, isError: true }, error: { code: 'TOOL_ABORTED' } })
+    }
+    expect(monitor.guidance(id)).toBe('')
+    for (let i = 0; i < 3; i++) {
+      monitor.observe(id, 'tool/call', { callId: 'fail-' + i, name: 'read' })
+      monitor.observe(id, 'tool/result', { message: { source: { callId: 'fail-' + i }, isError: true }, error: { code: 'PERMISSION_DENIED' } })
+    }
+    expect(monitor.guidance(id)).toContain('Never bypass')
+    expect(monitor.guidance(id)).toContain('Repeated tool failures')
+    expect(monitor.guidance('another')).toBe('')
+  })
+  it('observes repeated provider retries without inventing a quota', () => {
+    const monitor = new LiveEfficiencyMonitor()
+    monitor.startTask(id)
+    monitor.observe(id, 'llm/retry-started', {})
+    monitor.observe(id, 'llm/retry-started', {})
+    expect(monitor.guidance(id)).toContain('Repeated provider retries')
+    expect(monitor.guidance(id)).not.toContain('Quota or rate limit signal')
+  })
+})
