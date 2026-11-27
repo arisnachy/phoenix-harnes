@@ -16,6 +16,8 @@ The ranking rejects GPU measurements without positive layer-offload diagnostics 
 
 At managed GGUF startup, the Host accepts a recent calibration for the same model identity and matching pinned installation receipt. It attempts the measured layer and thread settings, then falls back to CPU when startup fails. An accelerated process exit disables that profile for subsequent starts in the current Host; in-flight turns are not replayed. The operational context is sized by total physical RAM, with a separate native maximum and explicit context override. The conservative existing free-memory admission check remains in place.
 
+Device admission reads free and total memory from the pinned llama.cpp device inventory. Calibration selects an enumerated device and tests only layer counts admitted by conservative weight-based memory thresholds. The Host rechecks the same device and its capacity before launch, passes its explicit device name and requests Flash Attention auto and a 1024 MiB fit target for unset parameters. These thresholds are not measured peak allocations; explicitly set layer counts are not guaranteed to fit. A focused Windows CI workflow checks the policy, PowerShell syntax, and the pinned CPU binary, not physical GPU throughput.
+
 ## Alternatives considered
 
 **Choose the first enumerated accelerator.** Device enumeration does not establish speed, so calibration compares equivalent workloads instead.
