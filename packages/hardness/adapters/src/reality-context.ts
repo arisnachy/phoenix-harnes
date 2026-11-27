@@ -80,6 +80,10 @@ interface GpuPayload {
   }[]
 }
 
+interface OllamaPlacement {
+  readonly models: readonly { readonly name: string; readonly sizeBytes: number; readonly vramBytes: number }[]
+}
+
 interface PhysicalTelemetry {
   readonly thermalZones: readonly { readonly temperatureC: number; readonly kind: 'acpi-zone' }[]
   readonly nvidia: readonly { readonly temperatureC: number | null; readonly utilizationPercent: number | null }[]
@@ -539,6 +543,45 @@ async function probeGpu(): Promise<{ value: GpuPayload | null; source: string; c
 }
 
 /** Read only OS/driver-reported metrics. A zone is not a CPU die; a busy GPU is not proof of inference. */
+async function probeOllamaPlacement(): Promise<{ value: OllamaPlacement | null; source: string; confidence: number }> {
+  // Fixed loopback, read-only endpoint; never follow redirects or send credentials.
+  try {
+    const response = await fetch('http://127.0.0.1:11434/api/ps', { redirect: 'error', signal: AbortSignal.timeout(1500) })
+    if (!response.ok || !response.body) throw new Error('Ollama status unavailable')
+    const reader = response.body.getReader()
+    const chunks: Uint8Array[] = []
+    let bytes = 0
+    try {
+      while (true) {
+        const next = await reader.read()
+        if (next.done) break
+        bytes += next.value.byteLength
+        if (bytes > 262_144) throw new Error('Ollama status exceeds limit')
+        chunks.push(next.value)
+      }
+    } finally {
+      await reader.cancel().catch(() => undefined)
+      reader.releaseLock()
+    }
+    const payload = asRecord(JSON.parse(Buffer.concat(chunks).toString('utf8')))
+    if (!Array.isArray(payload?.models)) throw new Error('Invalid Ollama status')
+    const models = payload.models.slice(0, 32).flatMap(item => {
+      const row = asRecord(item)
+      const name = row?.name
+      const size = row?.size
+      const vram = row?.size_vram
+      return typeof name === 'string' && name.length > 0 && name.length <= 256
+        && typeof size === 'number' && Number.isSafeInteger(size) && size > 0
+        && typeof vram === 'number' && Number.isSafeInteger(vram) && vram >= 0 && vram <= size
+        ? [{ name, sizeBytes: size, vramBytes: vram }] : []
+    })
+    if (payload.models.length > 0 && models.length === 0) throw new Error('Invalid Ollama model placement')
+    return { value: { models }, source: 'ollama-loopback-api-ps', confidence: 0.9 }
+  } catch {
+    return { value: null, source: 'ollama-loopback-unavailable', confidence: 0 }
+  }
+}
+
 async function probePhysicalTelemetry(): Promise<{ value: PhysicalTelemetry | null; source: string; confidence: number }> {
   if (platform() !== 'win32') return { value: null, source: 'unsupported-platform', confidence: 0 }
   const [zones, links, nvidia] = await Promise.all([
@@ -1206,6 +1249,7 @@ export class RealityContextEngine {
   private battery = cache<BatteryPayload>(null, 'not-probed', 1, 0)
   private gpu = cache<GpuPayload>(null, 'not-probed', 1, 0)
   private physical = cache<PhysicalTelemetry>(null, 'not-probed', 1, 0)
+  private ollamaPlacement = cache<OllamaPlacement>(null, 'not-probed', 1, 0)
   private clockSync = cache<boolean>(null, 'not-probed', 1, 0)
   private weather = cache<WeatherPayload>(null, 'not-configured', 1, 0)
   private browserWeather = cache<WeatherPayload>(null, 'not-probed', 1, 0)
@@ -1272,6 +1316,12 @@ export class RealityContextEngine {
       hostProbes.push((async () => {
         const probe = await probePhysicalTelemetry()
         this.physical = cache(probe.value, probe.source, 60_000, probe.confidence)
+      })())
+    }
+    if (now > this.ollamaPlacement.expiresAt) {
+      hostProbes.push((async () => {
+        const probe = await probeOllamaPlacement()
+        this.ollamaPlacement = cache(probe.value, probe.source, 60_000, probe.confidence)
       })())
     }
     if (now > this.userActivity.expiresAt) {
@@ -1393,6 +1443,7 @@ export class RealityContextEngine {
         this.battery,
         this.gpu,
         this.physical,
+        this.ollamaPlacement,
         this.clockSync,
         this.weather,
         this.browserWeather,
@@ -1548,15 +1599,20 @@ export class RealityContextEngine {
         gpu,
         temperature: {
           ...physical,
-          value: physical.stale || physical.value === null ? null : {
+          value: physical.stale || physical.value === null || (physical.value.thermalZones.length === 0 && !physical.value.nvidia.some(g => g.temperatureC !== null)) ? null : {
             acpiZones: physical.value.thermalZones,
             nvidiaGpu: physical.value.nvidia.map(g => g.temperatureC),
           },
           rule: 'ACPI thermal zones are not CPU die temperatures; unavailable values remain unknown',
         },
+        localModelPlacement: {
+          ...signal(this.ollamaPlacement, epoch),
+          inferenceVerified: false,
+          rule: 'Ollama reports resident model bytes in VRAM; this is not proof of GPU execution for a particular response',
+        },
         gpuUtilization: {
           ...physical,
-          value: physical.stale ? null : physical.value?.nvidia.map(g => g.utilizationPercent) ?? null,
+          value: physical.stale || !physical.value?.nvidia.some(g => g.utilizationPercent !== null) ? null : physical.value.nvidia.map(g => g.utilizationPercent),
           inferenceVerified: false,
           rule: 'driver GPU utilization does not identify inference workloads',
         },
@@ -1581,7 +1637,7 @@ export class RealityContextEngine {
         httpStatus: internet.value?.httpStatus ?? null,
         negotiatedLinkMbps: {
           ...physical,
-          value: physical.stale ? null : physical.value?.links ?? null,
+          value: physical.stale || !physical.value?.links.length ? null : physical.value.links,
           rule: 'negotiated network adapter link speed is not measured internet throughput',
         },
         bandwidthMbps: {
