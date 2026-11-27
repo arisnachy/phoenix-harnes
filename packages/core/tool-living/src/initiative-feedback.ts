@@ -34,7 +34,7 @@ export function loadInitiativeFeedback(memory:InitiativeMemory,id:string,now:num
 }
 export async function persistInitiativeFeedback(options:{memory:InitiativeMemory;sessionId:string;eventSeq:number;candidate:string;kind:InitiativeFeedbackKind;now:number;ask?:AdaptiveApprovalService;agent?:unknown;signal?:AbortSignal}){
   const {memory,sessionId,candidate,kind,now}=options
-  if(!validId(candidate)||!validKind(kind)||!options.ask||options.signal?.aborted)throw Error('INITIATIVE_FEEDBACK_APPROVAL_REQUIRED')
+  if(!validId(candidate)||!validKind(kind)||!Number.isFinite(now)||now<0||!options.ask||options.signal?.aborted)throw Error('INITIATIVE_FEEDBACK_APPROVAL_REQUIRED')
   const project=memory.projectIdForSession(sessionId)
   const questionId='initiative-feedback-save',allow='Guardar mi preferencia'
   const answer=await options.ask.ask({questions:[{id:questionId,header:'PHOENIX · Preferencias de iniciativa',question:'¿Recordar esta preferencia de iniciativa para futuras sesiones de este mismo ámbito?',detail:candidate+' · '+kind+'. No concede permisos adicionales.',sensitive:true,options:[{label:'No guardar',description:'Mantener solamente la sesión actual.',recommended:true},{label:allow,description:'Guardar únicamente esta categoría y decisión.'}]}],...(options.agent===undefined?{}:{agent:options.agent}),...(options.signal===undefined?{}:{signal:options.signal})})
@@ -43,5 +43,6 @@ export async function persistInitiativeFeedback(options:{memory:InitiativeMemory
   const subject=PREFIX+candidate,value=JSON.stringify({kind,at:now}),summary='Approved initiative preference: '+candidate+' / '+kind
   const row=await memory.rememberCognitive({sessionId,eventSeq:options.eventSeq,...(project===undefined?{}:{projectId:project}),kind:'preference',layers:['semantic','temporal'],subject,value,summary,content:summary,sourceEventType:'tool/phoenix_living_initiative',occurredAt:now,confidence:1,importance:0.6})
   if(row.status!=='active'||row.subject!==subject||row.value!==value||!scoped(row,sessionId,project))throw Error('INITIATIVE_FEEDBACK_PERSISTENCE_UNVERIFIED')
+  if(!loadInitiativeFeedback(memory,sessionId,now).some(r=>r.id===candidate&&r.kind===kind&&r.at===now))throw Error('INITIATIVE_FEEDBACK_READBACK_FAILED')
   return {recorded:true,persistent:true,scope:project===undefined?'session':'project',executionAuthority:'unchanged'}
 }
