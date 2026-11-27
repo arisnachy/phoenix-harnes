@@ -1,18 +1,20 @@
 /** PHOENIX local network observation and explicitly approved administration. */
 import { execFile } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { isIP } from 'node:net'
 import process from 'node:process'
 
 type Reply={ok:boolean;stdout:string}
 type Runner=(file:string,args:string[])=>Promise<Reply>
 type Approval=(detail:{target:string;effect:string})=>Promise<boolean>
-type Host={gateway:string;address:string;prefix:number;index:number;received:number|null;sent:number|null;neighbors:{address:string;state:string}[]}
+type Host={gateway:string;address:string;prefix:number;index:number;received:number|null;sent:number|null;neighbors:{address:string;state:string;mac:string|null}[];ipv6Neighbors:number|null;linkSpeed:string|null;adapterStatus:string|null;dnsServerCount:number|null}
 const runLocal:Runner=(file,args)=>new Promise(resolve=>{
   execFile(file,args,{encoding:'utf8',windowsHide:true,shell:false,timeout:12000,maxBuffer:262144},
     (error,stdout)=>resolve({ok:!error,stdout:error?'':stdout}))
 })
-const PROBE="$ErrorActionPreference='Stop'; $r=Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' | Where-Object {$_.NextHop -ne '0.0.0.0'} | Sort-Object RouteMetric | Select-Object -First 1; if (!$r) {throw 'No default route'}; $i=$r.InterfaceIndex; $a=Get-NetIPAddress -AddressFamily IPv4 -InterfaceIndex $i | Where-Object {$_.AddressState -eq 'Preferred' -and $_.IPAddress -notlike '169.254.*'} | Select-Object -First 1; if (!$a) {throw 'No address'}; $s=$null; try {$n=Get-NetAdapter -InterfaceIndex $i; $s=Get-NetAdapterStatistics -Name $n.Name} catch {}; @{gateway=$r.NextHop;address=$a.IPAddress;prefix=$a.PrefixLength;index=$i;received=$s.ReceivedBytes;sent=$s.SentBytes;neighbors=@(Get-NetNeighbor -AddressFamily IPv4 -InterfaceIndex $i | Select-Object -First 512 IPAddress,@{n='State';e={[string]$_.State}})} | ConvertTo-Json -Depth 4 -Compress"
+const PROBE="$ErrorActionPreference='Stop'; $r=Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' | Where-Object {$_.NextHop -ne '0.0.0.0'} | Sort-Object RouteMetric | Select-Object -First 1; if (!$r) {throw 'No default route'}; $i=$r.InterfaceIndex; $a=Get-NetIPAddress -AddressFamily IPv4 -InterfaceIndex $i | Where-Object {$_.AddressState -eq 'Preferred' -and $_.IPAddress -notlike '169.254.*'} | Select-Object -First 1; if (!$a) {throw 'No address'}; $s=$null; try {$n=Get-NetAdapter -InterfaceIndex $i; $s=Get-NetAdapterStatistics -Name $n.Name} catch {}; @{gateway=$r.NextHop;address=$a.IPAddress;prefix=$a.PrefixLength;index=$i;received=$s.ReceivedBytes;sent=$s.SentBytes;linkSpeed=[string]$n.LinkSpeed;adapterStatus=[string]$n.Status;dnsServerCount=@(Get-DnsClientServerAddress -InterfaceIndex $i -ErrorAction SilentlyContinue | ForEach-Object {$_.ServerAddresses}).Count;ipv6Neighbors=@(Get-NetNeighbor -AddressFamily IPv6 -InterfaceIndex $i -ErrorAction SilentlyContinue | Where-Object {$_.State -in @('Reachable','Stale','Delay','Probe','Permanent') -and $_.IPAddress -notlike 'ff*' -and $_.IPAddress -ne '::'} | Select-Object -First 512).Count;neighbors=@(Get-NetNeighbor -AddressFamily IPv4 -InterfaceIndex $i | Select-Object -First 512 IPAddress,LinkLayerAddress,@{n='State';e={[string]$_.State}})} | ConvertTo-Json -Depth 4 -Compress"
 const states=new Set(['Reachable','Stale','Delay','Probe','Permanent','Unreachable','Incomplete'])
 function privateIP(v:unknown):v is string {
   if(typeof v!=='string'||isIP(v)!==4)return false
@@ -37,11 +39,29 @@ function parse(text:string):Record<string,unknown>|null{
 }
 const integer=(v:unknown)=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0?v:null
 const label=(v:unknown)=>typeof v==='string'?v.replace(/[\x00-\x1f\x7f]/gu,'').slice(0,80):null
+function identitySalt(persist: boolean): Buffer {
+  if (!persist || !process.env.LOCALAPPDATA) return randomBytes(32)
+  try {
+    const dir = join(process.env.LOCALAPPDATA, 'PHOENIX', 'network')
+    const path = join(dir, 'identity-salt-v1')
+    mkdirSync(dir, { recursive: true })
+    try { writeFileSync(path, randomBytes(32), { flag: 'wx' }) } catch { /* existing salt or unavailable store */ }
+    const stored = readFileSync(path)
+    if (stored.length === 32) return stored
+  } catch { /* local persistence unavailable */ }
+  return randomBytes(32)
+}
+function macAddress(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const mac = value.replace(/[:-]/gu, '').toLowerCase()
+  return /^[a-f0-9]{12}$/u.test(mac) && mac !== '000000000000' && mac !== 'ffffffffffff' &&
+    (parseInt(mac.slice(0, 2), 16) & 1) === 0 ? mac : null
+}
 export class NetworkIntelligence {
-  private readonly salt=randomBytes(32)
+  private readonly salt: Buffer
   private previous:{key:string;time:number;received:number|null;sent:number|null;ids:Set<string>}|null=null
   private lastDiscovery=0
-  constructor(private readonly run:Runner=runLocal,private readonly platform:string=process.platform,private readonly now:()=>number=Date.now){}
+  constructor(private readonly run:Runner=runLocal,private readonly platform:string=process.platform,private readonly now:()=>number=Date.now){ this.salt=identitySalt(run===runLocal&&platform==='win32') }
   private async call(file:string,args:string[]):Promise<Reply>{
     try{return await this.run(file,args)}catch{return {ok:false,stdout:''}}
   }
@@ -53,28 +73,32 @@ export class NetworkIntelligence {
     if(!p||!privateIP(p.gateway)||!privateIP(p.address))return null
     const prefix=integer(p.prefix),index=integer(p.index)
     if(prefix===null||prefix<16||prefix>30||index===null)return null
-    const h:Host={gateway:p.gateway,address:p.address,prefix,index,received:integer(p.received),sent:integer(p.sent),neighbors:[]}
+    const h:Host={gateway:p.gateway,address:p.address,prefix,index,received:integer(p.received),sent:integer(p.sent),neighbors:[],ipv6Neighbors:integer(p.ipv6Neighbors),linkSpeed:label(p.linkSpeed),adapterStatus:label(p.adapterStatus),dnsServerCount:integer(p.dnsServerCount)}
     if(!onLink(h.gateway,h))return null
     const neighbors=Array.isArray(p.neighbors)?p.neighbors:[]
     for(const raw of neighbors.slice(0,512)){
       const n=record(raw)
       if(!n||!privateIP(n.IPAddress)||!onLink(n.IPAddress,h)||n.IPAddress===h.address||typeof n.State!=='string'||!states.has(n.State))continue
-      if(!h.neighbors.some(x=>x.address===n.IPAddress))h.neighbors.push({address:n.IPAddress,state:n.State})
+      if(!h.neighbors.some(x=>x.address===n.IPAddress))h.neighbors.push({address:n.IPAddress,state:n.State,mac:macAddress(n.LinkLayerAddress)})
     }
     return h
   }
   private key(h:Host){return h.gateway+'|'+h.address+'|'+h.prefix+'|'+h.index}
+  private deviceId(h:Host,n:Host['neighbors'][number]){
+    const gatewayMac=h.neighbors.find(x=>x.address===h.gateway)?.mac
+    return gatewayMac&&n.mac?this.id('mac|'+gatewayMac+'|'+n.mac):this.id('address|'+this.key(h)+'|'+n.address)
+  }
   async inventory(){
     const h=await this.host()
     if(!h)return {status:'unavailable',reason:'PRIVATE_ON_LINK_WINDOWS_ROUTE_NOT_CONFIRMED'}
-    const devices=h.neighbors.map(n=>({id:this.id(this.key(h)+'|'+n.address),address:n.address,state:n.state,role:n.address===h.gateway?'gateway':'neighbor'}))
+    const devices=h.neighbors.map(n=>({id:this.deviceId(h,n),identity:n.mac&&h.neighbors.some(x=>x.address===h.gateway&&x.mac)?'link-layer':'address-only',address:n.address,state:n.state,role:n.address===h.gateway?'gateway':'neighbor'}))
     return {status:'completed',observedAt:new Date(this.now()).toISOString(),gateway:h.gateway,localAddress:h.address,prefix:h.prefix,
-      devices,traffic:{receivedBytes:h.received,sentBytes:h.sent},limitations:['Neighbor cache is not a complete device list. Stale entries are not proof of online status. IP addresses can be reassigned. Traffic counters are for the local host interface only.']}
+      devices,link:{speed:h.linkSpeed,status:h.adapterStatus,dnsServerCount:h.dnsServerCount,ipv6NeighborCount:h.ipv6Neighbors},traffic:{receivedBytes:h.received,sentBytes:h.sent},limitations:['Neighbor cache is not a complete device list. Stale entries are not proof of online status. IP addresses can be reassigned; link-layer IDs are pseudonyms, can change or be spoofed, and do not prove identity. IPv6 count is a passive interface cache. Traffic counters are for the local host interface only.']}
   }
   async monitor(){
     const h=await this.host()
     if(!h)return {status:'unavailable'}
-    const key=this.key(h),time=this.now(),ids=new Set(h.neighbors.map(n=>this.id(key+'|'+n.address)))
+    const key=this.key(h),time=this.now(),ids=new Set(h.neighbors.map(n=>this.deviceId(h,n)))
     const old=this.previous?.key===key?this.previous:null
     this.previous={key,time,received:h.received,sent:h.sent,ids}
     const seconds=old?(time-old.time)/1000:0
