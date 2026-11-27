@@ -12,7 +12,7 @@ const runLocal:Runner=(file,args)=>new Promise(resolve=>{
   execFile(file,args,{encoding:'utf8',windowsHide:true,shell:false,timeout:12000,maxBuffer:262144},
     (error,stdout)=>resolve({ok:!error,stdout:error?'':stdout}))
 })
-const PROBE="$ErrorActionPreference='Stop'; $r=Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' | Where-Object {$_.NextHop -ne '0.0.0.0'} | Sort-Object RouteMetric | Select-Object -First 1; if (!$r) {throw 'No default route'}; $i=$r.InterfaceIndex; $a=Get-NetIPAddress -AddressFamily IPv4 -InterfaceIndex $i | Where-Object {$_.AddressState -eq 'Preferred' -and $_.IPAddress -notlike '169.254.*'} | Select-Object -First 1; if (!$a) {throw 'No address'}; $s=$null; try {$n=Get-NetAdapter -InterfaceIndex $i; $s=Get-NetAdapterStatistics -Name $n.Name} catch {}; @{gateway=$r.NextHop;address=$a.IPAddress;prefix=$a.PrefixLength;index=$i;received=$s.ReceivedBytes;sent=$s.SentBytes;neighbors=@(Get-NetNeighbor -AddressFamily IPv4 -InterfaceIndex $i | Select-Object -First 512 IPAddress,State)} | ConvertTo-Json -Depth 4 -Compress"
+const PROBE="$ErrorActionPreference='Stop'; $r=Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' | Where-Object {$_.NextHop -ne '0.0.0.0'} | Sort-Object RouteMetric | Select-Object -First 1; if (!$r) {throw 'No default route'}; $i=$r.InterfaceIndex; $a=Get-NetIPAddress -AddressFamily IPv4 -InterfaceIndex $i | Where-Object {$_.AddressState -eq 'Preferred' -and $_.IPAddress -notlike '169.254.*'} | Select-Object -First 1; if (!$a) {throw 'No address'}; $s=$null; try {$n=Get-NetAdapter -InterfaceIndex $i; $s=Get-NetAdapterStatistics -Name $n.Name} catch {}; @{gateway=$r.NextHop;address=$a.IPAddress;prefix=$a.PrefixLength;index=$i;received=$s.ReceivedBytes;sent=$s.SentBytes;neighbors=@(Get-NetNeighbor -AddressFamily IPv4 -InterfaceIndex $i | Select-Object -First 512 IPAddress,@{n='State';e={[string]$_.State}})} | ConvertTo-Json -Depth 4 -Compress"
 const states=new Set(['Reachable','Stale','Delay','Probe','Permanent','Unreachable','Incomplete'])
 function privateIP(v:unknown):v is string {
   if(typeof v!=='string'||isIP(v)!==4)return false
@@ -113,12 +113,12 @@ export class NetworkIntelligence {
   private ssh(host:string,user:string,command:string){
     return this.call('ssh',['-F','none','-T','-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','ConnectTimeout=5','-o','ClearAllForwardings=yes','-o','ForwardAgent=no','-o','IdentitiesOnly=yes','-o','PasswordAuthentication=no','-o','KbdInteractiveAuthentication=no',user+'@'+host,command])
   }
-  async router(user:string,operation:'inspect'|'reboot',approve:Approval,signal?:AbortSignal){
+  async router(user:string,operation:'inspect'|'reboot'|'wifi-reload',approve:Approval,signal?:AbortSignal){
     const before=await this.host()
     if(!before||!/^[a-z_][a-z0-9_-]{0,31}$/u.test(user)||signal?.aborted)return {status:'denied',reason:'CONFIRMED_GATEWAY_AND_EXPLICIT_SSH_USER_REQUIRED'}
-    if(operation!=='inspect'&&operation!=='reboot')return {status:'denied',reason:'UNSUPPORTED_OPERATION'}
+    if(operation!=='inspect'&&operation!=='reboot'&&operation!=='wifi-reload')return {status:'denied',reason:'UNSUPPORTED_OPERATION'}
     let allowed=false
-    try{allowed=await approve({target:user+'@'+before.gateway,effect:operation==='inspect'?'Read OpenWrt board, WAN state and DHCP lease counts using an existing authorized SSH key and trusted host key.':'Restart the OpenWrt router. Internet and local connections may be interrupted for all devices. No settings changes.'})}catch{/* deny */}
+    try{allowed=await approve({target:user+'@'+before.gateway,effect:operation==='inspect'?'Read OpenWrt board, WAN, Wi-Fi, uptime and DHCP lease information using an existing authorized SSH key and trusted host key.':operation==='wifi-reload'?'Reload OpenWrt wireless configuration without editing settings. Connected Wi-Fi devices may temporarily lose access.':'Restart the OpenWrt router. Internet and local connections may be interrupted for all devices. No settings changes.'})}catch{/* deny */}
     if(!allowed||signal?.aborted)return {status:'denied',reason:'HUMAN_APPROVAL_NOT_GIVEN'}
     const after=await this.host()
     if(!after||this.key(after)!==this.key(before)||signal?.aborted)return {status:'denied',reason:'NETWORK_CHANGED'}
@@ -127,17 +127,20 @@ export class NetworkIntelligence {
     const release=record(p?.release)
     if(!p||release?.distribution!=='OpenWrt')return {status:'unavailable',reason:'OPENWRT_NOT_VERIFIED_OR_SSH_UNAVAILABLE'}
     if(signal?.aborted)return {status:'denied',reason:'CANCELLED'}
-    if(operation==='reboot'){
+    if(operation==='reboot'||operation==='wifi-reload'){
       const current=await this.host()
       if(!current||this.key(current)!==this.key(after)||signal?.aborted)return {status:'denied',reason:'NETWORK_CHANGED'}
-      const result=await this.ssh(after.gateway,user,'ubus call system reboot')
+      const result=await this.ssh(after.gateway,user,operation==='reboot'?'ubus call system reboot':'wifi reload')
       return {status:result.ok?'command-accepted':'unknown-outcome',verified:false,next:'Reconnect and inspect router status; do not automatically retry.'}
     }
-    const [wan,leases]=await Promise.all([this.ssh(after.gateway,user,'ubus call network.interface.wan status'),this.ssh(after.gateway,user,'cat /tmp/dhcp.leases')])
+    const [wan,leases,wireless,system]=await Promise.all([this.ssh(after.gateway,user,'ubus call network.interface.wan status'),this.ssh(after.gateway,user,'cat /tmp/dhcp.leases'),this.ssh(after.gateway,user,'ubus call network.wireless status'),this.ssh(after.gateway,user,'ubus call system info')])
     const w=wan.ok?parse(wan.stdout):null
+    const radios=wireless.ok?parse(wireless.stdout):null
+    const info=system.ok?parse(system.stdout):null
+    const radioStatus=radios?Object.entries(radios).slice(0,16).map(([name,raw])=>({name:/^[A-Za-z0-9_-]{1,32}$/u.test(name)?name:'unknown',up:typeof record(raw)?.up==='boolean'?record(raw)?.up:null})):null
     const leaseCount=leases.ok?leases.stdout.split(/\r?\n/u).filter(x=>/^\d+\s+[a-f0-9:]+\s+\d+\.\d+\.\d+\.\d+\s/iu.test(x)).length:null
-    return {status:w&&leaseCount!==null?'completed':'partial',vendor:'OpenWrt',model:label(p.model),version:label(release.version),
-      wanUp:typeof w?.up==='boolean'?w.up:null,wanUptimeSeconds:integer(w?.uptime),dhcpLeaseCount:leaseCount,
+    return {status:w&&leaseCount!==null&&radios&&info?'completed':'partial',vendor:'OpenWrt',model:label(p.model),version:label(release.version),
+      wanUp:typeof w?.up==='boolean'?w.up:null,wanUptimeSeconds:integer(w?.uptime),dhcpLeaseCount:leaseCount,routerUptimeSeconds:integer(info?.uptime),radios:radioStatus,
       limitations:['Only supported OpenWrt commands. No credentials, MAC addresses, hostnames, wireless keys, firewall rules or WAN addresses returned.']}
   }
 }
