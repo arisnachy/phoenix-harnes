@@ -64,9 +64,12 @@ function samplePosition(signal?: AbortSignal): Promise<BrowserClientLocation | u
             finish(undefined)
             return
           }
-          const timestamp = Number.isFinite(position.timestamp) && position.timestamp > 0
-            ? Math.round(position.timestamp)
-            : Date.now()
+          const timestamp = Math.round(position.timestamp)
+          const now = Date.now()
+          if (settled || !Number.isFinite(timestamp) || timestamp <= 0 || timestamp > now + 60_000 || now - timestamp > CACHE_MAX_AGE_MS) {
+            finish(undefined)
+            return
+          }
           const value: BrowserClientLocation = {
             latitude,
             longitude,
@@ -99,13 +102,25 @@ function samplePosition(signal?: AbortSignal): Promise<BrowserClientLocation | u
 export async function resolvedClientLocation(
   signal?: AbortSignal,
 ): Promise<BrowserClientLocation | undefined> {
-  const now = Date.now()
-  const cachedValue = usableCached(now)
-  if (cachedValue !== undefined) return cachedValue
-  if (!(await permissionGranted())) return undefined
   if (signal?.aborted) return undefined
-  if (inFlight !== undefined) return inFlight
-  const job = samplePosition(signal).finally(() => {
+  if (!(await permissionGranted())) {
+    cached = undefined
+    return undefined
+  }
+  if (signal?.aborted) return undefined
+  const cachedValue = usableCached(Date.now())
+  if (cachedValue !== undefined) return cachedValue
+  if (inFlight !== undefined) {
+    const value = await inFlight
+    return !signal?.aborted && await permissionGranted() ? value : undefined
+  }
+  const job = samplePosition(signal).then(async value => {
+    if (signal?.aborted || !(await permissionGranted())) {
+      cached = undefined
+      return undefined
+    }
+    return value
+  }).finally(() => {
     if (inFlight === job) inFlight = undefined
   })
   inFlight = job

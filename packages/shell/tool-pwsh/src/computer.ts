@@ -1693,7 +1693,12 @@ export function systemBrowserOpenInvocation(url: string): ComputerInvocation {
 
 function executeComputerInvocation(invocation: ComputerInvocation, signal?: AbortSignal): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = execFile(invocation.file, [...invocation.argv], {
+    // GUI launchers and stripped-down runtimes may omit Windows PowerShell from PATH.
+    // Use the same fixed system executable used by Windows proprioception.
+    const executable = process.platform === 'win32' && invocation.file === 'powershell.exe'
+      ? join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+      : invocation.file
+    const child = execFile(executable, [...invocation.argv], {
       encoding: 'utf8',
       windowsHide: true,
       maxBuffer: 64 * 1024 * 1024,

@@ -20,7 +20,7 @@ describe('resolvedClientLocation', () => {
   })
 
   it('returns a bounded browser observation when permission is already granted', async () => {
-    const observedAt = Date.parse('2026-09-20T18:00:00.000Z')
+    const observedAt = Date.now()
     const getCurrentPosition = vi.fn((success: PositionCallback) => {
       success({
         coords: {
@@ -49,6 +49,27 @@ describe('resolvedClientLocation', () => {
       accuracyMeters: 22,
       observedAt,
     })
+    expect(getCurrentPosition).toHaveBeenCalledTimes(1)
+  })
+  it('rejects expired observations rather than reporting them as current', async () => {
+    const getCurrentPosition = vi.fn((success: PositionCallback) => {
+      success({ coords: { latitude: 19, longitude: -70, accuracy: 20 }, timestamp: Date.now() - 120_000 } as GeolocationPosition)
+    })
+    vi.stubGlobal('navigator', { permissions: { query: async () => ({ state: 'granted' }) }, geolocation: { getCurrentPosition } })
+    const { resolvedClientLocation } = await import('../src/client/location.ts')
+    await expect(resolvedClientLocation()).resolves.toBeUndefined()
+  })
+
+  it('does not return a cached location after permission is revoked', async () => {
+    let state = 'granted'
+    const getCurrentPosition = vi.fn((success: PositionCallback) => {
+      success({ coords: { latitude: 19, longitude: -70, accuracy: 20 }, timestamp: Date.now() } as GeolocationPosition)
+    })
+    vi.stubGlobal('navigator', { permissions: { query: async () => ({ state }) }, geolocation: { getCurrentPosition } })
+    const { resolvedClientLocation } = await import('../src/client/location.ts')
+    await expect(resolvedClientLocation()).resolves.toBeDefined()
+    state = 'denied'
+    await expect(resolvedClientLocation()).resolves.toBeUndefined()
     expect(getCurrentPosition).toHaveBeenCalledTimes(1)
   })
 })
