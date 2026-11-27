@@ -26,7 +26,7 @@ describe('Finix resident', () => {
   })
   it('persists a genuine observation and deduplicates the same alert across audits', async () => {
     const store = new MemoryProactivityStore()
-    const engine = new ProactivityEngine(store, { execute: async input => executeFinixResident(input, engine, hardness, 4) })
+    const engine: ProactivityEngine = new ProactivityEngine(store, { execute: async input => executeFinixResident(input, engine, hardness, 4) })
     await ensureFinixResident(engine, new Date(Date.now() - 1000))
     await engine.runDue(new Date())
     const rows = await engine.list()
