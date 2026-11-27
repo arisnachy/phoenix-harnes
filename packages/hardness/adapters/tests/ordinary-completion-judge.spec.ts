@@ -349,3 +349,36 @@ describe('ordinary completion judge', () => {
   })
 
 })
+
+describe('META live independent reviewer receipts', () => {
+  it('rejects contradictory passes and proves the alternate request route before accepting its verdict', async () => {
+    const route = { provider: 'gemini', model: 'reviewer' }
+    let serving = route
+    let changes: string[] = []
+    const dispose = vi.fn(async () => {})
+    const start = vi.fn<SubagentRuntime['start']>(async () => ({
+      id: 'meta-review' as never,
+      localAgent: { session: { events: [{ type: 'assistant/message', data: { message: { source: serving } } }] } } as never,
+      result: Promise.resolve({ stopReason: 'completed' as const, output: [], structured: {
+        verdict: 'pass', summary: 'reviewed', evidence: ['test:1'], known_limitations: [],
+        risk_coverage: { ambiguity: true, limitations: true, report_integrity: true }, required_changes: changes,
+      } }), dispose,
+    }))
+    const review = () => reviewOrdinaryCompletion({
+      subagents: { getProvider: () => ({ inheritsParentContext: false, capabilities: { outputSchema: true, toolFilter: true } }) as never, start },
+      provider: 'spawn', parent, request: 'review architecture', mutations: ['write'], verifications: ['test'],
+      signal: new AbortController().signal, route,
+    })
+    await expect(review()).resolves.toMatchObject({ verdict: 'pass', servingRoute: route })
+    expect(start.mock.calls[0]?.[1].agentOptions).toEqual(route)
+    const prompt = start.mock.calls[0]?.[1].prompt.flatMap(block => block.type === 'text' ? [block.text] : []).join(' ') ?? ''
+    expect(prompt).toContain('disconfirming observation')
+    expect(prompt).toContain('selection bias')
+    serving = { provider: 'codex', model: 'luna' }
+    await expect(review()).resolves.toMatchObject({ verdict: 'blocked' })
+    serving = route
+    changes = ['repair mandatory defect']
+    await expect(review()).resolves.toMatchObject({ verdict: 'blocked' })
+    expect(dispose).toHaveBeenCalledTimes(3)
+  })
+})
