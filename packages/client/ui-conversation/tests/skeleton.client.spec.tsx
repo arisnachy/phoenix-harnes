@@ -297,21 +297,15 @@ function mount(
 }
 
 describe('Hero chrome', () => {
-  it('renders the durable profile name and delegates the Phoenix mark through the hero slot', () => {
+  it('renders the durable profile name and the cute mascot without a hero emblem', () => {
     const renderSlot = vi.fn<HeroShellProps['renderSlot']>(() => null)
     const view = render(
       <HeroShell t={makeTranslate(en, commonEn)} renderSlot={renderSlot} preferredName="Profile User" />,
     )
     expect(view.getByText('Profile User')).toBeTruthy()
-    expect(renderSlot).toHaveBeenCalledOnce()
-    expect(renderSlot.mock.calls[0]?.[0]).toBe('conversation.hero.brand.mark')
-    const brandMarkOwner = renderSlot.mock.calls[0]?.[1]
-    if (brandMarkOwner === undefined || !('size' in brandMarkOwner) || !('className' in brandMarkOwner)) {
-      throw new Error('hero brand-mark owner must provide size and className')
-    }
-    expect(brandMarkOwner.size).toBe(64)
-    expect(brandMarkOwner.className).toBeTypeOf('string')
-    expect(renderSlot.mock.calls[0]?.[2]?.fallback).toBeTruthy()
+    expect(renderSlot).not.toHaveBeenCalled()
+    expect(view.getByRole('button', { name: 'Saludar al fénix' }).querySelector('[data-mascot-pose]')).not.toBeNull()
+    expect(view.container.querySelector('[data-welcome-subtitle]')?.textContent).toBeTruthy()
   })
 })
 
@@ -341,7 +335,7 @@ describe('ConversationRoot resident composer', () => {
   it('keeps the original composer and universal Kira mission starters', () => {
     const b = mount(conversationSnapshot({ composerPhase: 'blank', blank: true }))
     expect(b.view.getByRole('textbox')).toBeTruthy()
-    expect(b.view.getByText(/podemos trabajar hoy/)).toBeTruthy()
+    expect(b.view.container.querySelector('[data-welcome-subtitle]')?.textContent).toBeTruthy()
     expect(b.view.queryByRole('button', { name: 'Crear' })).toBeNull()
     expect(b.view.queryByRole('button', { name: 'Analizar' })).toBeNull()
     expect(b.view.queryByRole('button', { name: 'Programar' })).toBeNull()
@@ -497,7 +491,7 @@ describe('ConversationRoot resident composer', () => {
     expect(host).not.toBeNull()
     expect(header?.getAttribute('aria-hidden')).toBe('true')
     expect(b.view.getByRole('heading', { level: 1 })).toBeTruthy()
-    expect(b.view.getByText('¿En qué podemos trabajar hoy?')).toBeTruthy()
+    expect(b.view.container.querySelector('[data-welcome-subtitle]')?.textContent).toBeTruthy()
     expect(b.view.queryByTestId('view-chat')).toBeNull()
     // The same machine-backed textarea is live in the hero, and the
     // persistence mirror stays bound (ConversationSession mounts chrome-hidden
