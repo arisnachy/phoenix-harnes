@@ -1321,7 +1321,7 @@ export class RealityContextEngine {
   }
 
   /** Minimal cached signals for resident autonomic regulation; never starts a probe. */
-  autonomicSignals(now = new Date()): { internetReachable: boolean | null; batteryDischargingPercent: number | null; observedAt: number } {
+  autonomicSignals(now = new Date()): { internetReachable: boolean | null; batteryDischargingPercent: number | null; batteryKnownNotDischarging: boolean; observedAt: number } {
     const epoch = now.getTime()
     const network = signal(this.internet, epoch)
     const battery = signal(this.battery, epoch)
@@ -1331,6 +1331,8 @@ export class RealityContextEngine {
       .map(row => row.chargePercent as number)
     return { internetReachable: network.stale ? null : network.value?.reachable ?? null,
       batteryDischargingPercent: charges.length === 0 ? null : Math.min(...charges),
+      batteryKnownNotDischarging: !battery.stale && battery.value !== null
+        && (!battery.value.present || (battery.value.batteries.length > 0 && battery.value.batteries.every(row => [2,3,6,7,8,9,11].includes(row.statusCode ?? -1)))),
       observedAt: this.internet.observedAt }
   }
 
