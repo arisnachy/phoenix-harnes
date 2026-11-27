@@ -84,7 +84,10 @@ export class ManagedRouter {
     return p?{status:'enrolled',vendor:p.vendor,gateway:p.gateway,transport:'https',authenticated:false}
       :{status:'enrollment-required',setup:'Run scripts/phoenix-router-enroll.ps1 locally in Windows PowerShell. Never paste credentials into the chat.'}
   }
+  private readonly failures = new Map<string,number>()
   async inspect(gateway:string, current:()=>Promise<string|null>) {
+    const failedAt=this.failures.get(gateway)
+    if(failedAt!==undefined && Date.now()-failedAt<60000)return {status:'unavailable',reason:'ROUTER_AUTH_COOLDOWN'}
     const p=await this.profile(gateway)
     if(!p)return this.status(gateway)
     if(await current()!==gateway)return {status:'denied',reason:'NETWORK_CHANGED'}
@@ -127,6 +130,53 @@ export class ManagedRouter {
           uptimeSeconds:number(info?.uptime),wanUp:typeof net?.up==='boolean'?net.up:null,
           radios:wifi?Object.entries(wifi).slice(0,16).map(([name,v])=>({name:label(name),up:typeof obj(v)?.up==='boolean'?obj(v)?.up:null})):null}
       } finally {try{await call(session,'session','destroy',{ubus_rpc_session:session})}catch{/* bounded server session expires */}}
-    } catch {return {status:'unavailable',reason:'ROUTER_AUTH_TLS_OR_API_FAILED',next:'Verify the enrolled account, certificate and enabled API locally. Do not guess passwords or automatically retry.'}}
+    } catch {this.failures.set(gateway,Date.now());return {status:'unavailable',reason:'ROUTER_AUTH_TLS_OR_API_FAILED',next:'Verify the enrolled account, certificate and enabled API locally. Do not guess passwords or automatically retry.'}}
   }
+  /** A separately approved restart; transport success is not proof of recovery. */
+  async reboot(gateway:string,current:()=>Promise<string|null>,approve:(detail:{target:string;effect:string})=>Promise<boolean>,signal?:AbortSignal) {
+    const p=await this.profile(gateway)
+    if(!p)return this.status(gateway)
+    if(signal?.aborted || await current()!==gateway)return {status:'denied',reason:'NETWORK_CHANGED_OR_CANCELLED'}
+    let allowed=false
+    try{allowed=await approve({target:gateway,effect:'Restart the enrolled '+p.vendor+' router. Internet and local network access may be interrupted. No configuration edits.'})}catch{/* approval unavailable */}
+    if(!allowed||signal?.aborted)return {status:'denied',reason:'HUMAN_APPROVAL_NOT_GIVEN'}
+    const fresh=await this.profile(gateway)
+    if(!fresh||JSON.stringify(fresh)!==JSON.stringify(p)||await current()!==gateway)return {status:'denied',reason:'NETWORK_OR_ENROLLMENT_CHANGED'}
+    const failedAt=this.failures.get(gateway)
+    if(failedAt!==undefined&&Date.now()-failedAt<60000)return {status:'unavailable',reason:'ROUTER_AUTH_COOLDOWN'}
+    const secret=await this.decrypt(p.encrypted)
+    if(secret===null)return {status:'unavailable',reason:'LOCAL_VAULT_LOCKED'}
+    let dispatched=false
+    try{
+      if(p.vendor==='mikrotik'){
+        const auth='Basic '+Buffer.from(p.username+':'+secret,'utf8').toString('base64')
+        const resource=obj(await this.send(p,'GET','/rest/system/resource',auth))
+        if(!resource||typeof resource.version!=='string'||typeof resource['board-name']!=='string')return {status:'unavailable',reason:'ROUTEROS_NOT_VERIFIED'}
+        if(signal?.aborted||await current()!==gateway)return {status:'denied',reason:'NETWORK_CHANGED_OR_CANCELLED'}
+        dispatched=true
+        await this.send(p,'POST','/rest/system/reboot',auth,{})
+      }else{
+        const rpc=async(session:string,object:string,method:string,args:Record<string,unknown>={})=>{
+          const result=obj(await this.send(p,'POST','/ubus',undefined,{jsonrpc:'2.0',id:1,method:'call',params:[session,object,method,args]}))?.result
+          if(!Array.isArray(result)||result[0]!==0)throw new Error('UBUS_DENIED')
+          return obj(result[1])
+        }
+        const login=await rpc('00000000000000000000000000000000','session','login',{username:p.username,password:secret,timeout:60})
+        const session=login?.ubus_rpc_session
+        if(typeof session!=='string'||!/^[a-f0-9]{32}$/u.test(session))return {status:'unavailable',reason:'ROUTER_LOGIN_FAILED'}
+        try{
+          const board=await rpc(session,'system','board')
+          if(obj(board?.release)?.distribution!=='OpenWrt')return {status:'unavailable',reason:'OPENWRT_NOT_VERIFIED'}
+          if(signal?.aborted||await current()!==gateway)return {status:'denied',reason:'NETWORK_CHANGED_OR_CANCELLED'}
+          dispatched=true
+          await rpc(session,'system','reboot')
+        }finally{if(!dispatched)try{await rpc(session,'session','destroy',{ubus_rpc_session:session})}catch{/* session expires */}}
+      }
+      return {status:'command-accepted',verified:false,next:'Wait for router recovery, then perform a fresh inspection. Never automatically retry a restart.'}
+    }catch{
+      if(!dispatched)this.failures.set(gateway,Date.now())
+      return dispatched?{status:'unknown-outcome',verified:false,next:'Reconnect and inspect. Do not automatically retry.'}:{status:'unavailable',reason:'ROUTER_AUTH_TLS_OR_API_FAILED'}
+    }
+  }
+
 }
