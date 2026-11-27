@@ -10,6 +10,7 @@ import { SessionToolFactory } from './session-tool-factory.ts'
 import { livingActionSafety } from './living-action-safety.ts'
 import { assessSelfInitiative, SELF_GOALS } from './self-initiative.ts'
 import { inspectSystemEnvironment, searchLocalApps } from './system-proprioception.ts'
+import { DeviceNetworkRecovery } from './device-network-recovery.ts'
 import { DeviceAdapters } from './device-adapters.ts'
 import { DeviceIntelligence } from './device-intelligence.ts'
 import { WindowsProprioception } from './windows-proprioception.ts'
@@ -288,6 +289,39 @@ function assertTargetReached(snapshot: LivingCreationSnapshot): void {
 /** Register the universal living-creation policy and model controls. */
 export function apply(ctx: Context): void {
 
+
+
+  const networkRecovery = new DeviceNetworkRecovery()
+  ctx.systemPrompt.section({name:'phoenix:device-network-recovery',order:118,text:'For explicitly authorized device support use phoenix_device_network for already-connected private IPv4 Android/TV devices, Samsung Download Mode or Apple Recovery/DFU detection, and approved read-only SSH diagnostics on a private Linux host. Do not initiate ADB pairing or network scans, bypass locks, guess addresses, use arbitrary commands, or claim firmware repair. For remote Linux ask the user for the actual host and account and use the interactive authorization gate; do not weaken host key verification.'})
+  ctx.tools.register(defineTool({
+    name:'phoenix_device_network',
+    description:'Detect existing private IPv4 ADB connections, read model/OS/TV classification, detect Samsung Download Mode or Apple Recovery/DFU, or approved read-only Linux SSH diagnostics. No remote writes, new pairings, public host access or firmware flashing.',
+    parameters:{
+      operation:{type:'string',required:true,enum:['inventory','android-diagnose','recovery-modes','remote-linux']},
+      target:{type:'string',description:'Opaque network ADB target ID from current inventory.'},
+      host:{type:'string',description:'Explicit user-supplied private IPv4 address for SSH.'},
+      user:{type:'string',description:'Explicit user-supplied SSH login name.'},
+    },
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>false,
+    async execute(args,exec){
+      if(args.operation==='inventory')return JSON.stringify(await networkRecovery.networkInventory())
+      if(args.operation==='recovery-modes')return JSON.stringify(await networkRecovery.recoveryModes())
+      if(args.operation==='android-diagnose'){
+        if(!args.target||!/^[a-f0-9]{24}$/u.test(args.target))return JSON.stringify({status:'denied',reason:'CURRENT_TARGET_REQUIRED'})
+        return JSON.stringify(await networkRecovery.androidNetworkDiagnose(args.target))
+      }
+      if(args.operation!=='remote-linux'||!args.host||!args.user)return JSON.stringify({status:'denied',reason:'EXPLICIT_HOST_AND_USER_REQUIRED'})
+      let provider:AdaptiveApprovalService|undefined
+      try{provider=(ctx as unknown as {get(name:string):unknown}).get('userQuestions') as AdaptiveApprovalService|undefined}
+      catch{return JSON.stringify({status:'denied',reason:'HUMAN_APPROVAL_NOT_AVAILABLE'})}
+      return JSON.stringify(await networkRecovery.remoteLinux(args.host,args.user,detail=>confirmAdaptiveExternalAction({
+        ...(provider===undefined?{}:{ask:provider}),creationId:'private-linux-host',action:'ssh-read-diagnostics',inputJson:JSON.stringify(detail),
+        ...(exec.agent===undefined?{}:{agent:exec.agent}),...(exec.signal===undefined?{}:{signal:exec.signal}),
+      }),exec.signal))
+    },
+    presentCall:args=>({card:'generic',title:'PHOENIX · Device Network: '+args.operation,kind:'read' as const}),
+  }))
 
   const deviceAdapters = new DeviceAdapters()
   ctx.systemPrompt.section({name:'phoenix:device-adapters',order:118,text:'For authorized device repair, use phoenix_device_adapters to inventory Fastboot and USB Apple targets and Windows peripheral endpoints, inspect local host disk/battery/network, check passive neighbor counts, verify installed free diagnostic utilities and obtain official recovery workflows. Apple operations require validated pairing; restart of supported Apple or Windows audio/print devices requires one-time human approval and revalidation. Never interpret command acceptance as repair verification. Do not infer remote access from a network neighbor, flash unsupported firmware, bypass account locks, or use arbitrary commands. Physical repair, manufacturer procedures and actual hardware validation remain necessary.'})
