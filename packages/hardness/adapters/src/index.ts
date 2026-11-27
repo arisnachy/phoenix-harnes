@@ -8,6 +8,7 @@ import { installAssistantMailProtocol } from './assistant-mail-protocol.ts'
 import { AttentionStore } from './proactivity-attention-store.ts'
 import { LivingResourceAttention } from './living-resource-attention.ts'
 import { curiosityAttention, LivingHomeAttention } from './living-curiosity.ts'
+import { AutonomicRuntime, registerAutonomicRuntime, readAutonomicRuntime } from './autonomic-runtime.ts'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
@@ -508,6 +509,13 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         ctx,
         now=>reality.engine.initiativePresence(now),
       ))
+      disposers.push(systemPrompt.context({ name: 'phoenix:autonomic-state', order: 26,
+        interpolateVariables: false, text: () => {
+          const state = readAutonomicRuntime(proactivity.engine)
+          if (state.observedAt === null || state.mode === 'normal' && state.internetReachable !== false && state.upcomingUserTasks < 2) return ''
+          return 'PHOENIX AUTONOMIC local observation: ' + JSON.stringify(state)
+            + '. Optional sensor work can be deferred; never skip required verification or change user commitments. Unknown is not evidence of failure.'
+        } }))
       disposers.push(installCapabilityOperatingProtocol(systemPrompt))
       disposers.push(systemPrompt.section({ name: 'phoenix:gnosis', order: 155, text: GNOSIS_PROTOCOL }))
       disposers.push(systemPrompt.section({ name: 'phoenix:3d-intent-router', order: 176, text: PHOENIX_3D_ROUTING_PROTOCOL }))
@@ -655,6 +663,8 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       }
       proactivity.bindExecutor(createProactivityExecutor(agents, subagents, runtimeConfig))
       disposers.push(() => { void mailbox.dispose() })
+      const autonomic = new AutonomicRuntime()
+      disposers.push(registerAutonomicRuntime(proactivity.engine, autonomic))
       const resourceAttention = new LivingResourceAttention()
       let resourceItems: ReturnType<LivingResourceAttention['read']> = []
       const homeAttention = new LivingHomeAttention(async signal => {
@@ -671,8 +681,13 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         runtimeConfig.pollMs,
         new AttentionStore(`${taskLedgerPath(config)}.attention.json`),
         async () => [...await mailbox.attention(), ...resourceItems, ...homeAttention.read(),
-          ...curiosityAttention(proactivity.engine.peek(), Date.now())],
-        () => { resourceItems = resourceAttention.read(); void homeAttention.observe() },
+          ...curiosityAttention(proactivity.engine.peek(), Date.now()), ...autonomic.items()],
+        () => {
+          const now = new Date()
+          autonomic.observe(reality.engine.autonomicSignals(now), proactivity.engine.peek({ now }), now.getTime())
+          resourceItems = resourceAttention.read()
+          if (process.env.PHOENIX_HOME_MONITOR === '1' && autonomic.takeOptionalHomeSlot(now.getTime())) void homeAttention.observe()
+        },
       ))
       wake.bindExecutor(createWakeExecutor(agents, {
         composeResumedAgent: (agentCtx: Context) => composeResumedScheduledAgent(ctx, agentCtx),
