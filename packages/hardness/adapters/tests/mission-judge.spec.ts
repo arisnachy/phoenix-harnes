@@ -249,3 +249,20 @@ describe('HARDNESS mission judges', () => {
   })
 
 })
+
+describe('META mission judge verification', () => {
+  it('does not accept a pass containing unresolved mandatory repairs', async () => {
+    const start = vi.fn<SubagentRuntime['start']>(async () => ({
+      id: 'meta-judge' as never, localAgent: undefined, result: Promise.resolve({
+        stopReason: 'completed' as const, output: [], structured: {
+          verdict: 'pass', summary: 'contradictory', evidence: ['evidence:forecast'],
+          required_changes: ['repair missing requirement'],
+          criteria: [{ id: 'artifact', verdict: 'pass', evidence: ['evidence:forecast'], findings: [] }],
+          quality: { verdict: 'pass', summary: 'complete', evidence: ['evidence:forecast'], findings: [] },
+        },
+      }), dispose: async () => {},
+    }))
+    const judge = createSubagentMissionJudge({ subagents: { getProvider: () => ({ capabilities: { outputSchema: true, toolFilter: true } }) as never, start }, provider: 'spawn' })
+    await expect(judge(input())).resolves.toMatchObject({ verdict: 'blocked' })
+  })
+})
