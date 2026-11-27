@@ -76,3 +76,25 @@ export async function deliverAgentSpeech(
     }
   }
 }
+
+/** Rate limit spontaneous local speech without consuming tokens or opening Live. */
+export class InitiativeSpeechGate {
+  private lastAttempt: number | undefined
+  constructor(private readonly now: () => number = Date.now) {}
+
+  /** Reserve a brief local announcement only when the host is available.
+   * @param state - Current voice state and actual client heartbeat.
+   * @returns A deferral reason, or undefined when one attempt is admitted.
+   */
+  reserve(state: { foreground: boolean; enabled: boolean; queued: number; speaking: boolean }): string | undefined {
+    const now = this.now()
+    const hour = new Date(now).getHours()
+    if (!state.enabled) return 'voice-disabled'
+    if (!state.foreground) return 'no-foreground-client'
+    if (hour >= 22 || hour < 7 || !Number.isFinite(hour)) return 'quiet-hours'
+    if (state.speaking || state.queued !== 0) return 'voice-busy'
+    if (this.lastAttempt !== undefined && now - this.lastAttempt < 120_000) return 'initiative-cooldown'
+    this.lastAttempt = now
+    return undefined
+  }
+}
