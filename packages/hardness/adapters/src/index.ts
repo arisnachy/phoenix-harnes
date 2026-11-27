@@ -6,6 +6,7 @@ import type { AssistantMailControl } from './assistant-mail-runtime.ts'
 import { createAssistantMailIdentityTool, createAssistantMailSendTool, createAssistantMailInboxTool, createAssistantMailManageTool } from './assistant-mail-tool.ts'
 import { installAssistantMailProtocol } from './assistant-mail-protocol.ts'
 import { AttentionStore } from './proactivity-attention-store.ts'
+import { LivingResourceAttention } from './living-resource-attention.ts'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
@@ -653,12 +654,13 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       }
       proactivity.bindExecutor(createProactivityExecutor(agents, subagents, runtimeConfig))
       disposers.push(() => { void mailbox.dispose() })
+      const resourceAttention = new LivingResourceAttention()
       disposers.push(installProactivityRuntime(
         ctx,
         proactivity.engine,
         runtimeConfig.pollMs,
         new AttentionStore(`${taskLedgerPath(config)}.attention.json`),
-        () => mailbox.attention(),
+        async () => [...await mailbox.attention(), ...resourceAttention.read()],
       ))
       wake.bindExecutor(createWakeExecutor(agents, {
         composeResumedAgent: (agentCtx: Context) => composeResumedScheduledAgent(ctx, agentCtx),
