@@ -9,7 +9,7 @@
 import { classifyMetaFailure, metaRecoveryHint, metaResultCallId, type MetaFailure } from './metacognition.ts'
 
 interface SessionEfficiency {
-  lastFailure?: MetaFailure | undefined
+  lastFailure?: { category: MetaFailure; toolName?: string | undefined } | undefined
   contextWindow?: number | undefined
   pressureTokens?: number | undefined
   toolCalls: number
@@ -154,8 +154,8 @@ export class LiveEfficiencyMonitor {
       if (failed && category === 'cancelled') return
       if (failed) {
         state.failedToolCalls += 1
-        state.lastFailure = category
-      } else if (toolName !== undefined) {
+        state.lastFailure = { category, toolName }
+      } else if (toolName !== undefined && state.lastFailure?.toolName === toolName) {
         state.lastFailure = undefined
       }
       if (toolName !== undefined) {
@@ -167,7 +167,7 @@ export class LiveEfficiencyMonitor {
     if (type === 'llm/retry-started') {
       state.retries += 1
       const category = classifyMetaFailure(payload.error)
-      if (category !== 'unknown' && category !== 'cancelled') state.lastFailure = category
+      if (category !== 'unknown' && category !== 'cancelled') state.lastFailure = { category }
     }
     if (type === 'compaction/summary') state.pressureTokens = undefined
   }
@@ -204,7 +204,7 @@ export class LiveEfficiencyMonitor {
     const state = this.sessions.get(sessionId)
     if (state === undefined) return ''
     const hints: string[] = []
-    const recovery = state.lastFailure === undefined ? undefined : metaRecoveryHint(state.lastFailure)
+    const recovery = state.lastFailure === undefined ? undefined : metaRecoveryHint(state.lastFailure.category)
     if (recovery !== undefined) hints.push(recovery)
     if (state.contextWindow !== undefined && state.pressureTokens !== undefined) {
       const ratio = state.pressureTokens / state.contextWindow
