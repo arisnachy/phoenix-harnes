@@ -14,6 +14,8 @@ import { filterAdaptiveSearchHits, installAdaptiveLearning } from './adaptive.ts
 import { ExperienceLearningEngine, experienceMemoryInput } from './experience.ts'
 import { LiveEfficiencyMonitor } from './live-efficiency.ts'
 import { classifyMetaFailure, formatMetaComparison, metaResultCallId } from './metacognition.ts'
+import { cognitionGuidance, reviewCognition } from './cognitive-review.ts'
+import { ResidentConsolidation, interactionGuidance } from './resident-consolidation.ts'
 import { hasUnclearedGoal, isHumanTaskMessage, learningOwnerSessionId } from './team-learning-context.ts'
 import { assessHabitExperience, formatHabitGuidance, formatUnverifiedExperience } from './habit.ts'
 import { AutonomousMemoryCurator } from './autonomous-curator.ts'
@@ -88,6 +90,18 @@ export function apply(ctx: Context, config: Config): void {
   })
   const experience = new ExperienceLearningEngine()
   const efficiency = new LiveEfficiencyMonitor()
+  const resident = new ResidentConsolidation(() => ctx.learningMemory.allCognitiveRecords())
+  ctx.effect(() => {
+    let disposed = false
+    let ready = false
+    void ctx.learningMemory.ready().then(() => { if (!disposed) ready = true }).catch(() => {})
+    const timer = setInterval(() => {
+      if (!ready || disposed) return
+      try { resident.cycle() } catch (error: unknown) { ctx.logger.warn(`resident-consolidation: ${String(error)}`) }
+    }, 60_000)
+    timer.unref()
+    return () => { disposed = true; clearInterval(timer); resident.clear() }
+  }, 'learningMemory.residentConsolidation')
   // Correlate failures to tool names only; arguments and values are never persisted.
   const pendingToolNames = new Map<string, Map<string, string>>()
   const rememberOutcome = (sessionId: string, eventSeq: number, occurredAt: number,
@@ -123,6 +137,7 @@ export function apply(ctx: Context, config: Config): void {
       if (!isHumanTaskMessage(session, data)) return
       const text = messageText(data)
       if (text === undefined) return
+      resident.observe(learningOwnerId, projectId)
       tasks.observeUserMessage(sessionId, text, {
         occurredAt,
         ...projectId === undefined ? {} : { projectId },
@@ -358,7 +373,7 @@ export function apply(ctx: Context, config: Config): void {
       if (matched === undefined) return ''
       const assessment = assessHabitExperience(matched)
       return [formatHabitGuidance(assessment), formatUnverifiedExperience(matched),
-        assessment.mode === 'review' ? formatMetaComparison(matched.recentRuns) : ''].filter(Boolean).join(' ')
+        assessment.mode === 'review' ? formatMetaComparison(matched.recentRuns) : '', cognitionGuidance(matched)].filter(Boolean).join(' ')
     },
     interpolateVariables: false,
   })
@@ -374,6 +389,30 @@ export function apply(ctx: Context, config: Config): void {
     },
     interpolateVariables: false,
   })
+  ctx.systemPrompt.context({
+    name: 'context:explicit-interaction-signals', order: 123, interpolateVariables: false,
+    text: assembly => interactionGuidance(userTextForAssembly(assembly) ?? ''),
+  })
+  ctx.tools.register(defineTool({
+    name: 'phoenix_cognitive_review',
+    description: 'Read evidence-backed cognitive review of the current task: consolidation, recurring friction, historical cost regression, candidate strategy and autobiographical counts. No live quotas, emotion inference or autonomous action.',
+    parameters: {},
+    output: MEMORY_OUTPUT,
+    isConcurrencySafe: () => true,
+    execute: async (_args, execution) => {
+      const session = execution.agent?.session
+      if (session === undefined) return JSON.stringify(reviewCognition(undefined))
+      await ctx.learningMemory.ready()
+      execution.signal.throwIfAborted()
+      const owner = learningOwnerSessionId(session)
+      const currentMessage = userTextForAssembly({ agent: execution.agent })
+      const taskContext = tasks.resolvedReference(owner)?.task.text ?? currentMessage
+      const projectId = ctx.learningMemory.projectIdForSession(owner)
+      return JSON.stringify({ ...reviewCognition(taskContext === undefined ? undefined : experience.matchTask(taskContext, projectId)), resident: resident.inspect(owner, projectId) })
+    },
+    presentCall: () => ({ card: 'generic', title: 'Cognitive review', kind: 'read' }),
+  }))
+
   ctx.tools.register(defineTool({
     name: 'phoenix_gnosis_memory',
     description: 'Inspect stored technical memory relations and source event references in the owning conversation. Read-only, requires a specific query; no cross-session export, no raw memory text, no independent truth certification.',
