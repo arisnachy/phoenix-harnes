@@ -747,7 +747,7 @@ describe('Codex image generation bridge', () => {
       installCodexImageGeneration(context)
       if (tool === undefined) throw new Error('image_generation tool was not registered')
 
-      expect(tool.timeoutMs).toBe(30 * 60_000)
+      expect(tool.timeoutMs).toBe(85 * 60_000)
       const result = await tool.execute(
         {
           objective: 'Generate the requested image',
