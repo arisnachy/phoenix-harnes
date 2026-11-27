@@ -1320,6 +1320,20 @@ export class RealityContextEngine {
     ])
   }
 
+  /** Minimal cached signals for resident autonomic regulation; never starts a probe. */
+  autonomicSignals(now = new Date()): { internetReachable: boolean | null; batteryDischargingPercent: number | null; observedAt: number } {
+    const epoch = now.getTime()
+    const network = signal(this.internet, epoch)
+    const battery = signal(this.battery, epoch)
+    const charges = battery.stale || battery.value?.present !== true ? [] : battery.value.batteries
+      .filter(row => row.statusCode === 1 && row.chargePercent !== null && Number.isFinite(row.chargePercent)
+        && row.chargePercent >= 0 && row.chargePercent <= 100)
+      .map(row => row.chargePercent as number)
+    return { internetReachable: network.stale ? null : network.value?.reachable ?? null,
+      batteryDischargingPercent: charges.length === 0 ? null : Math.min(...charges),
+      observedAt: this.internet.observedAt }
+  }
+
   /** Read only the existing cached Windows activity signal, without new probes. */
   initiativePresence(now=new Date()):Record<string,unknown>{
     return presenceFromActivity(signal(this.userActivity,now.getTime()))
