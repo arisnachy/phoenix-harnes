@@ -837,3 +837,19 @@
 @media (prefers-reduced-motion: reduce) {
   .livingMascot, .livingMascot * { animation: none !important; }
 }
+
+.mascotClosedEyes { display: none; }
+.livingMascot[data-mascot-pose='welcome'] .mascotWingRight { animation: mascot-greet 2.6s ease-in-out 2; }
+.livingMascot[data-mascot-pose='welcome'] .mascotPupils { animation: mascot-look 5s ease-in-out infinite; }
+.livingMascot[data-mascot-pose='idea'] .mascotHead { animation: mascot-think 3s ease-in-out infinite; }
+.livingMascot[data-mascot-pose='coffee'] .mascotHead { animation: mascot-focus 4s ease-in-out infinite; }
+.livingMascot[data-mascot-pose='sleep'] .mascotEyes { display: none; }
+.livingMascot[data-mascot-pose='sleep'] .mascotClosedEyes { display: block; }
+.livingMascot[data-mascot-pose='sleep'] .mascotBody { animation-duration: 5s; }
+.livingMascot[data-mascot-pose='celebrate'] .mascotBody { animation: mascot-hop .85s ease-in-out 3; }
+.livingMascot[data-mascot-pose='celebrate'] .mascotWingLeft { animation: mascot-wave .65s ease-in-out 3; }
+.livingMascot[data-mascot-pose='celebrate'] .mascotWingRight { animation: mascot-greet .65s ease-in-out 3; }
+.livingMascot[data-mascot-pose='respectful'] .mascotBody, .livingMascot[data-mascot-pose='respectful'] .mascotTail { animation: none; }
+@keyframes mascot-greet { 0%,100% { transform: rotate(0); } 30%,70% { transform: rotate(-55deg); } 50% { transform: rotate(-30deg); } }
+@keyframes mascot-hop { 50% { transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .livingMascot, .livingMascot * { animation: none !important; } }
