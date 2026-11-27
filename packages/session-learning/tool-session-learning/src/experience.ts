@@ -2,6 +2,7 @@
 
 import type { CognitiveMemoryInput, CognitiveMemoryRecord } from '@phoenix-ai/dsh-session-learning'
 import { fingerprintTask, taskSimilarity, type TaskFingerprint } from './task-context.ts'
+import { assessMetaEvidence } from './metacognition.ts'
 
 const EXPERIENCE_SUBJECT_PREFIX = 'phoenix.learning.experience.'
 const STATE_VERSION = 1 as const
@@ -365,6 +366,7 @@ export function decodeExperienceAggregate(record: Pick<CognitiveMemoryRecord, 's
   if (typeof raw.key !== 'string' || typeof raw.taskSummary !== 'string') return undefined
   if (!isTaskFingerprint(raw.taskFingerprint) || !isMaturity(raw.maturity)) return undefined
   if (!isCount(raw.runs) || !isCount(raw.verifiedSuccesses) || !isCount(raw.failures)) return undefined
+  if (raw.verifiedSuccesses + raw.failures > raw.runs) return undefined
   if (!isCount(raw.totalWallTimeMs) || !isCount(raw.totalTokens) || !isCount(raw.totalToolCalls)) return undefined
   if (!isCount(raw.totalFailedToolCalls) || !isCount(raw.totalRetries) || !isCount(raw.totalUserInterventions)) return undefined
   if (!isCount(raw.firstObservedAt) || !isCount(raw.lastObservedAt)) return undefined
@@ -408,9 +410,9 @@ export function fingerprintKey(fingerprint: TaskFingerprint): string {
 }
 
 function maturityFor(runs: number, verifiedSuccesses: number, failures: number): ExperienceMaturity {
-  const successRate = verifiedSuccesses / Math.max(1, verifiedSuccesses + failures)
-  if (verifiedSuccesses >= 5 && successRate >= 0.9) return 'habitual'
-  if (verifiedSuccesses >= 3 && successRate >= 0.8) return 'validated'
+  const evidence = assessMetaEvidence({ runs, verifiedSuccesses, failures })
+  if (evidence.sufficientForReuse && verifiedSuccesses >= 5 && (evidence.verifiedFraction ?? 0) >= 0.9) return 'habitual'
+  if (evidence.sufficientForReuse) return 'validated'
   if (runs >= 3) return 'candidate'
   if (runs >= 2) return 'repeated'
   return 'novel'
