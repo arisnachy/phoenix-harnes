@@ -82,6 +82,13 @@ True(BrowserCommand.TryParse("{\"type\":\"phoenix.senses.status\",\"sessionId\":
     out var senses, allowAutomation: true), "native pipe supports viewer inventory", failures);
 Equal("turn-1", senses.SessionId, "sense inventory retains session", failures);
 
+
+False(BrowserCommand.TryParse("{\"type\":\"phoenix.desktop.windows-state\"}", out _),
+    "web surface cannot directly query Windows state", failures);
+True(BrowserCommand.TryParse("{\"type\":\"phoenix.desktop.windows-state\"}", out var windowsState, allowAutomation: true),
+    "native pipe can query Windows state", failures);
+Equal("phoenix.desktop.windows-state", windowsState.Type, "Windows state command type", failures);
+
 False(BrowserCommand.TryParse("{not-json}", out _), "malformed json rejected", failures);
 False(BrowserCommand.TryParse("{\"type\":\"phoenix.browser.open\",\"url\":\"javascript:alert(1)\"}", out _), "unsafe open command rejected", failures);
 
