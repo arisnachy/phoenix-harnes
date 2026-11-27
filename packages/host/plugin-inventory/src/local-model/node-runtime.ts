@@ -1,11 +1,11 @@
 import { spawn } from 'node:child_process'
-import { access, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { homedir, freemem, availableParallelism } from 'node:os'
 import path from 'node:path'
 import net from 'node:net'
 import type { LocalThinkingCapabilities } from './types.js'
 import { createLocalModelPaths } from './paths.js'
-import { readLocalAccelerationProfile } from './acceleration.js'
+import { hasLocalAcceleratorMemory, readLocalAccelerationProfile } from './acceleration.js'
 import { getRuntimeManifest, validOllamaTag, type OllamaDiscoveredModel } from './catalog.js'
 import { createLocalModelStateStore } from './state.js'
 import { downloadVerifiedArtifact } from './download.js'
@@ -323,7 +323,12 @@ export async function createNodeLocalModelRuntimeManager(): Promise<LocalModelRu
     readAccelerationProfile: async (modelId, modelPath) => {
       if (process.env['PHOENIX_LOCAL_ACCELERATOR_AUTOINSTALL'] === '0') return undefined
       const runtime = getRuntimeManifest(process.platform, process.arch)
-      return runtime === undefined ? undefined : readLocalAccelerationProfile(paths.root, runtime.version, modelId, modelPath, availableParallelism())
+      if (runtime === undefined) return undefined
+      const profile = await readLocalAccelerationProfile(paths.root, runtime.version, modelId, modelPath, availableParallelism())
+      if (profile === undefined) return undefined
+      try {
+        return await hasLocalAcceleratorMemory(profile, (await stat(modelPath)).size) ? profile : undefined
+      } catch { return undefined }
     },
   })
 }
