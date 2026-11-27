@@ -57,6 +57,11 @@ export function SidebarRoot({
   // The old 150ms settle timer blocked the rail and retained costly wide rows.
   const wide = !collapsed
   const [tasksOpen, setTasksOpen] = useState(false)
+  useEffect(() => {
+    const open = (): void => { setTasksOpen(true) }
+    window.addEventListener('phoenix:open-task-center', open)
+    return () => window.removeEventListener('phoenix:open-task-center', open)
+  }, [])
   const [nativeMenu,setNativeMenu]=useState(()=>readNativeMenu(window.localStorage))
   const [nativeRecovery,setNativeRecovery]=useState<NativeRecovery['status']>('healthy')
   // React to boot, another window's changes and return to foreground.
@@ -335,6 +340,11 @@ export function SidebarRoot({
             {wide&&<span>{title}</span>}
           </button>
         })}
+        <button type="button" className={clsx(css.navLink, css.companionLink)} aria-label="Fénix · compañero de trabajo" title={!wide ? 'Fénix' : undefined}
+          onClick={() => window.dispatchEvent(new Event('phoenix:open-companion'))}>
+          <svg viewBox="0 0 24 24" width={wide ? 19 : 18} height={wide ? 19 : 18} aria-hidden="true"><path fill="#f98b2c" d="M7 8Q2 4 5 3L9 6Q8 1 13 2L13 6Q17 2 19 5L17 8A9 9 0 1 1 7 8Z"/><ellipse cx="12" cy="15" rx="7" ry="6" fill="#ffedc2"/><ellipse cx="9" cy="13" rx="2.3" ry="3" fill="#693b24"/><ellipse cx="15" cy="13" rx="2.3" ry="3" fill="#693b24"/><circle cx="8.4" cy="12" r=".8" fill="white"/><circle cx="14.4" cy="12" r=".8" fill="white"/><path d="M10 17l2-2 2 2-2 2Z" fill="#e7a12d"/></svg>
+          {wide && <span>Fénix</span>}
+        </button>
         {wide&&nativeRecovery!=='healthy'&&<div className={css.iconEditor} role="status">
           <small>{nativeRecovery==='restored'?'PHOENIX restauró el último menú válido.':nativeRecovery==='defaulted'?'PHOENIX recuperó la navegación básica. No se encontró una revisión válida.':'PHOENIX no pudo reparar el almacenamiento; mantiene una vista segura.'}</small>
           <button type="button" className={css.iconCustomize} onClick={()=>setNativeRecovery('healthy')}>Cerrar aviso</button>

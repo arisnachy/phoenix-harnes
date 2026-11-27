@@ -786,3 +786,6 @@
   box-shadow: inset 0 2px rgba(190, 151, 68, .55);
 }
 
+
+.companionLink { color: var(--dsw-alias-label-primary); }
+.companionLink > svg { flex: none; }
