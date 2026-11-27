@@ -32,4 +32,20 @@ describe('NetworkWatch', () => {
     await watch.tick()
     expect(watch.report()).toMatchObject({ status: 'degraded', retainedSamples: 0, latest: null })
   })
+  it('reports spikes only against recent same-network host baselines', async () => {
+    const scope='a'.repeat(24)
+    let now=1000000
+    let rx=100
+    let networkScope=scope
+    const watch=new NetworkWatch(async()=>({status:'completed',neighborCount:3,networkScope,receivedBytesPerSecond:rx}),null,()=>now)
+    for(let i=0;i<10;i++){await watch.tick();now+=60000}
+    rx=2000000
+    await watch.tick()
+    expect(watch.report().alerts).toMatchObject([{kind:'host-traffic-spike-rx',baseline:100,observed:2000000}])
+    now+=60000;networkScope='b'.repeat(24)
+    await watch.tick()
+    expect(watch.report().alerts).toEqual([])
+    now+=190000
+    expect(watch.report().alerts).toEqual([])
+  })
 })
