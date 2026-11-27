@@ -201,19 +201,24 @@ describe('META deterministic judge gate', () => {
   it('refuses contradictory duplicate criteria and unresolved required changes even after tests', () => {
     const value = kernel()
     value.start()
-    for (const id of ['artifact', 'presentation']) {
-      value.markCriterion(id, 'IMPLEMENTED', ['artifact:1'])
-      value.markCriterion(id, 'TESTED', ['test:1'])
-      value.markCriterion(id, 'VERIFIED', ['test:1'])
+    const verifyCandidate = () => {
+      for (const id of ['artifact', 'presentation']) {
+        value.markCriterion(id, 'IMPLEMENTED', ['artifact:1'])
+        value.markCriterion(id, 'TESTED', ['test:1'])
+        value.markCriterion(id, 'VERIFIED', ['test:1'])
+      }
     }
+    verifyCandidate()
     const candidate = { verdict: 'pass' as const, summary: 'reviewed', evidence: ['test:1'], requiredChanges: [],
       criteria: [{ id: 'artifact', verdict: 'pass' as const, evidence: ['test:1'], findings: [] },
         { id: 'presentation', verdict: 'pass' as const, evidence: ['test:1'], findings: [] }],
       quality: { verdict: 'pass' as const, summary: 'complete', evidence: ['test:1'], findings: [] } }
     value.judge({ ...candidate, criteria: [...candidate.criteria, { id: 'artifact', verdict: 'fail', evidence: [], findings: ['contradiction'] }] })
     expect(value.snapshot()).toMatchObject({ status: 'ACTIVE', judge: { verdict: 'needs_changes' } })
+    verifyCandidate()
     value.judge({ ...candidate, requiredChanges: ['repair defect'] })
     expect(value.snapshot()).toMatchObject({ status: 'ACTIVE', judge: { verdict: 'needs_changes' } })
+    verifyCandidate()
     value.judge(candidate)
     expect(value.snapshot().status).toBe('DONE')
   })
