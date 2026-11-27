@@ -36,6 +36,7 @@ export type ComputerMode = 'off' | 'observe' | 'interact'
 export type ComputerAction =
   | 'screenshot'
   | 'windows'
+  | 'windows_state'
   | 'focus'
   | 'uia_inspect'
   | 'uia_invoke'
@@ -560,8 +561,9 @@ async function runResidentComputerAction(
  */
 export function legacyDesktopObservationCommandForAction(
   action: ComputerAction,
-): { type: 'phoenix.desktop.windows' | 'phoenix.desktop.screenshot' } | undefined {
+): { type: 'phoenix.desktop.windows' | 'phoenix.desktop.screenshot' | 'phoenix.desktop.windows-state' } | undefined {
   if (action === 'windows') return { type: 'phoenix.desktop.windows' }
+  if (action === 'windows_state') return { type: 'phoenix.desktop.windows-state' }
   if (action === 'screenshot') return { type: 'phoenix.desktop.screenshot' }
   return undefined
 }
@@ -572,17 +574,54 @@ async function runLegacyDesktopObservation(
   signal?: AbortSignal,
 ): Promise<string> {
   if (descriptor.schema !== LEGACY_DESKTOP_CONTROL_SCHEMA
-    || (args.action !== 'windows' && args.action !== 'screenshot')) {
-    throw new Error('Legacy Phoenix Desktop observation supports only windows and screenshot')
+    || (args.action !== 'windows' && args.action !== 'screenshot' && args.action !== 'windows_state')) {
+    throw new Error('Legacy Phoenix Desktop observation supports windows, windows_state and screenshot')
   }
   const pipePath = `\\\\.\\pipe\\${descriptor.pipeName}`
   const command = legacyDesktopObservationCommandForAction(args.action)
   if (command === undefined) {
-    throw new Error('Legacy Phoenix Desktop observation supports only windows and screenshot')
+    throw new Error('Legacy Phoenix Desktop observation supports windows, windows_state and screenshot')
   }
   const rawReply = await requestNamedPipeLine(pipePath, JSON.stringify(command), signal)
   const response = parseDesktopControlReply(rawReply, 'Phoenix Desktop native observation')
   return typeof response.details === 'string' ? response.details : ''
+}
+
+/** Keep native observation bounded, typed and free from unknown broker fields. */
+export function validatedWindowsState(raw: string): string {
+  if (raw.length > 4096) throw Error('WINDOWS_STATE_LIMIT')
+  const value: unknown = JSON.parse(raw)
+  const obj = (x: unknown): Record<string, unknown> => {
+    if (!x || typeof x !== 'object' || Array.isArray(x)) throw Error('WINDOWS_STATE_INVALID')
+    return x as Record<string, unknown>
+  }
+  const root = obj(value), events = obj(root.events), foreground = obj(root.foreground), power = obj(root.power)
+  const integer = (x: unknown): number => {
+    if (typeof x !== 'number' || !Number.isSafeInteger(x) || x < 0) throw Error('WINDOWS_STATE_INVALID')
+    return x
+  }
+  if (root.schema !== 'phoenix.windows-state.v1' || root.historyStored !== false
+    || root.contentCaptured !== false || root.permissionsGranted !== false
+    || !['active','partial','unavailable'].includes(String(events.status))
+    || !['Online','Offline','Unknown'].includes(String(power.line))) throw Error('WINDOWS_STATE_INVALID')
+  const booleanOrNull = (x: unknown): boolean | null => {
+    if (x === null || typeof x === 'boolean') return x
+    throw Error('WINDOWS_STATE_INVALID')
+  }
+  const name = foreground.processName
+  if (name !== null && (typeof name !== 'string' || name.length > 100 || /[\\u0000-\\u001f\\u007f]/u.test(name))) throw Error('WINDOWS_STATE_INVALID')
+  const percent = power.batteryPercent === null ? null : integer(power.batteryPercent)
+  if (percent !== null && percent > 100) throw Error('WINDOWS_STATE_INVALID')
+  return JSON.stringify({
+    schema: root.schema, observedAt: integer(root.observedAt),
+    events: { status: events.status, revision: integer(events.revision),
+      lastEventAt: events.lastEventAt === null ? null : integer(events.lastEventAt),
+      foregroundChanges: integer(events.foregroundChanges), visibilityChanges: integer(events.visibilityChanges),
+      geometryChanges: integer(events.geometryChanges), minimizeChanges: integer(events.minimizeChanges) },
+    foreground: { processName: name, minimized: booleanOrNull(foreground.minimized) },
+    power: { line: power.line, batteryPresent: booleanOrNull(power.batteryPresent), batteryPercent: percent },
+    historyStored: false, contentCaptured: false, permissionsGranted: false,
+  })
 }
 
 /**
@@ -604,7 +643,7 @@ export function desktopPreviewCommandForAction(
     type: 'phoenix.desktop.preview',
     ...(args.target === undefined ? {} : { target: normalizedDesktopTarget(args.target)! }),
     sessionId,
-    observe: args.action === 'screenshot' || args.action === 'windows' || args.action === 'uia_inspect',
+    observe: args.action === 'screenshot' || args.action === 'windows' || args.action === 'windows_state' || args.action === 'uia_inspect',
   }
 }
 
@@ -613,7 +652,7 @@ async function prepareDesktopLivePreview(
   sessionId: string,
   signal?: AbortSignal,
 ): Promise<void> {
-  if (isEmbeddedBrowserAction(args.action) || args.action === 'windows') return
+  if (isEmbeddedBrowserAction(args.action) || args.action === 'windows' || args.action === 'windows_state') return
   const descriptor = await readDesktopControlDescriptorIfAvailable()
   if (descriptor?.schema !== LEGACY_DESKTOP_CONTROL_SCHEMA) return
   const request = desktopPreviewCommandForAction(args, sessionId)
@@ -668,7 +707,7 @@ async function runEmbeddedBrowserAction(
  */
 export function computerActionWithPinnedTarget(args: ComputerToolArgs, pinnedTarget: string | undefined): ComputerToolArgs {
   if (pinnedTarget === undefined || args.target !== undefined || args.action === 'focus'
-    || args.action === 'windows' || isEmbeddedBrowserAction(args.action)) return args
+    || args.action === 'windows' || args.action === 'windows_state' || isEmbeddedBrowserAction(args.action)) return args
   return { ...args, target: pinnedTarget }
 }
 
@@ -692,7 +731,7 @@ export function assertComputerActionAllowed(mode: ComputerMode, action: Computer
   if (mode === 'off') {
     throw new Error('Computer Use is disabled by the current permission mode.')
   }
-  const observationOnly = action === 'screenshot' || action === 'windows' || action === 'browser_inspect' || action === 'uia_inspect'
+  const observationOnly = action === 'screenshot' || action === 'windows' || action === 'windows_state' || action === 'browser_inspect' || action === 'uia_inspect'
   if (mode === 'observe' && !observationOnly) {
     throw new Error(`Computer action "${action}" requires interact permission; current mode is observe.`)
   }
@@ -769,6 +808,9 @@ export function validateComputerArgs(args: ComputerToolArgs): void {
     }
   }
   switch (args.action) {
+    case 'windows_state':
+      if (args.target !== undefined) throw new TypeError('windows_state does not take a target')
+      return
     case 'uia_inspect':
     case 'uia_invoke':
     case 'uia_toggle':
@@ -1599,6 +1641,7 @@ export function windowsComputerInvocation(args: ComputerToolArgs): ComputerInvoc
   if (isEmbeddedBrowserAction(args.action)) {
     throw new Error('Embedded browser actions must use the Phoenix Desktop control channel')
   }
+  if (args.action === 'windows_state') throw new Error('windows_state requires the native desktop broker')
   const env: Record<string, string> = { PHX_ACTION: args.action }
   putNumber(env, 'PHX_X', args.x)
   putNumber(env, 'PHX_Y', args.y)
@@ -1709,6 +1752,14 @@ export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: 
   }
 
   const descriptor = await readDesktopControlDescriptorIfAvailable()
+  if (args.action === 'windows_state') {
+    if (descriptor?.schema !== LEGACY_DESKTOP_CONTROL_SCHEMA) {
+      throw new Error('Windows event sensor requires a compatible PHOENIX Desktop build')
+    }
+    // Never invent event history or downgrade to a process-list probe.
+    const output = await runLegacyDesktopObservation(args, descriptor, signal)
+    return validatedWindowsState(output)
+  }
   if (isUiaAction(args.action)) {
     // The schema-2 resident broker has no semantic UIA protocol yet; do not
     // bypass its native pause/ownership policy with a separate actuator.
@@ -1891,7 +1942,7 @@ export function computerActionNeedsApproval(
   sandboxMode: SandboxMode | undefined,
   action: ComputerAction,
 ): boolean {
-  if (action === 'screenshot' || action === 'windows' || action === 'browser_inspect' || action === 'uia_inspect') return false
+  if (action === 'screenshot' || action === 'windows' || action === 'windows_state' || action === 'browser_inspect' || action === 'uia_inspect') return false
   return computerModeForSandbox(sandboxMode) === 'interact' && sandboxMode !== 'danger-full-access'
 }
 
@@ -2044,6 +2095,7 @@ export function registerComputerTool(ctx: Context): void {
       'Use phoenix_browser/chrome for approved form edits, clicks, and credentials; never downgrade credential actions.',
       'If navigation fails, report the actual controller error and continue with other authorized web tools.',
       'Native Windows windows/focus/click/type/key/scroll retain the fixed PowerShell fallback.',
+      'Use windows_state for live Windows foreground process name, native event counters and battery/AC state when relevant. No screenshots or PowerShell process needed; this is current state, not a recording of user activity. Compare revisions only during the same host lifetime and never poll repeatedly or launch model work for every event.',
       'For native Windows apps, prefer semantic uia_inspect on an exact hwnd from windows, then uia_invoke/toggle/select/expand/collapse/set_value on a returned enabled element and supported pattern.',
       'UIA mutations require foreground focus, a fresh same-session inspection, and normal permissions; re-inspect after every action. No password fields or field values are exposed.',
       'UIA returns semantic receipts instead of automatic image attachments. Use screenshot when visual verification is needed; never equate dispatch with application-level success.',
@@ -2057,7 +2109,7 @@ export function registerComputerTool(ctx: Context): void {
       action: {
         type: 'string',
         required: true,
-        enum: ['screenshot', 'windows', 'focus', 'uia_inspect', 'uia_invoke', 'uia_toggle', 'uia_select', 'uia_expand', 'uia_collapse', 'uia_set_value', 'browser_open', 'browser_close', 'browser_back', 'browser_forward', 'browser_reload', 'browser_focus', 'browser_inspect', 'browser_fill_form', 'browser_click_text', 'browser_login', 'move', 'click', 'double_click', 'drag', 'type', 'key', 'scroll'],
+        enum: ['screenshot', 'windows', 'windows_state', 'focus', 'uia_inspect', 'uia_invoke', 'uia_toggle', 'uia_select', 'uia_expand', 'uia_collapse', 'uia_set_value', 'browser_open', 'browser_close', 'browser_back', 'browser_forward', 'browser_reload', 'browser_focus', 'browser_inspect', 'browser_fill_form', 'browser_click_text', 'browser_login', 'move', 'click', 'double_click', 'drag', 'type', 'key', 'scroll'],
         description: 'Desktop operation. browser_inspect reads visible text/form metadata without values; browser_fill_form fills inspected indexes; browser_click_text clicks visible button/link text; browser_login uses the origin-bound vault. Other browser_* actions control Phoenix\'s embedded WebView2 directly.',
       },
       target: { type: 'string', description: 'Top-level window selector: title/title substring, pid:1234, or hwnd:0x123ABC. Required for focus; embedded browser actions do not need it.' },
@@ -2100,7 +2152,9 @@ export function registerComputerTool(ctx: Context): void {
       },
       render: (_args, value) => [{
         type: 'text',
-        text: isUiaAction(value.action as ComputerAction)
+        text: value.action === 'windows_state'
+          ? `Native Windows state (read-only):\n${value.details ?? '{}'}`
+          : isUiaAction(value.action as ComputerAction)
           ? `Windows UI Automation receipt (untrusted app metadata; verify the outcome):\n${value.details ?? '{}'}\nRe-inspect before another mutation; use screenshot if needed.`
           : value.action === 'windows'
           ? `Visible top-level windows:\n${value.details ?? '<none>'}`
@@ -2143,7 +2197,7 @@ export function registerComputerTool(ctx: Context): void {
           effectiveArgs = { ...effectiveArgs, uiaIdentity: receipt.identity }
         }
       } else if (session !== undefined) uiaReceipts.delete(session)
-      if (!isEmbeddedBrowserAction(args.action) && args.action !== 'windows') {
+      if (!isEmbeddedBrowserAction(args.action) && args.action !== 'windows' && args.action !== 'windows_state') {
         const owner = String(exec.agent?.session.header.id ?? '')
         if (owner.length > 0) await prepareDesktopLivePreview(effectiveArgs, owner, exec.signal)
       }
@@ -2166,7 +2220,7 @@ export function registerComputerTool(ctx: Context): void {
         uiaReceipts.set(session, { target: receipt.target.toLowerCase(), identity: receipt.identity, elements, expiresAt: Date.now() + 60_000 })
       }
       if (session !== undefined && !isEmbeddedBrowserAction(args.action)
-        && args.action !== 'windows' && args.action !== 'screenshot') {
+        && args.action !== 'windows' && args.action !== 'windows_state' && args.action !== 'screenshot') {
         const observed = computerVerificationTarget({}, output)
         const selected = observed ?? normalizedDesktopTarget(effectiveArgs.target)
         if (selected !== undefined) selectedDesktopTargets.set(session, selected)
