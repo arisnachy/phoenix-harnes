@@ -10,6 +10,7 @@ import { SessionToolFactory } from './session-tool-factory.ts'
 import { livingActionSafety } from './living-action-safety.ts'
 import { assessSelfInitiative, SELF_GOALS } from './self-initiative.ts'
 import { inspectSystemEnvironment, searchLocalApps } from './system-proprioception.ts'
+import { NetworkIntelligence } from './network-intelligence.ts'
 import { DeviceNetworkRecovery } from './device-network-recovery.ts'
 import { DeviceAdapters } from './device-adapters.ts'
 import { DeviceIntelligence } from './device-intelligence.ts'
@@ -290,6 +291,37 @@ function assertTargetReached(snapshot: LivingCreationSnapshot): void {
 export function apply(ctx: Context): void {
 
 
+
+
+  const networkIntelligence = new NetworkIntelligence()
+  ctx.systemPrompt.section({name:'phoenix:local-network-intelligence',order:118,text:'For explicitly authorized local network work, use phoenix_network_intelligence inventory to observe the actual directly connected private Windows network, monitor for session-local traffic deltas and neighbor-cache changes, discover for a one-time approved bounded ICMP survey of the current /24 or smaller, and router-inspect for verified OpenWrt with existing SSH authorization. Router reboot and Wi-Fi reload require separate interactive approval and current gateway revalidation. No automatic scanning, default password attempts, public targets, packet capture, forwarding or arbitrary commands. Do not infer presence from stale cache, identity from address, or router-wide usage from host counters. Use phoenix_device_network and phoenix_device_adapters for separately authorized compatible device control. Never claim universal router support or repair without readback.'})
+  ctx.tools.register(defineTool({
+    name:'phoenix_network_intelligence',
+    description:'Observe private local Windows network topology and neighbor cache, measure local host traffic deltas, approved bounded ICMP discovery, or authorized OpenWrt router inspection, reboot and Wi-Fi reload. Uses trusted SSH host keys and existing keys; no passwords, arbitrary commands, external network scans or settings writes.',
+    parameters:{
+      operation:{type:'string',required:true,enum:['inventory','monitor','discover','router-inspect','router-reboot','router-wifi-reload']},
+      user:{type:'string',description:'Explicit user-supplied SSH login name for the current verified gateway.'},
+    },
+    output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
+    isConcurrencySafe:()=>false,
+    async execute(args,exec){
+      if(args.operation==='inventory')return JSON.stringify(await networkIntelligence.inventory())
+      if(args.operation==='monitor')return JSON.stringify(await networkIntelligence.monitor())
+      let provider:AdaptiveApprovalService|undefined
+      try{provider=(ctx as unknown as {get(name:string):unknown}).get('userQuestions') as AdaptiveApprovalService|undefined}
+      catch{return JSON.stringify({status:'denied',reason:'HUMAN_APPROVAL_NOT_AVAILABLE'})}
+      const approval=(detail:{target:string;effect:string})=>confirmAdaptiveExternalAction({
+        ...(provider===undefined?{}:{ask:provider}),creationId:'local-network',action:args.operation,inputJson:JSON.stringify(detail),
+        ...(exec.agent===undefined?{}:{agent:exec.agent}),...(exec.signal===undefined?{}:{signal:exec.signal}),
+      })
+      if(args.operation==='discover')return JSON.stringify(await networkIntelligence.discover(approval,exec.signal))
+      if(!args.user)return JSON.stringify({status:'denied',reason:'EXPLICIT_SSH_USER_REQUIRED'})
+      const op=args.operation==='router-inspect'?'inspect':args.operation==='router-reboot'?'reboot':args.operation==='router-wifi-reload'?'wifi-reload':null
+      if(op===null)return JSON.stringify({status:'denied',reason:'UNSUPPORTED_OPERATION'})
+      return JSON.stringify(await networkIntelligence.router(args.user,op,approval,exec.signal))
+    },
+    presentCall:args=>({card:'generic',title:'PHOENIX · Network Intelligence: '+args.operation,kind:args.operation==='router-reboot'||args.operation==='router-wifi-reload'?'execute' as const:'read' as const}),
+  }))
 
   const networkRecovery = new DeviceNetworkRecovery()
   ctx.systemPrompt.section({name:'phoenix:device-network-recovery',order:118,text:'For explicitly authorized device support use phoenix_device_network for already-connected private IPv4 Android/TV devices, Samsung Download Mode or Apple Recovery/DFU detection, and approved read-only SSH diagnostics on a private Linux host. Do not initiate ADB pairing or network scans, bypass locks, guess addresses, use arbitrary commands, or claim firmware repair. For remote Linux ask the user for the actual host and account and use the interactive authorization gate; do not weaken host key verification.'})
