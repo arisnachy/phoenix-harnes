@@ -622,7 +622,7 @@ async function generateWithNativeFastSd(
         throw new Error('image_generation: FastSD worker returned no verifiable receipt')
       }
       if (outcome.exitCode !== 0 || receipt?.ok !== true) {
-        const detail = typeof receipt?.error === 'string' ? receipt.error.slice(0, 300) : 'worker failed'
+        const detail = typeof receipt?.error === 'string' ? receipt.error.slice(0, 1800) : 'worker failed'
         throw new Error('image_generation: native FastSD CPU: ' + detail)
       }
       const id = typeof receipt.markdown === 'string'
@@ -1652,7 +1652,7 @@ export function installCodexImageGeneration(ctx: Context): void {
     },
     // CPU startup and first-time setup can exceed the old six-minute shared budget.
     // Codex retains its own six-minute attempt budget below.
-    timeoutMs: 30 * 60_000,
+    timeoutMs: 85 * 60_000,
     async execute(rawArgs, exec) {
       const args = imageGenerationArgs(rawArgs)
       const prompt = args.prompt.trim()
