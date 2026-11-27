@@ -13,6 +13,7 @@ import {
 } from './EmptyHero.tsx'
 import type { HeroMissionStarter } from './EmptyHero.tsx'
 import css from './ConversationRoot.module.css'
+import { CompanionDock } from './CompanionDock.tsx'
 
 interface AppMenuEntry { readonly id: string; readonly title: string }
 interface AppMenuPreset { readonly id: string; readonly label: string; readonly readiness: 'shell-ready' | 'preview-only' }
@@ -66,6 +67,12 @@ export function ConversationRoot({
   const profileInitials = preferredName?.trim().split(/\s+/).slice(0, 2).map(part => part[0] ?? '').join('').toUpperCase() || 'PX'
   const proactiveAttention = useProactivityAttention(items => items)
 
+  const [companionOpen, setCompanionOpen] = useState(false)
+  useEffect(() => {
+    const open = (): void => { setCompanionOpen(true) }
+    window.addEventListener('phoenix:open-companion', open)
+    return () => window.removeEventListener('phoenix:open-companion', open)
+  }, [])
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pendingWorkspaceId, setPendingWorkspaceId] = useState<WorkspaceId | undefined>()
   const pickerAnchor = useRef<HTMLButtonElement>(null)
@@ -554,6 +561,18 @@ export function ConversationRoot({
         <SessionBodyOutlet sessionId={sessionId} renderSlot={renderSlot} />
         {composerSeat}
       </div>
+      {activeApplication === 'general' && !visualActive && (!hero || companionOpen) && (
+        <CompanionDock open={companionOpen} onToggle={() => setCompanionOpen(value => !value)}
+          attention={proactiveAttention}
+          canReview={!inert && !blocked && (inputState?.draft ?? '').trim() === ''}
+          onTasks={() => { setCompanionOpen(false); window.dispatchEvent(new Event('phoenix:open-task-center')) }}
+          onReview={item => {
+            if (inert || blocked || (inputState?.draft ?? '').trim() !== '' || inputActions === undefined) return
+            inputActions.setDraft(heroAttentionPrompt(item))
+            setCompanionOpen(false)
+            requestAnimationFrame(() => rootRef.current?.querySelector('textarea')?.focus())
+          }} />
+      )}
     </div>
   )
 }
