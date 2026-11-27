@@ -26,6 +26,20 @@ describe('Phoenix reality context', () => {
     expect(REALITY_OPERATING_PROTOCOL).toContain('A purely simulated or local UI preview never depends on network')
     expect(REALITY_OPERATING_PROTOCOL).toContain('Only access external tools if the requested result actually depends')
   })
+  it('keeps native location opt-in and expires physical Host fixes', () => {
+    const now = Date.now()
+    expect(realityConfigFromEnvironment({})).not.toHaveProperty('windowsLocation')
+    expect(realityConfigFromEnvironment({ PHOENIX_REALITY_WINDOWS_LOCATION: '1' })).toMatchObject({ windowsLocation: true })
+    const engine = new RealityContextEngine({ refreshMs: 30_000, windowsLocation: true })
+    const internal = engine as unknown as { windowsLocation: { latitude: number; longitude: number; accuracyMeters: number; observedAt: number; expiresAt: number } }
+    internal.windowsLocation = { latitude: 10, longitude: 20, accuracyMeters: 30, observedAt: now - 1000, expiresAt: now + 30_000 }
+    const ctx = { get() { return undefined } } as never
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'))
+    expect(engine.snapshot(ctx).location).toMatchObject({ status: 'authorized-windows-host', source: 'windows-host:GeoCoordinateWatcher', city: null })
+    vi.spyOn(Date, 'now').mockReturnValue(now + 31_000)
+    expect(engine.snapshot(ctx).location).toMatchObject({ status: 'unknown' })
+  })
+
   it('does not accept partial or invalid coordinates as precise location', () => {
     expect(realityConfigFromEnvironment({
       PHOENIX_REALITY_LATITUDE: '19.45',
