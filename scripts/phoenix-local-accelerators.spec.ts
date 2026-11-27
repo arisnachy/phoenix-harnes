@@ -34,6 +34,20 @@ describe('local accelerator provisioning', () => {
     expect(JSON.parse(output)).toEqual(['vulkan', 'cpu', 'no-cpu-baseline', true, false])
   })
 
+  it('uses reported free device memory and rejects unknown or insufficient capacity', () => {
+    const policy = pathToFileURL(resolve(root, 'scripts/phoenix-local-acceleration-policy.mjs')).href
+    const script = [
+      'import { parseDeviceMemory, candidateGpuLayers } from ' + JSON.stringify(policy),
+      "const devices = parseDeviceMemory('  Vulkan0: Intel GPU (8192 MiB, 4096 MiB free)\\n  CUDA0: invalid (2048 MiB, 4096 MiB free)')",
+      "const size = 3000 * 1024 ** 2",
+      "console.log(JSON.stringify([devices, candidateGpuLayers(0, size), candidateGpuLayers(3000, size), candidateGpuLayers(4000, size), candidateGpuLayers(6000, size)]))",
+    ].join('\n')
+    const output = execFileSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8' })
+    expect(JSON.parse(output)).toEqual([
+      [{ name: 'Vulkan0', totalMiB: 8192, freeMiB: 4096 }], [], [8], [8, 16], [8, 16, 99],
+    ])
+  })
+
   it('starts the optional provisioner only after a successful updater result', () => {
     const updater = readFileSync(resolve(root, 'update-phoenix.ps1'), 'utf8')
     expect(updater).toContain("$localAcceleratorAuto = Join-Path $root 'scripts\\phoenix-local-accelerators.mjs'")
