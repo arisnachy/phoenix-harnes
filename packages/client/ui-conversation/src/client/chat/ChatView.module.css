@@ -766,3 +766,74 @@
 :global([data-conversation-scroll]:has(> [data-live-studio-host] > [data-live-studio], > [data-live-studio-host] > [data-space-with-chat='true']):not(:has(> [data-adaptive-inline-host] > *))) .root{flex:1 1 auto;height:100%;min-height:0;min-width:0;overflow:hidden}
 :global([data-conversation-scroll]:has(> [data-live-studio-host] > [data-live-studio], > [data-live-studio-host] > [data-space-with-chat='true']):not(:has(> [data-adaptive-inline-host] > *))) .root>.scroll{flex:1 1 auto;height:100%;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable;padding-inline:14px}
 :global([data-conversation-scroll]:has(> [data-live-studio-host] > [data-live-studio], > [data-live-studio-host] > [data-space-with-chat='true']):not(:has(> [data-adaptive-inline-host] > *))) .root>.scroll .column{max-width:100%;transform:none}
+
+
+/* Living mascot: local SVG rig, no spinner and no layout jump between states. */
+.livingStatus, .livingStatus[data-centered='true'] {
+  align-self: flex-start;
+  justify-content: flex-start;
+  margin: 0;
+  min-height: 52px;
+  height: auto;
+  max-width: 100%;
+  gap: 9px;
+  white-space: normal;
+  text-align: start;
+}
+.livingStatus .turnStatusText, .livingStatus[data-centered='true'] .turnStatusText {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--dsw-alias-label-secondary);
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  animation: none;
+}
+.livingStatus .turnStatusBrand { font-weight: 600; }
+.livingStatus .turnStatusClock { flex: none; white-space: nowrap; margin-left: 0; }
+.livingMascot {
+  width: 58px;
+  height: 52px;
+  display: block;
+  flex: none;
+  overflow: visible;
+}
+.livingMascot[data-large='true'] { width: min(100%, 104px); height: 94px; }
+.livingCompletion { height: 52px; }
+.mascotBody { transform-origin: 60px 75px; animation: mascot-breathe 2.7s ease-in-out infinite; }
+.mascotHead { transform-origin: 60px 57px; }
+.mascotEyes { transform-origin: 60px 42px; animation: mascot-blink 4.6s ease-in-out infinite; }
+.mascotPupils { transform-origin: 60px 42px; }
+.mascotTail { transform-origin: 48px 79px; animation: mascot-tail 2.8s ease-in-out infinite; }
+.mascotWingLeft { transform-origin: 39px 67px; }
+.mascotWingRight { transform-origin: 81px 67px; }
+.mascotProp { transform-origin: center; transform-box: fill-box; animation: mascot-prop 2s ease-in-out infinite; }
+.mascotTyping { animation: mascot-type .55s ease-in-out infinite alternate; }
+.livingMascot[data-mascot-pose='thinking'] .mascotHead { animation: mascot-think 3.2s ease-in-out infinite; }
+.livingMascot[data-mascot-pose='thinking'] .mascotPupils { transform: translateY(-2px); }
+.livingMascot[data-mascot-pose='search'] .mascotPupils { animation: mascot-look 1.8s ease-in-out infinite; }
+.livingMascot[data-mascot-pose='code'] .mascotHead,
+.livingMascot[data-mascot-pose='read'] .mascotHead { animation: mascot-focus 2.4s ease-in-out infinite; }
+.livingMascot[data-mascot-pose='paint'] .mascotProp,
+.livingMascot[data-mascot-pose='tools'] .mascotProp { animation: mascot-work 1.2s ease-in-out infinite; }
+.livingMascot[data-mascot-pose='talk'] .mascotBeak { transform-origin: 60px 55px; animation: mascot-speak .55s ease-in-out infinite; }
+.livingMascot[data-mascot-pose='settled'] .mascotBody { animation: mascot-settle .8s ease-out both; }
+.livingMascot[data-mascot-pose='settled'] .mascotWingRight { animation: mascot-wave .55s ease-in-out 2; }
+@keyframes mascot-breathe { 50% { transform: translateY(-1.8px); } }
+@keyframes mascot-blink { 0%, 43%, 49%, 100% { transform: scaleY(1); } 45%, 47% { transform: scaleY(.08); } }
+@keyframes mascot-tail { 50% { transform: rotate(7deg); } }
+@keyframes mascot-prop { 50% { opacity: .68; } }
+@keyframes mascot-type { to { transform: translateY(-1.5px); } }
+@keyframes mascot-think { 50% { transform: rotate(-8deg); } }
+@keyframes mascot-look { 50% { transform: translateX(3px); } }
+@keyframes mascot-focus { 50% { transform: rotate(3deg) translateY(1px); } }
+@keyframes mascot-work { 50% { transform: rotate(9deg); } }
+@keyframes mascot-speak { 50% { transform: scaleY(.35); } }
+@keyframes mascot-settle { 40% { transform: translateY(-3px); } 100% { transform: none; } }
+@keyframes mascot-wave { 50% { transform: rotate(-23deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .livingMascot, .livingMascot * { animation: none !important; }
+}
