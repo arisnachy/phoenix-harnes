@@ -15,12 +15,15 @@ import { performance } from 'node:perf_hooks'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import type { Context } from '@phoenix-ai/cordis'
+import { loadCivicCatalog, probeWindowsLocation, resolveCivicLocation, type CivicArea, type WindowsLocationFix } from './windows-location.ts'
 
 const execFileAsync = promisify(execFile)
 
 /** Configuration controlling Reality Context refresh cadence and optional location hints. */
 export interface RealityContextConfig {
   readonly refreshMs: number
+  readonly windowsLocation?: boolean
+  readonly civicCatalogPath?: string
   readonly latitude?: number
   readonly longitude?: number
   readonly accuracyMeters?: number
@@ -240,6 +243,8 @@ export function realityConfigFromEnvironment(env: NodeJS.ProcessEnv = process.en
       ? Math.round(configuredRefresh)
       : 30_000,
     ...(validCoordinates ? { latitude, longitude } : {}),
+    ...(env.PHOENIX_REALITY_WINDOWS_LOCATION === '1' ? { windowsLocation: true } : {}),
+    ...(env.PHOENIX_REALITY_CIVIC_CATALOG?.trim() ? { civicCatalogPath: env.PHOENIX_REALITY_CIVIC_CATALOG.trim() } : {}),
     ...(accuracyMeters === undefined ? {} : { accuracyMeters }),
     ...(env.PHOENIX_REALITY_LOCATION_LABEL?.trim()
       ? { locationLabel: env.PHOENIX_REALITY_LOCATION_LABEL.trim() }
@@ -768,7 +773,7 @@ function method<T>(
 }
 
 interface EffectiveLocation {
-  readonly kind: 'configured' | 'browser'
+  readonly kind: 'configured' | 'browser' | 'windows-host'
   readonly latitude: number
   readonly longitude: number
   readonly accuracyMeters: number | null
@@ -814,6 +819,7 @@ function effectiveLocation(
   ctx: Context,
   config: RealityContextConfig,
   assembly: RealityAssemblyContext | undefined,
+  native: WindowsLocationFix | undefined,
 ): EffectiveLocation | undefined {
   if (config.latitude !== undefined && config.longitude !== undefined) {
     return {
@@ -827,11 +833,16 @@ function effectiveLocation(
       expiresAt: null,
     }
   }
-  return transientClientLocation(ctx, assembly)
+  const browser = transientClientLocation(ctx, assembly)
+  if (browser !== undefined) return browser
+  if (config.windowsLocation === true && native !== undefined && native.expiresAt > Date.now()) {
+    return { ...native, kind: 'windows-host', label: null, source: 'windows-host:GeoCoordinateWatcher' }
+  }
+  return undefined
 }
 
 function locationKey(location: EffectiveLocation): string {
-  return `${location.latitude.toFixed(5)},${location.longitude.toFixed(5)}`
+  return `${location.kind}:${location.latitude.toFixed(3)},${location.longitude.toFixed(3)}`
 }
 
 function sameModel(
@@ -1260,7 +1271,13 @@ export class RealityContextEngine {
   private runtimeRefreshJob: Promise<void> | undefined
   private browserWeatherJob: Promise<void> | undefined
 
-  constructor(readonly config: RealityContextConfig) {}
+  private windowsLocation: WindowsLocationFix | undefined
+  private windowsLocationNextProbe = 0
+  private readonly civicCatalog: readonly CivicArea[]
+
+  constructor(readonly config: RealityContextConfig) {
+    this.civicCatalog = loadCivicCatalog(config.civicCatalogPath)
+  }
 
   /** Start best-effort periodic refreshes without keeping the process alive. */
   start(): void {
@@ -1289,6 +1306,12 @@ export class RealityContextEngine {
   private async performRefresh(): Promise<void> {
     const now = Date.now()
     const hostProbes: Promise<void>[] = []
+    if (this.config.windowsLocation === true && platform() === 'win32' && now >= this.windowsLocationNextProbe) {
+      this.windowsLocationNextProbe = now + 30_000
+      hostProbes.push((async () => {
+        this.windowsLocation = await probeWindowsLocation()
+      })())
+    }
     if (now > this.internet.expiresAt) {
       hostProbes.push((async () => {
         const probe = await probeInternet()
@@ -1388,8 +1411,8 @@ export class RealityContextEngine {
     assembly: RealityAssemblyContext | undefined,
     force = false,
   ): Promise<void> {
-    const location = effectiveLocation(ctx, this.config, assembly)
-    if (location?.kind !== 'browser') return
+    const location = effectiveLocation(ctx, this.config, assembly, this.windowsLocation)
+    if (location === undefined || location.kind === 'configured') return
     const key = locationKey(location)
     if (this.browserWeatherJob !== undefined) {
       await this.browserWeatherJob
@@ -1401,12 +1424,12 @@ export class RealityContextEngine {
       try {
         const value = await fetchWeatherAt(location.latitude, location.longitude)
         this.browserWeatherKey = key
-        this.browserWeather = cache(value, 'open-meteo:browser-location', 10 * 60_000, 0.95)
+        this.browserWeather = cache(value, `open-meteo:${location.kind}-location`, 10 * 60_000, 0.95)
       } catch {
         this.browserWeatherKey = key
         this.browserWeather = cache<WeatherPayload>(
           null,
-          'open-meteo:browser-location-unavailable',
+          `open-meteo:${location.kind}-location-unavailable`,
           60_000,
           0,
         )
@@ -1437,6 +1460,7 @@ export class RealityContextEngine {
         this.runtimeRefreshJob ?? Promise.resolve(),
         this.browserWeatherJob ?? Promise.resolve(),
       ])
+      this.windowsLocationNextProbe = 0
       for (const entry of [
         this.internet,
         this.userActivity,
@@ -1455,8 +1479,8 @@ export class RealityContextEngine {
     await Promise.all([
       this.refresh(),
       this.refreshRuntimeServices(ctx),
-      this.refreshBrowserWeather(ctx, assembly, full),
     ])
+    await this.refreshBrowserWeather(ctx, assembly, full)
   }
 
   /**
@@ -1476,9 +1500,10 @@ export class RealityContextEngine {
     const intl = new Intl.DateTimeFormat().resolvedOptions()
     const timezone = intl.timeZone || 'UTC'
     const dst = daylightSavings(now)
-    const location = effectiveLocation(ctx, this.config, assembly)
-    if (location?.kind === 'browser') void this.refreshBrowserWeather(ctx, assembly)
-    const weather = location?.kind === 'browser'
+    const location = effectiveLocation(ctx, this.config, assembly, this.windowsLocation)
+    const civic = location === undefined ? undefined : resolveCivicLocation(this.civicCatalog, location.latitude, location.longitude, location.accuracyMeters)
+    if (location !== undefined && location.kind !== 'configured') void this.refreshBrowserWeather(ctx, assembly)
+    const weather = location !== undefined && location.kind !== 'configured'
       ? this.browserWeatherKey === locationKey(location)
         ? signal(this.browserWeather, epoch)
         : {
@@ -1526,14 +1551,18 @@ export class RealityContextEngine {
           country: null,
           region: null,
           city: null,
-          reason: 'precise coordinates were not explicitly configured and no non-expired browser geolocation permission sample is available',
+          reason: 'No fresh authorized position from configuration, browser, or opted-in Windows Host sensor',
+          windowsHostLocationEnabled: this.config.windowsLocation === true,
           source: 'none',
         }
         : {
-          status: location.kind === 'configured' ? 'authorized-configured' : 'authorized-browser',
-          country: null,
-          region: null,
-          city: null,
+          status: location.kind === 'configured' ? 'authorized-configured' : location.kind === 'browser' ? 'authorized-browser' : 'authorized-windows-host',
+          country: civic?.country ?? null,
+          region: civic?.region ?? null,
+          city: civic?.city ?? null,
+          sector: civic?.sector ?? null,
+          civicSource: civic?.source ?? null,
+          civicPrecision: civic?.precision ?? null,
           label: location.label,
           latitude: location.latitude,
           longitude: location.longitude,
@@ -1541,10 +1570,12 @@ export class RealityContextEngine {
           source: location.source,
           observedAt: location.observedAt === null ? null : new Date(location.observedAt).toISOString(),
           expiresAt: location.expiresAt === null ? null : new Date(location.expiresAt).toISOString(),
-          retention: location.kind === 'browser' ? 'ephemeral-host-cache' : 'configuration',
+          retention: location.kind === 'configured' ? 'configuration' : 'ephemeral-host-cache',
           rule: location.kind === 'browser'
-            ? 'browser coordinates exist only because geolocation permission was already granted; do not infer city/region/country or persist the coordinates as memory'
-            : 'configured coordinates are explicit host configuration',
+            ? 'browser coordinates require granted permission; civic labels require local catalog evidence; do not persist coordinates as memory'
+            : location.kind === 'windows-host'
+              ? 'opted-in physical Windows Host location, not proof of the user or remote client position; civic labels are approximate and require catalog evidence; do not persist coordinates as memory'
+              : 'configured coordinates are explicit host configuration, not a live fix',
         },
       weather: location === undefined
         ? {
