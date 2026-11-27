@@ -13,7 +13,7 @@ import type { CognitiveMemoryKind, CognitiveMemoryLayer } from '@phoenix-ai/dsh-
 import { filterAdaptiveSearchHits, installAdaptiveLearning } from './adaptive.ts'
 import { ExperienceLearningEngine, experienceMemoryInput } from './experience.ts'
 import { LiveEfficiencyMonitor } from './live-efficiency.ts'
-import { classifyMetaFailure, metaResultCallId } from './metacognition.ts'
+import { classifyMetaFailure, formatMetaComparison, metaResultCallId } from './metacognition.ts'
 import { hasUnclearedGoal, isHumanTaskMessage, learningOwnerSessionId } from './team-learning-context.ts'
 import { assessHabitExperience, formatHabitGuidance, formatUnverifiedExperience } from './habit.ts'
 import { AutonomousMemoryCurator } from './autonomous-curator.ts'
@@ -356,8 +356,9 @@ export function apply(ctx: Context, config: Config): void {
       const taskContext = tasks.resolvedReference(taskSession(assembly))?.task.text ?? currentMessage
       const matched = experience.matchTask(taskContext, projectId)
       if (matched === undefined) return ''
-      return [formatHabitGuidance(assessHabitExperience(matched)),
-        formatUnverifiedExperience(matched)].filter(Boolean).join(' ')
+      const assessment = assessHabitExperience(matched)
+      return [formatHabitGuidance(assessment), formatUnverifiedExperience(matched),
+        assessment.mode === 'review' ? formatMetaComparison(matched.recentRuns) : ''].filter(Boolean).join(' ')
     },
     interpolateVariables: false,
   })
