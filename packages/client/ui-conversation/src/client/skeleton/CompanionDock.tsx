@@ -85,7 +85,7 @@ export function CompanionDock({ open, hero = false, onToggle, loadOutput }: Prop
           <span className={css.state}>{error ? 'Estado anterior · sin conexión actual' : row.resident && row.status === 'scheduled' ? 'Próxima comprobación pendiente' : statusText[row.status] ?? row.status}</span>
         </article>)}
       </div>
-      <p className={css.hint}>Elige @finix{alias !== 'finix' && <> o @{alias}</>} una vez; luego continúa desde el mismo input.</p>
+      <p className={css.hint}>Elige @finix{alias !== 'finix' && <> o @{alias}</>} una vez; luego continúa desde el input principal.</p>
     </section>}
     {showNotice && <div className={css.speech} role="status" data-finix-initiative-bubble=""><button type="button" className={css.speechText} onClick={onToggle}><strong>{name}</strong><span>{notice}</span></button><button type="button" className={css.speechClose} aria-label="Descartar aviso de Finix" onClick={() => setAcknowledged(notice)}>×</button></div>}
     <button type="button" className={css.launcher} aria-label={open ? 'Ocultar Finix' : 'Abrir Finix'} aria-expanded={open} aria-controls={open ? id : undefined} onClick={onToggle} title={name}>
