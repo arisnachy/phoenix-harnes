@@ -555,8 +555,8 @@ export function apply(ctx: Context): void {
     description: 'Read scoped PHOENIX tool registration and nonclinical Living connector metadata. Optional query filters tool names/descriptions; offset and limit page the matching names. Local models receive a small page by default and can discover exact schemas with tool_search. Registration is not execution, authorization, login or health. No secrets or clinical records.',
     parameters:{
       query:{type:'string',description:'Optional short capability keyword or exact tool name.'},
-      offset:{type:'integer',minimum:0,description:'Optional tool-page offset, initially zero.'},
-      limit:{type:'integer',minimum:1,maximum:160,description:'Optional maximum tool names in this page.'},
+      offset:{type:'integer',description:'Optional tool-page offset, initially zero.'},
+      limit:{type:'integer',description:'Optional maximum tool names in this page, from 1 to 160.'},
     },
     output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
     isConcurrencySafe:()=>true,
