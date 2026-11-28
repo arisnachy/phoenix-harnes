@@ -826,6 +826,21 @@ export class ReactLoopAgent implements Agent {
     }
     signal.throwIfAborted()
 
+    // A routed local turn must not inherit the cloud-sized SDK or catalog.
+    // Reassemble only the model-facing presentation on a local/cloud transition;
+    // the already-committed runtime context and original permissions stay intact.
+    const previousPresentation = session.requestContext()?.provider ?? this.options.provider
+    if (tools.length > 0 && (previousPresentation === 'phoenix-local') !== (config.provider === 'phoenix-local')) {
+      const latest = boundaryMessages.findLast(message => message.role === 'user' && message.source.kind === 'user')
+      const incomingUserText = latest?.content.flatMap(block => block.type === 'text' ? [block.text] : []).join(' ') ?? ''
+      assembly = await this.loopCtx.systemPrompt.assemble({
+        ...assembleContextFor(this, signal), requestProvider: config.provider, omitRuntimeContext: true,
+        ...(incomingUserText === '' ? {} : { incomingUserText }),
+      })
+      signal.throwIfAborted()
+      tools = assembly.tools
+      system = renderCacheFriendlyPrompt(assembly)
+    }
     if (config.provider === 'phoenix-local') system = renderLocalHarnessPrompt(assembly)
     const header = canonicalHeader({
       config,
