@@ -27,6 +27,65 @@ function stringsOnly(value, max = 30) {
   return Array.isArray(value) ? value.filter(v => typeof v === 'string' && SAFE_SERVICE.test(v)
     && !/^(?:window|document|globalThis|process|navigator|location)(?:\.|$)/u.test(v)).slice(0, max) : []
 }
+const WORKSPACE_KINDS = ['dependencies', 'peerDependencies', 'optionalDependencies', 'devDependencies']
+
+function workspaceDeclarations(manifest) {
+  return WORKSPACE_KINDS.flatMap(kind => {
+    const entries = manifest[kind]
+    if (!entries || typeof entries !== 'object' || Array.isArray(entries)) return []
+    return Object.entries(entries)
+      .filter(([name, version]) => SAFE_PACKAGE.test(name)
+        && typeof version === 'string' && version.startsWith('workspace:'))
+      .map(([name]) => ({ name, kind }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  })
+}
+
+/** Resolve explicit workspace declarations without treating them as loaded services. */
+function workspaceGraph(packages) {
+  const byName = new Map()
+  for (const pkg of packages) {
+    const matches = byName.get(pkg.id) ?? []
+    matches.push(pkg.source)
+    byName.set(pkg.id, matches)
+  }
+  const edges = []
+  const unresolved = []
+  const reverse = new Map(packages.map(pkg => [pkg.source, new Set()]))
+  for (const pkg of packages) {
+    for (const { name, kind } of pkg.workspaceDependencies) {
+      const targets = byName.get(name)
+      if (targets?.length !== 1) {
+        unresolved.push({ source: pkg.source, name, kind,
+          reason: targets ? 'ambiguous-package' : 'outside-inventory-or-missing' })
+        continue
+      }
+      edges.push({ source: pkg.source, target: targets[0], kind })
+      reverse.get(targets[0]).add(pkg.source)
+    }
+  }
+  const impact = packages.map(pkg => {
+    const visited = new Set([pkg.source])
+    const queue = [pkg.source]
+    for (let index = 0; index < queue.length; index++) {
+      for (const dependent of reverse.get(queue[index])) {
+        if (visited.has(dependent)) continue
+        visited.add(dependent)
+        queue.push(dependent)
+      }
+    }
+    return { source: pkg.source, potentialDependents: queue.slice(1).sort() }
+  })
+  const fingerprint = createHash('sha256').update(JSON.stringify({
+    packages: packages.map(pkg => ({ id: pkg.id, source: pkg.source,
+      declarations: pkg.workspaceDependencies })), edges, unresolved,
+  })).digest('hex')
+  return { schema: 'phoenix.adaptive.workspace-graph.v1', scope: 'explicit-workspace-declarations',
+    edges, unresolved, impact, fingerprint, includesDevelopmentDependencies: true,
+    runtimeHealthChecked: false, causalProof: false, mayApply: false,
+    truncatedPossible: packages.length >= MAX_PACKAGES }
+}
+
 function summary(manifest, path) {
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) return null
   if (typeof manifest.name !== 'string' || !SAFE_PACKAGE.test(manifest.name)) return null
@@ -40,6 +99,7 @@ function summary(manifest, path) {
     source: path,
     status: 'declared-source-only',
     surfaces: surface,
+    workspaceDependencies: workspaceDeclarations(manifest),
     dependencies: {
       client: stringsOnly(client?.inject),
       server: stringsOnly(server?.inject),
@@ -160,6 +220,7 @@ export async function inspectAdaptiveSource(root, now = new Date()) {
     packages: result,
     availableGateNames: gateNames,
     cognitiveGenome: cognitiveGenome(result, gateNames),
+    workspaceGraph: workspaceGraph(result),
     recoveryPolicy: 'isolated-branch -> synthetic-checks -> review -> verified-activation -> revert',
   }
 }
