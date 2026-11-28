@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { forgetOllamaCandidate, getLocalModel, getRuntimeManifest, registerOllamaCandidate, synchronizeOllamaCatalog, type OllamaDiscoveredModel } from './catalog.js'
+import { comparableOllamaTag, getLocalModelCatalog, forgetOllamaCandidate, getLocalModel, getRuntimeManifest, registerOllamaCandidate, synchronizeOllamaCatalog, type OllamaDiscoveredModel } from './catalog.js'
 import {
   LocalModelRuntimeFault,
   type ArtifactDownloadRequest,
@@ -245,6 +245,9 @@ class RuntimeManager implements LocalModelRuntimeManager {
         }
         this.lastOllamaCatalogRead = 0
         await this.refreshCatalog()
+        const actual = getLocalModelCatalog().find(entry => entry.backend === 'ollama'
+          && comparableOllamaTag(entry.ollamaModel) === comparableOllamaTag(model.ollamaModel))
+        if (actual !== undefined) modelId = actual.id
         const installedModelIds = [...new Set([...this.persistent.installedModelIds, modelId])]
         await this.savePersistent({ ...this.persistent, selectedModelId: modelId, installedModelIds })
         this.publishPhase('ready')
