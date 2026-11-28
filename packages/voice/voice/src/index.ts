@@ -584,7 +584,12 @@ export class VoiceRuntime extends TypertRemoteService {
     }
   }
 
-  /** Request speaker-only control from the actual calling conversation, never a raw thread id. */
+  /** Request speaker-only control from the actual calling conversation, never a raw thread id.
+   * @param key - Owning conversation control key.
+   * @param action - Requested voice or interface control action.
+   * @param text - Optional speech text or interface revision token, depending on the action.
+   * @returns The admission receipt or the exact rejection reason.
+   */
   agentRealtimeControl(key: string, action: VoiceAgentRealtimeAction, text?: string): VoiceAgentRealtimeResult {
     const now = Date.now()
     const ui = ['ui-inspect', 'ui-compact', 'ui-expand', 'ui-highlight-sidebar', 'ui-highlight-composer', 'ui-highlight-details', 'ui-clear-highlight'].includes(action)
@@ -614,7 +619,11 @@ export class VoiceRuntime extends TypertRemoteService {
     return result
   }
 
-  /** Read only the most recent control receipt, distinguishing admission from playback. */
+  /** Read only the most recent control receipt, distinguishing admission from playback.
+   * @param key - Owning conversation control key.
+   * @param family - Optional filter for voice or interface commands.
+   * @returns The latest matching receipt, or a failure receipt when unavailable.
+   */
   agentRealtimeControlStatus(key: string, family?: 'ui' | 'voice'): VoiceAgentRealtimeResult {
     const entry = this.agentRealtimeCommands.get(key)
     if (entry === undefined || (family !== undefined && (entry.command.action.startsWith('ui-') ? 'ui' : 'voice') !== family)) return { state: 'failed', reason: 'no-control-request' }
@@ -625,7 +634,10 @@ export class VoiceRuntime extends TypertRemoteService {
     return entry.result
   }
 
-  /** Poll from the active conversation surface. Claim once; old clients cannot replay a command. */
+  /** Poll from the active conversation surface. Claim once; old clients cannot replay a command.
+   * @param key - Active conversation control key.
+   * @returns The newly claimed command, or null if none is available.
+   */
   @Remote('conversationAgentRealtimePoll')
   conversationAgentRealtimePoll(key: string): VoiceAgentRealtimeCommand | null {
     if (!/^[A-Za-z0-9_:-]{1,128}$/u.test(key)) return null
@@ -640,7 +652,10 @@ export class VoiceRuntime extends TypertRemoteService {
     return entry.command
   }
 
-  /** Acknowledge the claimed command from its owning client, not from another conversation. */
+  /** Acknowledge the claimed command from its owning client, not from another conversation.
+   * @param receipt - Completion receipt containing the owning key and command identifier.
+   * @returns Whether the claimed command accepted the completion receipt.
+   */
   @Remote('conversationAgentRealtimeComplete')
   conversationAgentRealtimeComplete(receipt: VoiceAgentRealtimeCompletion): boolean {
     const entry = this.agentRealtimeCommands.get(receipt.key)
