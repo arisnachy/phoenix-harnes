@@ -32,12 +32,16 @@ export function LivingMascot({ pose, large = false }: { readonly pose: MascotPos
   return (
     <svg viewBox="0 0 120 108" className={css.livingMascot} data-mascot-pose={pose}
       data-large={large ? 'true' : undefined} aria-hidden="true" focusable="false">
-      <ellipse cx="60" cy="101" rx="32" ry="3" fill="#9d582d" opacity=".12" />
+      <ellipse className={css.mascotShadow} cx="60" cy="101" rx="32" ry="3" fill="#9d582d" opacity=".12" />
       <g className={css.mascotBody}>
         <g className={css.mascotTail}>
           <path d="M43 73C17 75 9 57 12 50 0 79 19 95 43 88 29 99 49 102 63 86" fill="#f47728"/>
           <path d="M39 83C20 83 15 74 12 67 13 89 31 96 48 85" fill="#ffc044"/>
           <path d="M44 86Q29 103 51 99L62 83" fill="#ffab35"/>
+        </g>
+        <g fill="#e98a25">
+          <ellipse className={css.mascotFootLeft} cx="47" cy="96" rx="8" ry="4"/>
+          <ellipse className={css.mascotFootRight} cx="71" cy="96" rx="8" ry="4"/>
         </g>
         <ellipse cx="60" cy="73" rx="25" ry="26" fill="#ed7027"/>
         <ellipse cx="63" cy="75" rx="17" ry="20" fill="#ffe2ac"/>
@@ -50,8 +54,10 @@ export function LivingMascot({ pose, large = false }: { readonly pose: MascotPos
           <path d="M92 70Q89 80 78 81" stroke="#ffc252" strokeWidth="3" strokeLinecap="round" fill="none"/>
         </g>
         <g className={css.mascotHead}>
+          <g className={css.mascotCrest}>
           <path d="M39 28Q13 7 28 6 30 20 48 18 32 4 55 1 48 13 63 17 69 3 82 7 74 20 87 27" fill="#f77a24"/>
           <path d="M48 18Q32 4 55 1 48 13 63 17" fill="#ffc34a"/>
+          </g>
           <ellipse cx="60" cy="43" rx="36" ry="31" fill="#ff902d"/>
           <ellipse cx="60" cy="49" rx="30" ry="23" fill="#fff0cd"/>
           <path d="M33 32Q42 24 50 29M70 29Q78 24 87 32" fill="none" stroke="#b75a2a" strokeWidth="2" strokeLinecap="round"/>
@@ -99,6 +105,7 @@ export function LivingMascot({ pose, large = false }: { readonly pose: MascotPos
           <path d="M25 69Q43 64 60 74 77 64 95 69V98Q77 93 60 101 43 93 25 98Z" fill="#a96b48"/>
           <path d="M28 67Q44 63 60 73 76 63 92 67V94Q76 89 60 97 44 89 28 94Z" fill="#fff5df"/>
           <path d="M60 73v24M34 74l19 5m-19 3 19 5m14-8 19-5m-19 13 19-5" stroke="#c6a88a" strokeWidth="1.5" fill="none"/>
+          <path className={css.mascotPage} opacity="0" d="M60 73Q76 63 92 67V94Q76 89 60 97Z" fill="#fffcf0"/>
         </g>}
         {(pose === 'verify' || pose === 'plan') && <g>
           <rect x="42" y="65" width="38" height="37" rx="3" fill="#ad8054"/>
