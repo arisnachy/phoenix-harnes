@@ -148,6 +148,7 @@ export function ModelSelect(
     ? -1
     : choices.findIndex(c => c.selection.provider === state.current?.provider && c.selection.model === state.current.model)
   const currentChoice = choices[selectedIndex]
+  const localReasoning = state.current?.provider === 'phoenix-local'
   const reasoning = currentChoice?.model.reasoning
   const effectiveEffort = state.current?.reasoningEffort ?? reasoning?.defaultEffort
   const codexSpeedAvailable = state.current?.provider === 'openai-codex'
@@ -157,7 +158,8 @@ export function ModelSelect(
     ? undefined
     : effectiveEffort === undefined
       ? t('effort.providerDefault')
-      : reasoning.efforts.find(level => level.id === effectiveEffort)?.name ?? effectiveEffort
+      : effectiveEffort === 'local:off' ? t('effort.instant') : effectiveEffort === 'local:on' ? t('effort.think')
+        : reasoning.efforts.find(level => level.id === effectiveEffort)?.name ?? effectiveEffort
   const effortChoices = useMemo<readonly EffortChoice[]>(() => reasoning === undefined
     ? []
     : [
@@ -165,7 +167,7 @@ export function ModelSelect(
       ...reasoning.efforts.map((effort: ModelReasoningEffort) => ({
         key: `effort:${effort.id}`,
         effort: effort.id,
-        label: effort.name,
+        label: effort.id === 'local:off' ? t('effort.instant') : effort.id === 'local:on' ? t('effort.think') : effort.name,
         ...effort.description === undefined ? {} : { description: effort.description },
       })),
     ], [reasoning, t])
@@ -605,7 +607,18 @@ export function ModelSelect(
               )}
               {effortChoices.length === 0
                 ? <div className={css.empty}>{t('empty.efforts')}</div>
-                : (
+                : localReasoning ? effortChoices.map(choice => (
+                  <button key={choice.key} ref={itemRef()} type="button" role="menuitemradio"
+                    aria-checked={effectiveEffort === choice.effort}
+                    className={clsx(css.option, effectiveEffort === choice.effort && css.selected)}
+                    disabled={busy}
+                    onClick={() => { chooseEffort(choice.effort) }}>
+                    <span className={css.optionCopy}>
+                      <span className={css.modelName}>{choice.label}</span>
+                    </span>
+                    <span className={css.check}>{effectiveEffort === choice.effort ? <IconCheckOutline16 /> : null}</span>
+                  </button>
+                )) : (
                   <div
                     className={css.effortSelector}
                     data-testid="effort-selector"
