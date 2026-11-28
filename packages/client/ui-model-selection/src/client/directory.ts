@@ -14,6 +14,7 @@ import {
   assertPhoenixLocalSelectable,
   projectPhoenixLocalAvailability,
   PHOENIX_LOCAL_PROVIDER,
+  localThinkingValue,
   type PhoenixLocalInstallState,
 } from './phoenix-local-visibility.ts'
 
@@ -63,6 +64,7 @@ export class ModelDirectory {
     private readonly available: () => boolean,
     private readonly readLocalModelState?: () => Promise<PhoenixLocalInstallState | undefined>,
     private readonly selectLocalModel?: (modelId: string) => Promise<PhoenixLocalInstallState>,
+    private readonly setLocalThinking?: (thinking: boolean | string | null) => Promise<PhoenixLocalInstallState>,
   ) {}
 
   /**
@@ -132,6 +134,34 @@ export class ModelDirectory {
     if (this.disposed || generation !== this.generation) return
     try {
       assertPhoenixLocalSelectable(selection, localState)
+      const previous = this.store.getSnapshot().current
+      if (selection.provider === PHOENIX_LOCAL_PROVIDER && localState !== undefined
+        && selection.model === localState.selectedModelId
+        && previous?.provider === selection.provider && previous.model === selection.model
+        && previous.reasoningEffort !== selection.reasoningEffort) {
+        if (this.setLocalThinking === undefined || !localState.thinkingCapabilities?.values.length) {
+          throw new Error('Local reasoning is unavailable on this Host.')
+        }
+        const requested = localThinkingValue(localState, selection.reasoningEffort)
+        localState = await this.setLocalThinking(requested)
+        if (localState.selectedModelId !== selection.model || (localState.thinking ?? null) !== requested) {
+          throw new Error('Host did not confirm the requested local reasoning mode.')
+        }
+        if (this.disposed || generation !== this.generation) return
+        const snapshot = this.store.getSnapshot()
+        const projected = projectPhoenixLocalAvailability({
+          current: { provider: PHOENIX_LOCAL_PROVIDER, model: PHOENIX_LOCAL_PROVIDER },
+          routable: snapshot.routable === true, groups: [...snapshot.groups], failures: [...snapshot.failures],
+        }, localState)
+        this.store.update(s => {
+          s.current = projected.current
+          s.groups = projected.groups
+          s.routable = projected.routable
+          s.status = 'ready'
+          s.error = null
+        })
+        return
+      }
       if (selection.provider === PHOENIX_LOCAL_PROVIDER && selection.model !== PHOENIX_LOCAL_PROVIDER) {
         if (this.selectLocalModel === undefined) throw new Error('Local model switching is unavailable on this Host.')
         localState = await this.selectLocalModel(selection.model)
@@ -150,7 +180,7 @@ export class ModelDirectory {
       sessionId: this.sessionId,
       provider: selection.provider,
       model: selection.provider === PHOENIX_LOCAL_PROVIDER ? PHOENIX_LOCAL_PROVIDER : selection.model,
-      ...selection.reasoningEffort === undefined
+      ...selection.provider === PHOENIX_LOCAL_PROVIDER || selection.reasoningEffort === undefined
         ? {}
         : { reasoningEffort: selection.reasoningEffort },
       ...selection.serviceTier === undefined ? {} : { serviceTier: selection.serviceTier },
@@ -166,10 +196,13 @@ export class ModelDirectory {
     // The Host validated the route before accepting it, and Phoenix Local has
     // additionally passed the install-state gate immediately before submission.
     this.store.update((s) => {
-      s.current = result.value.selected.provider === PHOENIX_LOCAL_PROVIDER && localState?.catalog !== undefined
-        ? { ...result.value.selected, model: localState.selectedModelId }
-        : result.value.selected
-      s.routable = true
+      const projected = result.value.selected.provider === PHOENIX_LOCAL_PROVIDER
+        ? projectPhoenixLocalAvailability({
+          current: result.value.selected, routable: true, groups: [...s.groups], failures: [...s.failures],
+        }, localState) : undefined
+      s.current = projected?.current ?? result.value.selected
+      if (projected !== undefined) s.groups = projected.groups
+      s.routable = projected?.routable ?? true
       s.status = 'ready'
       s.error = null
     })

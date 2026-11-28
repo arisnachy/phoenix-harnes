@@ -167,9 +167,19 @@ export async function readOllamaThinkingCapabilities(model: string): Promise<Loc
     signal: AbortSignal.timeout(3_000),
   })
   if (!response.ok) return undefined
-  const payload = await response.json() as { thinking?: { values?: unknown; default?: unknown } }
+  const payload = await response.json() as { thinking?: { values?: unknown; default?: unknown }; capabilities?: unknown; details?: { family?: unknown } }
   const raw = payload.thinking
-  if (!Array.isArray(raw?.values)) return undefined
+  if (!Array.isArray(raw?.values)) {
+    // Standard Ollama /api/show advertises "thinking" in capabilities but
+    // does not necessarily include a values extension. Qwen3-family thinking
+    // uses the native boolean switch; never infer named levels for other families.
+    const family = payload.details?.family
+    if (Array.isArray(payload.capabilities) && payload.capabilities.includes('thinking')
+      && typeof family === 'string' && /^qwen(?:3|35|3next)(?:[._-][a-z0-9]+)*$/iu.test(family)) {
+      return { values: [false, true], default: null }
+    }
+    return undefined
+  }
   const values = raw.values.filter((value): value is boolean | string =>
     typeof value === 'boolean' || (typeof value === 'string' && value.length > 0 && value.length <= 64))
   if (values.length === 0 || values.length > 16) return undefined
