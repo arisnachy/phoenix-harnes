@@ -177,7 +177,7 @@ describe('dsh-tool-skill', () => {
     ctx.skills.register({ name: 'lifecycle-skill', description: 'Lifecycle', source: 'runtime', content: 'body' })
 
     const fiber = await ctx.plugin(toolSkill)
-    expect(ctx.tools.schemas().map(tool => tool.name)).toEqual(['skill'])
+    expect(ctx.tools.schemas().map(tool => tool.name)).toEqual(['skill', 'skill_search'])
     expect(await composePrefix(ctx, '/workspace')).toHaveLength(1)
     expect(ctx.tools.get('skill')?.presentCall?.({ name: 'project-skill' })).toEqual({
       card: 'generic',
@@ -190,7 +190,7 @@ describe('dsh-tool-skill', () => {
     expect(await composePrefix(ctx, '/workspace')).toEqual([])
 
     toolSkill.apply(ctx)
-    expect(ctx.tools.schemas().map(tool => tool.name)).toEqual(['skill'])
+    expect(ctx.tools.schemas().map(tool => tool.name)).toEqual(['skill', 'skill_search'])
   })
 
   it('defers catalog discovery on fast conversation and restores it on the next normal step', async () => {
@@ -1323,4 +1323,18 @@ describe('user-explicit invocation injection', () => {
     expect(decision.messages.filter(message => message.source.kind === 'skill-invocation')).toHaveLength(1)
   })
 
+})
+
+
+it('searches a bounded page of scoped model-invocable skills without loading their bodies', async () => {
+  const home = await tempDir('skill-search')
+  const root = join(home, '.agents', 'skills')
+  await writeSkill(root, 'browser-example', 'Navigate a browser', 'PRIVATE FULL BODY')
+  const ctx = await setup(home)
+  const agent = agentForCwd(home)
+  const result = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('skill-search-page'), name: 'skill_search', agent,
+    arguments: { query: 'browser-example' } })
+  expect(result.isError).toBe(false)
+  expect(result.value).toContain('browser-example')
+  expect(result.value).not.toContain('PRIVATE FULL BODY')
 })
