@@ -33,6 +33,8 @@ export interface ProactivityRuntimeConfig {
   readonly privateWorkProvider: string
   readonly privateWorkResultChars: number
   readonly executeResident?: (input: ProactivityExecution) => ProactivityExecutionResult
+  /** Same-session completed companion messages, bounded and read-only. */
+  readonly companionHistory?: (input: ProactivityExecution) => string
   readonly userMailIdentity?: string
   readonly harnessMailIdentity?: string
   readonly resolveDefaultMailRecipient?: () => Promise<string | undefined>
@@ -426,7 +428,9 @@ export function createProactivityExecutor(
         const controller = new AbortController()
         const run = await subagents.start(config.privateWorkProvider, {
           label: input.phase === 'prepare' ? `Prepare: ${input.task.title}` : `Scheduled: ${input.task.title}`,
-          prompt: [{ type: 'text', text: proactivePrompt(input, config, conditionEvidence, resolvedRecipient) }],
+          prompt: [{ type: 'text', text: companion
+            ? ['You are Finix. Respond naturally to the current user in their language. Use authorized read-only tools only; if a connector, external model or write is needed, explain the limitation and request a governed handoff to Kira. Never claim unperformed work.', config.companionHistory?.(input) ?? '', 'Current user message (answer this):', input.instruction].filter(Boolean).join('\n\n')
+            : proactivePrompt(input, config, conditionEvidence, resolvedRecipient) }],
           parent,
           signal: controller.signal,
           ...(companion ? { agentOptions: COMPANION_LOCAL_MODEL, toolFilter: companionAvailableTools(parent.ctx.tools.schemas().map(schema => schema.name)), persona: COMPANION_LOCAL_PERSONA } : {}),
