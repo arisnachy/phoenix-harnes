@@ -641,6 +641,16 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
       setEditor(null);setRevisionCounter(n=>n+1);setStatus(deleted?'Movido a Papelera':'Recuperado')
     }catch(e){setError(String(e))}
   }
+  const changeLibraryItem=async(item:Summary,change:{space?:string;deleted?:boolean}):Promise<void>=>{
+    if(busy)return
+    setBusy(true);setError('')
+    try{
+      await api<{item:Item}>('/items/'+item.id,{revision:item.revision,...change},'PUT')
+      setRevisionCounter(n=>n+1)
+      setStatus(change.deleted===true?'Movido a Papelera':change.deleted===false?'Recuperado':'Movido a '+change.space)
+    }catch(e){setError(String(e));setRevisionCounter(n=>n+1)}
+    finally{setBusy(false)}
+  }
   const loadHistory=async():Promise<void>=>{
     if(!editor)return
     try{
@@ -664,6 +674,7 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
   const updateSheet=(newSheet:Sheet):void=>mutate({content:JSON.stringify(newSheet)})
   const currentSlide=deck.slides[slideIndex]
   const filteredSpaces=[...new Set(items.map(x=>x.space))]
+  const librarySpaces=[...new Set(['personal','docencia','investigacion','juegos','healthia',...filteredSpaces])]
   return <section className={css.root} role="region" aria-label="PHOENIX Espacio" data-phoenix-space="" data-space-with-chat={withChat&&editor?"true":undefined} data-readable={readable?"true":"false"}>
     <aside className={css.rail}>
       <div className={css.railTitle}>Espacio</div>
@@ -692,6 +703,7 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
       </header>
       {error&&<div className={css.alert} role="alert">{error}<button type="button" onClick={()=>setError('')}>Cerrar</button></div>}
       {!editor?<>
+        {status&&<div role="status">{status}</div>}
         <div className={css.toolbar}>
           <input aria-label="Buscar en Biblioteca" placeholder="Buscar por título o contenido…" value={query} onChange={e=>setQuery(e.currentTarget.value)}/>
           <select aria-label="Tipo de elemento nuevo" value={createKind} onChange={e=>setCreateKind(e.currentTarget.value as SpaceKind)}>
@@ -720,11 +732,21 @@ export function PhoenixSpace({onClose,renderSpecialized}:{onClose:()=>void;rende
         </div>
         <div className={mode==='grid'?css.grid:css.list} aria-busy={loading}>
           {!loading&&items.length===0&&<div className={css.empty}>Todavía no hay elementos en esta categoría. Puedes crear o importar uno.</div>}
-          {items.map(item=><button key={item.id} type="button" className={css.tile} onClick={()=>{void openItem(item.id)}}>
-            <span className={css.typeIcon} data-kind={item.kind}>{ICON[item.kind]}</span>
-            <span className={css.tileInfo}><strong>{item.title}</strong><small>{LABEL[item.kind]} · {item.space}</small>
-              <small>{new Date(item.updatedAt).toLocaleDateString('es-DO')}</small></span>
-          </button>)}
+          {items.map(item=><div key={item.id} className={css.libraryTile}>
+            <button type="button" className={css.tile} disabled={busy} onClick={()=>{void openItem(item.id)}}>
+              <span className={css.typeIcon} data-kind={item.kind}>{ICON[item.kind]}</span>
+              <span className={css.tileInfo}><strong>{item.title}</strong><small>{LABEL[item.kind]} · {item.space}</small>
+                <small>{new Date(item.updatedAt).toLocaleDateString('es-DO')}</small></span>
+            </button>
+            <div className={css.libraryActions}>
+              {!item.deleted&&<select aria-label={'Mover '+item.title} value={item.space} disabled={busy}
+                onChange={e=>{void changeLibraryItem(item,{space:e.currentTarget.value})}}>
+                {librarySpaces.map(destination=><option key={destination} value={destination}>{destination===item.space?'Mover a…':destination}</option>)}
+              </select>}
+              <button type="button" disabled={busy} aria-label={(item.deleted?'Restaurar ':'Eliminar ')+item.title}
+                onClick={()=>{void changeLibraryItem(item,{deleted:!item.deleted})}}>{item.deleted?'Restaurar':'Eliminar'}</button>
+            </div>
+          </div>)
         </div>
       </>:<>
         <div className={css.editHeader}>

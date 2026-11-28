@@ -107,3 +107,12 @@
 .root[data-space-with-chat='true'] .topbarTitle strong{font-size:17px}
 
 .root[data-space-with-chat='true']{position:relative;inset:auto;width:100%;height:100%;min-width:0;flex:1;z-index:auto}
+
+/* Library management is visible without opening a document. */
+.libraryTile{min-width:0;display:flex;flex-direction:column;gap:4px}
+.libraryTile>.tile{width:100%;flex:1}
+.libraryActions{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+.libraryActions select{flex:1;min-width:0;max-width:100%;font:inherit;font-size:11px;padding:4px;border:1px solid var(--dsw-alias-border-l1,#ddd);border-radius:6px;background:var(--dsw-alias-bg-layer-1,#fff);color:inherit}
+.libraryActions button{font-size:11px!important;padding:4px 7px!important}
+.list .libraryTile{flex-direction:row;align-items:center}
+.list .libraryActions{flex-shrink:0;max-width:45%}
