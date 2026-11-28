@@ -499,12 +499,30 @@ export function fitPhoenixLocalTextTurn(
     // Keep instruction and compaction checkpoints, and retain the newest skill
     // catalog unless the current suffix has its replacement.
     const catalog = retained.some(isAuxiliarySkillCatalog) ? undefined : prior.findLast(isAuxiliarySkillCatalog)
-    const prefix = prior.filter(message => {
+    // A new complete workspace baseline explicitly supersedes earlier
+    // workspace instructions. Do not replay obsolete baselines or deltas
+    // on a small model. Preserve all changes after the newest baseline and
+    // all unrelated instruction producers. A later baseline in the active
+    // suffix supersedes the prior workspace prefix as well.
+    const isWorkspaceBaseline = (message: Message): boolean => {
+      const source = message.source as { kind: string; baseline?: boolean }
+      return source.kind === 'agent-instructions' && source.baseline === true
+    }
+    const latestBaseline = retained.some(isWorkspaceBaseline)
+      ? prior.length : prior.findLastIndex(isWorkspaceBaseline)
+    const priorSkills = new Map<string, Message>()
+    for (const message of prior) {
+      const source = message.source as { kind: string; name?: string }
+      if (source.kind === 'skill-invocation' && source.name !== undefined) priorSkills.set(source.name, message)
+    }
+    const prefix = prior.filter((message, index) => {
       if (message.source.kind === 'plugin' && message.source.plugin === '@phoenix-ai/dsh-system-prompt') {
         return message === runtime && !suffixHasRuntime
       }
       if (isAuxiliarySkillCatalog(message)) return message === catalog
-      const source = message.source as { kind: string; form?: string; plugin?: string }
+      const source = message.source as { kind: string; form?: string; plugin?: string; name?: string }
+      if (source.kind === 'agent-instructions' && latestBaseline >= 0 && index < latestBaseline) return false
+      if (source.kind === 'skill-invocation' && source.name !== undefined && priorSkills.get(source.name) !== message) return false
       return message.role === 'system' || source.form === 'instructions' || (source.kind === 'plugin' && source.plugin === 'compact')
     })
     const messages = [...prefix, ...retained]
