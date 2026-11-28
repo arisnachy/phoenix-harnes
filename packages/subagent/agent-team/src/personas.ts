@@ -141,20 +141,22 @@ export type TeamSkill =
  */
 export function inferTeamSkill(work: string): TeamSkill {
   const text = work.trim().toLocaleLowerCase()
+  // Common Spanish infinitives and noun forms share stems; match the full
+  // Unicode word so assigning a specialist does not depend on exact inflection.
   if (/\b(playtest|play-test|qa|tester|testing|tests?|pruebas?|probar|validaci[oó]n|gameplay test)\b/u.test(text)) return 'testing'
-  if (/\b(design|designer|creative|creatividad|diseñ|disen|ui|ux|visual|art|artist|asset|sprite|avatar|animation|animaci[oó]n|layout)\b/u.test(text)) return 'design'
-  if (/\b(security|secure|vulnerab|threat|risk|riesgo|seguridad|permission|authz|hardening|attack)\b/u.test(text)) return 'security'
-  if (/\b(deploy|deployment|release|automation|automatiz|scheduler|schedule|workflow|ci\/?cd|pipeline|background task)\b/u.test(text)) return 'automation'
-  if (/\b(data|datos|sql|database|analytics|an[aá]lisis de datos|chart|metric|estad[ií]stic|dataset)\b/u.test(text)) return 'data'
+  if (/\b(design|designer|creative|creatividad|diseñ\p{L}*|disen\p{L}*|ui|ux|visual|art|artist|asset|sprite|avatar|animation|animaci[oó]n|layout)\b/u.test(text)) return 'design'
+  if (/\b(security|secure|vulnerab\p{L}*|threat|risk|riesgo|seguridad|permission|authz|hardening|attack)\b/u.test(text)) return 'security'
+  if (/\b(deploy|deployment|release|automation|automatiz\p{L}*|scheduler|schedule|workflow|ci\/?cd|pipeline|background task)\b/u.test(text)) return 'automation'
+  if (/\b(data|datos|sql|database|analytics|an[aá]lisis de datos|chart|metric|estad[ií]stic\p{L}*|dataset)\b/u.test(text)) return 'data'
   if (/\b(connector|integration|integraci[oó]n|mcp|oauth|api|webhook|adapter|provider)\b/u.test(text)) return 'integration'
-  if (/\b(browser|web search|search web|chrome|chromedriver|playwright|puppeteer|navegar|b[uú]squeda web|scrap)\b/u.test(text)) return 'browser'
-  if (/\b(performance|optimi[sz]|latency|speed|memory|throughput|profil|rendimiento|velocidad)\b/u.test(text)) return 'performance'
-  if (/\b(document|docs|documentation|write|writer|copy|redact|traduc|translation|readme|manual)\b/u.test(text)) return 'writing'
-  if (/\b(architect|architecture|plan|planner|planning|strategy|estrateg|roadmap|diseño t[eé]cnico)\b/u.test(text)) return 'planning'
-  if (/\b(juez|judge|reviewer|review|revisor|revisi[oó]n|quality|calidad|auditor|adversarial)\b/u.test(text)) return 'quality'
+  if (/\b(browser|web search|search web|chrome|chromedriver|playwright|puppeteer|navegar|b[uú]squeda web|scrap\p{L}*)\b/u.test(text)) return 'browser'
+  if (/\b(performance|optimi[sz]\p{L}*|latency|speed|memory|throughput|profil\p{L}*|rendimiento|velocidad)\b/u.test(text)) return 'performance'
+  if (/\b(document|docs|documentation|write|writer|copy|redact\p{L}*|traduc\p{L}*|translation|readme|manual)\b/u.test(text)) return 'writing'
+  if (/\b(architect|architecture|plan|planner|planning|strategy|estrateg\p{L}*|roadmap|diseño t[eé]cnico)\b/u.test(text)) return 'planning'
+  if (/\b(juez|judge|reviewer|review|revisor|revisi[oó]n|quality|calidad|auditor\p{L}*|adversarial)\b/u.test(text)) return 'quality'
   if (/\b(supervisor|supervise|orchestrator|orchestrate|coordinator|coordinate|lead|manager|director|supervisar|coordinar|orquestar)\b/u.test(text)) return 'orchestration'
   if (/\b(code|coding|coder|developer|engineer|debug|fix|repair|implement|programmer|programador|desarrollador|c[oó]digo|arreglar|reparar|depurar|implementar|typescript|javascript|python)\b/u.test(text)) return 'engineering'
-  if (/\b(investig|research|researcher|referencia|references|evidence|evidencia|literature|benchmark)\b/u.test(text)) return 'research'
+  if (/\b(investig\p{L}*|research|researcher|referencia|references|evidence|evidencia|literature|benchmark)\b/u.test(text)) return 'research'
   return 'general'
 }
 

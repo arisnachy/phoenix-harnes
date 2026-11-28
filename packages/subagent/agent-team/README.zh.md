@@ -38,6 +38,8 @@ fresh child 不带 parent 历史 seed。fork child 只捕获一次 Lead 的已�
 
 roster 同时报告持久 provisioning／failed phase 与实时 `running`／`idle` 状态。active 但不驻留的 teammate 显示为 `inactive`；后续唤醒投递通过 continuation owner 冷恢复它。创建请求可携带与提供方无关的 `agentOptions`；continuation manager 校验并持久化路由，roster 将 LLM 的 `modelProvider` 和 `model` 与子代理传输提供方分别报告。唤醒邮箱投递及定向用户回复保留驻留子代理自身的持久选择或创建时路由。冷恢复的子代理使用其持久化选项，不接收负责人的路由。Fénix Eclipse 为 Kira 配置一个协调器路由，并在创建子代理时配置一个子代理路由。正在执行的操作先完成，随后在安全边界投递用户回复。
 
+未指定成员姓名的分派任务会对实际职责使用确定性、有限的词汇匹配。常见西班牙语变形词如 *investigación*、*automatización*、*optimización*、*auditoría* 和 *redactar* 会选用相应专长池，而不再仅因词形与词根不同就落入通用池。这只是专长标签匹配，不代表模型能力已经过基准测量，也不会提升权限。
+
 ## 持久 mailbox
 
 `sendMessage()` 校验 peer 成员关系，追加 `team/message/queued` 并 flush，之后才尝试投递。结果始终标识该持久消息；`queued` 表示即时投递被推迟，并不表示需要重发。target 为 live 时，quiet 投递会立即注入、flush 并确认上下文，但绝不会激活 inactive target；inactive target 的 quiet 消息会保持 queued。wakeup 投递成为 target 的下一个 FIFO turn，并在需要时冷恢复它。
