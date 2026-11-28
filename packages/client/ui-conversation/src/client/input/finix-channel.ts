@@ -53,3 +53,21 @@ export async function loadFinixOutput(connection: ConnectionHandle | undefined, 
   if (!result.ok) throw new Error(result.error.message)
   return parseFinixOutput(result.value)
 }
+
+/** Explicit, session-scoped recipient selection. Opening the output does not change the recipient. */
+const finixSessions = new Set<string>()
+export const FINIX_RECIPIENT_EVENT = 'phoenix:finix-recipient'
+export function isFinixRecipient(sessionId: string): boolean { return finixSessions.has(sessionId) }
+export function setFinixRecipient(sessionId: string, active: boolean): void {
+  if (active === finixSessions.has(sessionId)) return
+  if (active) finixSessions.add(sessionId)
+  else finixSessions.delete(sessionId)
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(FINIX_RECIPIENT_EVENT))
+}
+export function resolveFinixMessage(text: string, sessionId: string): string | undefined {
+  const explicit = finixInstruction(text)
+  if (explicit !== undefined) return explicit
+  // An explicit different @address or slash command never inherits Finix.
+  if (/^\s*[@/]/u.test(text)) return undefined
+  return isFinixRecipient(sessionId) ? text.trim() : undefined
+}
