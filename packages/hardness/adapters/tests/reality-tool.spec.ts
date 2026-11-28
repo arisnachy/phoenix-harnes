@@ -40,3 +40,18 @@ describe('phoenix_reality_now tool', () => {
     expect(refreshNow).toHaveBeenCalledWith(ctx, false, undefined)
   })
 })
+
+describe('Reality Context field reads', () => {
+  it('preserves legacy full output and reads exact fields or properties', async () => {
+    const data = { schema: 1, generatedAt: 'now', network: { adapters: ['eth0'], status: 'observed' }, ai: { large: 'x'.repeat(50_000) } }
+    const tool = createRealitySnapshotTool({ refreshNow: vi.fn(async () => undefined), snapshot: vi.fn(() => data) } as never, {} as never)
+    expect(await tool.execute({}, {} as never)).toEqual(data)
+    expect(await tool.execute({ mode: 'fresh', field: 'network' }, {} as never)).toEqual({
+      schema: 1, generatedAt: 'now', field: 'network', value: data.network,
+    })
+    expect(await tool.execute({ mode: 'fresh', field: 'network', key: 'adapters' }, {} as never)).toEqual({
+      schema: 1, generatedAt: 'now', field: 'network', key: 'adapters', status: 'available', value: ['eth0'],
+    })
+    expect(await tool.execute({ field: 'network', key: '__proto__' }, {} as never)).toMatchObject({ status: 'unknown-key', value: null })
+  })
+})

@@ -427,6 +427,32 @@ function fitPhoenixLocalHeadroom(
 }
 
 /**
+ * Defer only the explicitly refreshable reality snapshot under local pressure.
+ * Preserve all other contributions, policies, human input and tool cycles.
+ * The original snapshot remains in the durable session.
+ */
+function deferLocalRealitySnapshot(message: Message): Message {
+  const source = message.source
+  if (message.role !== 'user' || source.kind !== 'plugin'
+    || source.plugin !== '@phoenix-ai/dsh-system-prompt' || source.form !== 'snapshot') return message
+  const reality = source.sections.find(section => section.name === 'hardness:reality-context')
+  const block = message.content[0]
+  if (reality === undefined || reality.text.length < 2_000 || message.content.length !== 1
+    || block?.type !== 'text' || !block.text.includes(reality.text)) return message
+  const note = 'Reality Context is available on demand. Do not guess environment facts. '
+    + 'Discover phoenix_reality_now with tool_search (exact name) if not already visible. '
+    + 'Use mode=fresh and field=time, location, weather, daylight, calendar, device, network, runtime, capabilities, authentication, phoenix, ai, region or userState; optionally key for one property. '
+    + 'Use mode=location for authorized place names, mode=full when a full probe is necessary, and mode=bandwidth only for explicit speed requests. '
+    + 'The full original snapshot remains in the session; use live evidence for current facts.'
+  return {
+    ...message,
+    source: { ...source, sections: source.sections.map(section =>
+      section === reality ? { ...section, text: note } : section) },
+    content: [{ type: 'text', text: block.text.replace(reality.text, () => note) }],
+  }
+}
+
+/**
  * Fit a local turn, using a request-only text projection under context pressure.
  * @param options - Fully assembled request including the latest user message.
  * @param contextWindow - Effective context limit of the selected local model.
@@ -461,12 +487,18 @@ export function fitPhoenixLocalTextTurn(
     const projected = compactAuxiliaryContextForPressure({ ...options, messages })
     const projectedFit = fitPhoenixLocalHeadroom(projected, contextWindow, desiredMaxOutput, true)
     if (projectedFit.estimatedTokens <= projectedFit.inputBudgetTokens) return projectedFit
-    const selected = selectToolsForPressureBudget(projected,
-      Math.max(1, Math.floor(projectedFit.inputBudgetTokens * 3.5 / ESTIMATED_CHARS_PER_TOKEN)))
+    const paged: GenerateOptions = gateway.name === 'tool_search'
+      || options.tools?.some(tool => tool.name === 'phoenix_reality_now')
+      ? { ...projected, messages: projected.messages.map(deferLocalRealitySnapshot) }
+      : projected
+    const pagedFit = fitPhoenixLocalHeadroom(paged, contextWindow, desiredMaxOutput, true)
+    if (pagedFit.estimatedTokens <= pagedFit.inputBudgetTokens) return pagedFit
+    const selected = selectToolsForPressureBudget(paged,
+      Math.max(1, Math.floor(pagedFit.inputBudgetTokens * 3.5 / ESTIMATED_CHARS_PER_TOKEN)))
     const fitted = fitPhoenixLocalHeadroom(selected, contextWindow, desiredMaxOutput, true)
     if (fitted.options.tools?.some(tool => tool.name === gateway.name)) return fitted
     // Explicit context error rather than a misleading tool-free success.
-    return projectedFit
+    return pagedFit
   }
 
   // Keep the full instructions, real tool signatures and user history whenever
