@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { PhoenixLocalKey } from './phoenix-local-locales.ts'
+import { LocalLibraryExplorer } from './LocalLibraryExplorer.tsx'
+import type { LocalLibraryRequest, LocalLibrarySnapshot } from './LocalLibraryExplorer.tsx'
 import styles from './PhoenixLocalPanel.module.css'
 
 export type PhoenixLocalModelMode = 'off' | 'on-demand' | 'always-on'
@@ -41,6 +43,7 @@ export interface PhoenixLocalModelSnapshot {
 /** Browser-safe façade over the Host-owned Phoenix Local remote. */
 export interface PhoenixLocalModelClient {
   state(): Promise<PhoenixLocalModelSnapshot>
+  searchLibrary?(request: LocalLibraryRequest): Promise<LocalLibrarySnapshot>
   install(modelId: string): Promise<PhoenixLocalModelSnapshot>
   start(): Promise<PhoenixLocalModelSnapshot>
   stop(): Promise<PhoenixLocalModelSnapshot>
@@ -142,7 +145,7 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
     : Math.min(selected.maxTokens, Math.max(1, Math.floor(selected.contextWindow / 4)))
   const inputBudget = selected === undefined ? 0
     : Math.max(0, selected.contextWindow - outputBudget
-      - Math.min(2_048, Math.floor(selected.contextWindow / 4)))
+      - Math.min(4_096, Math.floor(selected.contextWindow / 4)) - Math.min(512, Math.floor(selected.contextWindow / 8)))
   const modes = snapshot?.thinkingCapabilities?.values ?? []
   const activeThinking = snapshot?.thinking ?? null
   const thinkingKey = activeThinking === null ? 'default'
@@ -228,6 +231,11 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
         </div>
       ) : null}
 
+      <div className={styles['studioMetrics']}>
+        <div className={styles['studioMetric']}><span>{t('studioInstalled')}</span><strong>{snapshot.installedModelIds.length}</strong></div>
+        <div className={styles['studioMetric']}><span>{t('studioAllocated')}</span><strong>{selected?.contextWindow.toLocaleString() ?? '—'}</strong></div>
+        <div className={styles['studioMetric']}><span>{t('nativeContext')}</span><strong>{selected?.nativeContextWindow?.toLocaleString() ?? '—'}</strong></div>
+      </div>
       <label className={styles['field']}>
         <span className={styles['label']}>{t('model')}</span>
         <select
@@ -263,6 +271,8 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
         </select>
       </label>
 
+      {client.searchLibrary !== undefined && <LocalLibraryExplorer search={client.searchLibrary} install={id => { void run(() => client.install(id), 'installing') }} disabled={busy || TRANSIENT_PHASES.has(snapshot.phase)} installedIds={snapshot.ollamaInstalledModelIds ?? []} t={t} />}
+      <details className={styles['studioFallback']} open={client.searchLibrary === undefined}><summary>{t('studioQuick')}</summary>
       <div className={styles['ollamaPicker']}>
         <label className={styles['field']}>
           <span className={styles['label']}>{t('ollamaTag')}</span>
@@ -321,10 +331,11 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
             ))}
         </div>
       </section>
+      </details>
       {selected === undefined ? null : (
         <div className={styles['facts']}>
           <span><b>{t('download')}:</b> {selected.backend === 'ollama' ? inOllama ? t('ollamaExisting') : t('ollamaNotDownloaded') : formatBytes(selected.sizeBytes)}</span>
-          <span><b>{t('ram')}:</b> {formatBytes(selected.estimatedRamBytes)}</span>
+          <span><b>{t('ram')}:</b> {selected.estimatedRamBytes > 0 ? formatBytes(selected.estimatedRamBytes) : t('studioUnknown')}</span>
           <span><b>{t('context')}:</b> {selected.contextWindow.toLocaleString()} tokens</span>
           <span><b>{t('inputBudget')}:</b> {inputBudget.toLocaleString()} tokens</span>
           <span><b>{t('outputBudget')}:</b> {outputBudget.toLocaleString()} tokens</span>
