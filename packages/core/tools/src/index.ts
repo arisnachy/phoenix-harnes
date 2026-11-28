@@ -77,8 +77,9 @@ const LOCAL_DISCOVERY_SCHEMA_CHARS = 6_000
 const LOCAL_DISCOVERY_LIMIT = 3
 
 /** Local discovery changes model presentation, never execution permissions. */
-function localDiscovery(scope?: ScopeKey): boolean {
-  return (scope as Partial<Agent> | undefined)?.options?.provider === 'phoenix-local'
+function localDiscovery(scope?: ScopeKey, requestProvider?: string): boolean {
+  const agent = scope as Partial<Agent> | undefined
+  return (requestProvider ?? agent?.session?.requestContext?.()?.provider ?? agent?.options?.provider) === 'phoenix-local'
 }
 
 function isMcpToolName(name: string): boolean {
@@ -1029,7 +1030,7 @@ export class ToolRuntime extends Service {
       }
     })
 
-    ctx.systemPrompt.tools(context => this.wireSchemas(context.scope, context.agent))
+    ctx.systemPrompt.tools(context => this.wireSchemas(context.scope, context.agent, context.requestProvider))
     if (this.defaultMode !== 'native') {
       ctx.systemPrompt.section(this.collapseSection())
       ctx.systemPrompt.section(this.sdkSection())
@@ -1090,21 +1091,21 @@ export class ToolRuntime extends Service {
         if (context.omitTools === true) return ''
         const mode = this.modeFor(context.scope)
         // Local models in both mode use native calls instead of a second, large SDK catalog.
-        if (mode === 'native' || (mode === 'both' && localDiscovery(context.scope)
-          && this.view(context.scope).visible.has(TOOL_SEARCH_NAME))) return ''
+        if (mode === 'native' || (mode === 'both' && localDiscovery(context.scope, context.requestProvider)
+          && this.view(context.scope, context.requestProvider).visible.has(TOOL_SEARCH_NAME))) return ''
         const runtime = this.requireCodeRuntime(mode)
         // Own-property read: a language like `toString`/`constructor` would
         // otherwise resolve an inherited Object.prototype member as a renderer.
         const render = SDK_RENDERERS[runtime.language]
         /* v8 ignore next -- requireCodeRuntime rejects an unknown language before this runs. */
         if (render === undefined) throw new Error(`dsh-tools: no SDK renderer for ${runtime.language}`)
-        const sdk = render(this.sdkSchemas(context.scope, context.agent))
-        const view = this.view(context.scope)
+        const sdk = render(this.sdkSchemas(context.scope, context.agent, context.requestProvider))
+        const view = this.view(context.scope, context.requestProvider)
         if (!view.visible.has(TOOL_SEARCH_NAME)
-          || (!localDiscovery(context.scope) && !this.deferredMcpCatalog(view.visible.values(), context.scope))) return sdk
+          || (!localDiscovery(context.scope, context.requestProvider) && !this.deferredMcpCatalog(view.visible.values(), context.scope))) return sdk
         // Full signatures appear on discovery, but code bindings remain
         // callable and authorization still happens on every execution.
-        return sdk + (localDiscovery(context.scope) ? '\nTo use other Phoenix capabilities, call tools.tool_search({ query: "task keywords" })' : '\nTo use other MCP capabilities, call tools.tool_search({ query: "task keywords" })')
+        return sdk + (localDiscovery(context.scope, context.requestProvider) ? '\nTo use other Phoenix capabilities, call tools.tool_search({ query: "task keywords" })' : '\nTo use other MCP capabilities, call tools.tool_search({ query: "task keywords" })')
           + ' inside run_code. The next step shows their exact full signatures.'
       },
     }
@@ -1278,12 +1279,12 @@ export class ToolRuntime extends Service {
   }
 
   /** Project one scope's visible definitions into its prompt-facing catalog. */
-  private promptVisibleDefinitions(view: ToolView, scope?: ScopeKey): ToolDefinition[] {
+  private promptVisibleDefinitions(view: ToolView, scope?: ScopeKey, requestProvider?: string): ToolDefinition[] {
     // A restriction may intentionally remove discovery. In that case keep
     // the admitted MCP catalog eager rather than hiding it without a route.
     const deferred = view.visible.has(TOOL_SEARCH_NAME) && this.deferredMcpCatalog(view.visible.values(), scope)
     const selected = this.selectedMcpTools(scope)
-    if (localDiscovery(scope) && view.visible.has(TOOL_SEARCH_NAME)) {
+    if (localDiscovery(scope, requestProvider) && view.visible.has(TOOL_SEARCH_NAME)) {
       return [...view.visible.values()].filter(definition =>
         definition.name === TOOL_SEARCH_NAME || definition.name === RUN_CODE_NAME
         || definition.name === NATIVE_IMAGE_GENERATION_TOOL || selected.has(definition.name))
@@ -1475,13 +1476,13 @@ export class ToolRuntime extends Service {
    * Build one scope's wire schemas and names for prompt-order validation.
    * Restrictions do not make known tools invalid, but a mode collapse does.
    */
-  private wireSchemas(scope?: ScopeKey, agent?: Agent): ToolProviderResult {
-    const view = this.view(scope)
+  private wireSchemas(scope?: ScopeKey, agent?: Agent, requestProvider?: string): ToolProviderResult {
+    const view = this.view(scope, requestProvider)
     const mode = this.modeFor(scope)
     // Defer costly native MCP schemas in native and both. Both retains its
     // complete Code Mode SDK and nested execution capabilities, so no tool
     // disappears from the run_code transport when its direct schema defers.
-    const definitions = mode === 'code' ? [...view.visible.values()] : this.promptVisibleDefinitions(view, scope)
+    const definitions = mode === 'code' ? [...view.visible.values()] : this.promptVisibleDefinitions(view, scope, requestProvider)
     const visible = this.modelVisibleDefinitions(definitions, agent)
     if (mode === 'native') {
       const schemas = visible.map(definition => this.schemaOf(definition, false))
@@ -1494,7 +1495,7 @@ export class ToolRuntime extends Service {
     // language with no SDK renderer.
     this.requireCodeRuntime(mode)
     const schemas = visible.map(definition => this.schemaOf(definition, false))
-    if (mode === 'both' && localDiscovery(scope) && view.visible.has(TOOL_SEARCH_NAME)) {
+    if (mode === 'both' && localDiscovery(scope, requestProvider) && view.visible.has(TOOL_SEARCH_NAME)) {
       return { schemas: schemas.filter(schema => schema.name !== RUN_CODE_NAME), knownNames: [...view.knownNames, RUN_CODE_NAME] }
     }
     if (mode === 'code') {
@@ -1658,7 +1659,7 @@ export class ToolRuntime extends Service {
    * @param scope - the viewing scope (the agent), or undefined for the global view.
    * @returns the complete derived view for that scope.
    */
-  private view(scope?: ScopeKey): ToolView {
+  private view(scope?: ScopeKey, requestProvider?: string): ToolView {
     // Scope-chain layers, farthest ancestor first, the exact scope last.
     const layers = this.layers.chainLayers(scope)
     // Chain-blind on purpose: this is the ONE layer whose registrations the
@@ -1703,10 +1704,10 @@ export class ToolRuntime extends Service {
     const deferred = this.deferredMcpCatalog(visible.values(), scope)
     // `tool_search` is a virtual global only for an exposed deferred catalog;
     // empty/small scopes must keep the historical known-name set unchanged.
-    const discovery = deferred || localDiscovery(scope)
+    const discovery = deferred || localDiscovery(scope, requestProvider)
     if (discovery) restrictableNames.add(TOOL_SEARCH_NAME)
     if (discovery && layers.every(layer => layer.admits(TOOL_SEARCH_NAME))) {
-      visible.set(TOOL_SEARCH_NAME, this.createMcpSearchTool(localDiscovery(scope)))
+      visible.set(TOOL_SEARCH_NAME, this.createMcpSearchTool(localDiscovery(scope, requestProvider)))
       knownNames.add(TOOL_SEARCH_NAME)
     }
     return { visible, knownNames, restrictableNames }
@@ -1782,9 +1783,9 @@ export class ToolRuntime extends Service {
   }
 
   /** Project admitted/discovered MCP tools, retaining full run_code bindings. */
-  private sdkSchemas(scope?: ScopeKey, agent?: Agent): ToolSdkSchema[] {
-    const view = this.view(scope)
-    return this.modelVisibleDefinitions(this.promptVisibleDefinitions(view, scope), agent)
+  private sdkSchemas(scope?: ScopeKey, agent?: Agent, requestProvider?: string): ToolSdkSchema[] {
+    const view = this.view(scope, requestProvider)
+    return this.modelVisibleDefinitions(this.promptVisibleDefinitions(view, scope, requestProvider), agent)
       .filter(definition => definition.name !== RUN_CODE_NAME)
       .map((definition): ToolSdkSchema => {
         const output = snapshotJsonValue(definition.output.schema)
