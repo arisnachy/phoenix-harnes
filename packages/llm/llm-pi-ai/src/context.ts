@@ -245,6 +245,38 @@ function toolNamesUsedInMessages(messages: readonly Message[]): Set<string> {
   return names
 }
 
+/** Prioritize the latest discovery receipt over historical tool usage.
+ * This only ranks schemas already admitted by the scoped registry.
+ */
+function recentlyDiscoveredTools(messages: readonly Message[]): Set<string> {
+  const current = messages.findLastIndex(message => message.role === 'user' && message.source.kind === 'user')
+  const active = messages.slice(Math.max(0, current))
+  const calls = new Set<string>()
+  for (const message of active) {
+    for (const block of message.content) {
+      if (block.type === 'tool-call' && block.name === 'tool_search') calls.add(block.id)
+    }
+  }
+  for (const message of [...active].reverse()) {
+    for (const block of [...message.content].reverse()) {
+      if (block.type !== 'tool-result' || !calls.has(block.toolCallId)) continue
+      const raw = block.content.flatMap(item => item.type === 'text' ? [item.text] : []).join('')
+      if (raw.length > 12_000) continue
+      try {
+        const receipt: unknown = JSON.parse(raw)
+        if (typeof receipt !== 'object' || receipt === null || !('tools' in receipt) || !Array.isArray(receipt.tools)) continue
+        const names = receipt.tools.flatMap((entry: unknown): string[] => {
+          if (typeof entry !== 'object' || entry === null || !('name' in entry) || typeof entry.name !== 'string') return []
+          if ('requiresExact' in entry && entry.requiresExact === true) return []
+          return [entry.name]
+        })
+        return new Set(names)
+      } catch { /* Non-JSON or failed discovery gives no ranking hint. */ }
+    }
+  }
+  return new Set()
+}
+
 function latestUserText(messages: readonly Message[]): string {
   const latest = messages.findLast(message => message.role === 'user' && message.source.kind === 'user')
     ?? messages.findLast(message => message.role === 'user' && message.source.kind !== 'tool'
@@ -263,6 +295,7 @@ function selectToolsForPressureBudget(options: GenerateOptions, inputBudgetToken
 
   const query = latestUserText(options.messages)
   const used = toolNamesUsedInMessages(options.messages)
+  const recent = options.provider === 'phoenix-local' ? recentlyDiscoveredTools(options.messages) : new Set<string>()
   const words = new Set(query.match(/[\p{L}\p{N}_-]{3,}/gu) ?? [])
   const ranked = tools.map((tool, index) => {
     const name = tool.name.toLowerCase()
@@ -270,6 +303,7 @@ function selectToolsForPressureBudget(options: GenerateOptions, inputBudgetToken
     let score = used.has(tool.name) ? 10_000 : 0
     if (options.provider === 'phoenix-local') {
       if (tool.name === 'tool_search') score += 100_000
+      else if (recent.has(tool.name)) score += 80_000
       else if (tool.name === 'run_code') score += 50_000
     }
     if (query.includes(name)) score += 2_000
@@ -499,12 +533,30 @@ export function fitPhoenixLocalTextTurn(
     // Keep instruction and compaction checkpoints, and retain the newest skill
     // catalog unless the current suffix has its replacement.
     const catalog = retained.some(isAuxiliarySkillCatalog) ? undefined : prior.findLast(isAuxiliarySkillCatalog)
-    const prefix = prior.filter(message => {
+    // A new complete workspace baseline explicitly supersedes earlier
+    // workspace instructions. Do not replay obsolete baselines or deltas
+    // on a small model. Preserve all changes after the newest baseline and
+    // all unrelated instruction producers. A later baseline in the active
+    // suffix supersedes the prior workspace prefix as well.
+    const isWorkspaceBaseline = (message: Message): boolean => {
+      const source = message.source as { kind: string; baseline?: boolean }
+      return source.kind === 'agent-instructions' && source.baseline === true
+    }
+    const latestBaseline = retained.some(isWorkspaceBaseline)
+      ? prior.length : prior.findLastIndex(isWorkspaceBaseline)
+    const priorSkills = new Map<string, Message>()
+    for (const message of prior) {
+      const source = message.source as { kind: string; name?: string }
+      if (source.kind === 'skill-invocation' && source.name !== undefined) priorSkills.set(source.name, message)
+    }
+    const prefix = prior.filter((message, index) => {
       if (message.source.kind === 'plugin' && message.source.plugin === '@phoenix-ai/dsh-system-prompt') {
         return message === runtime && !suffixHasRuntime
       }
       if (isAuxiliarySkillCatalog(message)) return message === catalog
-      const source = message.source as { kind: string; form?: string; plugin?: string }
+      const source = message.source as { kind: string; form?: string; plugin?: string; name?: string }
+      if (source.kind === 'agent-instructions' && latestBaseline >= 0 && index < latestBaseline) return false
+      if (source.kind === 'skill-invocation' && source.name !== undefined && priorSkills.get(source.name) !== message) return false
       return message.role === 'system' || source.form === 'instructions' || (source.kind === 'plugin' && source.plugin === 'compact')
     })
     const messages = [...prefix, ...retained]
