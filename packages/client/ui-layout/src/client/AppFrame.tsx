@@ -657,6 +657,8 @@ export function AppFrame({
   const presence: LivingPresenceSnapshot = {
     enabled: LIVING_PRESENCE_ENABLED, season, compacted,
     recoveredPixels: compacted ? Math.max(0, panels.sidebar - cols.sidebar) : 0,
+    geometry: {viewport,sidebar:cols.sidebar,center:cols.center,details:cols.details,
+      visualWork:adaptiveActive || spaceOpen,manualExpansion:narrow && panels.narrowExpanded},
     notice: compacted ? 'workspace-compacted' : season === 'christmas' ? 'christmas' : 'ready',
   }
   livingSnapshot.current = presence
