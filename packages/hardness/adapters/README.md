@@ -145,3 +145,7 @@ The projected catalog and proactivity protocol are cache-friendly while source s
 - Durable mission tracing requires a live agent session; direct unit-level runner calls without one remain unrecorded and are not production proof.
 - Legacy scheduled email identities remain configuration references requiring authorized mail tools. The local assistant mailbox separately enrolls an included-domain AgentMail account; live signup and verification require the owner and provider availability. Incoming task text is bounded; attachments are not automatically executed.
 - Surprise visibility hides unrevealed content from ordinary task listings and compact tool presentation, but the durable ledger intentionally remains auditable to an authorized operator.
+
+## Windows host probes
+
+Native Reality Context probes run from the user home directory. A probe that outlives a Host restart cannot hold its retired runtime as the working directory.

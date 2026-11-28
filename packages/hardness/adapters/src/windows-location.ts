@@ -1,7 +1,7 @@
 /** Local, permission-gated Windows position and offline civic-area matching. */
 import { execFile } from 'node:child_process'
 import { openSync, closeSync, fstatSync, readFileSync } from 'node:fs'
-import { platform } from 'node:os'
+import { homedir, platform } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 
@@ -106,7 +106,7 @@ export async function probeWindowsLocation(): Promise<WindowsLocationFix | undef
     const { stdout } = await execute(executable, [
       '-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand',
       Buffer.from(LOCATION_SCRIPT, 'utf16le').toString('base64'),
-    ], { timeout: 10_000, windowsHide: true, maxBuffer: 16_384 })
+    ], { cwd: homedir(), timeout: 10_000, windowsHide: true, maxBuffer: 16_384 })
     return parseWindowsLocation(JSON.parse(stdout.trim().replace(/^\uFEFF/u, '')))
   } catch { return undefined }
 }
@@ -114,7 +114,7 @@ export async function probeWindowsLocation(): Promise<WindowsLocationFix | undef
 /** Parse only well-formed, bounded civic circles from a local JSON file. */
 export function parseCivicCatalog(value: unknown): readonly CivicArea[] {
   if (!Array.isArray(value) || value.length > 150_000) return []
-  return value.flatMap(item => {
+  return value.flatMap((item) => {
     const raw = record(item)
     if (!raw || !bounded(raw.latitude, -90, 90) || !bounded(raw.longitude, -180, 180)
       || !bounded(raw.radiusMeters, 1, 500_000)) return []
