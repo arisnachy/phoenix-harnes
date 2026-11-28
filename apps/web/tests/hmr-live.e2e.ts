@@ -78,15 +78,13 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
     .map(path => join(REPO_ROOT, path))
   const originalClientBundles = await Promise.all(clientBundlePaths.map(async path => [path, await readFile(path)] as const))
   const originalSource = await readFile(sourcePath)
-  // Read the original visible subtitle from the source, not a stale copy string.
-  const sourceNeedle = /<p className=\{css\.subtitle\}>([^<]+)<\/p>/u
-  const match = sourceNeedle.exec(originalSource.toString())
-  if (match?.[1] === undefined) throw new Error('HMR source lacks its subtitle JSX element')
-  const oldText = match[1]
+  // Preserve the adaptive subtitle element and replace only its dynamic value.
+  const sourceNeedle = /(<p\b[^>]*\bdata-welcome-subtitle=""[^>]*>)\{scene\.subtitle\}(<\/p>)/u
+  if (!sourceNeedle.test(originalSource.toString())) throw new Error('HMR source lacks its adaptive subtitle JSX element')
   const newText = `HMR UPDATED ${'x'.repeat(80)}`
   const updatedSource = originalSource.toString().replace(
     sourceNeedle,
-    `<p className={css.subtitle}>${newText}</p>`,
+    `$1${newText}$2`,
   )
 
   const subprocessCtx = new Context()
@@ -117,7 +115,11 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
     const pageErrors: string[] = []
     page.on('pageerror', error => pageErrors.push(String(error)))
     await page.goto(baseUrl, { waitUntil: 'load' })
-    await page.getByText(oldText, { exact: true }).waitFor({ timeout: 15_000 })
+    const subtitle = page.locator('[data-welcome-subtitle]')
+    await subtitle.waitFor({ state: 'visible', timeout: 15_000 })
+    const oldText = (await subtitle.innerText()).trim()
+    expect(oldText).not.toBe('')
+    expect(oldText).not.toBe(newText)
     const pageIdentity = await page.evaluate(() => {
       const identity = crypto.randomUUID()
       Object.defineProperty(window, '__dshHmrPageIdentity', { value: identity })
@@ -125,7 +127,8 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
     })
 
     await writeFile(sourcePath, updatedSource)
-    await page.getByText(newText, { exact: true }).waitFor({ timeout: 60_000 })
+    await subtitle.filter({ hasText: newText }).waitFor({ timeout: 60_000 })
+    expect(await subtitle.innerText()).toBe(newText)
     expect(await page.evaluate(() => (window as Window & { __dshHmrPageIdentity?: string }).__dshHmrPageIdentity))
       .toBe(pageIdentity)
     expect(pageErrors).toEqual([])
