@@ -92,7 +92,7 @@ const LOCAL_DISCOVERY_DOMAINS: readonly { words: RegExp; names: RegExp; preferre
   { words: /\b(?:calendario|calendar|agenda|citas|appointments)\b/u, names: /calendar|agenda|appointment/u, preferred: [] },
   { words: /\b(?:recordatorios?|reminders?|rutinas?|routines?|programar|schedule)\b/u, names: /phoenix_(?:task|watch|wake|routine)_/u, preferred: [] },
   { words: /\b(?:red local|local network|router|wifi|wi-fi|dispositivos?|devices?)\b/u, names: /network|router|device/u, preferred: [] },
-  { words: /\b(?:buscar en internet|busca en internet|web search|search the web|investigar en internet)\b/u, names: /web_search|search_web/u, preferred: ['web_search'] },
+  { words: /\b(?:buscar en internet|busca en internet|navegar en internet|navegar por internet|browse the internet|web search|search the web|investigar en internet)\b/u, names: /web_search|search_web/u, preferred: ['web_search'] },
 ]
 
 /** Rank only the caller's already visible catalog. Exact matches win;
@@ -1351,6 +1351,7 @@ export class ToolRuntime extends Service {
       return [...view.visible.values()].filter(definition =>
         definition.name === TOOL_SEARCH_NAME || definition.name === RUN_CODE_NAME
         || definition.name === NATIVE_IMAGE_GENERATION_TOOL || definition.name === 'system_runtime_inspect'
+        || (definition.name === 'skill_search' && view.visible.has('skill'))
         || selected.has(definition.name))
     }
     return [...view.visible.values()].filter((definition) => {
