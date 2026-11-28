@@ -12,6 +12,7 @@ import { scopeOf } from '@phoenix-ai/dsh-scope'
 import AgentLoop from '@phoenix-ai/dsh-agent-loop'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 import { MockAdapter, textResponse } from './mock-adapter.ts'
+import { renderLocalHarnessPrompt } from '../src/agent.ts'
 
 async function harnessWithLoop(adapter: MockAdapter = new MockAdapter([textResponse('ok')])): Promise<{ ctx: Context; loopFiber: Fiber }> {
   const ctx = new Context()
@@ -1090,4 +1091,37 @@ describe('agent scope lifecycle', () => {
     await ctx.fiber.dispose()
   })
 
+})
+
+
+describe('local capability prompt hydration', () => {
+  it('keeps native discovery and protected custom instructions while deferring unrelated full domain guidance', () => {
+    const bulk = 'known domain details '.repeat(7600)
+    const connector = '<phoenix_connector_protocol>' + bulk
+    const mail = 'Phoenix includes a dedicated local-assistant mailbox for Kira' + bulk
+    const sdk = 'large duplicate SDK ' + bulk
+    const assembly = {
+      sections: [
+        { name: 'custom:policy', text: 'External writes require approval; preserve this custom policy.' },
+        { name: 'hardness:connector-operating-protocol', text: connector },
+        { name: 'hardness:assistant-mail-protocol', text: mail },
+        { name: 'tools:sdk', text: sdk },
+      ],
+      contexts: [], variables: {},
+      tools: [{ name: 'tool_search', description: 'Discover authorized tools', parameters: {} }],
+    }
+    const projected = renderLocalHarnessPrompt(assembly)
+    expect(projected.length).toBeLessThan(7000)
+    expect(projected).toContain('External writes require approval; preserve this custom policy.')
+    expect(projected).toContain('system_runtime_inspect')
+    expect(projected).toContain('tool_search')
+    expect(projected).not.toContain(bulk)
+    expect(assembly.sections[1]?.text).toBe(connector)
+    const withMail = renderLocalHarnessPrompt({ ...assembly, tools: [...assembly.tools,
+      { name: 'phoenix_mail_identity', description: 'Inspect mailbox', parameters: {} }] })
+    expect(withMail).toContain(mail)
+    expect(withMail).not.toContain(connector)
+    const codeOnly = renderLocalHarnessPrompt({ ...assembly, tools: [{ name: 'run_code', description: 'Code', parameters: {} }] })
+    expect(codeOnly).toContain(sdk)
+  })
 })

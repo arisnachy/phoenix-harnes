@@ -552,24 +552,38 @@ export function apply(ctx: Context): void {
   ctx.systemPrompt.section({name:'phoenix:self-navigation',order:116,text:'PHOENIX can inspect and adapt its native General navigation through a user-reviewed generative-ui block: {"component":"adaptive_control","version":1,"props":{"appId":"general","operation":"native-menu","menuAction":"inspect"}}. The live browser receipt lists menu IDs, labels, registered destinations and revision. Ask the user to share that receipt if not visible to you. For open use menuAction open and sectionId; rename uses sectionId,label,expectedRevision; move uses sectionId,direction up/down,expectedRevision; add uses a new sectionId beginning shortcut-, label, target (home/tasks/connectors/team/library/healthia), expectedRevision; remove only shortcuts; restore uses expectedRevision. Never guess revisions. The browser requires preflight and user apply. This is local navigation only, not permission for configuration secrets, clinical actions, arbitrary code or core edits. For active Host tools use system_runtime_inspect and for machine state system_environment_inspect. Do not claim execution without the browser receipt.'})
   ctx.tools.register(defineTool({
     name: 'system_runtime_inspect',
-    description: 'Read active PHOENIX tool registration names, available nonclinical Living connectors and declared actions (metadata only). This is live Host proprioception, not evidence of authorization, successful execution, login or system health. No manifest resources, bearer tokens, records, file paths or secret settings.',
-    parameters:{},
+    description: 'Read scoped PHOENIX tool registration and nonclinical Living connector metadata. Optional query filters tool names/descriptions; offset and limit page the matching names. Local models receive a small page by default and can discover exact schemas with tool_search. Registration is not execution, authorization, login or health. No secrets or clinical records.',
+    parameters:{
+      query:{type:'string',description:'Optional short capability keyword or exact tool name.'},
+      offset:{type:'integer',minimum:0,description:'Optional tool-page offset, initially zero.'},
+      limit:{type:'integer',minimum:1,maximum:160,description:'Optional maximum tool names in this page.'},
+    },
     output:{schema:{type:'string'},render:(_args,value)=>[{type:'text' as const,text:value}]},
     isConcurrencySafe:()=>true,
-    execute(){
-      const allNames=ctx.tools.schemas().map(schema=>schema.name)
-      const names=allNames.filter(name=>/^[a-z][a-z0-9_.-]{0,90}$/u.test(name)).slice(0,160)
-      const connected=ctx.living.list()
+    execute(args,exec){
+      const local=(exec.agent?.session.requestContext()?.provider ?? exec.agent?.options.provider)==='phoenix-local'
+      const scoped=ctx.tools.schemas(exec.agent)
+      const allNames=scoped.map(schema=>schema.name)
+      const query=(args.query??'').trim().toLowerCase()
+      const matching=scoped.filter(schema=>/^[a-z][a-z0-9_.-]{0,127}$/iu.test(schema.name)
+        && (query==='' || (schema.name+' '+schema.description).toLowerCase().includes(query)))
+      const offset=Math.min(matching.length,Math.max(0,args.offset??0))
+      const limit=Math.max(1,Math.min(local?24:160,args.limit??(local?24:160)))
+      const names=matching.slice(offset,offset+limit).map(schema=>schema.name)
+      const connectorInventory=ctx.living.list()
         .filter(item=>!/(?:clinical|patient|health|medic|pacient|expediente|historia)/iu.test(item.manifest.kind))
-        .slice(0,40).map(item=>({
+      const connected=connectorInventory.slice(0,local?6:40).map(item=>({
           id:String(item.manifest.id),kind:item.manifest.kind.slice(0,40),
           connected:item.connected,achieved:item.achievedLevel,
           declaredActions:item.manifest.actions
-            .filter(name=>/^[a-z][a-z0-9_.-]{0,80}$/u.test(name)).slice(0,30),
+            .filter(name=>/^[a-z][a-z0-9_.-]{0,80}$/u.test(name)).slice(0,local?4:30),
         }))
       return Promise.resolve(JSON.stringify({
         schema:'phoenix.runtime-self.v1',registeredToolNames:names,
-        livingConnectors:connected,
+        registeredToolCount:allNames.length,matchedToolCount:matching.length,
+        nextOffset:offset+limit<matching.length?offset+limit:null,
+        livingConnectorCount:connectorInventory.length,livingConnectors:connected,
+        ...(local?{discovery:'Use tool_search to discover exact authorized schemas; call system_runtime_inspect with query or nextOffset for further tool names.'}:{}),
         authority:'registration-only',
         permissions:'must-check-current-tool-policy-and-user-approval',
         offlineVerification:{registered:allNames.includes('phoenix_amplifier'),operations:[...AMPLIFIER_OPERATIONS],requiresNetwork:false,requiresModelForCalculation:false,modelAvailability:'not-inspected',internetConnectivity:'not-inspected'},

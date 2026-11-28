@@ -76,6 +76,68 @@ const MAX_EAGER_MCP_SCHEMA_CHARS = 8_000
 const LOCAL_DISCOVERY_SCHEMA_CHARS = 6_000
 const LOCAL_DISCOVERY_LIMIT = 3
 
+/** Normalize only discovery text; never rewrite tool arguments or user intent. */
+function localDiscoveryText(value: string): string {
+  return value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
+}
+
+const LOCAL_DISCOVERY_DOMAINS: readonly { words: RegExp; names: RegExp; preferred: readonly string[] }[] = [
+  { words: /\b(?:herramientas?|capacidades?|capabilities|tools|inventario|inventory)\b/u, names: /runtime_inspect|tool_search|self_assess/u, preferred: ['system_runtime_inspect'] },
+  { words: /\b(?:windows|escritorio|desktop|ventanas?|paint|notepad|bloc de notas|aplicaciones? instaladas?)\b/u, names: /computer|windows|system_app_search|environment_inspect/u, preferred: ['phoenix_windows_inspect', 'computer'] },
+  { words: /\b(?:archivos?|files?|carpetas?|folders?|directorios?|directory|ficheros?)\b/u, names: /(?:^|_)(?:read|glob|grep|file|fs|directory|folder)(?:_|$)/u, preferred: ['glob', 'read'] },
+  { words: /\b(?:excel|spreadsheet|hoja de calculo|celdas?|workbook)\b/u, names: /spreadsheet|sheet|excel|workbook/u, preferred: [] },
+  { words: /\b(?:navegador|browser|pagina web|sitio web|chromium|chrome)\b/u, names: /browser|chrome|web_fetch|navigate/u, preferred: [] },
+  { words: /\b(?:memoria|recuerda|recordar|remember|memory|conversaciones? anteriores?|previous sessions?)\b/u, names: /session_search|session_event_search|memory|recall/u, preferred: ['session_search'] },
+  { words: /\b(?:correo|email|mail|gmail|buzon|inbox)\b/u, names: /mail|gmail|inbox/u, preferred: [] },
+  { words: /\b(?:calendario|calendar|agenda|citas|appointments)\b/u, names: /calendar|agenda|appointment/u, preferred: [] },
+  { words: /\b(?:recordatorios?|reminders?|rutinas?|routines?|programar|schedule)\b/u, names: /phoenix_(?:task|watch|wake|routine)_/u, preferred: [] },
+  { words: /\b(?:red local|local network|router|wifi|wi-fi|dispositivos?|devices?)\b/u, names: /network|router|device/u, preferred: [] },
+  { words: /\b(?:buscar en internet|busca en internet|web search|search the web|investigar en internet)\b/u, names: /web_search|search_web/u, preferred: ['web_search'] },
+]
+
+/** Rank only the caller's already visible catalog. Exact matches win;
+ * Spanish capability aliases help tiny models discover native English names.
+ * The matcher is a presentation hint, not permission or automatic execution.
+ */
+function rankLocalDiscovery<T extends { name: string; description: string }>(definitions: readonly T[], rawQuery: string): T[] {
+  const query = localDiscoveryText(rawQuery).trim()
+  if (query === '') return [...definitions]
+  const words = [...new Set(query.match(/[\p{L}\p{N}_-]{3,}/gu) ?? [])]
+    .filter(word => !/^(?:que|como|para|con|del|las|los|una|the|and|for|use|puedes|quiero|phoenix)$/u.test(word))
+  const domains = LOCAL_DISCOVERY_DOMAINS.filter(domain => domain.words.test(query))
+  return definitions.map((definition, index) => {
+    const name = localDiscoveryText(definition.name)
+    const desc = localDiscoveryText(definition.description)
+    const nameWords = name.split(/[^\p{L}\p{N}]+/u)
+    let score = query === name ? 100_000 : 0
+    if (name.length >= 3 && words.includes(name)) score += 5_000
+    for (const word of words) {
+      if (nameWords.includes(word)) score += 200
+      else if (name.includes(word)) score += 60
+      else if (desc.includes(word)) score += 8
+    }
+    for (const domain of domains) {
+      if (domain.names.test(name)) score += 300
+      const preference = domain.preferred.indexOf(definition.name)
+      if (preference >= 0) score += 500 - preference * 50
+    }
+    return { definition, index, score }
+  }).filter(entry => entry.score > 0)
+    .sort((a,b) => b.score - a.score || a.index - b.index)
+    .map(entry => entry.definition)
+}
+
+/** Pick a single high-confidence native starting point; never run it here. */
+function localInitialCapability(text: string): readonly string[] {
+  const query = localDiscoveryText(text)
+  // Capability questions must inspect actual scoped registration, not guess.
+  if (/\b(?:que|cuales|what|which)\b/u.test(query)
+    && /\b(?:phoenix|herramientas?|capacidades?|tools|capabilities)\b/u.test(query)
+    && /\b(?:puedes|puede|tienes|usar|can|available|have)\b/u.test(query)) return ['system_runtime_inspect']
+  const matched = LOCAL_DISCOVERY_DOMAINS.filter(domain => domain.words.test(query) && domain.preferred.length > 0)
+  return matched.length === 1 ? matched[0]!.preferred.slice(0,1) : []
+}
+
 /** Local discovery changes model presentation, never execution permissions. */
 function localDiscovery(scope?: ScopeKey, requestProvider?: string): boolean {
   const agent = scope as Partial<Agent> | undefined
@@ -1030,7 +1092,8 @@ export class ToolRuntime extends Service {
       }
     })
 
-    ctx.systemPrompt.tools(context => this.wireSchemas(context.scope, context.agent, context.requestProvider))
+    ctx.systemPrompt.tools(context => this.wireSchemas(context.scope, context.agent, context.requestProvider,
+      'incomingUserText' in context && typeof context.incomingUserText === 'string' ? context.incomingUserText : undefined))
     if (this.defaultMode !== 'native') {
       ctx.systemPrompt.section(this.collapseSection())
       ctx.systemPrompt.section(this.sdkSection())
@@ -1198,14 +1261,14 @@ export class ToolRuntime extends Service {
     return {
       name: TOOL_SEARCH_NAME,
       description: local
-        ? 'Discover authorized Phoenix tools (files, browser, workspace, skills). Matching schemas appear on the next step. Use short English keywords or exact names.'
+        ? 'Discover authorized Phoenix tools (files, browser, workspace, skills). Matching schemas appear on the next step. Use short Spanish or English keywords or exact names.'
         : 'Search the deferred MCP catalog. Matching tool schemas become available to this agent on the next model request.',
       parameters: {
         type: 'object',
         properties: {
           query: {
             type: 'string',
-            description: local ? 'Short tool-name or description keywords.' : 'Case-insensitive text matched against MCP tool names and descriptions.',
+            description: local ? 'Short Spanish or English capability keywords or exact tool names.' : 'Case-insensitive text matched against MCP tool names and descriptions.',
           },
           names: {
             type: 'array',
@@ -1287,7 +1350,8 @@ export class ToolRuntime extends Service {
     if (localDiscovery(scope, requestProvider) && view.visible.has(TOOL_SEARCH_NAME)) {
       return [...view.visible.values()].filter(definition =>
         definition.name === TOOL_SEARCH_NAME || definition.name === RUN_CODE_NAME
-        || definition.name === NATIVE_IMAGE_GENERATION_TOOL || selected.has(definition.name))
+        || definition.name === NATIVE_IMAGE_GENERATION_TOOL || definition.name === 'system_runtime_inspect'
+        || selected.has(definition.name))
     }
     return [...view.visible.values()].filter((definition) => {
       if (definition.name === TOOL_SEARCH_NAME) return deferred
@@ -1296,9 +1360,9 @@ export class ToolRuntime extends Service {
   }
 
   /** Return and select a bounded set of visible MCP schemas for one agent. */
-  private searchMcpTools(rawArgs: unknown, scope?: ScopeKey): JsonValue {
-    const view = this.view(scope)
-    const local = localDiscovery(scope)
+  private searchMcpTools(rawArgs: unknown, scope?: ScopeKey, requestProvider?: string): JsonValue {
+    const view = this.view(scope, requestProvider)
+    const local = localDiscovery(scope, requestProvider)
     const candidates = [...view.visible.values()].filter(definition => local
       ? definition.name !== TOOL_SEARCH_NAME && definition.name !== RUN_CODE_NAME
       : isMcpToolName(definition.name))
@@ -1317,15 +1381,20 @@ export class ToolRuntime extends Service {
       : undefined
     const parsedLimit = typeof args.limit === 'number' && Number.isInteger(args.limit) ? args.limit : DEFAULT_MCP_TOOL_SEARCH_LIMIT
     const limit = Math.max(1, Math.min(local ? LOCAL_DISCOVERY_LIMIT : DEFAULT_MCP_TOOL_SEARCH_LIMIT, parsedLimit))
-    const schemaBudget = local ? LOCAL_DISCOVERY_SCHEMA_CHARS : MAX_DISCOVERED_MCP_SCHEMA_CHARS
+    const window = (scope as Partial<Agent> | undefined)?.session?.requestContext?.()?.contextWindow
+    const schemaBudget = local ? Math.min(LOCAL_DISCOVERY_SCHEMA_CHARS,
+      typeof window === 'number' && Number.isFinite(window) && window > 0 ? Math.max(1200, Math.floor(window * 0.5)) : LOCAL_DISCOVERY_SCHEMA_CHARS)
+      : MAX_DISCOVERED_MCP_SCHEMA_CHARS
     const resultBudget = local ? 2_000 : MAX_MCP_TOOL_SEARCH_RESULT_CHARS
     const descriptionBudget = local ? 160 : MAX_MCP_TOOL_SUMMARY_DESCRIPTION_CHARS
-    const matched = candidates.filter((definition) => {
-      if (names !== undefined && !names.has(definition.name)) return false
-      if (queryTerms.length === 0) return true
-      const haystack = `${definition.name} ${definition.description}`.toLocaleLowerCase()
-      return queryTerms.every(term => haystack.includes(term))
-    })
+    const matched = local
+      ? names !== undefined ? candidates.filter(definition => names.has(definition.name)) : rankLocalDiscovery(candidates, query)
+      : candidates.filter((definition) => {
+        if (names !== undefined && !names.has(definition.name)) return false
+        if (queryTerms.length === 0) return true
+        const haystack = `${definition.name} ${definition.description}`.toLocaleLowerCase()
+        return queryTerms.every(term => haystack.includes(term))
+      })
     let discovered = this.discoveredMcpTools.get(scope)
     if (discovered === undefined) {
       discovered = new Set<string>()
@@ -1476,9 +1545,18 @@ export class ToolRuntime extends Service {
    * Build one scope's wire schemas and names for prompt-order validation.
    * Restrictions do not make known tools invalid, but a mode collapse does.
    */
-  private wireSchemas(scope?: ScopeKey, agent?: Agent, requestProvider?: string): ToolProviderResult {
+  private wireSchemas(scope?: ScopeKey, agent?: Agent, requestProvider?: string, incomingUserText?: string): ToolProviderResult {
     const view = this.view(scope, requestProvider)
     const mode = this.modeFor(scope)
+    // Preselect only a registered, scope-admitted native starting point for
+    // a fresh human request. No tool is executed, no restriction is bypassed,
+    // and code-only/cloud presentation is unchanged.
+    if (scope !== undefined && mode !== 'code' && localDiscovery(scope, requestProvider)
+      && view.visible.has(TOOL_SEARCH_NAME) && incomingUserText !== undefined) {
+      const initial = localInitialCapability(incomingUserText)
+        .filter(name => view.visible.has(name) && !isMcpToolName(name))
+      if (initial.length > 0) this.searchMcpTools({ names: initial, limit: 1 }, scope, requestProvider)
+    }
     // Defer costly native MCP schemas in native and both. Both retains its
     // complete Code Mode SDK and nested execution capabilities, so no tool
     // disappears from the run_code transport when its direct schema defers.

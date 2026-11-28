@@ -72,7 +72,7 @@ import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { CODEX_PROVIDER } from './codex-live-catalog.ts'
 import { codexPlatformFallbackModel, isChatGptAccessJwt, isChatGptAccountJwt } from './codex-platform.ts'
 import { applyMondayCodexMembrane, normalizeCodexToolSchemas, recoverRejectedCodexFunctionSchema, scopeCodexToolsForPaint, normalizeOpenAiFunctionToolPayload, surfaceRejectedCodexSchemaEvent, requiresMondayCodexMembrane, requiresObjectRootFunctionSchemas } from './codex-tool-schema.ts'
-import { fitGenerateOptionsToContext, fitPhoenixLocalTextTurn, resolvePhoenixLocalMaxOutput, toPiContext } from './context.ts'
+import { estimateGenerateOptionsTokens, fitGenerateOptionsToContext, fitPhoenixLocalTextTurn, resolvePhoenixLocalMaxOutput, toPiContext } from './context.ts'
 import { toStreamChunks } from './stream.ts'
 import { isNonCodexRecoveryModel } from './provider-recovery.ts'
 
@@ -580,11 +580,21 @@ export class PiAiAdapter extends LlmAdapter {
         }))
       }
       if (fitted.estimatedTokens > fitted.inputBudgetTokens) {
+        // Report aggregate request sizes only: useful for diagnosing residual
+        // harness bloat without logging private instructions or tool contents.
+        const projectedTokens = (request: GenerateOptions): number =>
+          Math.ceil(estimateGenerateOptionsTokens(request) * 4 / 3.5)
+        const localDetails = options.provider === 'phoenix-local'
+          ? ' Desglose estimado: instrucciones ' + projectedTokens({ ...fitted.options, messages: [], tools: [] })
+            + ', mensajes/contexto ' + projectedTokens({ ...fitted.options, system: '', tools: [] })
+            + ', esquemas de herramientas ' + projectedTokens({ ...fitted.options, system: '', messages: [] })
+            + ' tokens. No se ha cambiado de modelo ni eliminado el acceso autorizado a herramientas.'
+          : ''
         throw new LlmError(
           options.provider === 'phoenix-local'
             ? `Phoenix Local: la solicitud requiere aproximadamente ${fitted.estimatedTokens} tokens de entrada. `
               + `El modelo seleccionado admite ${fitted.inputBudgetTokens} tokens de entrada para este turno (ventana ${model.contextWindow}). `
-              + 'Reduce el contenido del turno o elige un modelo con una ventana mayor.'
+              + 'El contexto no cabe de forma segura; revisa el desglose antes de cambiar el modelo.' + localDetails
             : `pi-ai request for "${model.id}" still needs ~${fitted.estimatedTokens} input tokens after context fitting; `
               + `the safe input budget is ${fitted.inputBudgetTokens} tokens`,
           CONTEXT_WINDOW_EXCEEDED_CODE,

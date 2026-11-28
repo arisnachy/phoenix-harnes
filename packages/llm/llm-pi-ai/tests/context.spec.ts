@@ -910,3 +910,49 @@ describe('Phoenix Local budgeted tool replay', () => {
     expect(snapshot.content[0]).toMatchObject({ type: 'text', text })
   })
 })
+
+
+it('keeps the latest workspace baseline and skill instructions, never their superseded copies, in a local capability turn', () => {
+  const obsolete = createUserMessage({ content: [{ type: 'text', text: 'obsolete baseline '.repeat(11000) }],
+    source: { kind: 'agent-instructions', form: 'instructions', baseline: true, changes: [] } as never })
+  const workspace = createUserMessage({ content: [{ type: 'text', text: 'Current workspace policy: require approval.' }],
+    source: { kind: 'agent-instructions', form: 'instructions', baseline: true, changes: [] } as never })
+  const oldSkill = createUserMessage({ content: [{ type: 'text', text: 'old skill instructions '.repeat(3000) }],
+    source: { kind: 'skill-invocation', form: 'instructions', name: 'test-skill' } as never })
+  const skill = createUserMessage({ content: [{ type: 'text', text: 'Current skill instructions: verify the receipt.' }],
+    source: { kind: 'skill-invocation', form: 'instructions', name: 'test-skill' } as never })
+  const task = createUserMessage({ content: [{ type: 'text', text: 'que puedes usar de phoenix' }], source: { kind: 'user' } })
+  const options: GenerateOptions = { provider: 'phoenix-local', model: 'phoenix-local',
+    system: 'Keep the user intent and authorized discovery.',
+    messages: [obsolete, workspace, oldSkill, skill, task],
+    tools: [{ name: 'tool_search', description: 'Discover scoped capabilities', parameters: { type: 'object' } },
+      { name: 'system_runtime_inspect', description: 'Inspect runtime', parameters: { type: 'object' } }] }
+  const fitted = fitPhoenixLocalTextTurn(options, 16384, 2048)
+  expect(fitted.inputBudgetTokens).toBe(9728)
+  expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+  expect(fitted.options.messages).toEqual([workspace, skill, task])
+  expect(fitted.options.tools?.map(tool => tool.name)).toContain('tool_search')
+  expect(fitted.options.tools?.map(tool => tool.name)).toContain('system_runtime_inspect')
+  expect(options.messages).toHaveLength(5)
+})
+
+
+it('prioritizes the newly discovered schema over an older completed tool within the local input budget', () => {
+  const task = createUserMessage({ content: [{ type: 'text', text: 'continúa' }], source: { kind: 'user' } })
+  const oldId = CallId('prior-operation')
+  const discoverId = CallId('discover-next-operation')
+  const priorCall = history('assistant', [{ type: 'tool-call', id: oldId, name: 'old_operation', arguments: '{}' }])
+  const priorResult = user([{ type: 'tool-result', toolCallId: oldId, content: [{ type: 'text', text: 'Completed.' }] }])
+  const discover = history('assistant', [{ type: 'tool-call', id: discoverId, name: 'tool_search', arguments: '{"names":["next_operation"]}' }])
+  const receipt = user([{ type: 'tool-result', toolCallId: discoverId, content: [{ type: 'text', text: '{"enabled":true,"tools":[{"name":"next_operation","schemaDeferred":true}]}' }] }])
+  const makeTool = (name: string) => ({ name, description: 'Operation', parameters: { type: 'object',
+    properties: { selector: { type: 'string', enum: ['x'.repeat(5200)] } } } })
+  const options: GenerateOptions = { provider: 'phoenix-local', model: 'phoenix-local',
+    system: 'p'.repeat(27000), messages: [task, priorCall, priorResult, discover, receipt],
+    tools: [{ name: 'tool_search', description: 'Discover authorized tools', parameters: { type: 'object' } },
+      makeTool('old_operation'), makeTool('next_operation')] }
+  const fitted = fitPhoenixLocalTextTurn(options, 16384, 2048)
+  expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+  expect(fitted.options.tools?.map(tool => tool.name)).toEqual(['tool_search','next_operation'])
+  expect(fitted.options.messages).toEqual(options.messages)
+})
