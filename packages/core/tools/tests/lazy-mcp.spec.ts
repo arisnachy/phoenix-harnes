@@ -418,3 +418,37 @@ it('projects tools for a resolved local route without changing the configured cl
   const restored = await ctx.systemPrompt.assemble({ scope: agent })
   expect(restored.tools.map(item => item.name)).toContain('spreadsheet_edit')
 })
+
+
+describe('PHOENIX Local capability-aware discovery', () => {
+  it('ranks Spanish capability queries against native English tool names', async () => {
+    const { ctx, agent } = await mount()
+    Object.assign(agent, { options: { provider: 'phoenix-local' } })
+    ctx.tools.register(tool('unrelated_tool', 'Unrelated'))
+    ctx.tools.register(tool('spreadsheet_edit', 'Edit spreadsheet cells'))
+    ctx.tools.register(tool('browser_inspect', 'Inspect browser'))
+    const result = await ctx.tools.execute({ signal, callId: CallId('es-sheet'), name: 'tool_search', agent,
+      arguments: { query: 'hoja de cálculo', limit: 1 } })
+    expect(result).toMatchObject({ isError: false, value: { selected: 1, tools: [{ name: 'spreadsheet_edit' }] } })
+    const selected = await ctx.systemPrompt.assemble({ scope: agent })
+    expect(selected.tools.map(item => item.name)).toContain('spreadsheet_edit')
+    expect(selected.tools.map(item => item.name)).not.toContain('browser_inspect')
+    const executed = await ctx.tools.execute({ signal, callId: CallId('es-sheet-call'), name: 'spreadsheet_edit', agent, arguments: {} })
+    expect(executed).toMatchObject({ isError: false, value: 'ran:spreadsheet_edit' })
+  })
+
+  it('preselects a small native Windows capability without executing anything or changing cloud presentation', async () => {
+    const { ctx, agent } = await mount()
+    Object.assign(agent, { options: { provider: 'phoenix-local' } })
+    let executions = 0
+    ctx.tools.register({ ...tool('phoenix_windows_inspect'), execute: () => { executions++; return Promise.resolve('ok') } })
+    ctx.tools.register(tool('computer'))
+    ctx.tools.register(tool('spreadsheet_edit'))
+    const assembly = await ctx.systemPrompt.assemble({ scope: agent, incomingUserText: 'Abre Paint en Windows' } as Parameters<typeof ctx.systemPrompt.assemble>[0])
+    expect(assembly.tools.map(item => item.name)).toEqual(['phoenix_windows_inspect', 'tool_search'])
+    expect(executions).toBe(0)
+    const cloud = await addAgent(ctx, 'capability-cloud')
+    const cloudAssembly = await ctx.systemPrompt.assemble({ scope: cloud })
+    expect(cloudAssembly.tools.map(item => item.name)).toContain('spreadsheet_edit')
+  })
+})
