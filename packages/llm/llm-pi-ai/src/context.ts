@@ -192,6 +192,7 @@ function compactToolsForPressure(
 
 function compactSkillCatalogMessage(message: Message): Message {
   const source = message.source as unknown as { kind?: unknown; entries?: unknown }
+  if (message.content[0]?.type === 'text' && message.content[0].text.startsWith('<system-reminder>Available task skills: ')) return message
   if (source.kind !== 'skill-catalog' || !Array.isArray(source.entries)) return message
   const names = source.entries.flatMap((entry): string[] => {
     if (typeof entry !== 'object' || entry === null) return []
@@ -304,6 +305,7 @@ function selectToolsForPressureBudget(options: GenerateOptions, inputBudgetToken
     if (options.provider === 'phoenix-local') {
       if (tool.name === 'tool_search') score += 100_000
       else if (recent.has(tool.name)) score += 80_000
+      else if (tool.name === 'skill_search') score += 60_000
       else if (tool.name === 'run_code') score += 50_000
     }
     if (query.includes(name)) score += 2_000
@@ -465,7 +467,7 @@ function fitPhoenixLocalHeadroom(
 /** Project large, named observational snapshots only. Security, approval, sandbox,
  * delegation, user messages and unknown contributors remain intact. Durable messages
  * are not changed; the full observation is available through its owning tool. */
-function compactLocalObservation(message: Message): Message {
+function compactLocalObservation(message: Message, proactive = false): Message {
   if (message.source.kind !== 'plugin' || message.source.plugin !== '@phoenix-ai/dsh-system-prompt') return message
   const source = message.source as { form?: unknown; sections?: unknown }
   if (source.form !== 'snapshot' || !Array.isArray(source.sections)
@@ -480,7 +482,7 @@ function compactLocalObservation(message: Message): Message {
   if (message.content.length !== 1 || block?.type !== 'text') return message
   let projected = block.text
   for (const section of source.sections as { name: string; text: string }[]) {
-    if (!Object.hasOwn(retrieval, section.name) || section.text.length <= 2400 || !projected.includes(section.text)) continue
+    if (!Object.hasOwn(retrieval, section.name) || section.text.length <= (proactive ? 700 : 2400) || !projected.includes(section.text)) continue
     const note = '[Large observation ' + section.name + ' retained in durable history. For current facts, discover the relevant authorized tool by exact name with tool_search or use it directly: ' + retrieval[section.name] + '. Read only the necessary fields when supported; do not infer omitted facts.]'
     projected = projected.replace(section.text, () => note)
   }
@@ -494,6 +496,18 @@ function compactLocalObservation(message: Message): Message {
  * @param desiredMaxOutput - Response budget requested for the turn.
  * @returns The fitted request and the safe input budget.
  */
+/** The durable catalog is retained for the UI and future provider changes.
+ * Only the local request receives a short discovery instruction, and only
+ * when the actual scoped skill search gateway is available.
+ */
+function projectLocalSkillCatalog(message: Message): Message {
+  if (!isAuxiliarySkillCatalog(message)) return message
+  const source = message.source as { entries?: unknown }
+  if (!Array.isArray(source.entries) || source.entries.length === 0) return message
+  return { ...message, content: [{ type: 'text', text: '<system-reminder>Available task skills: ' + source.entries.length
+    + '. Discover relevant skills with skill_search using a short task keyword or exact name; then discover the skill loader through tool_search if needed and call skill with the exact returned name before acting. Follow any explicitly loaded skill instructions. Do not assume a skill is available without discovery.</system-reminder>' }] }
+}
+
 export function fitPhoenixLocalTextTurn(
   options: GenerateOptions,
   contextWindow: number,
@@ -501,12 +515,22 @@ export function fitPhoenixLocalTextTurn(
 ): ContextBudgetFit {
   // Budget against the actual local reserve before selecting schemas. The generic
   // fitter uses a different safety margin and can discard the gateway too early.
-  const localRegular = fitPhoenixLocalHeadroom(options, contextWindow, desiredMaxOutput, false)
   const gateway = options.tools?.find(tool => tool.name === 'tool_search')
     ?? options.tools?.find(tool => tool.name === 'run_code')
+  const nativeDiscovery = gateway?.name === 'tool_search'
+  const skillDiscovery = nativeDiscovery && options.tools?.some(tool => tool.name === 'skill_search') === true
+  // Budget observations before ordinary admission, rather than waiting for
+  // a context overflow. Preserve every unknown policy and human message.
+  const initialMessages = nativeDiscovery ? options.messages.map(message => {
+    const observation = compactLocalObservation(message, true)
+    return skillDiscovery ? projectLocalSkillCatalog(observation) : observation
+  }) : options.messages
+  const changed = initialMessages.some((message, index) => message !== options.messages[index])
+  const initial = changed ? { ...options, messages: initialMessages } : options
+  const localRegular = fitPhoenixLocalHeadroom(initial, contextWindow, desiredMaxOutput, changed)
   if (localRegular.estimatedTokens <= localRegular.inputBudgetTokens) return localRegular
 
-  const runtimeProjected: GenerateOptions = { ...options, messages: options.messages.map(compactLocalObservation) }
+  const runtimeProjected: GenerateOptions = { ...initial, messages: initial.messages.map(message => compactLocalObservation(message)) }
   const runtimeFit = fitPhoenixLocalHeadroom(compactAuxiliaryContextForPressure(runtimeProjected), contextWindow, desiredMaxOutput, true)
   if (runtimeFit.estimatedTokens <= runtimeFit.inputBudgetTokens) return runtimeFit
   // First narrow the wire catalog while preserving full conversation history.
