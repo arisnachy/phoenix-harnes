@@ -11,6 +11,7 @@ process.stdin.on('end', () => {
     dshHome: process.env.DSH_HOME,
     agentsHome: process.env.DSH_AGENTS_HOME,
     marker: process.env.LOADER_SMOKE_MARKER,
+    fastsdEnabled: process.env.PHOENIX_FASTSD_ENABLE,
     input,
   }))
   console.error('fixture stderr')
