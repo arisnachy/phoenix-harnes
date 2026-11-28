@@ -99,6 +99,33 @@ describe('Installed local model selection', () => {
     expect(() => assertPhoenixLocalSelectable({ provider: 'phoenix-local', model: 'stale' }, inventory)).toThrow()
   })
 
+  it('exposes and persists only the active local model thinking choices without sending synthetic effort to the session', async () => {
+    let local: PhoenixLocalInstallState = { ...inventory, thinking: false, thinkingCapabilities: { values: [false, true], default: null } }
+    const setThinking = vi.fn(async (thinking: boolean | string | null) => {
+      local = { ...local, thinking }
+      return local
+    })
+    const selectModel = vi.fn()
+    const sessions = {
+      models: async () => ({ result: { ok: true, value: hostDirectory } }),
+      selectModel,
+    } as unknown as Pick<IApiClient['sessions'], 'models' | 'selectModel'>
+    const directory = new ModelDirectory(sessions, 'local-thinking' as SessionId, () => true, async () => local, undefined, setThinking)
+    await directory.load()
+    const state = directory.store.getSnapshot()
+    expect(state.current?.reasoningEffort).toBe('local:off')
+    expect(state.groups[1]?.models[0]?.reasoning?.efforts.map(e => e.id)).toEqual(['local:off', 'local:on'])
+    expect(state.groups[1]?.models[1]?.reasoning).toBeUndefined()
+    await directory.select({ provider: 'phoenix-local', model: gemma, reasoningEffort: 'local:on' })
+    expect(setThinking).toHaveBeenCalledWith(true)
+    expect(directory.store.getSnapshot().current?.reasoningEffort).toBe('local:on')
+    await directory.select({ provider: 'phoenix-local', model: gemma })
+    expect(setThinking).toHaveBeenCalledWith(null)
+    await expect(directory.select({ provider: 'phoenix-local', model: gemma, reasoningEffort: 'local:level:high' })).rejects.toThrow()
+    expect(setThinking).toHaveBeenCalledTimes(2)
+    expect(selectModel).not.toHaveBeenCalled()
+  })
+
   it('activates the exact artifact and submits only the stable adapter route to the session', async () => {
     let local = inventory
     const activate = vi.fn(async (modelId: string) => {
