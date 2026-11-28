@@ -27,3 +27,11 @@ describe('Finix output', () => {
     expect(view.queryByText('Delegar y administrar tareas')).toBeNull()
   })
 })
+
+it('shows a dismissible speech bubble for a material initiative only when minimized', async () => {
+  const loadOutput = vi.fn(async () => [{id:'r',title:'Monitor',status:'scheduled',resident:true,initiative:'Detecté 3 tareas fallidas.',recentHistory:[]}])
+  const view = render(<CompanionDock open={false} onToggle={vi.fn()} loadOutput={loadOutput} />)
+  await waitFor(() => expect(view.getByText('Detecté 3 tareas fallidas.')).toBeTruthy())
+  fireEvent.click(view.getByRole('button', { name: 'Descartar aviso de Finix' }))
+  expect(view.queryByText('Detecté 3 tareas fallidas.')).toBeNull()
+})

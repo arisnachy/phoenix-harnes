@@ -118,7 +118,15 @@ export function apply(ctx: Context, config: Config): void {
     throw new Error(`spill-policy: maxInlineBytes must be a non-negative integer (got ${maxInlineBytes})`)
   }
   // Narrowed once for the nested arms (closure narrowing does not survive awaits).
-  const cap: number = maxInlineBytes
+  const configuredCap: number = maxInlineBytes
+  const capFor = (exec: ToolExecution): number => {
+    const agent = (exec as SpillPolicyExec).agent
+    const route = agent?.session.requestContext?.()
+    if ((route?.provider ?? agent?.options?.provider) !== 'phoenix-local') return configuredCap
+    const window = route?.contextWindow ?? 8192
+    const localCap = Number.isFinite(window) && window > 0 ? Math.max(1024, Math.min(8192, Math.floor(window / 4))) : 2048
+    return Math.min(configuredCap, localCap)
+  }
 
   /**
    * Spill `text` and build the bounded replacement (preview + notice), or
@@ -134,6 +142,7 @@ export function apply(ctx: Context, config: Config): void {
     toolName: string,
     callId: CallId,
     label: 'result' | 'dispatch',
+    cap: number,
   ): Promise<string | undefined> {
     if (sessionId === undefined) {
       ctx.logger.warn(`spill-policy: no session owner for ${toolName} ${label}; keeping the inline content`)
@@ -200,9 +209,10 @@ export function apply(ctx: Context, config: Config): void {
     const text = flattenPlainText(content)
     if (text === undefined) return decision
     const totalBytes = Buffer.byteLength(text, 'utf8')
-    if (totalBytes <= maxInlineBytes) return decision
+    const cap = capFor(exec)
+    if (totalBytes <= cap) return decision
 
-    const replacedText = await spillReplacement(text, totalBytes, ownerSessionId(exec), exec.name, exec.callId, 'result')
+    const replacedText = await spillReplacement(text, totalBytes, ownerSessionId(exec), exec.name, exec.callId, 'result', cap)
     if (replacedText === undefined) return decision
     const replaced: ContentBlock[] = [{ type: 'text', text: replacedText }]
     return { kind: 'accept', content: replaced, ...decision.additionalContexts ? { additionalContexts: decision.additionalContexts } : {} }
@@ -222,10 +232,11 @@ export function apply(ctx: Context, config: Config): void {
     const text = flattenPlainText(content)
     if (text === undefined) return content
     const totalBytes = Buffer.byteLength(text, 'utf8')
-    if (totalBytes <= maxInlineBytes) return content
+    const cap = capFor(dispatch.exec)
+    if (totalBytes <= cap) return content
 
     const replacedText = await spillReplacement(
-      text, totalBytes, ownerSessionId(dispatch.exec), dispatch.name, dispatch.subCallId, 'dispatch')
+      text, totalBytes, ownerSessionId(dispatch.exec), dispatch.name, dispatch.subCallId, 'dispatch', cap)
     if (replacedText === undefined) return content
     return [{ type: 'text', text: replacedText }]
   }, { prepend: true })

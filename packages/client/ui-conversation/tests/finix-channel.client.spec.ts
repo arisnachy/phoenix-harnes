@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { finixInstruction, parseFinixOutput } from '../src/client/input/finix-channel.ts'
+import { finixInstruction, parseFinixOutput, resolveFinixMessage, setFinixRecipient } from '../src/client/input/finix-channel.ts'
 describe('Finix shared composer', () => {
   it('recognizes exact leading addresses and custom names, not file mentions', () => {
     expect(finixInstruction('@finix revisa esto', 'Finix')).toBe('revisa esto')
@@ -23,4 +23,20 @@ it('surfaces a verified resident observation without exposing raw JSON or unrela
   expect(result[0]?.resident).toBe(true)
   expect(result[0]?.recentHistory[0]?.summary).toContain('Investigar tareas fallidas')
   expect(result[0]?.recentHistory[0]?.summary).not.toContain('{"identity"')
+})
+
+it('keeps a selected recipient in the same session and allows explicit overrides', () => {
+  expect(resolveFinixMessage('hola', 'session-a')).toBeUndefined()
+  setFinixRecipient('session-a', true)
+  expect(resolveFinixMessage('¿qué puedes hacer?', 'session-a')).toBe('¿qué puedes hacer?')
+  expect(resolveFinixMessage('hola', 'session-b')).toBeUndefined()
+  expect(resolveFinixMessage('@Kira hola', 'session-a')).toBeUndefined()
+  expect(resolveFinixMessage('/model', 'session-a')).toBeUndefined()
+  setFinixRecipient('session-a', false)
+  expect(resolveFinixMessage('hola', 'session-a')).toBeUndefined()
+})
+it('does not issue unsolicited notices for routine healthy monitoring', () => {
+  const summary = JSON.stringify({identity:'finix',tools:5,capabilities:10,degraded:0,failed:0,repeated:0,due:0,running:0,memory:'normal',next:'observe'})
+  const rows = parseFinixOutput([{id:'r',title:'Monitor',status:'scheduled',executionPolicy:'companion-resident',recentHistory:[{status:'completed',summary}]}])
+  expect(rows[0]?.initiative).toBeUndefined()
 })

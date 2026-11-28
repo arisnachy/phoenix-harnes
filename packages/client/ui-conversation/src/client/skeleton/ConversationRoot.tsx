@@ -14,6 +14,9 @@ import {
 import type { HeroMissionStarter } from './EmptyHero.tsx'
 import css from './ConversationRoot.module.css'
 import { CompanionDock } from './CompanionDock.tsx'
+import { FINIX_RECIPIENT_EVENT, isFinixRecipient, setFinixRecipient } from '../input/finix-channel.ts'
+import { readCompanionName } from './companion-name.ts'
+import { LivingMascot } from '../chat/LivingMascot.tsx'
 
 interface AppMenuEntry { readonly id: string; readonly title: string }
 interface AppMenuPreset { readonly id: string; readonly label: string; readonly readiness: 'shell-ready' | 'preview-only' }
@@ -68,6 +71,13 @@ export function ConversationRoot({
   const proactiveAttention = useProactivityAttention(items => items)
 
   const [companionOpen, setCompanionOpen] = useState(false)
+  const [, refreshRecipient] = useState(0)
+  useEffect(() => {
+    const refresh = (): void => { refreshRecipient(value => value + 1) }
+    window.addEventListener(FINIX_RECIPIENT_EVENT, refresh)
+    return () => window.removeEventListener(FINIX_RECIPIENT_EVENT, refresh)
+  }, [])
+  const finixRecipient = sessionId !== undefined && isFinixRecipient(String(sessionId))
   useEffect(() => {
     const open = (): void => { setCompanionOpen(true) }
     window.addEventListener('phoenix:open-companion', open)
@@ -387,7 +397,7 @@ export function ConversationRoot({
         ? { blocked: composerBlock, placeholder: composerBlock.reason }
         : hero ? { placeholder: t('placeholder.hero') } : {}),
     overlay: renderSlot('conversation.input.overlay', {}),
-    leftItems: zone === undefined ? null : renderSlot('conversation.input.left', zone),
+    leftItems: zone === undefined ? null : <>{renderSlot('conversation.input.left', zone)}{finixRecipient && sessionId !== undefined && <button type="button" className={css.finixRecipient} data-finix-recipient="" onClick={() => setFinixRecipient(String(sessionId), false)} aria-label="Volver a Kira" title="Conversando con Finix · pulsar para volver a Kira"><LivingMascot pose="ready" /><span>{readCompanionName()}</span><span aria-hidden="true">×</span></button>}</>,
     rightItems: zone === undefined ? null : renderSlot('conversation.input.right', zone),
     // Stats band under the card, inside the bar's width column so both
     // share one constraint (composer.dock = stats-line family).

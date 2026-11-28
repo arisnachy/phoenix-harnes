@@ -53,6 +53,8 @@ declare module '@phoenix-ai/cordis' {
 
 /** Merge-extensible context for one prompt assembly. */
 export interface AssembleContext {
+  /** Provider resolved for this request after adaptive routing; presentation only, never authorization. */
+  requestProvider?: string
   /**
    * Scope whose providers and waterfall listeners participate. When absent,
    * only global providers and subject-less listeners participate.

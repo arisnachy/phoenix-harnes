@@ -38,7 +38,6 @@ const SCHEMA_DECORATION_KEYS = new Set([
   '$comment',
   'examples',
   'example',
-  'default',
 ])
 
 /** JSON stringify that cannot fail request budgeting on an exotic schema value. */
@@ -133,11 +132,19 @@ function compactSchemaForPressure(value: unknown): unknown {
     return compacted
   }
 
-  const compacted: Record<string, unknown> = {}
-  for (const [key, child] of Object.entries(value)) {
-    if (SCHEMA_DECORATION_KEYS.has(key)) continue
-    compacted[key] = compactSchemaForPressure(child)
-  }
+  // Visit only schema positions. A property named "description", "title",
+  // or "examples" is an argument, not annotation; enum/const/default values
+  // can also be arbitrary objects and must remain lossless.
+  const maps = new Set(['properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas', 'dependencies'])
+  const children = new Set(['items', 'additionalItems', 'additionalProperties', 'unevaluatedProperties', 'unevaluatedItems',
+    'contains', 'not', 'if', 'then', 'else', 'propertyNames', 'allOf', 'anyOf', 'oneOf', 'prefixItems'])
+  const compacted = Object.fromEntries(Object.entries(value).flatMap(([key, child]) => {
+    if (SCHEMA_DECORATION_KEYS.has(key)) return []
+    if (maps.has(key) && typeof child === 'object' && child !== null && !Array.isArray(child)) {
+      return [[key, Object.fromEntries(Object.entries(child).map(([name, schema]) => [name, compactSchemaForPressure(schema)]))]]
+    }
+    return [[key, children.has(key) ? compactSchemaForPressure(child) : child]]
+  }))
   COMPACT_SCHEMA_CACHE.set(value, compacted)
   return compacted
 }
@@ -426,6 +433,30 @@ function fitPhoenixLocalHeadroom(
   }
 }
 
+/** Project large, named observational snapshots only. Security, approval, sandbox,
+ * delegation, user messages and unknown contributors remain intact. Durable messages
+ * are not changed; the full observation is available through its owning tool. */
+function compactLocalObservation(message: Message): Message {
+  if (message.source.kind !== 'plugin' || message.source.plugin !== '@phoenix-ai/dsh-system-prompt') return message
+  const source = message.source as { form?: unknown; sections?: unknown }
+  if (source.form !== 'snapshot' || !Array.isArray(source.sections)
+    || !source.sections.every(section => section && typeof section.name === 'string' && typeof section.text === 'string')) return message
+  const retrieval: Record<string, string> = {
+    'hardness:humanos-self-model': 'phoenix_self_assess / system_runtime_inspect',
+    'hardness:reality-context': 'phoenix_reality_now',
+    'hardness:initiative-context': 'phoenix_task_list / phoenix_finix_status',
+    'windows:free-capabilities': 'system_environment_inspect / phoenix_windows_inspect',
+  }
+  let changed = false
+  const parts = (source.sections as { name: string; text: string }[]).map(section => {
+    if (!Object.hasOwn(retrieval, section.name) || section.text.length <= 2400) return section.text
+    changed = true
+    return `[Large observation ${section.name} retained in durable history. For current facts, retrieve the relevant subset with ${retrieval[section.name]} if authorized and available. Do not infer omitted facts.]`
+  })
+  if (!changed) return message
+  return { ...message, content: [{ type: 'text', text: 'Background runtime context (silent, supersedes older snapshots; use only when relevant):\n\n' + parts.join('\n\n') }] }
+}
+
 /**
  * Fit a local turn, using a request-only text projection under context pressure.
  * @param options - Fully assembled request including the latest user message.
@@ -445,33 +476,41 @@ export function fitPhoenixLocalTextTurn(
   if (localRegular.estimatedTokens <= localRegular.inputBudgetTokens
     && (gateway === undefined || localRegular.options.tools?.some(tool => tool.name === gateway.name))) return localRegular
 
+  const runtimeProjected: GenerateOptions = { ...options, messages: options.messages.map(compactLocalObservation) }
+  const runtimeFit = fitPhoenixLocalHeadroom(compactAuxiliaryContextForPressure(runtimeProjected), contextWindow, desiredMaxOutput, true)
+  if (runtimeFit.estimatedTokens <= runtimeFit.inputBudgetTokens) return runtimeFit
+
   // Preserve the active mission and every current tool call/result pair. Drop
   // only older history from the request projection, never from durable state.
   // Do not degrade a tool-capable agent into the conversational fallback.
-  if (gateway !== undefined) {
-    const current = options.messages.findLastIndex(message => message.role === 'user' && message.source.kind === 'user')
-    if (current < 0) return fitPhoenixLocalHeadroom(options, contextWindow, desiredMaxOutput, false)
-    const retained = options.messages.slice(current)
-    const prior = options.messages.slice(0, current)
+  if (gateway !== undefined || (options.tools?.length ?? 0) > 0) {
+    const current = runtimeProjected.messages.findLastIndex(message => message.role === 'user' && message.source.kind === 'user')
+    if (current < 0 && gateway !== undefined) return runtimeFit
+    const retained = current < 0 ? runtimeProjected.messages : runtimeProjected.messages.slice(current)
+    const prior = current < 0 ? [] : runtimeProjected.messages.slice(0, current)
     const runtime = prior.findLast(message => message.source.kind === 'plugin'
       && message.source.plugin === '@phoenix-ai/dsh-system-prompt')
     const suffixHasRuntime = retained.some(message => message.source.kind === 'plugin'
       && message.source.plugin === '@phoenix-ai/dsh-system-prompt')
     const messages = runtime !== undefined && !suffixHasRuntime ? [runtime, ...retained] : retained
-    const projected = compactAuxiliaryContextForPressure({ ...options, messages })
+    const projected = compactAuxiliaryContextForPressure({ ...runtimeProjected, messages })
     const projectedFit = fitPhoenixLocalHeadroom(projected, contextWindow, desiredMaxOutput, true)
     if (projectedFit.estimatedTokens <= projectedFit.inputBudgetTokens) return projectedFit
     const selected = selectToolsForPressureBudget(projected,
       Math.max(1, Math.floor(projectedFit.inputBudgetTokens * 3.5 / ESTIMATED_CHARS_PER_TOKEN)))
     const fitted = fitPhoenixLocalHeadroom(selected, contextWindow, desiredMaxOutput, true)
-    if (fitted.options.tools?.some(tool => tool.name === gateway.name)) return fitted
-    // Explicit context error rather than a misleading tool-free success.
-    return projectedFit
+    const used = toolNamesUsedInMessages(messages)
+    const selectedNames = new Set(fitted.options.tools?.map(tool => tool.name))
+    const activeToolsRetained = [...used].every(name => selectedNames.has(name))
+    if (gateway !== undefined && selectedNames.has(gateway.name) && activeToolsRetained && fitted.estimatedTokens <= fitted.inputBudgetTokens) return fitted
+    if (gateway === undefined && selectedNames.size > 0 && activeToolsRetained && fitted.estimatedTokens <= fitted.inputBudgetTokens) return fitted
+    if (gateway !== undefined || used.size > 0) return projectedFit
+    // Only an ordinary text turn without active tools can use the existing lite fallback.
   }
 
   // Keep the full instructions, real tool signatures and user history whenever
   // a more conservative, request-only projection can still fit the model window.
-  const condensed = compactAuxiliaryContextForPressure(regular.options)
+  const condensed = compactAuxiliaryContextForPressure(runtimeProjected)
   // A live tool cycle must retain its known tool names, schemas and results.
   // Under pressure fail with a clear context error rather than silently
   // stripping a tool the assistant has already called in this turn.

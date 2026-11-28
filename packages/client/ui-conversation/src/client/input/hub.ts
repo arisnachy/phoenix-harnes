@@ -16,7 +16,7 @@ import type { ComposerKeyboard, DraftAttachmentId, SessionInputResolver, Session
 import type { InputSubmitMode } from '../contract/composer-submission.ts'
 import type { PopupDismissFace } from './facade.ts'
 import { SessionInputShell } from './facade.ts'
-import { finixInstruction } from './finix-channel.ts'
+import { resolveFinixMessage, setFinixRecipient } from './finix-channel.ts'
 import type { ConnectionHandle } from '@phoenix-ai/dsh-api-remotes/client'
 
 /** Structural command face for per-session popup resolution. */
@@ -172,7 +172,7 @@ export class InputHub implements SessionInputResolver {
     signal: AbortSignal,
   ): Promise<SubmitOutcome> {
     if (text === '' && imageIds.length === 0) return Promise.resolve({ kind: 'success' })
-    const instruction = finixInstruction(text)
+    const instruction = resolveFinixMessage(text, String(session.sessionId))
     if (instruction !== undefined) {
       if (imageIds.length > 0) return { kind: 'error', text: 'Finix todavía no admite imágenes en este canal; tu borrador y adjuntos se conservan.' }
       if (instruction.length === 0) return { kind: 'error', text: 'Escribe tu mensaje después de @finix.' }
@@ -184,12 +184,14 @@ export class InputHub implements SessionInputResolver {
           sessionId: session.sessionId, instruction,
         }, signal)
         if (!result.ok) return { kind: 'error', text: result.error.message }
+        setFinixRecipient(String(session.sessionId), true)
         window.dispatchEvent(new Event('phoenix:open-companion'))
         return { kind: 'success' }
       } catch (error) {
         return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
       }
     }
+    if (/^\s*@/u.test(text)) setFinixRecipient(String(session.sessionId), false)
     const addressed = await this.rootCtx.bail(this.rootCtx, 'conversation/addressed-submit', { sessionId: session.sessionId, text, hasImages: imageIds.length > 0, signal })
     return addressed ?? this.conversation().sendSession(session, text, imageIds, mode, signal)
   }
