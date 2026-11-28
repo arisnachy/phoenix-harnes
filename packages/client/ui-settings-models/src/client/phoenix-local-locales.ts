@@ -1,5 +1,8 @@
 /** Dedicated copy for Phoenix Local inside Settings → Models. */
 export const localEn = {
+  studioQuantization: "Quantization",
+  studioParameters: "Parameters",
+  studioCapabilities: "Reported capabilities",
   studioLibrary: "Model library",
   studioLibraryHint: "Search public catalogs without downloading anything. Choose the exact variant to install.",
   studioSource: "Model source",
@@ -90,6 +93,9 @@ export type PhoenixLocalKey = keyof typeof localEn
 
 /** Spanish copy for Phoenix Local settings. */
 export const localEs: { [Key in PhoenixLocalKey]: string } = {
+  studioQuantization: "Cuantización",
+  studioParameters: "Parámetros",
+  studioCapabilities: "Capacidades declaradas",
   studioLibrary: "Biblioteca de modelos",
   studioLibraryHint: "Explora catálogos públicos sin descargar nada. Elige la variante exacta antes de instalar.",
   studioSource: "Origen del modelo",
@@ -177,6 +183,9 @@ export const localEs: { [Key in PhoenixLocalKey]: string } = {
 
 /** Simplified Chinese copy for Phoenix Local settings. */
 export const localZh: { [Key in PhoenixLocalKey]: string } = {
+  studioQuantization: "量化",
+  studioParameters: "参数",
+  studioCapabilities: "已报告能力",
   studioLibrary: "模型库",
   studioLibraryHint: "搜索公开目录，不会自动下载。选择具体版本后安装。",
   studioSource: "模型来源",
