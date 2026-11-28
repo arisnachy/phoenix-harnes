@@ -6,7 +6,7 @@
 }
 .panel {
   position: absolute; inset-block: 12px 16px; inset-inline-end: 12px;
-  width: min(390px, var(--finix-gutter)); min-width: 0; min-height: 0;
+  width: clamp(300px, var(--finix-gutter), 390px); max-width: calc(100% - 24px); min-width: 0; min-height: 0;
   pointer-events: auto; display: flex; flex-direction: column; overflow: hidden;
   border: 1px solid var(--dsw-alias-border-l2); border-radius: 20px;
   background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary);
@@ -16,8 +16,8 @@
 .avatar { flex: none; display: grid; place-items: center; width: 38px; height: 38px; }
 .avatar > svg { width: 38px; height: 36px; }
 .identity { flex: 1; min-width: 0; display: grid; gap: 3px; }
-.identity strong { font-size: 14px; font-weight: 650; overflow-wrap: anywhere; }
-.identity small { font-size: 11px; color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; }
+.identity strong { font-size: 14px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.identity small { font-size: 11px; color: var(--dsw-alias-label-secondary); overflow-wrap: break-word; }
 .close, .rename { flex: none; border: 0; border-radius: 8px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; font: inherit; padding: 5px; }
 .close { font-size: 20px; line-height: 1; }
 .close:hover, .rename:hover, .launcher:hover { background: var(--dsw-alias-interactive-bg-hover); }
@@ -44,25 +44,33 @@
 .launcher { position: absolute; inset-inline-end: 14px; inset-block-end: 18px; pointer-events: auto; display: grid; place-items: center; width: 48px; height: 44px; border: 0; border-radius: 12px; background: transparent; cursor: pointer; padding: 2px; }
 .launcher > svg { width: 39px; height: 35px; }
 .dot { position: absolute; right: 4px; top: 3px; width: 7px; height: 7px; border-radius: 50%; background: #ef5c20; }
-/* Insufficient gutter: explicit standalone reading surface, never resize the chat.
-   The sidebar and hero remain entry points; the active composer stays available below the independent output. */
-@container conversation-root (max-width: 1240px) {
-  .dock[data-open='true']:not([data-hero='true']) { inset-block-end: var(--finix-composer-height, 140px); }
-  .panel { inset: 0; width: auto; border: 0; border-radius: 0; box-shadow: none; }
-  .launcher { display: none; }
+/* Respond to actual conversation width, including sidebar toggles. */
+@container finix-workspace (max-width: 1500px) {
+  /* Active chat retains its original composer position and width. */
+  .dock[data-open='true']:not([data-hero='true']) { inset-block-end: calc(var(--finix-composer-height, 140px) + 8px); }
+  .dock:not([data-hero='true']) .launcher { inset-block-start: 8px; inset-block-end: auto; background: var(--dsw-alias-bg-base); }
 }
-@container conversation-root (max-width: 1440px) {
+@container finix-workspace (min-width: 850px) and (max-width: 1700px) {
+  /* Home: a readable right column, without covering the shared input. */
+  .dock[data-hero='true'][data-open='true'] {
+    position: relative; inset: auto; flex: 0 0 clamp(300px, 30cqw, 360px);
+    min-width: 0; min-height: 0;
+  }
+  .dock[data-hero='true'] .panel { inset: 12px 12px 16px 0; width: auto; max-width: none; }
+}
+@container finix-workspace (max-width: 849px) {
+  /* Small screens: dismissible reading surface instead of a crushed rail. */
   .dock[data-hero='true'][data-open='true'] { background: var(--dsw-alias-bg-base); pointer-events: auto; }
-  .dock[data-hero='true'] .panel { inset: 0; width: auto; border: 0; border-radius: 0; box-shadow: none; }
+  .dock[data-hero='true'] .panel { inset: 8px; width: auto; max-width: none; }
 }
 .dock[data-hero='true'] .launcher, .dock[data-open='true'] .launcher { display: none; }
 @media (prefers-reduced-motion: reduce) { .dock svg, .dock svg * { animation: none !important; } }
 
 /* A material initiative speaks from the existing free gutter, never a new chat row. */
-.speech { position: absolute; inset-inline-end: 14px; inset-block-end: 72px; pointer-events: auto; display: flex; align-items: flex-start; width: min(240px, var(--finix-gutter)); box-sizing: border-box; padding: 9px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 15px 15px 4px 15px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); box-shadow: 0 5px 18px rgb(40 25 10 / 7%); }
+.speech { position: absolute; inset-inline-end: 14px; inset-block-end: 72px; pointer-events: auto; display: flex; align-items: flex-start; width: clamp(210px, var(--finix-gutter), 240px); max-width: calc(100% - 28px); box-sizing: border-box; padding: 9px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 15px 15px 4px 15px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); box-shadow: 0 5px 18px rgb(40 25 10 / 7%); }
 .speech::after { content: ''; position: absolute; inset-inline-end: 14px; bottom: -7px; width: 12px; height: 12px; transform: rotate(45deg); background: inherit; border-inline-end: 1px solid var(--dsw-alias-border-l2); border-block-end: 1px solid var(--dsw-alias-border-l2); }
 .speechText { display: grid; gap: 5px; text-align: start; padding: 2px; min-width: 0; flex: 1; border: 0; background: transparent; color: inherit; font: inherit; font-size: 12px; line-height: 1.45; cursor: pointer; }
 .speechText strong { color: var(--dsw-specific-phoenix-accent, #ef5c20); }
 .speechClose { flex: none; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 16px; cursor: pointer; }
-@container conversation-root (max-width: 1240px) { .speech { inset-block-start: 8px; inset-block-end: auto; width: min(240px, calc(100% - 28px)); } .speech::after { display: none; } }
+@container finix-workspace (max-width: 1500px) { .speech { inset-block-start: 58px; inset-block-end: auto; width: min(240px, calc(100% - 28px)); } .speech::after { display: none; } }
 .dock[data-hero='true'] .speech { display: none; }
