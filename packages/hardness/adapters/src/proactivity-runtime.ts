@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { COMPANION_LOCAL_MODEL, companionAvailableTools, COMPANION_LOCAL_PERSONA } from './companion-local-policy.ts'
+import { COMPANION_LOCAL_MODEL, companionAvailableTools, COMPANION_LOCAL_PERSONA, companionGreeting, companionFailure } from './companion-local-policy.ts'
 import { AttentionStore, parseAttentionReceipt } from './proactivity-attention-store.ts'
 import { parseFinixChat, parseScheduledTaskCreation, parseScheduledTaskId } from './proactivity-rpc-input.ts'
 import { scheduledMissionScopeActive } from './mission-scope.ts'
@@ -350,6 +350,10 @@ export function createProactivityExecutor(
       }
       const companion = input.task.executionPolicy === 'companion-local'
       if (companion && (input.task.delivery !== 'work' || input.task.condition !== undefined)) throw new Error('companion-local execution policy mismatch')
+      if (companion && input.phase === 'deliver' && input.task.createdBy === 'user' && input.task.recurrence.kind === 'once' && input.task.preparationInstruction === undefined) {
+        const greeting = companionGreeting(input.instruction)
+        if (greeting !== undefined) return { summary: greeting, terminal: true }
+      }
       if (companion && config.privateWorkProvider !== 'spawn') throw new ProactivityDeferredError('local companion requires the in-process spawn provider')
       if (companion && (!subagents?.getProvider('spawn')?.capabilities.toolFilter || !subagents.getProvider('spawn')?.capabilities.persona)) throw new ProactivityDeferredError('local companion requires tool filtering and persona support')
       const lease = await acquireExecutionAgent(agents, input.task.targetAgentId, config)
@@ -430,6 +434,12 @@ export function createProactivityExecutor(
         try {
           const result = await run.result
           if (result.stopReason !== 'completed') {
+            if (companion) {
+              const end = run.localAgent?.session.events.findLast(event => event.type === 'turn/end')
+              const reason = end?.type === 'turn/end' ? end.data.reason : undefined
+              const evidence = reason?.kind === 'error' ? reason.error.code + ' ' + reason.error.message : ''
+              throw new Error(companionFailure(result.stopReason, evidence + ' ' + (result.diagnostic ?? '')))
+            }
             throw new Error(result.diagnostic ?? `private proactive work ended with ${result.stopReason}`)
           }
           const summary = plainOutput(result.output, config.privateWorkResultChars)

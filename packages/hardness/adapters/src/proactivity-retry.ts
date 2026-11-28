@@ -1,4 +1,5 @@
 import type { ProactivityEngine, ProactivityHistoryEntry } from './proactivity-engine.ts'
+import { companionGreeting } from './companion-local-policy.ts'
 
 /** Bounded exponential backoff for scheduled work that failed after starting. */
 export interface ProactivityRetryPolicy {
@@ -72,11 +73,16 @@ export async function retryFailedProactivityTasks(
     if (task.status !== 'failed') continue
     const latest = latestFailure(task.history)
     if (latest === undefined || latest.error?.startsWith('mail delivery requires manual review:')) continue
+    // Recover old failed exact greetings even if the previous model-only path exhausted its retry budget.
+    const recoverGreeting = task.executionPolicy === 'companion-local' && task.createdBy === 'user'
+      && task.recurrence.kind === 'once' && task.preparationInstruction === undefined && companionGreeting(task.instruction) !== undefined
+      && !task.history.some(row => row.status === 'completed' && row.phase === 'deliver')
+    if (!recoverGreeting && task.executionPolicy === 'companion-local' && /^Finix \[LOCAL_(?:DISABLED|INSTALL|MEMORY|CONTEXT|REFUSAL|ABORTED)\]/u.test(latest.error ?? '')) continue
     const attempts = failedAttempts(task.history, latest)
-    if (attempts >= policy.maxAttempts) continue
+    if (!recoverGreeting && attempts >= policy.maxAttempts) continue
     const finishedAt = Date.parse(latest.finishedAt)
     if (!Number.isFinite(finishedAt)) continue
-    if (nowMs < finishedAt + delayForAttempt(attempts, policy)) continue
+    if (!recoverGreeting && nowMs < finishedAt + delayForAttempt(attempts, policy)) continue
 
     try {
       await engine.resume(task.id)
