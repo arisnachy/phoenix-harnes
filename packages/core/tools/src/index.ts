@@ -1287,7 +1287,8 @@ export class ToolRuntime extends Service {
     if (localDiscovery(scope, requestProvider) && view.visible.has(TOOL_SEARCH_NAME)) {
       return [...view.visible.values()].filter(definition =>
         definition.name === TOOL_SEARCH_NAME || definition.name === RUN_CODE_NAME
-        || definition.name === NATIVE_IMAGE_GENERATION_TOOL || selected.has(definition.name))
+        || definition.name === NATIVE_IMAGE_GENERATION_TOOL || definition.name === 'system_runtime_inspect'
+        || selected.has(definition.name))
     }
     return [...view.visible.values()].filter((definition) => {
       if (definition.name === TOOL_SEARCH_NAME) return deferred
