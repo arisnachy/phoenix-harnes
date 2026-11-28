@@ -35,4 +35,22 @@ describe('PHOENIX Living Mascot', () => {
     expect(css).toContain(".livingStatus[data-centered='true']")
     expect(css).toContain('.livingMascot, .livingMascot * { animation: none !important; }')
   })
+
+  it('animates preparing, thinking and real tool poses without changing the mascot layout', () => {
+    const css = readFileSync(new URL('../src/client/chat/ChatView.module.css', import.meta.url), 'utf8')
+    const rig = readFileSync(new URL('../src/client/chat/LivingMascot.tsx', import.meta.url), 'utf8')
+    expect(css).toContain("[data-mascot-pose='ready'] .mascotHead { animation: finix-curiosity")
+    expect(css).toContain("[data-mascot-pose='ready'] .mascotWingRight { animation: finix-chin")
+    expect(css).toContain("[data-mascot-pose='ready'] .mascotBody { animation: finix-prepare")
+    expect(css).toContain("[data-mascot-pose='search'] .mascotProp { animation: finix-inspect")
+    expect(css).toContain("[data-mascot-pose='settled'] .mascotBody { animation: finix-settle")
+    expect(css).toContain("[data-mascot-pose='celebrate'] .mascotShadow { animation: finix-shadow")
+    for (const part of ['mascotCrest', 'mascotFootLeft', 'mascotFootRight', 'mascotShadow', 'mascotPage']) {
+      expect(rig).toContain('css.' + part)
+      expect(css).toContain('.' + part)
+    }
+    expect(rig).toContain('viewBox="0 0 120 108"')
+    expect(css).toContain('.livingMascot, .livingMascot * { animation: none !important; }')
+    expect(css).toContain('.mascotPage { opacity: 0; }')
+  })
 })
