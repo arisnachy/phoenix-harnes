@@ -162,3 +162,6 @@
 
 /* Keep the clinical surface and its protected ASK workflow in one column: the actual Kira conversation owns the right-hand content lane. */
 @container clinicalEncounter (min-width:820px){.consultationGrid[data-assistance='available']{grid-template-columns:minmax(0,1fr)}.consultationGrid .interviewCard{position:static;max-height:none;overflow:visible}}
+
+/* Compact working surface; no oversized introductory cards. */
+.root{gap:8px}.toolbar{padding:6px 9px;min-height:0;border-radius:9px}.toolbar .identity{min-height:0}.directoryHeader{padding:9px 11px;gap:8px}.directoryHeader label{min-width:0}.directoryHeader>div{flex-basis:150px}.lockedWorkspace{grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:10px 12px;margin:0;border-radius:10px}.lockIcon{display:none}.lockCopy{min-width:0}.lockCopy h3{font-size:13px;margin:0}.lockActions{display:flex;flex-wrap:wrap;gap:5px;align-items:center}.lockActions button{font-size:11px}.root .notice{padding:6px 9px;font-size:11px}.root .patientFocus{padding:8px 10px}.root .form,.root .encounter{padding:12px;gap:10px}.root .form label{font-size:12px}.root .form input,.root .form select{min-height:36px}
