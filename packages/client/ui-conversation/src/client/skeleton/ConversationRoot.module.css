@@ -994,7 +994,7 @@
 .root .scrollBody:has(> .adaptiveInlineHost > *):not(:has(> [data-slot='conversation.session'] > .viewArea))>.adaptiveInlineHost{grid-column:1/-1;grid-row:1}
 
 /* Independent right-gutter output; the scroll body and resident composer retain their full width. */
-.finixWorkspace { position: relative; display: flex; flex: 1; min-height: 0; min-width: 0; width: 100%; }
+.finixWorkspace { position: relative; display: flex; flex: 1; min-height: 0; min-width: 0; width: 100%; container: finix-workspace / inline-size; }
 
 .finixWorkspace > .scrollBody { min-width: 0; }
 
