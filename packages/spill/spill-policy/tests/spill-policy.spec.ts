@@ -602,3 +602,38 @@ describe('disposal (HMR safety)', () => {
     expect(spill?.saves).toHaveLength(1)
   })
 })
+
+describe('adaptive model-facing spill budget', () => {
+  it('preserves the complete output but bounds the preview for the actual 8k route', async () => {
+    const { ctx, spill } = await setup({ maxInlineBytes: 50_000 })
+    const body = 'result '.repeat(6000)
+    ctx.tools.register(textTool('big', body))
+    const request = exec('big')
+    Object.assign(request.agent?.session ?? {}, {
+      requestContext: () => ({ provider: 'phoenix-local', model: 'small', contextWindow: 8192 }),
+    })
+    const result = await ctx.tools.execute(request)
+    expect(result.isError).toBe(false)
+    expect(spill?.saves[0]?.content).toBe(body)
+    expect(textOf(result.content)).toContain('Full formatted result stored at:')
+    expect(Buffer.byteLength(textOf(result.content), 'utf8')).toBeLessThanOrEqual(3072)
+  })
+
+  it('applies the same small-window protection to cloud routes and leaves wide routes untouched', async () => {
+    const { ctx, spill } = await setup({ maxInlineBytes: 50_000 })
+    const body = 'result '.repeat(6000)
+    ctx.tools.register(textTool('big', body))
+    const narrow = exec('big')
+    Object.assign(narrow.agent?.session ?? {}, {
+      requestContext: () => ({ provider: 'cloud', model: 'small', contextWindow: 8192 }),
+    })
+    const result = await ctx.tools.execute(narrow)
+    expect(Buffer.byteLength(textOf(result.content), 'utf8')).toBeLessThanOrEqual(3072)
+    const wide = exec('big')
+    Object.assign(wide.agent?.session ?? {}, {
+      requestContext: () => ({ provider: 'cloud', model: 'large', contextWindow: 262144 }),
+    })
+    expect(textOf((await ctx.tools.execute(wide)).content)).toBe(body)
+    expect(spill?.saves).toHaveLength(1)
+  })
+})
