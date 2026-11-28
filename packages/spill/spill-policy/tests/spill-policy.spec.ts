@@ -602,3 +602,17 @@ describe('disposal (HMR safety)', () => {
     expect(spill?.saves).toHaveLength(1)
   })
 })
+
+it('uses the actual local context window for spill while retaining full results and cloud behavior', async () => {
+  const {ctx, spill} = await setup({maxInlineBytes:50000})
+  const body = 'complete evidence '.repeat(1000)
+  ctx.tools.register(textTool('big', body))
+  const local = exec('big','local')
+  Object.assign(local.agent!.session, { requestContext: () => ({provider:'phoenix-local', contextWindow:8192}) })
+  const result = await ctx.tools.execute(local)
+  expect(result.isError).toBe(false)
+  expect(Buffer.byteLength(textOf(result.content),'utf8')).toBeLessThanOrEqual(2048)
+  expect(spill?.saves[0]?.content).toBe(body)
+  const cloud = await ctx.tools.execute(exec('big','cloud'))
+  expect(textOf(cloud.content)).toBe(body)
+})
