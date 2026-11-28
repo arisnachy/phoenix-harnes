@@ -2666,6 +2666,18 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         return ok(request, { sessionId, ...createdPreset === undefined ? {} : { agentPreset: createdPreset } })
       },
 
+      async observeLocation(request) {
+        const { sessionId, location } = request.payload
+        // Never resume a cold session, create history, or activate an agent merely to observe location.
+        if (ctx.sessions.get(sessionId) === undefined) {
+          return err(request, { code: 'session-not-found', message: 'Session is not live', details: { sessionId } })
+        }
+        const service = ctx.get('clientReality')
+        if (location === null) service?.clearLocation(sessionId)
+        else service?.observeLocation(sessionId, location)
+        return ok(request, { accepted: true })
+      },
+
       async history(request) {
         const { sessionId, beforeSeq, maxMessages } = request.payload
         try {

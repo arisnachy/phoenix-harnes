@@ -22,6 +22,7 @@ import {
   sessionDeleteRequestSchema,
   sessionForkRequestSchema,
   sessionHistoryRequestSchema,
+  sessionObserveLocationRequestSchema,
   sessionListRequestSchema,
   sessionModelsRequestSchema,
   sessionPromptRequestSchema,
@@ -97,6 +98,13 @@ const UNARY_ROUTES: UnaryRoutes = {
   'session.search': { schema: sessionSearchRequestSchema, invoke: (api, r, signal) => api.sessions.search(r, signal) },
   'session.create': { schema: sessionCreateRequestSchema, invoke: (api, r) => api.sessions.create(r) },
   'session.history': { schema: sessionHistoryRequestSchema, invoke: (api, r) => api.sessions.history(r) },
+  'session.observeLocation': {
+    schema: sessionObserveLocationRequestSchema,
+    invoke: async (api, r) => {
+      if (api.sessions.observeLocation === undefined) throw new Error('location observation is unavailable')
+      return api.sessions.observeLocation(r)
+    },
+  },
   'session.models': { schema: sessionModelsRequestSchema, invoke: (api, r) => api.sessions.models(r) },
   'session.selectModel': { schema: sessionSelectModelRequestSchema, invoke: (api, r) => api.sessions.selectModel(r) },
   'session.rename': { schema: sessionRenameRequestSchema, invoke: (api, r) => api.sessions.rename(r) },
