@@ -64,6 +64,7 @@ interface ManagedStdioMcpConfig {
   env: Record<string, string>
   envCredentialRefs: Record<string, string>
   cwd: string
+  supportedPlatforms?: string[]
   toolCallTimeoutMs: number
   startupTimeoutMs: number
   failOnStartupError: boolean
@@ -319,6 +320,28 @@ function blenderLabMcpConfig(): ManagedStdioMcpConfig {
   }
 }
 /** Only the exact previous official launchers are accepted for migration. */
+/**
+ * Optional Windows UI Automation bridge. Never downloads executables,
+ * starts on other operating systems or joins the default MCP pack.
+ * Every tool call is mediated by the MCP client's windows permission gate.
+ */
+export const WINDOWS_FLAUI_MCP_LAUNCHER = 'scripts/phoenix-windows-flaui-mcp.mjs'
+function windowsFlaUiMcpConfig(): ManagedStdioMcpConfig {
+  return {
+    transport: 'stdio',
+    serverName: 'windows-flaui',
+    command: 'node',
+    args: [WINDOWS_FLAUI_MCP_LAUNCHER],
+    env: {},
+    envCredentialRefs: {},
+    cwd: '',
+    supportedPlatforms: ['win32'],
+    toolCallTimeoutMs: 45_000,
+    startupTimeoutMs: 8_000,
+    failOnStartupError: false,
+    reconnect: { enabled: false, initialDelayMs: 1000, maxDelayMs: 30_000, maxAttempts: 1 },
+  }
+}
 function previousBlenderMcpConfig(source: string): ManagedStdioMcpConfig {
   return {
     ...blenderLabMcpConfig(),
@@ -376,6 +399,7 @@ function microsoftScopedMcpConfig(serverName: string, service: 'mail' | 'calenda
 
 const CURATED_MCP_SPECS: Readonly<Record<CuratedMcpConnectorId, CuratedMcpSpec>> = {
   blender: { label: 'Blender Lab (official local MCP, Python execution)', config: blenderLabMcpConfig },
+  'windows-flaui': { label: 'Windows desktop (FlaUI; explicit per-action consent)', config: windowsFlaUiMcpConfig },
   devpost: { label: 'Devpost Hackathons', config: devpostHackathonsMcpConfig },
   canva: { label: 'Canva', config: canvaMcpConfig },
   supabase: { label: 'Supabase', config: () => remoteOauthMcpConfig('supabase', SUPABASE_MCP_URL) },
