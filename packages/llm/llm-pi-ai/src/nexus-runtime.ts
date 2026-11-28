@@ -451,8 +451,8 @@ export class NexusOpenRouterPrices {
 }
 
 /**
- * Reserve output capacity and a margin for tokenizer differences. This is a
- * conservative routing estimate, not a provider token count.
+ * Estimate projected context plus explicitly requested output. This is advisory,
+ * not a provider token count or an artificial admission limit.
  * @param input - estimated tokens in the current projected request.
  * @param output - requested output budget, if explicit.
  * @returns total required context, or undefined for invalid/missing measurements.
@@ -460,7 +460,7 @@ export class NexusOpenRouterPrices {
 export function nexusRequiredContext(input: number | undefined, output?: number): number | undefined {
   if (input === undefined || !Number.isSafeInteger(input) || input < 0) return undefined
   if (output !== undefined && (!Number.isSafeInteger(output) || output <= 0)) return undefined
-  const required = Math.ceil(input * 1.25) + (output ?? 2048)
+  const required = input + (output ?? 0)
   return Number.isSafeInteger(required) ? required : undefined
 }
 
@@ -683,13 +683,11 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
     const complex = payload.step !== 1 || hasImage || nexusRequiresStrongModel(text)
     const freeAllowed = payload.turn === 1 && !complex
     const requiredContext = nexusRequiredContext(payload.approximateInputTokens, selected.maxTokens)
-    if (requiredContext === undefined) {
-      throw new LlmError('Nexus cannot route without a valid current request context estimate', 'NEXUS_NO_ELIGIBLE_ROUTE')
-    }
-    const codexContextFits = async (model: string): Promise<boolean> => {
+    // Missing estimates are not evidence that a native subscription route is unusable.
+    const codexContextWindow = async (model: string): Promise<number | undefined> => {
       const info = await ctx.llm.resolveModelInfo('openai-codex', model, payload.signal).catch(() => undefined)
       const window = info?.context?.contextWindow
-      return window !== undefined && Number.isSafeInteger(window) && window >= requiredContext
+      return window !== undefined && Number.isSafeInteger(window) && window > 0 ? window : undefined
     }
     const exact = !hasImage ? nexusExactResponseTarget(text) : undefined
     const numeric = !hasImage && exact === undefined ? nexusNumericResponseTarget(text) : undefined
@@ -722,13 +720,12 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
         eligible = eligible && nexusCodexAvailability(quota, Date.now()) === 'available'
           && await options.nativeCodexAuthorized()
           && (await accountCodexModels()).some(model => model.id === route.model)
-          && await codexContextFits(route.model)
       } else {
         const inventory = await listAuthorizedModels(now)
         const model = inventory.find(item => item.provider === route.provider && item.id === route.model)
         eligible = eligible && freeAllowed && model !== undefined && model.online && model.supportsTools === true
           && (!hasImage || model.supportsImages === true)
-          && model.contextWindow !== undefined && model.contextWindow >= requiredContext
+          && (requiredContext === undefined || (model.contextWindow !== undefined && model.contextWindow >= requiredContext))
           && nexusPriceClass(model, Date.now()) === 'verified-free'
           && (route.provider === 'openrouter' ? (profile?.baseURL === undefined
             || profile.baseURL.replace(/\/+$/u, '') === 'https://openrouter.ai/api/v1')
@@ -762,7 +759,7 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       // Even short turns inherit the harness tool schema; only capable routes are safe.
       needsTools: true,
       needsImages: hasImage,
-      inputTokens: requiredContext,
+      ...(requiredContext === undefined ? {} : { inputTokens: requiredContext }),
       minimumQuality: 0,
       allowPaid: false,
       allowLocal: false,
@@ -785,10 +782,23 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
       && !state.excluded.has(routeKey('openai-codex', model.id))
       && (blockedUntil.get(routeKey('openai-codex', model.id)) ?? 0) <= Date.now()
     ).map(model => model.id)
-    const fitting = nativeAuthorized && quotaStatus === 'available'
-      ? await Promise.all(ids.map(async id => await codexContextFits(id) ? id : undefined))
+    const capacities = nativeAuthorized && quotaStatus === 'available'
+      ? await Promise.all(ids.map(async id => ({ id, window: await codexContextWindow(id) })))
       : []
-    const candidate = nexusCodexFallback(fitting.filter((id): id is string => id !== undefined), complex)
+    // Prefer a model whose advertised window fits, but never reject an
+    // authorized native route merely because a rough estimate exceeds metadata.
+    // On a real provider overflow the Agent loop's durable compaction recovery
+    // rebuilds the request. No context-window metadata is inflated or changed.
+    const fitting = capacities.filter(item => requiredContext === undefined
+      || (item.window !== undefined && item.window >= requiredContext)).map(item => item.id)
+    const unknown = capacities.filter(item => item.window === undefined).map(item => item.id)
+    const widest = Math.max(0, ...capacities.filter(item =>
+      nexusCodexFallback([item.id], complex) !== undefined).map(item => item.window ?? 0))
+    const widestIds = capacities.filter(item => item.window === widest).map(item => item.id)
+    const candidate = nexusCodexFallback(fitting, complex)
+      ?? nexusCodexFallback(widestIds, complex)
+      ?? nexusCodexFallback(unknown, complex)
+      ?? nexusCodexFallback(ids, complex)
     if (candidate !== undefined && quotaStatus === 'available') {
       route = { provider: 'openai-codex', model: candidate, priceClass: 'unknown',
         reason: nexusCodexWithinPace(quota, Date.now())
@@ -804,10 +814,10 @@ export function installNexusRuntime(ctx: Context, options: NexusRuntimeOptions):
         : quotaStatus === 'unknown' ? 'cuota nativa no confirmada o desactualizada'
           : quotaStatus === 'exhausted' ? 'cuota nativa agotada'
             : ids.length === 0 ? 'sin modelos anunciados elegibles (catálogo, modalidad o cooldown)'
-              : 'ningún modelo elegible tiene capacidad de contexto confirmada o familia compatible'
+              : 'ningún modelo del catálogo corresponde a una familia compatible'
       throw new LlmError(
         'ORIÓN: ' + reason + '. Cuota compartida 5h: ' + remaining(view.fiveHours)
-        + '; 7d: ' + remaining(view.sevenDays) + '; contexto requerido: ' + String(requiredContext)
+        + '; 7d: ' + remaining(view.sevenDays) + '; contexto estimado: ' + String(requiredContext ?? 'desconocido')
         + ' tokens; modelos candidatos: ' + String(ids.length)
         + '. No se ejecutará una ruta de pago no autorizada ni un modelo gratuito no validado para trabajo complejo.',
         'NEXUS_NO_ELIGIBLE_ROUTE',

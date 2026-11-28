@@ -25,6 +25,7 @@ import {
 import type { GenerateOptions, LlmCallConfig, Message, PreparedLlmCall } from '@phoenix-ai/dsh-llm'
 import {
   BlockAssembler,
+  CONTEXT_WINDOW_EXCEEDED_CODE,
   LlmError,
   createAssistantMessage,
   createUserMessage,
@@ -684,13 +685,36 @@ export class ReactLoopAgent implements Agent {
       }))
     }
 
+    let preflightCompactions = 0
     while (true) {
       const derived = this.session.deriveMessages()
       const boundaryMessages = projectRequestHistory(derived, this.session.events.findLast(event => event.type === 'step/start')?.data.historyProjection)
       const auditId = randomUUID()
-      const { request, preparedCall } = await this.buildRequest(
-        turn, step, assembly.tools, system, boundaryMessages, signal, auditId, assembly,
-      )
+      let built: { request: GenerateOptions; preparedCall?: PreparedLlmCall }
+      try {
+        built = await this.buildRequest(
+          turn, step, assembly.tools, system, boundaryMessages, signal, auditId, assembly,
+        )
+      } catch (error: unknown) {
+        // Only a classified context preflight failure is recoverable here. The
+        // previous real route supplies the compaction target; no provider call
+        // or tool execution has occurred for this attempt.
+        const prior = this.session.requestHeader()?.config
+        if (!(error instanceof LlmError) || error.code !== CONTEXT_WINDOW_EXCEEDED_CODE
+          || prior === undefined || signal.aborted || preflightCompactions >= 2) throw error
+        const generation = this.session.surface.replaceGeneration
+        const action = await this.dispatch.waterfall(
+          'agent/request-error', {
+            turn, step, provider: prior.provider, failure: error.failure, signal,
+          },
+          () => Promise.resolve<RequestErrorAction>(undefined),
+        )
+        signal.throwIfAborted()
+        if (action?.kind !== 'retry' || this.session.surface.replaceGeneration <= generation) throw error
+        preflightCompactions += 1
+        continue
+      }
+      const { request, preparedCall } = built
       const assembler = new BlockAssembler()
       const chunkSeqs: number[] = []
       this.modelBoundaryActive = true
