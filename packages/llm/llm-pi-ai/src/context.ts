@@ -246,16 +246,11 @@ function toolNamesUsedInMessages(messages: readonly Message[]): Set<string> {
 }
 
 function latestUserText(messages: readonly Message[]): string {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index]
-    if (message?.role !== 'user' || message.source.kind === 'tool') continue
-    return message.content
-      .filter(block => block.type === 'text')
-      .map(block => block.text)
-      .join(' ')
-      .toLowerCase()
-  }
-  return ''
+  const latest = messages.findLast(message => message.role === 'user' && message.source.kind === 'user')
+    ?? messages.findLast(message => message.role === 'user' && message.source.kind !== 'tool'
+      && !(message.source.kind === 'plugin' && message.source.plugin === '@phoenix-ai/dsh-system-prompt')
+      && !isAuxiliarySkillCatalog(message))
+  return latest?.content.filter(block => block.type === 'text').map(block => block.text).join(' ').toLowerCase() ?? ''
 }
 
 function selectToolsForPressureBudget(options: GenerateOptions, inputBudgetTokens: number): GenerateOptions {
@@ -447,14 +442,15 @@ function compactLocalObservation(message: Message): Message {
     'hardness:initiative-context': 'phoenix_task_list / phoenix_finix_status',
     'windows:free-capabilities': 'system_environment_inspect / phoenix_windows_inspect',
   }
-  let changed = false
-  const parts = (source.sections as { name: string; text: string }[]).map(section => {
-    if (!Object.hasOwn(retrieval, section.name) || section.text.length <= 2400) return section.text
-    changed = true
-    return `[Large observation ${section.name} retained in durable history. For current facts, retrieve the relevant subset with ${retrieval[section.name]} if authorized and available. Do not infer omitted facts.]`
-  })
-  if (!changed) return message
-  return { ...message, content: [{ type: 'text', text: 'Background runtime context (silent, supersedes older snapshots; use only when relevant):\n\n' + parts.join('\n\n') }] }
+  const block = message.content[0]
+  if (message.content.length !== 1 || block?.type !== 'text') return message
+  let projected = block.text
+  for (const section of source.sections as { name: string; text: string }[]) {
+    if (!Object.hasOwn(retrieval, section.name) || section.text.length <= 2400 || !projected.includes(section.text)) continue
+    const note = '[Large observation ' + section.name + ' retained in durable history. For current facts, discover the relevant authorized tool by exact name with tool_search or use it directly: ' + retrieval[section.name] + '. Read only the necessary fields when supported; do not infer omitted facts.]'
+    projected = projected.replace(section.text, () => note)
+  }
+  return projected === block.text ? message : { ...message, content: [{ type: 'text', text: projected }] }
 }
 
 /**
@@ -469,16 +465,24 @@ export function fitPhoenixLocalTextTurn(
   contextWindow: number,
   desiredMaxOutput: number,
 ): ContextBudgetFit {
-  const regular = fitGenerateOptionsToContext(options, contextWindow, desiredMaxOutput)
-  const localRegular = fitPhoenixLocalHeadroom(regular.options, contextWindow, desiredMaxOutput, regular.compacted)
+  // Budget against the actual local reserve before selecting schemas. The generic
+  // fitter uses a different safety margin and can discard the gateway too early.
+  const localRegular = fitPhoenixLocalHeadroom(options, contextWindow, desiredMaxOutput, false)
   const gateway = options.tools?.find(tool => tool.name === 'tool_search')
     ?? options.tools?.find(tool => tool.name === 'run_code')
-  if (localRegular.estimatedTokens <= localRegular.inputBudgetTokens
-    && (gateway === undefined || localRegular.options.tools?.some(tool => tool.name === gateway.name))) return localRegular
+  if (localRegular.estimatedTokens <= localRegular.inputBudgetTokens) return localRegular
 
   const runtimeProjected: GenerateOptions = { ...options, messages: options.messages.map(compactLocalObservation) }
   const runtimeFit = fitPhoenixLocalHeadroom(compactAuxiliaryContextForPressure(runtimeProjected), contextWindow, desiredMaxOutput, true)
   if (runtimeFit.estimatedTokens <= runtimeFit.inputBudgetTokens) return runtimeFit
+  // First narrow the wire catalog while preserving full conversation history.
+  // Tool-search can discover any still-authorized definition again on demand.
+  const runtimeSelected = selectToolsForPressureBudget(runtimeFit.options,
+    Math.floor(runtimeFit.inputBudgetTokens * 3.5 / ESTIMATED_CHARS_PER_TOKEN))
+  const runtimeSelectedFit = fitPhoenixLocalHeadroom(runtimeSelected, contextWindow, desiredMaxOutput, true)
+  const hasGateway = (fit: ContextBudgetFit): boolean => gateway !== undefined
+    && fit.options.tools?.some(tool => tool.name === gateway.name) === true
+  if (hasGateway(runtimeSelectedFit) && runtimeSelectedFit.estimatedTokens <= runtimeSelectedFit.inputBudgetTokens) return runtimeSelectedFit
 
   // Preserve the active mission and every current tool call/result pair. Drop
   // only older history from the request projection, never from durable state.
@@ -492,7 +496,18 @@ export function fitPhoenixLocalTextTurn(
       && message.source.plugin === '@phoenix-ai/dsh-system-prompt')
     const suffixHasRuntime = retained.some(message => message.source.kind === 'plugin'
       && message.source.plugin === '@phoenix-ai/dsh-system-prompt')
-    const messages = runtime !== undefined && !suffixHasRuntime ? [runtime, ...retained] : retained
+    // Keep instruction and compaction checkpoints, and retain the newest skill
+    // catalog unless the current suffix has its replacement.
+    const catalog = retained.some(isAuxiliarySkillCatalog) ? undefined : prior.findLast(isAuxiliarySkillCatalog)
+    const prefix = prior.filter(message => {
+      if (message.source.kind === 'plugin' && message.source.plugin === '@phoenix-ai/dsh-system-prompt') {
+        return message === runtime && !suffixHasRuntime
+      }
+      if (isAuxiliarySkillCatalog(message)) return message === catalog
+      const source = message.source as { kind: string; form?: string; plugin?: string }
+      return message.role === 'system' || source.form === 'instructions' || (source.kind === 'plugin' && source.plugin === 'compact')
+    })
+    const messages = [...prefix, ...retained]
     const projected = compactAuxiliaryContextForPressure({ ...runtimeProjected, messages })
     const projectedFit = fitPhoenixLocalHeadroom(projected, contextWindow, desiredMaxOutput, true)
     if (projectedFit.estimatedTokens <= projectedFit.inputBudgetTokens) return projectedFit
@@ -501,8 +516,12 @@ export function fitPhoenixLocalTextTurn(
     const fitted = fitPhoenixLocalHeadroom(selected, contextWindow, desiredMaxOutput, true)
     const used = toolNamesUsedInMessages(messages)
     const selectedNames = new Set(fitted.options.tools?.map(tool => tool.name))
+    // Completed calls remain replayable by their recorded IDs and names even
+    // after discovery evicts their schema. Requiring every past schema makes
+    // long local tool chains impossible. The gateway remains available for
+    // rediscovery; execution permissions stay in the tool runtime.
     const activeToolsRetained = [...used].every(name => selectedNames.has(name))
-    if (gateway !== undefined && selectedNames.has(gateway.name) && activeToolsRetained && fitted.estimatedTokens <= fitted.inputBudgetTokens) return fitted
+    if (gateway !== undefined && selectedNames.has(gateway.name) && fitted.estimatedTokens <= fitted.inputBudgetTokens) return fitted
     if (gateway === undefined && selectedNames.size > 0 && activeToolsRetained && fitted.estimatedTokens <= fitted.inputBudgetTokens) return fitted
     if (gateway !== undefined || used.size > 0) return projectedFit
     // Only an ordinary text turn without active tools can use the existing lite fallback.
