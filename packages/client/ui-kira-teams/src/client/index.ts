@@ -27,7 +27,7 @@ export type { KiraTeamsDockProps, KiraTeamsInjected } from './KiraTeamsDock.tsx'
 /** Required services for the KIRA mission-control overlay contribution. */
 export const inject = ['sessions', 'slots', 'locale', 'layout', 'conversation', 'remote', 'remote.agentTeams', 'connection']
 
-/** Register the KIRA activity strip and rail inside the center-column overlay so agents never consume chat width or cover the sidebar. */
+/** Register real team activity in the shared companion seat. */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, es }), 'ui-kira-teams: dictionaries')
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
@@ -180,9 +180,9 @@ export function apply(ctx: ClientContext): void {
     },
   })
   ctx.slots.inject(
-    'shell.overlay',
+    'conversation.side.activity',
     () => ctx.slots.register({
-      name: 'shell.overlay',
+      name: 'conversation.side.activity',
       id: 'kira-teams',
       locale: NS,
       inject: dockActions,

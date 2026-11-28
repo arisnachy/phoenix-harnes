@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { readCompanionName, saveCompanionName } from './companion-name.ts'
 import type { FinixOutput } from '../input/finix-channel.ts'
 import type { ProactivityAttentionItem } from '../contract/slots.ts'
@@ -8,6 +8,8 @@ import css from './CompanionDock.module.css'
 interface Props {
   readonly open: boolean
   readonly hero?: boolean
+  readonly available?: boolean
+  readonly team?: ReactNode
   readonly onToggle: () => void
   readonly loadOutput?: (signal: AbortSignal) => Promise<readonly FinixOutput[]>
 }
@@ -18,7 +20,7 @@ export function companionPose(items: readonly ProactivityAttentionItem[]): Masco
   return 'ready'
 }
 const statusText: Record<string, string> = { scheduled: 'En espera de ejecución', running: 'Trabajando', completed: 'Completado', failed: 'Necesita atención', paused: 'Pausado', cancelled: 'Cancelado' }
-export function CompanionDock({ open, hero = false, onToggle, loadOutput }: Props) {
+export function CompanionDock({ open, hero = false, available = true, team, onToggle, loadOutput }: Props) {
   const id = useId()
   const feed = useRef<HTMLDivElement>(null)
   const follow = useRef(true)
@@ -59,7 +61,8 @@ export function CompanionDock({ open, hero = false, onToggle, loadOutput }: Prop
   const [acknowledged, setAcknowledged] = useState<string | undefined>()
   useEffect(() => { if (open && notice !== undefined) setAcknowledged(notice) }, [open, notice])
   const showNotice = !open && notice !== undefined && notice !== acknowledged
-  return <aside className={css.dock} data-finix-dock="" data-open={open ? 'true' : 'false'} data-hero={hero ? 'true' : 'false'} aria-label="Compañero Finix">
+  return <aside className={css.dock} data-finix-dock="" data-open={open ? 'true' : 'false'} data-hero={hero ? 'true' : 'false'} data-available={available ? 'true' : 'false'} aria-label="Centro de actividad de Finix y Kira">
+    <div className={css.team} data-shared-kira-seat="">{team}</div>
     {open && <section id={id} className={css.panel} aria-label="Salida de Finix">
       <div className={css.heading}>
         <span className={css.avatar}><LivingMascot pose={pose} /></span>
@@ -89,7 +92,7 @@ export function CompanionDock({ open, hero = false, onToggle, loadOutput }: Prop
     </section>}
     {showNotice && <div className={css.speech} role="status" data-finix-initiative-bubble=""><button type="button" className={css.speechText} onClick={onToggle}><strong>{name}</strong><span>{notice}</span></button><button type="button" className={css.speechClose} aria-label="Descartar aviso de Finix" onClick={() => setAcknowledged(notice)}>×</button></div>}
     <button type="button" className={css.launcher} aria-label={open ? 'Ocultar Finix' : 'Abrir Finix'} aria-expanded={open} aria-controls={open ? id : undefined} onClick={onToggle} title={name}>
-      <LivingMascot pose={pose} />{running && <span className={css.dot} aria-label="Trabajando" />}
+      <LivingMascot pose={pose} />{(running || showNotice) && <span className={css.dot} aria-label={running ? 'Trabajando' : 'Aviso pendiente'} />}
     </button>
   </aside>
 }

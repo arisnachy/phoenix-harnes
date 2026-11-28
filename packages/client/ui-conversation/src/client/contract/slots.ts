@@ -215,6 +215,8 @@ declare module '@phoenix-ai/dsh-client-ui-slots' {
      * the next one rather than applied to a current one.
      */
     'conversation.hero.agentPreset': { kind: 'single'; scope: 'root'; owner: HeroAgentPresetOwnerProps }
+    /** Shared activity surface for the resident companion and live agents. */
+    'conversation.side.activity': { kind: 'list'; scope: 'root' }
     // 'conversation.input.overlay' merges in ui-input-trigger (the dependency
     // direction is the hard constraint — ui-input-trigger cannot import
     // this package, while this package's input contract already imports
@@ -744,6 +746,7 @@ export type ConversationSlotProps =
     | 'conversation.hero.brand.mark'
     | 'conversation.hero.workspace'
     | 'conversation.hero.agentPreset'
+    | 'conversation.side.activity'
   >
   & InjectFace<ConversationInjected>
   & PropsLocale<'conversation'>
