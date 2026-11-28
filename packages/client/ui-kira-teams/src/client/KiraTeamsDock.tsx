@@ -28,7 +28,7 @@ export interface KiraTeamsInjected {
 }
 
 export type KiraTeamsDockProps =
-  PropsRuntime<'shell.overlay'> & InjectFace<KiraTeamsInjected> & PropsLocale<typeof NS>
+  PropsRuntime<'conversation.side.activity'> & InjectFace<KiraTeamsInjected> & PropsLocale<typeof NS>
 
 export interface MemberRow {
   summary: SessionSummary
@@ -442,7 +442,7 @@ export function KiraTeamsDock({ useList, openChild, t, layout, teamRpc }: KiraTe
   }, [])
 
   useEffect(() => {
-    // KIRA stays in the overlay layer; the rail never consumes chat width.
+    // Shared dock owns the geometry; never reserve a second occupant.
     layout.setWorkspaceOccupant('subagent', false)
     return () => { layout.setWorkspaceOccupant('subagent', false) }
   }, [layout])
@@ -541,6 +541,7 @@ export function KiraTeamsDock({ useList, openChild, t, layout, teamRpc }: KiraTe
         <span className={css.railBrand} aria-hidden="true">
           <span className={css.railBrandMark} />
         </span>
+        <span className={css.railTitle}>{t('dock.title')} · {cards.length}</span>
         <span className={css.railDivider} aria-hidden="true" />
         <span className={css.railAgents}>
           {cards.map((card) => {
