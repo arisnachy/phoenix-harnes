@@ -187,6 +187,40 @@ export function apply(ctx: Context, config: Config = {}): void {
     },
   })
   ctx.tools.register(skillTool)
+  // Model-facing discovery for the complete scoped catalog. The actual skill
+  // loader and visibility policy are unchanged; search never executes a skill.
+  ctx.tools.register(defineTool({
+    name: 'skill_search',
+    description: 'Find available task skills by exact name or keywords. Returns a small page of names and summaries; use skill to load instructions.',
+    parameters: {
+      query: { type: 'string', description: 'Skill name or task keywords. Empty lists the next page.' },
+      offset: { type: 'integer', minimum: 0, description: 'Page offset (default 0).' },
+    },
+    output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text' as const, text: value }] },
+    async execute(args, exec) {
+      if (ctx.tools.get(skillTool.name, exec.agent) !== skillTool) {
+        throw new Error('Skill loader is not available in this scope.')
+      }
+      const normalize = (value: string): string => value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
+      const query = normalize((args.query ?? '').trim().slice(0, 160))
+      const words = [...new Set(query.match(/[\p{L}\p{N}_-]{3,}/gu) ?? [])]
+        .filter(word => !/^(?:que|como|para|con|del|las|los|una|the|and|for)$/u.test(word))
+      const available = (await ctx.skills.list({ cwd: exec.agent?.session.header.cwd, signal: exec.signal, scope: exec.agent })).filter(isModelInvocable)
+      const ranked = available.map((skill, index) => {
+        const name = normalize(skill.name)
+        const desc = normalize(skill.description)
+        let score = query === name ? 10000 : 0
+        for (const word of words) score += name.includes(word) ? 100 : desc.includes(word) ? 10 : 0
+        return { skill, index, score }
+      }).filter(entry => query === '' || entry.score > 0)
+        .sort((a, b) => b.score - a.score || a.index - b.index)
+      const offset = Math.min(ranked.length, Math.max(0, args.offset ?? 0))
+      const page = ranked.slice(offset, offset + 6).map(({ skill }) => ({
+        name: skill.name, description: catalogDescription(skill.description, 100),
+      }))
+      return JSON.stringify({ total: ranked.length, nextOffset: offset + page.length < ranked.length ? offset + page.length : null, skills: page })
+    },
+  }))
 
   // Skill activation: user-explicit /name gestures plus high-confidence
   // natural user requests (e.g. a newly requested game). A claimed message
