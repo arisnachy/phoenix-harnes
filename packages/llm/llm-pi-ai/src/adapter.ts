@@ -558,7 +558,8 @@ export class PiAiAdapter extends LlmAdapter {
       const fitted = localCompletions
         ? fitPhoenixLocalTextTurn(options, model.contextWindow, desiredMaxOutput)
         : fitGenerateOptionsToContext(options, model.contextWindow, desiredMaxOutput)
-      if (options.provider === 'phoenix-local' && process.env.PHOENIX_TOKEN_AUDIT === '1') {
+      if (options.provider === 'phoenix-local' && (process.env.PHOENIX_TOKEN_AUDIT === '1'
+        || fitted.estimatedTokens > fitted.inputBudgetTokens)) {
         // The agent-loop INPUT audit measures the assembled request BEFORE the
         // local context fitter. This counterpoint explains what is retained.
         // Never log actual messages, instructions, schemas or credentials.
@@ -569,6 +570,10 @@ export class PiAiAdapter extends LlmAdapter {
           requestedOutputTokens: desiredMaxOutput,
           initialSystemChars: options.system?.length ?? 0,
           fittedSystemChars: fitted.options.system?.length ?? 0,
+          runtimeSnapshotSections: options.messages.flatMap(message =>
+            message.source.kind === 'plugin' && message.source.form === 'snapshot'
+              ? message.source.sections.map(section => ({ name: section.name, chars: section.text.length }))
+              : []).sort((left, right) => right.chars - left.chars).slice(0, 12),
           initialMessageCount: options.messages.length,
           fittedMessageCount: fitted.options.messages.length,
           initialToolCount: options.tools?.length ?? 0,

@@ -848,3 +848,49 @@ describe('Phoenix Local agent discovery context', () => {
     expect(options.messages).toHaveLength(4)
   })
 })
+
+describe('Phoenix Local reality context deferral', () => {
+  it('fits approximately 71k local input into 8k while retaining the current task, tool cycle and policy', () => {
+    const huge = 'telemetry '.repeat(24_850)
+    const policy = 'Approval and sandbox policy: read-only.'
+    const snapshot = createUserMessage({
+      content: [{ type: 'text', text: huge + '\n\n' + policy }],
+      source: { kind: 'plugin', plugin: '@phoenix-ai/dsh-system-prompt', form: 'snapshot',
+        sections: [{ name: 'hardness:reality-context', text: huge }, { name: 'approval:policy', text: policy }] },
+    })
+    const task = createUserMessage({ content: [{ type: 'text', text: 'Consulta mi red' }], source: { kind: 'user' } })
+    const callId = CallId('reality-discover')
+    const call = history('assistant', [{ type: 'tool-call', id: callId, name: 'tool_search', arguments: '{"query":"phoenix_reality_now"}' }])
+    const result = user([{ type: 'tool-result', toolCallId: callId, content: [{ type: 'text', text: 'Found phoenix_reality_now' }] }])
+    const options: GenerateOptions = {
+      ...request([snapshot, task, call, result]), provider: 'phoenix-local', model: 'phoenix-local',
+      tools: [{ name: 'tool_search', description: 'Discover tools', parameters: { type: 'object' } },
+        { name: 'phoenix_reality_now', description: 'Read reality', parameters: { type: 'object' } }],
+    }
+    expect(estimateGenerateOptionsTokens(options)).toBeGreaterThan(60_000)
+    const fitted = fitPhoenixLocalTextTurn(options, 8192, 1024)
+    expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+    expect(fitted.options.tools?.map(tool => tool.name)).toEqual(['tool_search', 'phoenix_reality_now'])
+    expect(fitted.options.messages.slice(1)).toEqual([task, call, result])
+    expect(fitted.options.messages[0]?.content).toEqual([{ type: 'text', text: expect.stringContaining(policy) }])
+    expect(fitted.options.messages[0]?.content).toEqual([{ type: 'text', text: expect.stringContaining('field=time') }])
+    expect(snapshot.content).toEqual([{ type: 'text', text: huge + '\n\n' + policy }])
+    expect(fitGenerateOptionsToContext({ ...options, provider: 'openai' }, 400_000, 1024).options.messages[0]).toBe(snapshot)
+  })
+
+  it('fails closed instead of rewriting an unknown or mandatory policy snapshot', () => {
+    const huge = 'mandatory '.repeat(25_000)
+    const policy = createUserMessage({
+      content: [{ type: 'text', text: huge }],
+      source: { kind: 'plugin', plugin: '@phoenix-ai/dsh-system-prompt', form: 'snapshot',
+        sections: [{ name: 'approval:policy', text: huge }] },
+    })
+    const task = createUserMessage({ content: [{ type: 'text', text: 'Work' }], source: { kind: 'user' } })
+    const options: GenerateOptions = { ...request([policy, task]), provider: 'phoenix-local',
+      tools: [{ name: 'tool_search', description: 'Discover', parameters: { type: 'object' } }] }
+    const fitted = fitPhoenixLocalTextTurn(options, 8192, 1024)
+    expect(fitted.estimatedTokens).toBeGreaterThan(fitted.inputBudgetTokens)
+    expect(fitted.options.messages).toContain(policy)
+    expect(fitted.options.messages).toContain(task)
+  })
+})
