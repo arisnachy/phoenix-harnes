@@ -406,3 +406,15 @@ describe('Phoenix Local universal discovery', () => {
     expect(result.isError).toBe(false)
   })
 })
+
+it('projects tools for a resolved local route without changing the configured cloud agent or its permissions', async () => {
+  const { ctx, agent } = await mount()
+  ctx.tools.register(tool('spreadsheet_edit', 'Edit spreadsheet cells'))
+  ctx.tools.register(tool('file_read', 'Read a file'))
+  const cloud = await ctx.systemPrompt.assemble({ scope: agent })
+  expect(cloud.tools.map(item => item.name)).toContain('spreadsheet_edit')
+  const local = await ctx.systemPrompt.assemble({ scope: agent, requestProvider: 'phoenix-local' })
+  expect(local.tools.map(item => item.name)).toEqual(['tool_search'])
+  const restored = await ctx.systemPrompt.assemble({ scope: agent })
+  expect(restored.tools.map(item => item.name)).toContain('spreadsheet_edit')
+})

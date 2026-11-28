@@ -848,3 +848,25 @@ describe('Phoenix Local agent discovery context', () => {
     expect(options.messages).toHaveLength(4)
   })
 })
+
+it('fits a 16K local agent request with a large observed inventory without dropping the active request or policies', () => {
+  const current = createUserMessage({ content: [{type:'text',text:'¿Puedes revisar mi correo?'}], source: {kind:'user'} })
+  const sections = [{name:'hardness:humanos-self-model',text:'inventory '.repeat(20000)},{name:'approval:policy',text:'External writes require approval.'}]
+  const snapshot = createUserMessage({content:[{type:'text',text:sections.map(section => section.text).join('\n')}],source:{kind:'plugin',plugin:'@phoenix-ai/dsh-system-prompt',form:'snapshot',sections} as never})
+  const options: GenerateOptions = { provider:'phoenix-local', model:'phoenix-local', system:'Keep the user task and authorized tools.', messages:[current,snapshot], tools:[{name:'tool_search',description:'Discover authorized tools',parameters:{type:'object'}}] }
+  const fitted = fitPhoenixLocalTextTurn(options,16384,2560)
+  expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+  expect(fitted.options.messages[0]).toEqual(current)
+  expect(JSON.stringify(fitted.options.messages.map(message => message.content))).toContain('External writes require approval.')
+  expect(fitted.options.tools?.some(tool => tool.name === 'tool_search')).toBe(true)
+  expect(snapshot.content[0]).toMatchObject({type:'text',text:sections.map(section => section.text).join('\n')})
+})
+
+it('preserves argument names and literal JSON values when compacting tool schemas', () => {
+  const message = createUserMessage({content:[{type:'text',text:'edit the description'}],source:{kind:'user'}})
+  const parameters = {type:'object',description:'x'.repeat(50000),properties:{description:{type:'string'},title:{type:'string'},payload:{type:'object',const:{description:'retain this'},default:{title:'retain this too'}}},required:['description','title']}
+  const options: GenerateOptions = {provider:'phoenix-local',model:'phoenix-local',messages:[message],tools:[{name:'edit',description:'edit',parameters}]}
+  const fitted = fitGenerateOptionsToContext(options,8192,512)
+  expect(fitted.options.tools?.[0]?.parameters).toEqual({type:'object',properties:parameters.properties,required:parameters.required})
+  expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+})
