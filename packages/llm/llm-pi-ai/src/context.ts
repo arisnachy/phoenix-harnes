@@ -38,7 +38,6 @@ const SCHEMA_DECORATION_KEYS = new Set([
   '$comment',
   'examples',
   'example',
-  'default',
 ])
 
 /** JSON stringify that cannot fail request budgeting on an exotic schema value. */
@@ -133,11 +132,19 @@ function compactSchemaForPressure(value: unknown): unknown {
     return compacted
   }
 
-  const compacted: Record<string, unknown> = {}
-  for (const [key, child] of Object.entries(value)) {
-    if (SCHEMA_DECORATION_KEYS.has(key)) continue
-    compacted[key] = compactSchemaForPressure(child)
-  }
+  // Visit only schema positions. A property named "description", "title",
+  // or "examples" is an argument, not annotation; enum/const/default values
+  // can also be arbitrary objects and must remain lossless.
+  const maps = new Set(['properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas', 'dependencies'])
+  const children = new Set(['items', 'additionalItems', 'additionalProperties', 'unevaluatedProperties', 'unevaluatedItems',
+    'contains', 'not', 'if', 'then', 'else', 'propertyNames', 'allOf', 'anyOf', 'oneOf', 'prefixItems'])
+  const compacted = Object.fromEntries(Object.entries(value).flatMap(([key, child]) => {
+    if (SCHEMA_DECORATION_KEYS.has(key)) return []
+    if (maps.has(key) && typeof child === 'object' && child !== null && !Array.isArray(child)) {
+      return [[key, Object.fromEntries(Object.entries(child).map(([name, schema]) => [name, compactSchemaForPressure(schema)]))]]
+    }
+    return [[key, children.has(key) ? compactSchemaForPressure(child) : child]]
+  }))
   COMPACT_SCHEMA_CACHE.set(value, compacted)
   return compacted
 }
@@ -426,13 +433,6 @@ function fitPhoenixLocalHeadroom(
   }
 }
 
-/**
- * Fit a local turn, using a request-only text projection under context pressure.
- * @param options - Fully assembled request including the latest user message.
- * @param contextWindow - Effective context limit of the selected local model.
- * @param desiredMaxOutput - Response budget requested for the turn.
- * @returns The fitted request and the safe input budget.
- */
 /** Project large, named observational snapshots only. Security, approval, sandbox,
  * delegation, user messages and unknown contributors remain intact. Durable messages
  * are not changed; the full observation is available through its owning tool. */
@@ -457,6 +457,13 @@ function compactLocalObservation(message: Message): Message {
   return { ...message, content: [{ type: 'text', text: 'Background runtime context (silent, supersedes older snapshots; use only when relevant):\n\n' + parts.join('\n\n') }] }
 }
 
+/**
+ * Fit a local turn, using a request-only text projection under context pressure.
+ * @param options - Fully assembled request including the latest user message.
+ * @param contextWindow - Effective context limit of the selected local model.
+ * @param desiredMaxOutput - Response budget requested for the turn.
+ * @returns The fitted request and the safe input budget.
+ */
 export function fitPhoenixLocalTextTurn(
   options: GenerateOptions,
   contextWindow: number,
@@ -495,7 +502,7 @@ export function fitPhoenixLocalTextTurn(
     const used = toolNamesUsedInMessages(messages)
     const selectedNames = new Set(fitted.options.tools?.map(tool => tool.name))
     const activeToolsRetained = [...used].every(name => selectedNames.has(name))
-    if (gateway !== undefined && selectedNames.has(gateway.name) && activeToolsRetained) return fitted
+    if (gateway !== undefined && selectedNames.has(gateway.name) && activeToolsRetained && fitted.estimatedTokens <= fitted.inputBudgetTokens) return fitted
     if (gateway === undefined && selectedNames.size > 0 && activeToolsRetained && fitted.estimatedTokens <= fitted.inputBudgetTokens) return fitted
     if (gateway !== undefined || used.size > 0) return projectedFit
     // Only an ordinary text turn without active tools can use the existing lite fallback.
