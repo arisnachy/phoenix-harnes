@@ -3,6 +3,7 @@ import { createLocalModelPaths } from '../src/local-model/paths.js'
 import { getLocalModel } from '../src/local-model/catalog.js'
 import {
   createLocalModelRuntimeManager,
+  localCpuThreadProfile,
   LocalModelRuntimeFault,
   type LocalModelRuntimeManagerDependencies,
   type LocalServerHandle,
@@ -35,11 +36,20 @@ function harness(initial?: Partial<LocalModelPersistentState>) {
     probeHealth: vi.fn(async () => undefined),
     probeOllamaModel: vi.fn(async () => undefined),
     freeMemoryBytes: vi.fn(() => 16_000_000_000),
+    availableCpuThreads: vi.fn(() => 8),
   }
   return { dependencies, server, readState: () => persisted }
 }
 
 describe('LocalModelRuntimeManager', () => {
+  it('bounds generation and prefill threads while preserving a CPU for the Host', () => {
+    expect(localCpuThreadProfile(8)).toEqual({ generation: 4, prefill: 7 })
+    expect(localCpuThreadProfile(1)).toEqual({ generation: 1, prefill: 1 })
+    expect(localCpuThreadProfile(2)).toEqual({ generation: 1, prefill: 1 })
+    expect(localCpuThreadProfile(64)).toEqual({ generation: 16, prefill: 32 })
+    expect(localCpuThreadProfile(Number.NaN)).toEqual({ generation: 1, prefill: 1 })
+  })
+
   it('accepts only thinking modes discovered in local Ollama metadata', async () => {
     const id = 'qwen3.5-2b-ollama-q4-k-m'
     const { dependencies, readState } = harness({ selectedModelId: id, thinking: false })
@@ -112,6 +122,9 @@ describe('LocalModelRuntimeManager', () => {
       '--host', '127.0.0.1',
       '--port', '17842',
       '--ctx-size', '131072',
+      '--parallel', '1',
+      '--threads', '4',
+      '--threads-batch', '7',
       '--cache-type-k', 'q8_0',
       '--cache-type-v', 'q8_0',
       '--model', expect.stringContaining('gemma-4-E2B-it-Q4_0.gguf'),
@@ -132,6 +145,9 @@ describe('LocalModelRuntimeManager', () => {
     const [, args] = vi.mocked(dependencies.spawnServer).mock.calls[0]!
     expect(args).toEqual(expect.arrayContaining([
       '--ctx-size', '262144',
+      '--parallel', '1',
+      '--threads', '4',
+      '--threads-batch', '7',
       '--reasoning', 'off',
       '--model', expect.stringContaining('Qwen_Qwen3.5-4B-Q4_K_M.gguf'),
     ]))

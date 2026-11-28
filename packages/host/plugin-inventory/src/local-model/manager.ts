@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { availableParallelism } from 'node:os'
 import { comparableOllamaTag, getLocalModelCatalog, forgetOllamaCandidate, getLocalModel, getRuntimeManifest, registerOllamaCandidate, synchronizeOllamaCatalog, type OllamaDiscoveredModel } from './catalog.js'
 import {
   LocalModelRuntimeFault,
@@ -47,6 +48,8 @@ export interface LocalModelRuntimeManagerDependencies {
   pullOllamaModel?(tag: string, onProgress: (progress: { receivedBytes: number; totalBytes?: number }) => void): Promise<void>
   deleteOllamaModel?(tag: string): Promise<void>
   freeMemoryBytes(): number
+  /** Available logical CPUs, honoring OS affinity where supported. */
+  availableCpuThreads?(): number
 }
 
 /** Lifecycle API for installing, starting, stopping, and configuring Phoenix Local. */
@@ -69,6 +72,19 @@ export interface LocalModelRuntimeManager {
 
 const MEMORY_HEADROOM_BYTES = 1_000_000_000
 const HEALTH_TIMEOUT_MS = 60_000
+
+/** Conservative CPU-first launch settings; no model weights or context are changed.
+ * @param logicalThreads - Logical CPUs available to this Host.
+ * @returns Separate bounded generation and prefill thread counts.
+ */
+export function localCpuThreadProfile(logicalThreads: number): { generation: number; prefill: number } {
+  const available = Number.isFinite(logicalThreads) ? Math.max(1, Math.floor(logicalThreads)) : 1
+  const budget = Math.max(1, available - 1)
+  return {
+    generation: Math.min(16, budget, Math.max(1, Math.floor(available / 2))),
+    prefill: Math.min(32, budget),
+  }
+}
 
 function apiFor(platform: string): typeof path.win32   {
   return platform === 'win32' ? path.win32 : path.posix
@@ -354,11 +370,18 @@ class RuntimeManager implements LocalModelRuntimeManager {
     this.publishPhase('starting')
     const port = await this.dependencies.allocatePort()
     const base = `http://127.0.0.1:${String(port)}`
+    const cpu = localCpuThreadProfile(this.dependencies.availableCpuThreads?.() ?? availableParallelism())
     const args = [
       '--model', modelPath,
       '--host', '127.0.0.1',
       '--port', String(port),
       '--ctx-size', String(model.contextWindow),
+      // The managed CPU server has one resident model. A single slot avoids
+      // automatic slot partitioning reducing the advertised per-turn context.
+      // Concurrent local requests queue at the server instead of sharing slots.
+      '--parallel', '1',
+      '--threads', String(cpu.generation),
+      '--threads-batch', String(cpu.prefill),
       // Qwen3.5-4B is a hybrid thinking model. llama-server defaults to
       // automatic reasoning, which can spend the entire completion budget on
       // hidden thinking and return no visible answer. Disable it at process
