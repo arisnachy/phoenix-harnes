@@ -82,6 +82,24 @@ describe('classification', () => {
     expect(classifyQualityActivity('shell:bash', { command: 'pnpm run test' })).toBe('verification')
   })
 
+  it('tracks named GitHub mutations instead of accepting stale evidence', () => {
+    expect(classifyQualityActivity('mcp__GitHub__merge_pull_request', { pr_number: 10 })).toBe('mutation')
+    expect(classifyQualityActivity('mcp__GitHub__create_pull_request', { base: 'main' })).toBe('mutation')
+    expect(classifyQualityActivity('mcp__GitHub__update_ref', { ref: 'refs/heads/main' })).toBe('mutation')
+    expect(classifyQualityActivity('mcp__GitHub__enable_auto_merge', { pr_number: 10 })).toBe('mutation')
+    expect(classifyQualityActivity('mcp__GitHub__add_issue_labels', { labels: ['bug'] })).toBe('mutation')
+    expect(classifyQualityActivity('mcp__files__manage_library', { operation: 'upload' })).toBe('mutation')
+    expect(classifyQualityActivity('mcp__GitHub__get_pr_info', { pr_number: 10 })).toBe('other')
+    expect(classifyQualityActivity('github.update_file', { path: 'a.ts' })).toBe('mutation')
+  })
+
+  it('treats shell commands that both mutate and test as mutations', () => {
+    expect(classifyQualityActivity('bash', { command: 'git add a.ts && pnpm run test' })).toBe('mutation')
+    expect(classifyQualityActivity('pwsh', { command: 'pnpm run typecheck; git push' })).toBe('mutation')
+    expect(classifyQualityActivity('bash', { command: 'gh pr merge 42 --squash && pnpm run test' })).toBe('mutation')
+    expect(classifyQualityActivity('bash', { command: 'pnpm run test' })).toBe('verification')
+  })
+
   it('infers requirement signals that need targeted evidence', () => {
     expect(inferQualitySignals('CycleError must include the exact cycle in its message')).toEqual({
       errorContract: true, scale: false, unicodeBoundary: false, zeroProgress: false, differentialOracle: false,
@@ -140,6 +158,29 @@ describe('quality-policy evidence freshness', () => {
     expect(found).toHaveLength(1)
     expect(found[0]).toContain('verification evidence is now stale')
     expect(found[0]).toContain('focused automated check')
+  })
+
+  it('nudges when a GitHub merge is reported complete without checking the resulting state', async () => {
+    const ctx = await harness()
+    ctx.tools.register(defineContentToolFixture({
+      name: 'merge_pull_request',
+      description: 'GitHub merge fixture',
+      parameters: {},
+      async execute() { return [{ type: 'text' as const, text: 'merged' }] },
+    }))
+    ctx.llm.registerAdapter(['mock-merge'], new MockAdapter([
+      toolCallResponse('merge', 'merge_pull_request', {}),
+      textResponse('merged and ready'),
+      textResponse('not yet independently verified'),
+    ]))
+    const agent = ctx.agentLoop.create(SessionId('github-merge-verification'), { provider: 'mock-merge', model: 'mock' })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'merge the PR' }], source: { kind: 'user' } }))
+    await waitForIdle(ctx, agent)
+
+    const found = notices(agent)
+    expect(found).toHaveLength(2)
+    expect(found[0]).toContain('verification evidence is now stale')
+    expect(found[1]).toContain('successful mutations after its latest accepted verification')
   })
 
   it('preserves downstream post-execute context on a mutating call', async () => {

@@ -19,7 +19,7 @@ maxStopNudges is a latency budget, not a quality score. Zero disables stop corre
 
 ## Activity classification
 
-The guard classifies calls locally from tool name and JSON arguments. Native file mutation tools such as write, edit, str_replace_editor and common create/update/delete/move/upload/deploy names count as mutations. Shell, PowerShell and Code calls are classified with bounded command-pattern checks: common test/build/lint/typecheck commands count as verification, while common filesystem, package-management and git mutation commands count as mutations. Read/search/fetch/screenshot calls count as inspection.
+The guard classifies calls locally from tool name and JSON arguments. Native mutation tools such as write, edit, str_replace_editor and create/update/delete/move/upload/deploy/merge/ref-change operation families count as mutations, including namespaced GitHub operations. Shell, PowerShell and Code calls are classified with bounded command-pattern checks: common test/build/lint/typecheck commands count as verification **only when the same call is not also mutating**, while filesystem, package-management, git and GitHub CLI mutations take precedence. A combined edit-and-test shell command remains dirty until a separate successful verification is observed. Read/search/fetch/screenshot calls count as inspection.
 
 The artifact domain is inferred from touched paths: code, web, docs, data, config, or generic. Code, web, and config require automated evidence; docs, data, and generic work may be satisfied by inspection. The policy deliberately stays conservative and cheap: it does not parse source trees or launch an evaluator merely to classify work.
 
