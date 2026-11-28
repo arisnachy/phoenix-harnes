@@ -175,7 +175,7 @@ export async function readOllamaThinkingCapabilities(model: string): Promise<Loc
     // uses the native boolean switch; never infer named levels for other families.
     const family = payload.details?.family
     if (Array.isArray(payload.capabilities) && payload.capabilities.includes('thinking')
-      && typeof family === 'string' && /^qwen3(?:[._-][a-z0-9]+)*$/iu.test(family)) {
+      && typeof family === 'string' && /^qwen(?:3|35|3next)(?:[._-][a-z0-9]+)*$/iu.test(family)) {
       return { values: [false, true], default: null }
     }
     return undefined
