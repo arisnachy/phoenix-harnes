@@ -1,31 +1,9 @@
 /* KIRA live-agent presence rail.
    Teammate-authored text lives only in the shared chat transcript. */
 
-.root {
-  position: absolute;
-  z-index: 80;
-  top: 72px;
-  right: 10px;
-  width: 78px;
-  height: 0;
-  box-sizing: border-box;
-  pointer-events: none;
-}
-
-.rail {
-  pointer-events: auto;
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 78px;
-  max-height: calc(100vh - 88px);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  box-sizing: border-box;
-  padding: 7px 0 8px;
-  border-left: 1px solid var(--dsw-alias-border-l1);
-}
+.root { display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; width: 100%; }
+.rail { display: flex; flex: 1 1 auto; flex-direction: column; align-items: center; min-height: 0; min-width: 0; width: 100%; box-sizing: border-box; padding: 6px 0; overflow: hidden; }
+.railTitle { display: none; }
 
 .railBrand {
   flex: none;
@@ -66,7 +44,7 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 5px;
   overflow-y: auto;
   overflow-x: hidden;
@@ -79,7 +57,7 @@
   flex: none;
   width: 44px;
   height: 44px;
-  margin-left: 5px;
+  margin-left: 0;
   display: grid;
   place-items: center;
   padding: 0;
@@ -112,10 +90,15 @@
   content: '';
 }
 
-@media (max-width: 620px) {
-  .root {
-    display: none;
-  }
+:global([data-finix-dock][data-open='true']) .rail { align-items: stretch; padding: 5px 9px; }
+:global([data-finix-dock][data-open='true']) .railTitle { display: block; font-size: 11px; font-weight: 650; color: var(--dsw-alias-label-secondary); padding: 4px; }
+:global([data-finix-dock][data-open='true']) .railBrand, :global([data-finix-dock][data-open='true']) .railDivider { display: none; }
+:global([data-finix-dock][data-open='true']) .railAgents { flex-direction: row; overflow-x: auto; overflow-y: hidden; min-height: 48px; }
+@container finix-workspace (max-width: 849px) {
+  .rail { flex-direction: row; padding: 0 4px; }
+  .railDivider { display: none; }
+  .railAgents { flex-direction: row; overflow-x: auto; overflow-y: hidden; min-height: 44px; }
+  :global([data-finix-dock][data-open='true']) .rail { flex-direction: column; }
 }
 
 @media (prefers-reduced-motion: reduce) {

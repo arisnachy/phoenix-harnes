@@ -1,17 +1,15 @@
-
-/* The companion occupies only the free right gutter, never a composer row. */
-.dock {
-  position: absolute; inset: 0; pointer-events: none; z-index: 9;
-  --finix-gutter: calc((100% - var(--dsh-composer-card-max-width, 800px)) / 2 - 24px);
-}
-.panel {
-  position: absolute; inset-block: 12px 16px; inset-inline-end: 12px;
-  width: clamp(300px, var(--finix-gutter), 390px); max-width: calc(100% - 24px); min-width: 0; min-height: 0;
-  pointer-events: auto; display: flex; flex-direction: column; overflow: hidden;
-  border: 1px solid var(--dsw-alias-border-l2); border-radius: 20px;
-  background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary);
-  box-sizing: border-box; box-shadow: 0 8px 28px rgb(45 30 20 / 5%);
-}
+/* Shared activity seat: only use absolute positioning in a proven free gutter. */
+.dock { position: relative; display: flex; flex-direction: column; align-items: stretch; flex: 0 0 58px; min-width: 0; min-height: 0; margin: 12px 12px 16px 0; box-sizing: border-box; }
+.dock[data-open='true'] { flex-basis: clamp(260px, 28cqw, 340px); border: 1px solid var(--dsw-alias-border-l2); border-radius: 20px; background: var(--dsw-alias-bg-base); box-shadow: 0 8px 28px rgb(45 30 20 / 5%); }
+.team { display: contents; }
+.team:has([data-kira-teams]) { display: flex; flex: 0 1 auto; min-height: 0; min-width: 0; }
+.team:has([data-kira-teams]) > :global([data-slot]) { display: contents; }
+.dock[data-open='true'] .team:has([data-kira-teams]) { max-height: 32%; border-bottom: 1px solid var(--dsw-alias-border-l2); }
+.dock[data-open='false'] .team:has([data-kira-teams]) { flex: 1 1 auto; }
+.dock[data-available='false'], .dock[data-hero='true'][data-open='false']:not(:has([data-kira-teams])) { display: contents; }
+.dock[data-available='false'] .team { display: contents; }
+.dock[data-available='false'] :global([data-kira-teams]), .dock[data-available='false'] .launcher, .dock[data-available='false'] .speech { display: none; }
+.panel { position: relative; flex: 1 1 0; width: 100%; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border-radius: inherit; color: var(--dsw-alias-label-primary); box-sizing: border-box; }
 .heading { display: flex; align-items: center; gap: 9px; flex: none; padding: 12px 11px; border-bottom: 1px solid var(--dsw-alias-border-l2); }
 .avatar { flex: none; display: grid; place-items: center; width: 38px; height: 38px; }
 .avatar > svg { width: 38px; height: 36px; }
@@ -41,36 +39,31 @@
 .nameForm { display: flex; align-items: end; gap: 6px; padding: 8px 11px; font-size: 11px; }
 .nameForm label { display: grid; gap: 3px; flex: 1; min-width: 0; }
 .nameForm input, .nameForm button { min-width: 0; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); border-radius: 6px; padding: 5px; font: inherit; }
-.launcher { position: absolute; inset-inline-end: 14px; inset-block-end: 18px; pointer-events: auto; display: grid; place-items: center; width: 48px; height: 44px; border: 0; border-radius: 12px; background: transparent; cursor: pointer; padding: 2px; }
+.launcher { position: relative; align-self: center; margin-top: auto; flex: none; display: grid; place-items: center; width: 48px; height: 44px; border: 0; border-radius: 12px; background: transparent; cursor: pointer; padding: 2px; }
 .launcher > svg { width: 39px; height: 35px; }
 .dot { position: absolute; right: 4px; top: 3px; width: 7px; height: 7px; border-radius: 50%; background: #ef5c20; }
-/* Respond to actual conversation width, including sidebar toggles. */
-@container finix-workspace (max-width: 1500px) {
-  /* Active chat retains its original composer position and width. */
-  .dock[data-open='true']:not([data-hero='true']) { inset-block-end: calc(var(--finix-composer-height, 140px) + 8px); }
-  .dock:not([data-hero='true']) .launcher { inset-block-start: 8px; inset-block-end: auto; background: var(--dsw-alias-bg-base); }
-}
-@container finix-workspace (min-width: 850px) and (max-width: 1700px) {
-  /* Home: a readable right column, without covering the shared input. */
-  .dock[data-hero='true'][data-open='true'] {
-    position: relative; inset: auto; flex: 0 0 clamp(300px, 30cqw, 360px);
-    min-width: 0; min-height: 0;
-  }
-  .dock[data-hero='true'] .panel { inset: 12px 12px 16px 0; width: auto; max-width: none; }
-}
-@container finix-workspace (max-width: 849px) {
-  /* Small screens: dismissible reading surface instead of a crushed rail. */
-  .dock[data-hero='true'][data-open='true'] { background: var(--dsw-alias-bg-base); pointer-events: auto; }
-  .dock[data-hero='true'] .panel { inset: 8px; width: auto; max-width: none; }
-}
-.dock[data-hero='true'] .launcher, .dock[data-open='true'] .launcher { display: none; }
-@media (prefers-reduced-motion: reduce) { .dock svg, .dock svg * { animation: none !important; } }
-
 /* A material initiative speaks from the existing free gutter, never a new chat row. */
-.speech { position: absolute; inset-inline-end: 14px; inset-block-end: 72px; pointer-events: auto; display: flex; align-items: flex-start; width: clamp(210px, var(--finix-gutter), 240px); max-width: calc(100% - 28px); box-sizing: border-box; padding: 9px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 15px 15px 4px 15px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); box-shadow: 0 5px 18px rgb(40 25 10 / 7%); }
+.speech { position: absolute; inset-inline-end: 14px; inset-block-end: 72px; pointer-events: auto; display: flex; align-items: flex-start; width: 240px; max-width: 240px; box-sizing: border-box; padding: 9px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 15px 15px 4px 15px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); box-shadow: 0 5px 18px rgb(40 25 10 / 7%); }
 .speech::after { content: ''; position: absolute; inset-inline-end: 14px; bottom: -7px; width: 12px; height: 12px; transform: rotate(45deg); background: inherit; border-inline-end: 1px solid var(--dsw-alias-border-l2); border-block-end: 1px solid var(--dsw-alias-border-l2); }
 .speechText { display: grid; gap: 5px; text-align: start; padding: 2px; min-width: 0; flex: 1; border: 0; background: transparent; color: inherit; font: inherit; font-size: 12px; line-height: 1.45; cursor: pointer; }
 .speechText strong { color: var(--dsw-specific-phoenix-accent, #ef5c20); }
 .speechClose { flex: none; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 16px; cursor: pointer; }
-@container finix-workspace (max-width: 1500px) { .speech { inset-block-start: 58px; inset-block-end: auto; width: min(240px, calc(100% - 28px)); } .speech::after { display: none; } }
+@container finix-workspace (max-width: 1599px) { .speech { display: none; } }
 .dock[data-hero='true'] .speech { display: none; }
+
+/* Centered home card is 1000px; preserve it when both gutters really fit. */
+@container finix-workspace (min-width: 1240px) {
+  .dock[data-open='false'][data-available='true'] { position: absolute; inset: 12px 12px 16px auto; width: 58px; margin: 0; }
+}
+@container finix-workspace (min-width: 1760px) {
+  .dock[data-open='true'][data-available='true'] { position: absolute; inset: 12px 12px 16px auto; width: 340px; margin: 0; }
+}
+@container finix-workspace (max-width: 849px) {
+  .dock { flex: 0 0 auto; order: -1; margin: 6px 10px; }
+  .dock[data-open='false'] { flex-direction: row; align-items: center; }
+  .dock[data-open='false'] .launcher { margin: 0 0 0 auto; }
+  .dock[data-open='true'] { flex: 0 0 min(35%, 260px); }
+  .dock[data-open='true'] .team:has([data-kira-teams]) { max-height: 40%; }
+}
+.dock[data-hero='true']:not(:has([data-kira-teams])) .launcher, .dock[data-open='true'] .launcher, .dock:has([data-kira-teams]) .speech { display: none; }
+@media (prefers-reduced-motion: reduce) { .dock svg, .dock svg * { animation: none !important; } }

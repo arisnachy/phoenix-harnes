@@ -572,10 +572,11 @@ export function ConversationRoot({
           <SessionBodyOutlet sessionId={sessionId} renderSlot={renderSlot} />
           {composerSeat}
         </div>
-        {activeApplication === 'general' && !visualActive && (!hero || companionOpen) && (
-          <CompanionDock open={companionOpen} hero={hero} onToggle={() => setCompanionOpen(value => !value)}
-            {...(loadFinixOutput === undefined ? {} : { loadOutput: loadFinixOutput })} />
-        )}
+        <CompanionDock open={companionOpen && activeApplication === 'general' && !visualActive}
+          available={activeApplication === 'general' && !visualActive} hero={hero}
+          team={renderSlot('conversation.side.activity', {})}
+          onToggle={() => setCompanionOpen(value => !value)}
+          {...(loadFinixOutput === undefined || activeApplication !== 'general' || visualActive ? {} : { loadOutput: loadFinixOutput })} />
       </div>
 
     </div>
