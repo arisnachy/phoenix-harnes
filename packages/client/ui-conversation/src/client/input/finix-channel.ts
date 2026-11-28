@@ -16,6 +16,7 @@ export interface FinixOutput {
   readonly title: string
   readonly status: string
   readonly resident?: boolean
+  readonly initiative?: string
   readonly recentHistory: readonly { status: string; summary?: string; error?: string }[]
 }
 function record(value: unknown): value is Record<string, unknown> {
@@ -34,13 +35,27 @@ function residentSummary(summary: string): string | undefined {
     return `Observación del sistema: ${tools} herramientas registradas, ${capabilities} capacidades declaradas, ${degraded} degradadas. Tareas fallidas: ${failed} (${repeated} repetidas); vencidas: ${due}; en ejecución: ${running}. Memoria: ${memory === 'normal' ? 'normal' : memory === 'pressure' ? 'bajo presión' : 'desconocida'}. Próxima iniciativa propuesta: ${actions[next as keyof typeof actions]}.`
   } catch { return undefined }
 }
+/** An unsolicited speech bubble requires a validated material resident observation. */
+function residentInitiative(summary: string): string | undefined {
+  if (residentSummary(summary) === undefined) return undefined
+  const snapshot = JSON.parse(summary) as { next: string; failed: number; repeated: number; due: number; degraded: number }
+  switch (snapshot.next) {
+    case 'diagnose': return snapshot.failed > 0 ? `Detecté ${snapshot.failed} tareas fallidas. Propongo revisar qué está pasando.` : undefined
+    case 'resources': return 'Detecté presión de memoria. Propongo revisar los recursos del equipo.'
+    case 'review-due': return snapshot.due > 0 ? `Hay ${snapshot.due} tareas vencidas. Propongo revisar el planificador.` : undefined
+    case 'verify': return snapshot.degraded > 0 ? `Detecté ${snapshot.degraded} capacidades degradadas. Propongo verificarlas.` : undefined
+    default: return undefined
+  }
+}
 export function parseFinixOutput(value: unknown): readonly FinixOutput[] {
   if (!Array.isArray(value)) throw new Error('Respuesta de Finix inválida')
   return value.filter(record).filter(row => row.executionPolicy === 'companion-local' || row.executionPolicy === 'companion-resident').flatMap(row => {
     if (typeof row.id !== 'string' || typeof row.title !== 'string' || typeof row.status !== 'string' || !Array.isArray(row.recentHistory)) return []
     const resident = row.executionPolicy === 'companion-resident'
     const history = row.recentHistory.filter(record)
-    return [{ id: row.id, title: row.title, status: row.status, ...(resident ? { resident: true } : {}), recentHistory: (resident ? history.slice(-1) : history).flatMap(item => {
+    const latest = history.at(-1)
+    const initiative = resident && latest?.status === 'completed' && typeof latest.summary === 'string' ? residentInitiative(latest.summary) : undefined
+    return [{ id: row.id, title: row.title, status: row.status, ...(resident ? { resident: true } : {}), ...(initiative === undefined ? {} : { initiative }), recentHistory: (resident ? history.slice(-1) : history).flatMap(item => {
       if (typeof item.status !== 'string') return []
       const summary = typeof item.summary === 'string' ? (resident ? residentSummary(item.summary) : item.summary) : undefined
       return [{ status: item.status, ...(summary === undefined ? {} : { summary }), ...(typeof item.error === 'string' ? { error: item.error } : {}) }]
