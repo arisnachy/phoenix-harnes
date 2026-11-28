@@ -432,9 +432,8 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
   </div>
   if((mode==='login'||mode==='setup')&&(!accessOnly||deferredAccess||onRequestAccess)&&(!accessExpanded||onRequestAccess))return <section className={css.lockedWorkspace} aria-label="Acceso clínico protegido">
     <div className={css.lockIcon} aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14v3"/></svg></div>
-    <div className={css.lockCopy}><span className={css.lockEyebrow}>EXPEDIENTES PRIVADOS</span>
-      <h3>{mode==='setup'?'Configura tu clínica':'Tu espacio clínico está protegido'}</h3>
-      <p>{mode==='setup'?'Crea el acceso institucional una sola vez.':'Desbloquea el expediente para continuar. Si ya tienes una sesión clínica activa, puedes recuperarla sin repetir las credenciales.'}</p>
+    <div className={css.lockCopy}>
+      <h3>{mode==='setup'?'Configurar clínica':'Clínica bloqueada'}</h3>
     </div>
     <div className={css.lockActions}>
       <button type="button" className={css.primary} onClick={()=>{if(onRequestAccess)onRequestAccess();else setAccessExpanded(true)}}>{mode==='setup'?'Configurar clínica':'Desbloquear clínica'}</button>
@@ -476,9 +475,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
   return <section className={css.root} aria-label={area==='patients'?'Pacientes clínicos':'Consultas clínicas'}>
     <header className={css.toolbar}>
       <div className={css.identity}>
-        <span className={css.secureIndicator}>● Repositorio clínico protegido</span>
-        <strong>Sesión profesional activa</strong>
-        <small>{session?.actor.username} · {session?.actor.role}</small>
+        <small className={css.secureIndicator}>● {session?.actor.username} · {session?.actor.role}</small>
       </div>
       <div className={css.toolbarActions}>
         <button type="button" disabled={busy} onClick={()=>{void reload()}}>Actualizar</button>
@@ -520,7 +517,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
     <div className={css.directoryHeader}>
       <div>
         <strong>{area==='patients'?'Directorio de pacientes':'Atención de consultas'}</strong>
-        <small>{patients.length} expedientes autorizados · {area==='patients'?'Selecciona uno para ver su ficha':'Selecciona un paciente para continuar'}</small>
+        <small>{patients.length} expedientes autorizados</small>
       </div>
       <label>Buscar paciente
         <input aria-label="Buscar pacientes" type="search" value={patientSearch}
@@ -531,7 +528,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
         {creatingPatient?'Cancelar registro':'Registrar paciente'}
       </button>}
     </div>
-    {area==='encounters'&&<label className={css.selectPatient}>Paciente del expediente
+    {area==='encounters'&&!selectedPatient&&<label className={css.selectPatient}>Paciente del expediente
       <select value={patientId} aria-label="Paciente del expediente"
         onChange={e=>{setPatientId(e.currentTarget.value);setEncounterId('');setError('');setNotice('')}}>
         <option value="">Seleccionar paciente</option>
@@ -566,7 +563,6 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
       </div>}
       {creatingPatient&&canManagePatients&&<form className={css.form} onSubmit={event=>{void addPatient(event)}} autoComplete="off">
         <h3>Nuevo paciente</h3>
-        <p>Identidad, contacto y datos de admisión. El expediente interno se asigna al guardar; documento y teléfono no son su identificador principal.</p>
         <div className={css.admissionGrid}>
           <label>Nombre completo<input required maxLength={160} value={name} onChange={e=>{setName(e.target.value);setIdentityMatches(null)}}/></label>
           <label>Fecha de nacimiento<input type="date" required value={birthDate} max={new Date().toISOString().slice(0,10)}
@@ -589,8 +585,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
             onChange={e=>{setEmail(e.target.value);setIdentityMatches(null)}}/></label>
         </div>
         <div className={css.intakeAssistant} aria-label="Admisión conversacional protegida">
-          <strong>Cuéntame los datos del paciente</strong>
-          <p>Escribe en una sola entrada. Los datos reconocidos se proponen antes de llenar los campos vacíos; no se envían al chat general.</p>
+          <strong>Admisión rápida</strong>
           <textarea aria-label="Datos de admisión en lenguaje natural" maxLength={4000} rows={3} value={intakeText}
             placeholder="Crea paciente Ana Pérez, edad: 42 años, sexo: femenino, fecha de nacimiento: 1984-03-12, correo: ana@example.com"
             onChange={e=>{setIntakeText(e.currentTarget.value);setIntakeProposal(null)}}/>
@@ -649,7 +644,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
         </label>}
         <button className={css.primary} type="submit"
           disabled={busy||!name.trim()||!birthDate||(confirmDistinct&&distinctReason.trim().length<12)}>Guardar paciente</button>
-        <p className={css.notice}>La clínica realiza nuevamente la detección de duplicados al guardar y registra cualquier excepción justificada.</p>
+
       </form>}
       {selectedPatient&&session&&<HealthiaPatientDossier key={selectedPatient.id}
 
@@ -693,10 +688,9 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
         </select>
       </label>}
       {selectedPatient&&!creatingEncounter&&!patientEncounters.length&&
-        <p className={css.emptyState}>Este paciente aún no tiene consultas accesibles. Utiliza «Nueva consulta» para iniciar la atención.</p>}
+        <p className={css.emptyState}>Sin consultas registradas.</p>}
       {selectedEncounter&&currentNote&&<div className={css.encounter}>
-        <p className={css.notice}>Consulta · versión {selectedEncounter.version} · {selectedEncounter.status}
-          {selectedEncounter.status==='signed'?' · Solo lectura': ' · Borrador pendiente de revisión y firma'}</p>
+        <p className={css.notice}>{selectedEncounter.status==='signed'?'Firmada · Solo lectura':selectedEncounter.status==='reviewed'?'Revisada':'Borrador'} · v{selectedEncounter.version}</p>
         <div className={css.consultationGrid} data-assistance={canManageEncounters&&selectedEncounter.status!=='signed'?'available':'none'}>
         <div className={css.consultationEditor}>
         {selectedEncounter.status==='signed' ? <div className={css.panel}>
@@ -714,9 +708,7 @@ export function HealthiaClinicOperations({ area, selectedPatientId, onPatientCha
         </div>
         {canManageEncounters&&selectedEncounter.status!=='signed'&&<section className={css.interviewCard}
           aria-label="Ask clínico protegido">
-          <div className={css.interviewHeader}><span className={css.contextEyebrow}>ASISTENCIA CLÍNICA · LOCAL</span><strong>Ask · interrogatorio clínico</strong>
-            <small>Preguntas del servicio local; ninguna respuesta se envía al chat de Kira.</small>
-          </div>
+          <div className={css.interviewHeader}><strong>ASK · Interrogatorio clínico local</strong></div>
           <p className={css.notice}>Registra únicamente lo que refiere el paciente o lo verificado.
             Ante signos de alarma, realiza valoración inmediata; la guía no determina un diagnóstico.</p>
           {(interviewGuide?.nextQuestions??[]).map(question=><button type="button" key={question.key}

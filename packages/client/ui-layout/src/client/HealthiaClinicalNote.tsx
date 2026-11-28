@@ -352,11 +352,8 @@ export function HealthiaClinicalNote({
     <section ref={editorRoot} className={css.root} aria-label="Historia clínica estructurada">
       <div className={css.top}>
         <div>
-          <span className={css.eyebrow}>REGISTRO ASISTENCIAL</span>
           <h3>Historia clínica</h3>
-          <p>{onSave
-            ? 'Guardado explícito en el expediente cifrado, sujeto a sesión profesional y versión. Nunca firma automáticamente.'
-            : 'La información permanece en esta vista hasta cerrarla. No hay guardado ni firma clínica habilitados desde este editor.'}</p>
+          <p>{onSave?'Borrador · sin firma':'Vista sin guardado'}</p>
         </div>
         {onReturn && <button type="button" className={css.secondary} onClick={onReturn}>Volver</button>}
       </div>
@@ -375,7 +372,7 @@ export function HealthiaClinicalNote({
             </button>
           ))}
         </div>
-        <div className={css.sectionTitle}><h4>{step.label}</h4><p>{step.hint}</p><small>{filledFields} de {shown.length} campos con datos · {documentedSections?documentedSections.split(',').length:0} de {CLINICAL_EDITOR_STEPS.length} secciones con información</small>{nextSection&&nextSection!==section&&<button type="button" className={css.secondary} onClick={()=>{setSection(nextSection);setPreview(false)}}>Ir a siguiente sección sin datos</button>}</div>
+        <div className={css.sectionTitle}><h4>{step.label}</h4><small>{filledFields} de {shown.length} campos completados</small>{nextSection&&nextSection!==section&&<button type="button" className={css.secondary} onClick={()=>{setSection(nextSection);setPreview(false)}}>Siguiente sección pendiente</button>}</div>
         {section==='background'&&patient&&<div className={css.assist}><strong>Expediente longitudinal</strong><p>Última revisión: {patient.medicalHistoryReview?.reviewedAt??'No documentada'}. No se reemplazan datos escritos ni se importan mediciones anteriores.</p><button type="button" className={css.secondary} onClick={importBackground}>Recuperar antecedentes previos</button></div>}
         {section==='vitals'&&<div className={css.assist}>
           <label className={css.wideField}>Entrada rápida de mediciones
