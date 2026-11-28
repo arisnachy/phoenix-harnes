@@ -1,7 +1,11 @@
 import type { ConnectionHandle } from '@phoenix-ai/dsh-api-remotes/client'
 import { readCompanionName } from '../skeleton/companion-name.ts'
 
-/** Only a leading exact address is reserved; @file and later mentions remain unchanged. */
+/** Only a leading exact address is reserved; @file and later mentions remain unchanged.
+ * @param text - User draft.
+ * @param name - Configured companion name.
+ * @returns Addressed message or undefined.
+ */
 export function finixInstruction(text: string, name = readCompanionName()): string | undefined {
   const match = /^\s*@(?:"([^"]+)"|([\p{L}\p{N}_-]+))(?=\s|$)\s*/u.exec(text)
   if (!match) return undefined
@@ -11,6 +15,7 @@ export function finixInstruction(text: string, name = readCompanionName()): stri
   return text.slice(match[0].length).trim()
 }
 
+/** Browser-safe companion output. */
 export interface FinixOutput {
   readonly id: string
   readonly title: string
@@ -47,6 +52,10 @@ function residentInitiative(summary: string): string | undefined {
     default: return undefined
   }
 }
+/** Parse the host task view without exposing unrelated tasks.
+ * @param value - Host response.
+ * @returns Validated companion output rows.
+ */
 export function parseFinixOutput(value: unknown): readonly FinixOutput[] {
   if (!Array.isArray(value)) throw new Error('Respuesta de Finix inválida')
   return value.filter(record).filter(row => row.executionPolicy === 'companion-local' || row.executionPolicy === 'companion-resident').flatMap(row => {
@@ -62,6 +71,11 @@ export function parseFinixOutput(value: unknown): readonly FinixOutput[] {
     }) }]
   }).reverse()
 }
+/** Fetch the companion feed.
+ * @param connection - Host connection.
+ * @param signal - Cancellation signal.
+ * @returns Validated companion rows.
+ */
 export async function loadFinixOutput(connection: ConnectionHandle | undefined, signal: AbortSignal): Promise<readonly FinixOutput[]> {
   if (!connection?.rpc) throw new Error('Host de PHOENIX desconectado')
   const result = await connection.rpc.call('/phoenix-tasks', 'list', {}, signal)
@@ -71,14 +85,28 @@ export async function loadFinixOutput(connection: ConnectionHandle | undefined, 
 
 /** Explicit, session-scoped recipient selection. Opening the output does not change the recipient. */
 const finixSessions = new Set<string>()
+/** Recipient change notification. */
 export const FINIX_RECIPIENT_EVENT = 'phoenix:finix-recipient'
+/** Read the selected recipient.
+ * @param sessionId - Session identity.
+ * @returns Whether Finix is selected.
+ */
 export function isFinixRecipient(sessionId: string): boolean { return finixSessions.has(sessionId) }
+/** Select a recipient for one session.
+ * @param sessionId - Session identity.
+ * @param active - Whether Finix is selected.
+ */
 export function setFinixRecipient(sessionId: string, active: boolean): void {
   if (active === finixSessions.has(sessionId)) return
   if (active) finixSessions.add(sessionId)
   else finixSessions.delete(sessionId)
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(FINIX_RECIPIENT_EVENT))
 }
+/** Resolve explicit and continuing companion messages.
+ * @param text - User draft.
+ * @param sessionId - Session identity.
+ * @returns Companion instruction or undefined.
+ */
 export function resolveFinixMessage(text: string, sessionId: string): string | undefined {
   const explicit = finixInstruction(text)
   if (explicit !== undefined) return explicit
