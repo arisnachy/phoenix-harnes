@@ -998,8 +998,6 @@
 
 .finixWorkspace > .scrollBody { min-width: 0; }
 
-.finixRecipient { display: flex; justify-content: space-between; align-items: center; gap: 6px; align-self: center; width: min(100%, var(--dsh-composer-card-max-width)); box-sizing: border-box; padding: 0 12px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
-.finixRecipient > span { display: flex; align-items: center; gap: 5px; }
-.finixRecipient svg { width: 23px; height: 23px; }
-.finixRecipient button { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; cursor: pointer; padding: 4px 6px; border-radius: 6px; }
-.finixRecipient button:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.finixRecipient { display: inline-flex; align-items: center; flex: 0 0 auto; gap: 4px; border: 0; border-radius: 8px; padding: 3px 6px; background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); font: inherit; font-size: 11px; cursor: pointer; }
+.finixRecipient svg { width: 20px; height: 20px; }
+.finixRecipient > span:first-of-type { max-width: 76px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
