@@ -57,3 +57,12 @@
 }
 .dock[data-hero='true'] .launcher, .dock[data-open='true'] .launcher { display: none; }
 @media (prefers-reduced-motion: reduce) { .dock svg, .dock svg * { animation: none !important; } }
+
+/* A material initiative speaks from the existing free gutter, never a new chat row. */
+.speech { position: absolute; inset-inline-end: 14px; inset-block-end: 72px; pointer-events: auto; display: flex; align-items: flex-start; width: min(240px, var(--finix-gutter)); box-sizing: border-box; padding: 9px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 15px 15px 4px 15px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); box-shadow: 0 5px 18px rgb(40 25 10 / 7%); }
+.speech::after { content: ''; position: absolute; inset-inline-end: 14px; bottom: -7px; width: 12px; height: 12px; transform: rotate(45deg); background: inherit; border-inline-end: 1px solid var(--dsw-alias-border-l2); border-block-end: 1px solid var(--dsw-alias-border-l2); }
+.speechText { display: grid; gap: 5px; text-align: start; padding: 2px; min-width: 0; flex: 1; border: 0; background: transparent; color: inherit; font: inherit; font-size: 12px; line-height: 1.45; cursor: pointer; }
+.speechText strong { color: var(--dsw-specific-phoenix-accent, #ef5c20); }
+.speechClose { flex: none; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 16px; cursor: pointer; }
+@container conversation-root (max-width: 1240px) { .speech { inset-block-start: 8px; inset-block-end: auto; width: min(240px, calc(100% - 28px)); } .speech::after { display: none; } }
+.dock[data-hero='true'] .speech { display: none; }
