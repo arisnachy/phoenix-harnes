@@ -54,6 +54,7 @@ export function CompanionDock({ open, hero = false, onToggle, loadOutput }: Prop
   }, [loadOutput, open])
   const running = !error && rows.some(row => row.status === 'running')
   const pose: MascotPose = running ? 'plan' : !error && rows.some(row => row.status === 'failed') ? 'tools' : 'ready'
+  const alias = name.toLowerCase().replace(/ /g, '-')
   return <aside className={css.dock} data-finix-dock="" data-open={open ? 'true' : 'false'} data-hero={hero ? 'true' : 'false'} aria-label="Compañero Finix">
     {open && <section id={id} className={css.panel} aria-label="Salida de Finix">
       <div className={css.heading}>
@@ -75,12 +76,12 @@ export function CompanionDock({ open, hero = false, onToggle, loadOutput }: Prop
         {[...rows].reverse().map(row => <article className={row.resident ? css.resident : css.thread} key={row.id}>
           {!row.resident && <div className={css.request}>{row.title}</div>}
           <div className={css.byline}><span className={css.miniAvatar}><LivingMascot pose={row.status === 'running' && !error ? 'plan' : row.status === 'failed' ? 'tools' : 'ready'} /></span><strong>{name}</strong><span>· {row.resident ? 'Iniciativa propia' : 'Respuesta'}</span></div>
-          {row.recentHistory.filter(item => item.summary !== undefined || item.error !== undefined).map((item, i) =>
+          {row.recentHistory.filter(item => item.summary !== undefined || item.error !== undefined).slice(-1).map((item, i) =>
             <div className={css.result} key={i}><MarkdownText text={item.summary ?? item.error ?? ''} /></div>)}
           <span className={css.state}>{error ? 'Estado anterior · sin conexión actual' : row.resident && row.status === 'scheduled' ? 'Próxima comprobación pendiente' : statusText[row.status] ?? row.status}</span>
         </article>)}
       </div>
-      <p className={css.hint}>Escríbeme en el input principal: @finix o @{name.toLowerCase().replace(/ /g, '-')}.</p>
+      <p className={css.hint}>Escríbeme en el input principal: @finix{alias !== 'finix' && <> o @{alias}</>}.</p>
     </section>}
     <button type="button" className={css.launcher} aria-label={open ? 'Ocultar Finix' : 'Abrir Finix'} aria-expanded={open} aria-controls={open ? id : undefined} onClick={onToggle} title={name}>
       <LivingMascot pose={pose} />{running && <span className={css.dot} aria-label="Trabajando" />}
