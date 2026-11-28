@@ -38,8 +38,14 @@ const SCHEMA_DECORATION_KEYS = new Set([
   '$comment',
   'examples',
   'example',
-  'default',
 ])
+// Only descend into positions that JSON Schema defines as schemas. Arbitrary
+// property names, default/const values and extension payloads are data, not
+// annotation keywords; deleting their keys changes the tool contract.
+const SCHEMA_MAP_KEYS = new Set(['properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas'])
+const SCHEMA_CHILD_KEYS = new Set(['additionalProperties', 'additionalItems', 'unevaluatedProperties',
+  'unevaluatedItems', 'items', 'contains', 'propertyNames', 'not', 'if', 'then', 'else',
+  'allOf', 'anyOf', 'oneOf', 'prefixItems'])
 
 /** JSON stringify that cannot fail request budgeting on an exotic schema value. */
 function safeJsonStringify(value: unknown): string {
@@ -133,11 +139,20 @@ function compactSchemaForPressure(value: unknown): unknown {
     return compacted
   }
 
-  const compacted: Record<string, unknown> = {}
-  for (const [key, child] of Object.entries(value)) {
-    if (SCHEMA_DECORATION_KEYS.has(key)) continue
-    compacted[key] = compactSchemaForPressure(child)
-  }
+  const compacted = Object.fromEntries(Object.entries(value).flatMap(([key, child]) => {
+    if (SCHEMA_DECORATION_KEYS.has(key)) return []
+    if (SCHEMA_MAP_KEYS.has(key) && typeof child === 'object' && child !== null && !Array.isArray(child)) {
+      return [[key, Object.fromEntries(Object.entries(child).map(([name, schema]) =>
+        [name, compactSchemaForPressure(schema)]))]]
+    }
+    if (SCHEMA_CHILD_KEYS.has(key)) return [[key, compactSchemaForPressure(child)]]
+    // Legacy dependencies maps contain either property-name arrays or schemas.
+    if (key === 'dependencies' && typeof child === 'object' && child !== null && !Array.isArray(child)) {
+      return [[key, Object.fromEntries(Object.entries(child).map(([name, dependency]) =>
+        [name, Array.isArray(dependency) ? dependency : compactSchemaForPressure(dependency)]))]]
+    }
+    return [[key, child]]
+  }))
   COMPACT_SCHEMA_CACHE.set(value, compacted)
   return compacted
 }
@@ -239,16 +254,16 @@ function toolNamesUsedInMessages(messages: readonly Message[]): Set<string> {
 }
 
 function latestUserText(messages: readonly Message[]): string {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index]
-    if (message?.role !== 'user' || message.source.kind === 'tool') continue
-    return message.content
-      .filter(block => block.type === 'text')
-      .map(block => block.text)
-      .join(' ')
-      .toLowerCase()
-  }
-  return ''
+  // Runtime snapshots and tool replies must not outrank the human's intent.
+  // Plugin-originated missions can still supply intent when no human turn exists.
+  const latest = messages.findLast(message => message.role === 'user' && message.source.kind === 'user')
+    ?? messages.findLast(message => message.role === 'user' && message.source.kind !== 'tool'
+      && !(message.source.kind === 'plugin' && message.source.plugin === '@phoenix-ai/dsh-system-prompt'))
+  return latest?.content
+    .filter(block => block.type === 'text')
+    .map(block => block.text)
+    .join(' ')
+    .toLowerCase() ?? ''
 }
 
 function selectToolsForPressureBudget(options: GenerateOptions, inputBudgetTokens: number): GenerateOptions {
@@ -347,7 +362,17 @@ export function fitGenerateOptionsToContext(
     return { options, estimatedTokens, inputBudgetTokens, compacted: false }
   }
 
-  const compactedOptions = compactAuxiliaryContextForPressure(options)
+  // For any provider with the actual read tool available, page only the
+  // explicitly recoverable reality snapshot before reducing other context.
+  // Never assume generic cloud tool_search can discover native capabilities.
+  const pagedOptions = options.tools?.some(tool => tool.name === 'phoenix_reality_now')
+    ? { ...options, messages: options.messages.map(deferLocalRealitySnapshot) }
+    : options
+  const pagedTokens = estimateGenerateOptionsTokens(pagedOptions)
+  if (pagedTokens <= inputBudgetTokens) {
+    return { options: pagedOptions, estimatedTokens: pagedTokens, inputBudgetTokens, compacted: true }
+  }
+  const compactedOptions = compactAuxiliaryContextForPressure(pagedOptions)
   const compactedTokens = estimateGenerateOptionsTokens(compactedOptions)
   if (compactedTokens <= inputBudgetTokens) {
     return {
@@ -407,12 +432,48 @@ export function resolvePhoenixLocalMaxOutput(contextWindow: number, desiredMaxOu
   return Math.max(1, Math.min(Math.floor(desiredMaxOutput), Math.floor(contextWindow / 4)))
 }
 
+/**
+ * Preserve active instructions and durable compaction checkpoints even when
+ * the conversational prefix must be projected. A replaced skill catalog is
+ * superseded only by the newest catalog, never by an unrelated message.
+ */
+function localAgentPrefix(prior: readonly Message[], retained: readonly Message[]): Message[] {
+  const isRuntime = (message: Message): boolean => message.source.kind === 'plugin'
+    && message.source.plugin === '@phoenix-ai/dsh-system-prompt'
+  const runtime = retained.some(isRuntime) ? undefined : prior.findLast(isRuntime)
+  const catalog = retained.some(isAuxiliarySkillCatalog) ? undefined : prior.findLast(isAuxiliarySkillCatalog)
+  return prior.filter(message => {
+    if (isRuntime(message)) return message === runtime
+    if (isAuxiliarySkillCatalog(message)) return message === catalog
+    const source = message.source as { kind: string; form?: string; plugin?: string }
+    return message.role === 'system' || source.form === 'instructions'
+      || (source.kind === 'plugin' && source.plugin === 'compact')
+  })
+}
+
+/** Baseline conservative estimate; not a provider tokenizer. */
+export function estimatePhoenixLocalInputTokens(options: GenerateOptions): number {
+  return Math.ceil(estimateGenerateOptionsTokens(options) * (ESTIMATED_CHARS_PER_TOKEN / 3.5))
+}
+
+/** Learn a bounded, conservative correction from successful model usage.
+ * Never reduce protection based on an unusually short or cached request.
+ * Small samples are too sensitive to fixed template overhead.
+ */
+export function nextLocalContextCalibration(previous: number, estimate: number, observed: number): number {
+  const current = Number.isFinite(previous) ? Math.min(3, Math.max(1, previous)) : 1
+  if (!Number.isFinite(estimate) || estimate < 256 || !Number.isFinite(observed) || observed <= 0) return current
+  const ratio = observed / estimate
+  return ratio > current ? Math.min(3, Math.max(current, ratio * 1.05)) : current
+}
+
 /** Fit the local request before passing it to the OpenAI-compatible transport. */
 function fitPhoenixLocalHeadroom(
   options: GenerateOptions,
   contextWindow: number,
   desiredMaxOutput: number,
   compacted: boolean,
+  factor = 1,
 ): ContextBudgetFit {
   const capacity = Math.max(1, Math.floor(contextWindow))
   const responseTokens = resolvePhoenixLocalMaxOutput(capacity, desiredMaxOutput)
@@ -420,9 +481,35 @@ function fitPhoenixLocalHeadroom(
   const framingReserve = Math.min(512, Math.floor(capacity / 8))
   return {
     options,
-    estimatedTokens: Math.ceil(estimateGenerateOptionsTokens(options) * (ESTIMATED_CHARS_PER_TOKEN / 3.5)),
+    estimatedTokens: Math.ceil(estimatePhoenixLocalInputTokens(options) * factor),
     inputBudgetTokens: Math.max(1, capacity - safetyReserve - framingReserve - responseTokens),
     compacted,
+  }
+}
+
+/**
+ * Defer only the explicitly refreshable reality snapshot under local pressure.
+ * Preserve all other contributions, policies, human input and tool cycles.
+ * The original snapshot remains in the durable session.
+ */
+function deferLocalRealitySnapshot(message: Message): Message {
+  const source = message.source
+  if (message.role !== 'user' || source.kind !== 'plugin'
+    || source.plugin !== '@phoenix-ai/dsh-system-prompt' || source.form !== 'snapshot') return message
+  const reality = source.sections.find(section => section.name === 'hardness:reality-context')
+  const block = message.content[0]
+  if (reality === undefined || reality.text.length < 2_000 || message.content.length !== 1
+    || block?.type !== 'text' || !block.text.includes(reality.text)) return message
+  const note = 'Reality Context is available on demand. Do not guess environment facts. '
+    + 'Discover phoenix_reality_now with tool_search (exact name) if not already visible. '
+    + 'Use mode=fresh and field=time, location, weather, daylight, calendar, device, network, runtime, capabilities, authentication, phoenix, ai, region or userState; optionally key for one property. '
+    + 'Use mode=location for authorized place names, mode=full when a full probe is necessary, and mode=bandwidth only for explicit speed requests. '
+    + 'The full original snapshot remains in the session; use live evidence for current facts.'
+  return {
+    ...message,
+    source: { ...source, sections: source.sections.map(section =>
+      section === reality ? { ...section, text: note } : section) },
+    content: [{ type: 'text', text: block.text.replace(reality.text, () => note) }],
   }
 }
 
@@ -431,15 +518,20 @@ function fitPhoenixLocalHeadroom(
  * @param options - Fully assembled request including the latest user message.
  * @param contextWindow - Effective context limit of the selected local model.
  * @param desiredMaxOutput - Response budget requested for the turn.
+ * @param calibrationFactor - Conservative route-specific correction from observed usage.
  * @returns The fitted request and the safe input budget.
  */
 export function fitPhoenixLocalTextTurn(
   options: GenerateOptions,
   contextWindow: number,
   desiredMaxOutput: number,
+  calibrationFactor = 1,
 ): ContextBudgetFit {
+  const factor = nextLocalContextCalibration(calibrationFactor, 0, 0)
+  const headroom = (candidate: GenerateOptions, window: number, output: number, compacted: boolean): ContextBudgetFit =>
+    fitPhoenixLocalHeadroom(candidate, window, output, compacted, factor)
   const regular = fitGenerateOptionsToContext(options, contextWindow, desiredMaxOutput)
-  const localRegular = fitPhoenixLocalHeadroom(regular.options, contextWindow, desiredMaxOutput, regular.compacted)
+  const localRegular = headroom(regular.options, contextWindow, desiredMaxOutput, regular.compacted)
   const gateway = options.tools?.find(tool => tool.name === 'tool_search')
     ?? options.tools?.find(tool => tool.name === 'run_code')
   if (localRegular.estimatedTokens <= localRegular.inputBudgetTokens
@@ -449,24 +541,43 @@ export function fitPhoenixLocalTextTurn(
   // only older history from the request projection, never from durable state.
   // Do not degrade a tool-capable agent into the conversational fallback.
   if (gateway !== undefined) {
+    const canReadReality = gateway.name === 'tool_search'
+      || options.tools?.some(tool => tool.name === 'phoenix_reality_now') === true
+    // First remove retrievable bulk, not conversational continuity. Retain
+    // original tool signatures and history whenever the resulting request fits.
+    if (canReadReality) {
+      const messages = options.messages.map(deferLocalRealitySnapshot)
+      if (messages.some((message, index) => message !== options.messages[index])) {
+        const fullHistory = headroom({ ...options, messages }, contextWindow, desiredMaxOutput, true)
+        if (fullHistory.estimatedTokens <= fullHistory.inputBudgetTokens) return fullHistory
+        const compactedHistory = headroom(
+          compactAuxiliaryContextForPressure({ ...options, messages }), contextWindow, desiredMaxOutput, true,
+        )
+        if (compactedHistory.estimatedTokens <= compactedHistory.inputBudgetTokens) return compactedHistory
+      }
+    }
     const current = options.messages.findLastIndex(message => message.role === 'user' && message.source.kind === 'user')
-    if (current < 0) return fitPhoenixLocalHeadroom(options, contextWindow, desiredMaxOutput, false)
+    if (current < 0) return headroom(options, contextWindow, desiredMaxOutput, false)
     const retained = options.messages.slice(current)
     const prior = options.messages.slice(0, current)
-    const runtime = prior.findLast(message => message.source.kind === 'plugin'
-      && message.source.plugin === '@phoenix-ai/dsh-system-prompt')
-    const suffixHasRuntime = retained.some(message => message.source.kind === 'plugin'
-      && message.source.plugin === '@phoenix-ai/dsh-system-prompt')
-    const messages = runtime !== undefined && !suffixHasRuntime ? [runtime, ...retained] : retained
+    const messages = [...localAgentPrefix(prior, retained), ...retained]
+    // Preserve loaded skills, checkpoints and policy. Fail closed if these
+    // essential messages cannot fit rather than claiming a capable agent
+    // succeeded after silently erasing them.
     const projected = compactAuxiliaryContextForPressure({ ...options, messages })
-    const projectedFit = fitPhoenixLocalHeadroom(projected, contextWindow, desiredMaxOutput, true)
+    const projectedFit = headroom(projected, contextWindow, desiredMaxOutput, true)
     if (projectedFit.estimatedTokens <= projectedFit.inputBudgetTokens) return projectedFit
-    const selected = selectToolsForPressureBudget(projected,
-      Math.max(1, Math.floor(projectedFit.inputBudgetTokens * 3.5 / ESTIMATED_CHARS_PER_TOKEN)))
-    const fitted = fitPhoenixLocalHeadroom(selected, contextWindow, desiredMaxOutput, true)
+    const paged: GenerateOptions = canReadReality
+      ? { ...projected, messages: projected.messages.map(deferLocalRealitySnapshot) }
+      : projected
+    const pagedFit = headroom(paged, contextWindow, desiredMaxOutput, true)
+    if (pagedFit.estimatedTokens <= pagedFit.inputBudgetTokens) return pagedFit
+    const selected = selectToolsForPressureBudget(paged,
+      Math.max(1, Math.floor(pagedFit.inputBudgetTokens * 3.5 / (ESTIMATED_CHARS_PER_TOKEN * factor))))
+    const fitted = headroom(selected, contextWindow, desiredMaxOutput, true)
     if (fitted.options.tools?.some(tool => tool.name === gateway.name)) return fitted
     // Explicit context error rather than a misleading tool-free success.
-    return projectedFit
+    return pagedFit
   }
 
   // Keep the full instructions, real tool signatures and user history whenever
@@ -482,9 +593,9 @@ export function fitPhoenixLocalTextTurn(
     ? condensed
     : selectToolsForPressureBudget(
       condensed,
-      Math.max(1, Math.floor(localRegular.inputBudgetTokens * 3.5 / ESTIMATED_CHARS_PER_TOKEN)),
+      Math.max(1, Math.floor(localRegular.inputBudgetTokens * 3.5 / (ESTIMATED_CHARS_PER_TOKEN * factor))),
     )
-  const localCompacted = fitPhoenixLocalHeadroom(selected, contextWindow, desiredMaxOutput, true)
+  const localCompacted = headroom(selected, contextWindow, desiredMaxOutput, true)
   if (localCompacted.estimatedTokens <= localCompacted.inputBudgetTokens) return localCompacted
 
   const messages = options.messages
@@ -523,7 +634,7 @@ export function fitPhoenixLocalTextTurn(
     messages: [currentUser],
     tools: [],
   }
-  let fit = fitPhoenixLocalHeadroom(reduced, contextWindow, desiredMaxOutput, true)
+  let fit = headroom(reduced, contextWindow, desiredMaxOutput, true)
   // The current human message is never clipped; if it cannot fit alone,
   // return the original oversized error instead.
   if (fit.estimatedTokens > fit.inputBudgetTokens) return localCompacted
@@ -538,7 +649,7 @@ export function fitPhoenixLocalTextTurn(
       ...reduced,
       messages: [previous, ...recent, currentUser],
     }
-    const evaluated = fitPhoenixLocalHeadroom(candidate, contextWindow, desiredMaxOutput, true)
+    const evaluated = headroom(candidate, contextWindow, desiredMaxOutput, true)
     if (evaluated.estimatedTokens > Math.min(evaluated.inputBudgetTokens, LOCAL_LITE_HISTORY_BUDGET_TOKENS)) break
     recent.unshift(previous)
     fit = evaluated

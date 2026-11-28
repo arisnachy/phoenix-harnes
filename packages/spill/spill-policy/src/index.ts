@@ -91,6 +91,25 @@ function ownerSessionId(exec: ToolExecution): SessionId | undefined {
   return (exec as SpillPolicyExec).agent?.session.header.id
 }
 
+/**
+ * Keep the configured ceiling for wide/unknown cloud routes. For a known
+ * small window, reserve most of the request for reasoning, history and tools.
+ * requestContext is the last actual dispatched route, not a picker label.
+ * The cap is a conservative byte budget, not an exact tokenizer measurement.
+ */
+function modelInlineCap(exec: ToolExecution, configured: number): number {
+  const agent = exec.agent
+  const route = agent?.session.requestContext?.()
+  const context = route?.contextWindow
+  if (typeof context === 'number' && Number.isSafeInteger(context) && context > 0) {
+    return Math.min(configured, Math.max(1024, Math.floor(context * 3 / 8)))
+  }
+  if (route?.provider === 'phoenix-local' || agent?.options?.provider === 'phoenix-local') {
+    return Math.min(configured, 3072)
+  }
+  return configured
+}
+
 /** Build the bounded head/tail preview for `text`, splitting `budget` bytes across the two ends. */
 function preview(text: string, budget: number): { text: string; omitted: Omitted } {
   const headBytes = Math.ceil(budget / 2)
@@ -117,8 +136,6 @@ export function apply(ctx: Context, config: Config): void {
   if (!Number.isInteger(maxInlineBytes) || maxInlineBytes < 0) {
     throw new Error(`spill-policy: maxInlineBytes must be a non-negative integer (got ${maxInlineBytes})`)
   }
-  // Narrowed once for the nested arms (closure narrowing does not survive awaits).
-  const cap: number = maxInlineBytes
 
   /**
    * Spill `text` and build the bounded replacement (preview + notice), or
@@ -134,6 +151,7 @@ export function apply(ctx: Context, config: Config): void {
     toolName: string,
     callId: CallId,
     label: 'result' | 'dispatch',
+    cap: number,
   ): Promise<string | undefined> {
     if (sessionId === undefined) {
       ctx.logger.warn(`spill-policy: no session owner for ${toolName} ${label}; keeping the inline content`)
@@ -200,9 +218,10 @@ export function apply(ctx: Context, config: Config): void {
     const text = flattenPlainText(content)
     if (text === undefined) return decision
     const totalBytes = Buffer.byteLength(text, 'utf8')
-    if (totalBytes <= maxInlineBytes) return decision
+    const cap = modelInlineCap(exec, maxInlineBytes)
+    if (totalBytes <= cap) return decision
 
-    const replacedText = await spillReplacement(text, totalBytes, ownerSessionId(exec), exec.name, exec.callId, 'result')
+    const replacedText = await spillReplacement(text, totalBytes, ownerSessionId(exec), exec.name, exec.callId, 'result', cap)
     if (replacedText === undefined) return decision
     const replaced: ContentBlock[] = [{ type: 'text', text: replacedText }]
     return { kind: 'accept', content: replaced, ...decision.additionalContexts ? { additionalContexts: decision.additionalContexts } : {} }
@@ -225,7 +244,7 @@ export function apply(ctx: Context, config: Config): void {
     if (totalBytes <= maxInlineBytes) return content
 
     const replacedText = await spillReplacement(
-      text, totalBytes, ownerSessionId(dispatch.exec), dispatch.name, dispatch.subCallId, 'dispatch')
+      text, totalBytes, ownerSessionId(dispatch.exec), dispatch.name, dispatch.subCallId, 'dispatch', maxInlineBytes)
     if (replacedText === undefined) return content
     return [{ type: 'text', text: replacedText }]
   }, { prepend: true })

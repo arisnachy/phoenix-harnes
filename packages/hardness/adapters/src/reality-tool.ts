@@ -3,6 +3,8 @@ import type { Context } from '@phoenix-ai/cordis'
 import { defineTool, type JsonValue, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 import type { RealityContextEngine } from './reality-context.ts'
 
+const REALITY_FIELDS = ['time', 'location', 'weather', 'daylight', 'calendar', 'device', 'network', 'runtime', 'capabilities', 'authentication', 'phoenix', 'ai', 'region', 'userState'] as const
+
 const DOWNLOAD_BYTES = 2_000_000
 const DOWNLOAD_URL = 'https://speed.cloudflare.com/__down?bytes=2000000'
 
@@ -48,8 +50,17 @@ export function createRealitySnapshotTool(
 ): ToolDefinition {
   return defineTool({
     name: 'phoenix_reality_now',
-    description: 'Read Phoenix\'s current verified Reality Context. Use this before an environment-sensitive decision when the prompt snapshot is stale, unknown, or the action is high-impact. mode=fresh waits for due probes while respecting TTLs; mode=full forces all configured host/runtime probes to run again. mode=location resolves geographic names locally from public GeoNames data for an authorized position. mode=bandwidth explicitly runs a bounded 2 MB HTTPS download sample only when the user requests internet speed. This tool is read-only and never grants permissions.',
+    description: 'Read Phoenix\'s current verified Reality Context. Use this before an environment-sensitive decision when the prompt snapshot is stale, unknown, or the action is high-impact. mode=fresh waits for due probes while respecting TTLs; mode=full forces all configured host/runtime probes to run again. mode=location resolves geographic names locally from public GeoNames data for an authorized position. mode=bandwidth explicitly runs a bounded 2 MB HTTPS download sample only when the user requests internet speed. This tool is read-only and never grants permissions. For small context windows request one field, optionally an exact key within it; no field preserves the complete legacy snapshot.',
     parameters: {
+      field: {
+        type: 'string',
+        enum: [...REALITY_FIELDS],
+        description: 'Optional exact snapshot section; omit for the complete snapshot.',
+      },
+      key: {
+        type: 'string',
+        description: 'Optional exact property within field; useful for large inventories. Omit for the whole field.',
+      },
       mode: {
         type: 'string',
         enum: ['fresh', 'full', 'location', 'bandwidth'],
@@ -70,7 +81,17 @@ export function createRealitySnapshotTool(
         new Date(),
         assembly,
       )
-      return JSON.parse(JSON.stringify(snapshot)) as Record<string, JsonValue>
+      const serialized = JSON.parse(JSON.stringify(snapshot)) as Record<string, JsonValue>
+      const field = args.field
+      if (typeof field !== 'string') return serialized
+      if (!REALITY_FIELDS.some(name => name === field)) return { status: 'unknown-field', fields: [...REALITY_FIELDS] }
+      const value = serialized[field]
+      if (typeof args.key !== 'string') return { schema: 1, generatedAt: serialized.generatedAt ?? null, field, value: value ?? null }
+      const key = args.key
+      const record = value !== null && typeof value === 'object' && !Array.isArray(value) ? value : undefined
+      const found = record !== undefined && Object.hasOwn(record, key)
+      return { schema: 1, generatedAt: serialized.generatedAt ?? null, field, key,
+        status: found ? 'available' : 'unknown-key', value: found ? record?.[key] ?? null : null }
     },
     presentCall(args) {
       return {
