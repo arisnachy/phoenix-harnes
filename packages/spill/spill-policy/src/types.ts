@@ -16,7 +16,10 @@ import type { SessionId } from '@phoenix-ai/dsh-session'
 export interface SpillPolicyExec {
   /** The agent on whose behalf the call runs, when there is one. */
   agent?: {
+    options?: { readonly provider?: string }
     session: {
+      /** Actual model route and context window, when the session provides it. */
+      requestContext?: () => { provider: string; contextWindow?: number } | undefined
       header: {
         /** The canonical session identity — the spill owner. */
         id: SessionId
