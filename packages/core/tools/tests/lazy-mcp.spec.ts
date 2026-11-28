@@ -406,3 +406,20 @@ describe('Phoenix Local universal discovery', () => {
     expect(result.isError).toBe(false)
   })
 })
+
+describe('Phoenix Local discovery relevance', () => {
+  it('prefers a tool whose name matches the task over earlier incidental description matches', async () => {
+    const { ctx, agent } = await mount()
+    Object.assign(agent, { options: { provider: 'phoenix-local' } })
+    ctx.tools.register(tool('archive', 'spreadsheet edit history'))
+    ctx.tools.register(tool('audit', 'spreadsheet edit audit'))
+    ctx.tools.register(tool('report', 'spreadsheet edit report'))
+    ctx.tools.register(tool('spreadsheet_edit', 'Change cells'))
+    const result = await ctx.tools.execute({ signal, callId: CallId('local-ranked-search'),
+      name: 'tool_search', agent, arguments: { query: 'spreadsheet edit', limit: 1 } })
+    expect(result.isError).toBe(false)
+    const assembly = await ctx.systemPrompt.assemble({ scope: agent })
+    expect(assembly.tools.map(item => item.name)).toContain('spreadsheet_edit')
+    expect(assembly.tools.map(item => item.name)).not.toContain('archive')
+  })
+})

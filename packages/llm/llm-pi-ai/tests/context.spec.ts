@@ -10,7 +10,7 @@ import type {
 } from '@phoenix-ai/dsh-attachment'
 import { CallId, createMessage, createUserMessage, OFFLOADED_IMAGE_TEXT } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock, GenerateOptions, Message } from '@phoenix-ai/dsh-llm'
-import { estimateGenerateOptionsTokens, fitGenerateOptionsToContext, fitPhoenixLocalTextTurn, toPiContext } from '../src/context.ts'
+import { estimateGenerateOptionsTokens, fitGenerateOptionsToContext, fitPhoenixLocalTextTurn, nextLocalContextCalibration, toPiContext } from '../src/context.ts'
 import { toPiAssistant } from '../src/replay.ts'
 
 const ref: ImageAttachmentRef = {
@@ -846,5 +846,186 @@ describe('Phoenix Local agent discovery context', () => {
     expect(fitted.options.tools?.map(tool => tool.name)).toContain('tool_search')
     expect(fitted.options.tools?.map(tool => tool.name)).toContain('spreadsheet_edit')
     expect(options.messages).toHaveLength(4)
+  })
+})
+
+describe('Phoenix Local reality context deferral', () => {
+  it('fits approximately 71k local input into 8k while retaining the current task, tool cycle and policy', () => {
+    const huge = 'telemetry '.repeat(24_850)
+    const policy = 'Approval and sandbox policy: read-only.'
+    const snapshot = createUserMessage({
+      content: [{ type: 'text', text: huge + '\n\n' + policy }],
+      source: { kind: 'plugin', plugin: '@phoenix-ai/dsh-system-prompt', form: 'snapshot',
+        sections: [{ name: 'hardness:reality-context', text: huge }, { name: 'approval:policy', text: policy }] },
+    })
+    const task = createUserMessage({ content: [{ type: 'text', text: 'Consulta mi red' }], source: { kind: 'user' } })
+    const callId = CallId('reality-discover')
+    const call = history('assistant', [{ type: 'tool-call', id: callId, name: 'tool_search', arguments: '{"query":"phoenix_reality_now"}' }])
+    const result = user([{ type: 'tool-result', toolCallId: callId, content: [{ type: 'text', text: 'Found phoenix_reality_now' }] }])
+    const options: GenerateOptions = {
+      ...request([snapshot, task, call, result]), provider: 'phoenix-local', model: 'phoenix-local',
+      tools: [{ name: 'tool_search', description: 'Discover tools', parameters: { type: 'object' } },
+        { name: 'phoenix_reality_now', description: 'Read reality', parameters: { type: 'object' } }],
+    }
+    expect(estimateGenerateOptionsTokens(options)).toBeGreaterThan(60_000)
+    const fitted = fitPhoenixLocalTextTurn(options, 8192, 1024)
+    expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+    expect(fitted.options.tools?.map(tool => tool.name)).toEqual(['tool_search', 'phoenix_reality_now'])
+    expect(fitted.options.messages.slice(1)).toEqual([task, call, result])
+    expect(fitted.options.messages[0]?.content).toEqual([{ type: 'text', text: expect.stringContaining(policy) }])
+    expect(fitted.options.messages[0]?.content).toEqual([{ type: 'text', text: expect.stringContaining('field=time') }])
+    expect(snapshot.content).toEqual([{ type: 'text', text: huge + '\n\n' + policy }])
+    expect(fitGenerateOptionsToContext({ ...options, provider: 'openai' }, 400_000, 1024).options.messages[0]).toBe(snapshot)
+  })
+
+  it('fails closed instead of rewriting an unknown or mandatory policy snapshot', () => {
+    const huge = 'mandatory '.repeat(25_000)
+    const policy = createUserMessage({
+      content: [{ type: 'text', text: huge }],
+      source: { kind: 'plugin', plugin: '@phoenix-ai/dsh-system-prompt', form: 'snapshot',
+        sections: [{ name: 'approval:policy', text: huge }] },
+    })
+    const task = createUserMessage({ content: [{ type: 'text', text: 'Work' }], source: { kind: 'user' } })
+    const options: GenerateOptions = { ...request([policy, task]), provider: 'phoenix-local',
+      tools: [{ name: 'tool_search', description: 'Discover', parameters: { type: 'object' } }] }
+    const fitted = fitPhoenixLocalTextTurn(options, 8192, 1024)
+    expect(fitted.estimatedTokens).toBeGreaterThan(fitted.inputBudgetTokens)
+    expect(fitted.options.messages).toContain(policy)
+    expect(fitted.options.messages).toContain(task)
+  })
+})
+
+describe('Context pressure continuity and intent', () => {
+  it('defers recoverable reality data before dropping earlier conversation or tool signatures', () => {
+    const previous = createUserMessage({ content: [{ type: 'text', text: 'Keep the original project requirements.' }], source: { kind: 'user' } })
+    const answer = history('assistant', [{ type: 'text', text: 'I will preserve the requirements.' }])
+    const task = createUserMessage({ content: [{ type: 'text', text: 'Continue the project.' }], source: { kind: 'user' } })
+    const huge = 'telemetry '.repeat(25_000)
+    const snapshot = createUserMessage({
+      content: [{ type: 'text', text: huge }],
+      source: { kind: 'plugin', plugin: '@phoenix-ai/dsh-system-prompt', form: 'snapshot',
+        sections: [{ name: 'hardness:reality-context', text: huge }] },
+    })
+    const tools = [{ name: 'tool_search', description: 'Discover tools', parameters: { type: 'object' } },
+      { name: 'project_edit', description: 'Edit project', parameters: { type: 'object' } }]
+    const options: GenerateOptions = { ...request([previous, answer, task, snapshot]), provider: 'phoenix-local', model: 'phoenix-local', tools }
+    const fitted = fitPhoenixLocalTextTurn(options, 8192, 1024)
+    expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+    expect(fitted.options.messages.slice(0, 3)).toEqual([previous, answer, task])
+    expect(fitted.options.tools).toEqual(tools)
+    expect(options.messages[3]).toBe(snapshot)
+  })
+
+  it('ranks tools by the human request instead of a later runtime snapshot across providers', () => {
+    const task = createUserMessage({ content: [{ type: 'text', text: 'Use customer_records to find Ana.' }], source: { kind: 'user' } })
+    const telemetry = createUserMessage({ content: [{ type: 'text', text: 'device_metrics '.repeat(5) }], source: { kind: 'plugin', plugin: '@phoenix-ai/dsh-system-prompt' } })
+    const properties = Object.fromEntries(Array.from({ length: 40 }, (_, i) => ['argument_' + i, { type: 'string', enum: ['one', 'two', 'three'] }]))
+    const tools = Array.from({ length: 60 }, (_, i) => ({
+      name: i === 59 ? 'customer_records' : 'device_metrics_' + i,
+      description: i === 59 ? 'Customer records' : 'Device metrics',
+      parameters: { type: 'object', properties },
+    }))
+    const fitted = fitGenerateOptionsToContext({ ...request([task, telemetry]), tools }, 4096, 512)
+    expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+    expect(fitted.options.tools?.map(tool => tool.name)).toContain('customer_records')
+    expect(fitted.options.messages).toEqual([task, telemetry])
+  })
+})
+
+describe('cross-provider recoverable reality pressure', () => {
+  it('pages oversized reality only when the actual read capability is exposed and pressure requires it', () => {
+    const huge = 'telemetry '.repeat(25_000)
+    const policy = 'Keep approval requirements.'
+    const snapshot = createUserMessage({
+      content: [{ type: 'text', text: huge + '\n\n' + policy }],
+      source: { kind: 'plugin', plugin: '@phoenix-ai/dsh-system-prompt', form: 'snapshot',
+        sections: [{ name: 'hardness:reality-context', text: huge }, { name: 'approval:policy', text: policy }] },
+    })
+    const task = createUserMessage({ content: [{ type: 'text', text: 'Check my device' }], source: { kind: 'user' } })
+    const tools = [{ name: 'phoenix_reality_now', description: 'Read current environment', parameters: { type: 'object' } }]
+    const options = { ...request([snapshot, task]), tools }
+    const narrow = fitGenerateOptionsToContext(options, 8192, 1024)
+    expect(narrow.estimatedTokens).toBeLessThanOrEqual(narrow.inputBudgetTokens)
+    expect(narrow.options.tools).toEqual(tools)
+    expect(narrow.options.messages[0]?.content[0]).toMatchObject({ text: expect.stringContaining(policy) })
+    expect(narrow.options.messages[1]).toBe(task)
+    expect(fitGenerateOptionsToContext(options, 400_000, 1024).options).toBe(options)
+    const unavailable = fitGenerateOptionsToContext({ ...options, tools: [] }, 8192, 1024)
+    expect(unavailable.estimatedTokens).toBeGreaterThan(unavailable.inputBudgetTokens)
+    expect(unavailable.options.messages[0]).toBe(snapshot)
+  })
+})
+
+describe('safe pressure schema projection', () => {
+  it('never deletes real argument names, defaults, enum values or nested const data', () => {
+    const huge = 'documentation '.repeat(20_000)
+    const value = { title: 'real title', description: 'real description', default: 3 }
+    const properties = {
+      title: { type: 'string', description: huge },
+      description: { type: 'string', default: 'keep this default' },
+      default: { type: 'integer', enum: [1, 2], default: 2 },
+      payload: { type: 'object', const: value },
+    }
+    const parameters = { type: 'object', properties, required: Object.keys(properties), additionalProperties: false }
+    const task = createUserMessage({ content: [{ type: 'text', text: 'Use exact arguments' }], source: { kind: 'user' } })
+    const options = { ...request([task]), tools: [{ name: 'lookup', description: 'Lookup', parameters }] }
+    const fitted = fitGenerateOptionsToContext(options, 8192, 1024)
+    expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+    expect(fitted.options.tools?.[0]?.parameters).toEqual({
+      type: 'object', additionalProperties: false, required: Object.keys(properties),
+      properties: { ...properties, title: { type: 'string' } },
+    })
+    expect(options.tools[0]?.parameters.properties.title.description).toBe(huge)
+  })
+})
+
+describe('local agent protected memory projection', () => {
+  it('retains prior compaction checkpoints, active instructions and the current task while dropping bulk chat', () => {
+    const checkpoint = createUserMessage({ content: [{ type: 'text', text: 'Prior verified decision: keep the original implementation.' }],
+      source: { kind: 'plugin', plugin: 'compact' } })
+    const rules = createUserMessage({ content: [{ type: 'text', text: 'Workspace instructions: do not modify the production configuration.' }],
+      source: { kind: 'plugin', plugin: 'workspace-rules', form: 'instructions' } })
+    const old = createUserMessage({ content: [{ type: 'text', text: 'bulk '.repeat(50_000) }], source: { kind: 'user' } })
+    const task = createUserMessage({ content: [{ type: 'text', text: 'Continue the previous implementation.' }], source: { kind: 'user' } })
+    const tools = [{ name: 'tool_search', description: 'Discover', parameters: { type: 'object' } }]
+    const options: GenerateOptions = { ...request([checkpoint, rules, old, task]), provider: 'phoenix-local', model: 'phoenix-local', tools }
+    const fitted = fitPhoenixLocalTextTurn(options, 8192, 1024)
+    expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+    expect(fitted.options.messages).toEqual([checkpoint, rules, task])
+    expect(fitted.options.tools?.map(tool => tool.name)).toContain('tool_search')
+    expect(options.messages).toEqual([checkpoint, rules, old, task])
+  })
+
+  it('fails explicitly rather than discarding protected prior instructions that exceed the window', () => {
+    const rules = createUserMessage({ content: [{ type: 'text', text: 'Mandatory rule '.repeat(50_000) }],
+      source: { kind: 'plugin', plugin: 'workspace-rules', form: 'instructions' } })
+    const task = createUserMessage({ content: [{ type: 'text', text: 'Continue.' }], source: { kind: 'user' } })
+    const options = { ...request([rules, task]), provider: 'phoenix-local',
+      tools: [{ name: 'tool_search', description: 'Discover', parameters: { type: 'object' } }] }
+    const fitted = fitPhoenixLocalTextTurn(options, 8192, 1024)
+    expect(fitted.estimatedTokens).toBeGreaterThan(fitted.inputBudgetTokens)
+    expect(fitted.options.messages).toContain(rules)
+    expect(fitted.options.messages).toContain(task)
+  })
+})
+
+describe('conservative local context self-calibration', () => {
+  it('learns underestimation without trusting small, invalid or unusually low usage samples', () => {
+    expect(nextLocalContextCalibration(1, 100, 400)).toBe(1)
+    expect(nextLocalContextCalibration(1, 1000, Number.NaN)).toBe(1)
+    const learned = nextLocalContextCalibration(1, 1000, 1500)
+    expect(learned).toBeGreaterThan(1.5)
+    expect(nextLocalContextCalibration(learned, 1000, 500)).toBe(learned)
+    expect(nextLocalContextCalibration(learned, 1000, 999999)).toBe(3)
+  })
+
+  it('uses the calibrated pressure estimate without modifying the user task or model', () => {
+    const task = createUserMessage({ content: [{ type: 'text', text: 'Keep the exact request.' }], source: { kind: 'user' } })
+    const options = { ...request([task]), provider: 'phoenix-local', model: 'phoenix-local' }
+    const baseline = fitPhoenixLocalTextTurn(options, 8192, 1024)
+    const calibrated = fitPhoenixLocalTextTurn(options, 8192, 1024, 1.5)
+    expect(calibrated.estimatedTokens).toBeGreaterThan(baseline.estimatedTokens)
+    expect(calibrated.inputBudgetTokens).toBe(baseline.inputBudgetTokens)
+    expect(calibrated.options).toBe(options)
   })
 })
