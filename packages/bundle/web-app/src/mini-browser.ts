@@ -852,7 +852,11 @@ async function action(input: Action, signal?: AbortSignal): Promise<Record<strin
   throwIfAborted(signal)
   const base = await endpoint(type === 'open' || type === 'new-tab' || type === 'start', signal, sessionId)
   throwIfAborted(signal)
-  if (!base) throw new Error('Inicia el navegador primero.')
+  if (!base) {
+    if (type === 'inspect') return { available: false, tabs: [], code: 'browser_not_started',
+      message: 'No hay MiniBrowser activo. Usa browser_open con la URL deseada antes de inspeccionar.' }
+    throw new Error('Inicia el navegador primero.')
+  }
   if (type === 'start') {
     if (sessionId === undefined) return await state(base, undefined, signal)
     const available = await listTabs(base, signal)
@@ -890,6 +894,14 @@ async function action(input: Action, signal?: AbortSignal): Promise<Record<strin
       throw new Error('No puedes controlar una pestaña de otra conversación.')
     }
     targetTabId ??= owned
+    if (targetTabId === undefined && type === 'open') {
+      const created = await json<Tab>(base + '/json/new?' + encodeURIComponent('about:blank'), 'PUT', signal)
+      throwIfAborted(signal)
+      browserScopes.claim(sessionId, created.id)
+      targetTabId = created.id
+    }
+    if (targetTabId === undefined && type === 'inspect') return { available: false, tabs: [], code: 'browser_no_tabs',
+      message: 'Esta conversación no tiene pestañas activas. Usa browser_open con la URL deseada.' }
     if (targetTabId === undefined) throw new Error('Esta conversación todavía no tiene pestañas.')
     browserScopes.select(sessionId, targetTabId)
     persistBrowserScopes()
