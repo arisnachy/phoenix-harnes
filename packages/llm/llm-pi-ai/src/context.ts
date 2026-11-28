@@ -347,7 +347,17 @@ export function fitGenerateOptionsToContext(
     return { options, estimatedTokens, inputBudgetTokens, compacted: false }
   }
 
-  const compactedOptions = compactAuxiliaryContextForPressure(options)
+  // For any provider with the actual read tool available, page only the
+  // explicitly recoverable reality snapshot before reducing other context.
+  // Never assume generic cloud tool_search can discover native capabilities.
+  const pagedOptions = options.tools?.some(tool => tool.name === 'phoenix_reality_now')
+    ? { ...options, messages: options.messages.map(deferLocalRealitySnapshot) }
+    : options
+  const pagedTokens = estimateGenerateOptionsTokens(pagedOptions)
+  if (pagedTokens <= inputBudgetTokens) {
+    return { options: pagedOptions, estimatedTokens: pagedTokens, inputBudgetTokens, compacted: true }
+  }
+  const compactedOptions = compactAuxiliaryContextForPressure(pagedOptions)
   const compactedTokens = estimateGenerateOptionsTokens(compactedOptions)
   if (compactedTokens <= inputBudgetTokens) {
     return {

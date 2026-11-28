@@ -931,3 +931,27 @@ describe('Context pressure continuity and intent', () => {
     expect(fitted.options.messages).toEqual([task, telemetry])
   })
 })
+
+describe('cross-provider recoverable reality pressure', () => {
+  it('pages oversized reality only when the actual read capability is exposed and pressure requires it', () => {
+    const huge = 'telemetry '.repeat(25_000)
+    const policy = 'Keep approval requirements.'
+    const snapshot = createUserMessage({
+      content: [{ type: 'text', text: huge + '\n\n' + policy }],
+      source: { kind: 'plugin', plugin: '@phoenix-ai/dsh-system-prompt', form: 'snapshot',
+        sections: [{ name: 'hardness:reality-context', text: huge }, { name: 'approval:policy', text: policy }] },
+    })
+    const task = createUserMessage({ content: [{ type: 'text', text: 'Check my device' }], source: { kind: 'user' } })
+    const tools = [{ name: 'phoenix_reality_now', description: 'Read current environment', parameters: { type: 'object' } }]
+    const options = { ...request([snapshot, task]), tools }
+    const narrow = fitGenerateOptionsToContext(options, 8192, 1024)
+    expect(narrow.estimatedTokens).toBeLessThanOrEqual(narrow.inputBudgetTokens)
+    expect(narrow.options.tools).toEqual(tools)
+    expect(narrow.options.messages[0]?.content[0]).toMatchObject({ text: expect.stringContaining(policy) })
+    expect(narrow.options.messages[1]).toBe(task)
+    expect(fitGenerateOptionsToContext(options, 400_000, 1024).options).toBe(options)
+    const unavailable = fitGenerateOptionsToContext({ ...options, tools: [] }, 8192, 1024)
+    expect(unavailable.estimatedTokens).toBeGreaterThan(unavailable.inputBudgetTokens)
+    expect(unavailable.options.messages[0]).toBe(snapshot)
+  })
+})
