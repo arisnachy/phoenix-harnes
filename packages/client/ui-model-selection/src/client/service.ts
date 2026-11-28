@@ -37,6 +37,7 @@ type PluginInventoryRemoteResult<T> =
   | { ok: false; error: { code: string; message: string } }
 
 interface PluginInventoryLocalRemote {
+  setLocalModelThinking?: (request: { thinking: boolean | string | null }) => Promise<PluginInventoryRemoteResult<PhoenixLocalInstallState>>
   localModelState?: () => Promise<PluginInventoryRemoteResult<PhoenixLocalInstallState>>
   setDefaultLocalModel?: (request: { modelId: string; installedOnly: boolean }) => Promise<PluginInventoryRemoteResult<PhoenixLocalInstallState>>
 }
@@ -104,12 +105,18 @@ export class ModelDirectoryResolver extends Service {
       if (result.ok) return result.value
       throw new Error(result.error.message)
     }
+    const setLocalThinking = pluginInventory?.setLocalModelThinking === undefined ? undefined : async (thinking: boolean | string | null) => {
+      const result = await pluginInventory.setLocalModelThinking!({ thinking })
+      if (result.ok) return result.value
+      throw new Error(result.error.message)
+    }
     const directory = new ModelDirectory(
       connection.api.sessions,
       sessionId,
       () => sessions.subagentAddress(sessionId) === undefined,
       readLocalModelState,
       selectLocalModel,
+      setLocalThinking,
     )
     live.directories.set(sessionId, directory)
     // The composer cannot read this plugin (the dependency runs one way), so
