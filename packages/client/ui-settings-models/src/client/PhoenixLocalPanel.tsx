@@ -23,6 +23,9 @@ export interface PhoenixLocalModelCatalogEntry {
   readonly estimatedRamBytes: number
   readonly contextWindow: number
   readonly nativeContextWindow?: number
+  readonly capabilities?: readonly string[]
+  readonly quantization?: string
+  readonly parameterSize?: string
   readonly maxTokens: number
   readonly recommended: boolean
 }
@@ -334,6 +337,9 @@ export function PhoenixLocalPanel({ client, t }: PhoenixLocalPanelProps): ReactN
       </details>
       {selected === undefined ? null : (
         <div className={styles['facts']}>
+          {selected.quantization !== undefined && <span><b>{t('studioQuantization')}:</b> {selected.quantization}</span>}
+          {selected.parameterSize !== undefined && <span><b>{t('studioParameters')}:</b> {selected.parameterSize}</span>}
+          {selected.capabilities !== undefined && <span><b>{t('studioCapabilities')}:</b> {selected.capabilities.length === 0 ? t('studioUnknown') : selected.capabilities.join(' · ')}</span>}
           <span><b>{t('download')}:</b> {selected.backend === 'ollama' ? inOllama ? t('ollamaExisting') : t('ollamaNotDownloaded') : formatBytes(selected.sizeBytes)}</span>
           <span><b>{t('ram')}:</b> {selected.estimatedRamBytes > 0 ? formatBytes(selected.estimatedRamBytes) : t('studioUnknown')}</span>
           <span><b>{t('context')}:</b> {selected.contextWindow.toLocaleString()} tokens</span>
