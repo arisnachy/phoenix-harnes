@@ -10,6 +10,21 @@ export interface PhoenixLocalInstallState {
   ollamaInstalledModelIds?: readonly string[]
   catalog?: readonly { id: string; displayName: string; backend: 'ollama' | 'llama-server' }[]
   mode?: 'off' | 'on-demand' | 'always-on'
+  thinking?: boolean | string | null
+  thinkingCapabilities?: { readonly values: readonly (boolean | string)[]; readonly default: boolean | string | null }
+}
+
+/** Encode native Ollama thinking values without conflating booleans and named levels. */
+export function localThinkingId(value: boolean | string): string {
+  return typeof value === 'boolean' ? (value ? 'local:on' : 'local:off') : `local:level:${value}`
+}
+
+/** Resolve only a choice advertised for the currently active artifact. */
+export function localThinkingValue(state: PhoenixLocalInstallState, id: string | undefined): boolean | string | null {
+  if (id === undefined) return null
+  const value = state.thinkingCapabilities?.values.find(candidate => localThinkingId(candidate) === id)
+  if (value === undefined) throw new Error('This local reasoning mode is not advertised by Ollama.')
+  return value
 }
 
 function installedCandidates(state: PhoenixLocalInstallState) {
@@ -53,14 +68,22 @@ export function projectPhoenixLocalAvailability(
       id: model.id,
       name: model.displayName,
       description: model.backend === 'ollama' ? 'Ollama · Local' : 'GGUF · Local',
+      ...(model.backend === 'ollama' && model.id === state.selectedModelId && state.thinkingCapabilities?.values.length
+        ? { reasoning: { efforts: [...new Set(state.thinkingCapabilities.values)].map(value => ({
+          id: localThinkingId(value),
+          name: typeof value === 'boolean' ? (value ? 'Think' : 'Instant') : value,
+        })) } } : {}),
     }))
     return models.length === 0 ? [] : [{ ...group, name, models }]
   })
+  const currentLocalEffort = state?.thinking != null && state.thinkingCapabilities?.values.includes(state.thinking)
+    ? localThinkingId(state.thinking) : undefined
   return {
     ...directory,
     groups,
     current: currentIsLocal && localReady && state?.catalog !== undefined
-      ? { ...directory.current, model: state.selectedModelId }
+      ? { provider: PHOENIX_LOCAL_PROVIDER, model: state.selectedModelId,
+        ...(currentLocalEffort === undefined ? {} : { reasoningEffort: currentLocalEffort }) }
       : directory.current,
     routable: currentIsLocal ? directory.routable && localReady : directory.routable,
   }
