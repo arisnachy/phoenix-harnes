@@ -20,7 +20,7 @@ import type { QueueAction, QueueItemId } from './contract/queue.ts'
 import type { ComposerBlocks, DraftAttachmentId, SessionInputResolver } from './contract/input.ts'
 import type { InputSubmitMode } from './contract/composer-submission.ts'
 import { messageWithProfileReference, savedPhotoForSelfImageRequest } from './portrait-reference.ts'
-import { prepareSheetPrompt,revokeSheetGrant } from './chat/active-sheet-context.ts'
+import { prepareSheetPrompt,revokeSheetGrant,tryDirectSheetEdit } from './chat/active-sheet-context.ts'
 
 /**
  * The outward conversation face (`ctx.conversation`): the scope-addressed
@@ -159,6 +159,10 @@ export class ConversationController extends Service implements IConversation {
     mode: InputSubmitMode,
     signal?: AbortSignal,
   ): Promise<SubmitOutcome> {
+    if(imageIds.length===0&&mode==='queue'&&!signal?.aborted){
+      const local=tryDirectSheetEdit(String(session.sessionId),text)
+      if(local)return local
+    }
     const attachments = this.draftImages(imageIds)
     if (attachments.length !== imageIds.length) {
       throw new Error('conversation.sendSession: one or more draft images are no longer available')
