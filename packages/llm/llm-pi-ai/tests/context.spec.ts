@@ -935,3 +935,24 @@ it('keeps the latest workspace baseline and skill instructions, never their supe
   expect(fitted.options.tools?.map(tool => tool.name)).toContain('system_runtime_inspect')
   expect(options.messages).toHaveLength(5)
 })
+
+
+it('prioritizes the newly discovered schema over an older completed tool within the local input budget', () => {
+  const task = createUserMessage({ content: [{ type: 'text', text: 'continúa' }], source: { kind: 'user' } })
+  const oldId = CallId('prior-operation')
+  const discoverId = CallId('discover-next-operation')
+  const priorCall = history('assistant', [{ type: 'tool-call', id: oldId, name: 'old_operation', arguments: '{}' }])
+  const priorResult = user([{ type: 'tool-result', toolCallId: oldId, content: [{ type: 'text', text: 'Completed.' }] }])
+  const discover = history('assistant', [{ type: 'tool-call', id: discoverId, name: 'tool_search', arguments: '{"names":["next_operation"]}' }])
+  const receipt = user([{ type: 'tool-result', toolCallId: discoverId, content: [{ type: 'text', text: '{"enabled":true,"tools":[{"name":"next_operation","schemaDeferred":true}]}' }] }])
+  const makeTool = (name: string) => ({ name, description: 'Operation', parameters: { type: 'object',
+    properties: { selector: { type: 'string', enum: ['x'.repeat(5200)] } } } })
+  const options: GenerateOptions = { provider: 'phoenix-local', model: 'phoenix-local',
+    system: 'p'.repeat(27000), messages: [task, priorCall, priorResult, discover, receipt],
+    tools: [{ name: 'tool_search', description: 'Discover authorized tools', parameters: { type: 'object' } },
+      makeTool('old_operation'), makeTool('next_operation')] }
+  const fitted = fitPhoenixLocalTextTurn(options, 16384, 2048)
+  expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+  expect(fitted.options.tools?.map(tool => tool.name)).toEqual(['tool_search','next_operation'])
+  expect(fitted.options.messages).toEqual(options.messages)
+})
