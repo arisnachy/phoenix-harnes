@@ -997,3 +997,9 @@
 .finixWorkspace { position: relative; display: flex; flex: 1; min-height: 0; min-width: 0; width: 100%; }
 
 .finixWorkspace > .scrollBody { min-width: 0; }
+
+.finixRecipient { display: flex; justify-content: space-between; align-items: center; gap: 6px; align-self: center; width: min(100%, var(--dsh-composer-card-max-width)); box-sizing: border-box; padding: 0 12px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.finixRecipient > span { display: flex; align-items: center; gap: 5px; }
+.finixRecipient svg { width: 23px; height: 23px; }
+.finixRecipient button { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; cursor: pointer; padding: 4px 6px; border-radius: 6px; }
+.finixRecipient button:hover { background: var(--dsw-alias-interactive-bg-hover); }
