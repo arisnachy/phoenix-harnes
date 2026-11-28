@@ -53,7 +53,3 @@ declare module '@phoenix-ai/cordis' {
     conversation: import('./service.ts').IConversation
   }
 }
-
-/** Shared companion presentation for the unified mention picker. */
-export { LivingMascot } from './chat/LivingMascot.tsx'
-export { readCompanionName } from './skeleton/companion-name.ts'
