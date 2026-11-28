@@ -38,8 +38,14 @@ const SCHEMA_DECORATION_KEYS = new Set([
   '$comment',
   'examples',
   'example',
-  'default',
 ])
+// Only descend into positions that JSON Schema defines as schemas. Arbitrary
+// property names, default/const values and extension payloads are data, not
+// annotation keywords; deleting their keys changes the tool contract.
+const SCHEMA_MAP_KEYS = new Set(['properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas'])
+const SCHEMA_CHILD_KEYS = new Set(['additionalProperties', 'additionalItems', 'unevaluatedProperties',
+  'unevaluatedItems', 'items', 'contains', 'propertyNames', 'not', 'if', 'then', 'else',
+  'allOf', 'anyOf', 'oneOf', 'prefixItems'])
 
 /** JSON stringify that cannot fail request budgeting on an exotic schema value. */
 function safeJsonStringify(value: unknown): string {
@@ -133,11 +139,20 @@ function compactSchemaForPressure(value: unknown): unknown {
     return compacted
   }
 
-  const compacted: Record<string, unknown> = {}
-  for (const [key, child] of Object.entries(value)) {
-    if (SCHEMA_DECORATION_KEYS.has(key)) continue
-    compacted[key] = compactSchemaForPressure(child)
-  }
+  const compacted = Object.fromEntries(Object.entries(value).flatMap(([key, child]) => {
+    if (SCHEMA_DECORATION_KEYS.has(key)) return []
+    if (SCHEMA_MAP_KEYS.has(key) && typeof child === 'object' && child !== null && !Array.isArray(child)) {
+      return [[key, Object.fromEntries(Object.entries(child).map(([name, schema]) =>
+        [name, compactSchemaForPressure(schema)]))]]
+    }
+    if (SCHEMA_CHILD_KEYS.has(key)) return [[key, compactSchemaForPressure(child)]]
+    // Legacy dependencies maps contain either property-name arrays or schemas.
+    if (key === 'dependencies' && typeof child === 'object' && child !== null && !Array.isArray(child)) {
+      return [[key, Object.fromEntries(Object.entries(child).map(([name, dependency]) =>
+        [name, Array.isArray(dependency) ? dependency : compactSchemaForPressure(dependency)]))]]
+    }
+    return [[key, child]]
+  }))
   COMPACT_SCHEMA_CACHE.set(value, compacted)
   return compacted
 }
@@ -417,6 +432,25 @@ export function resolvePhoenixLocalMaxOutput(contextWindow: number, desiredMaxOu
   return Math.max(1, Math.min(Math.floor(desiredMaxOutput), Math.floor(contextWindow / 4)))
 }
 
+/**
+ * Preserve active instructions and durable compaction checkpoints even when
+ * the conversational prefix must be projected. A replaced skill catalog is
+ * superseded only by the newest catalog, never by an unrelated message.
+ */
+function localAgentPrefix(prior: readonly Message[], retained: readonly Message[]): Message[] {
+  const isRuntime = (message: Message): boolean => message.source.kind === 'plugin'
+    && message.source.plugin === '@phoenix-ai/dsh-system-prompt'
+  const runtime = retained.some(isRuntime) ? undefined : prior.findLast(isRuntime)
+  const catalog = retained.some(isAuxiliarySkillCatalog) ? undefined : prior.findLast(isAuxiliarySkillCatalog)
+  return prior.filter(message => {
+    if (isRuntime(message)) return message === runtime
+    if (isAuxiliarySkillCatalog(message)) return message === catalog
+    const source = message.source as { kind: string; form?: string; plugin?: string }
+    return message.role === 'system' || source.form === 'instructions'
+      || (source.kind === 'plugin' && source.plugin === 'compact')
+  })
+}
+
 /** Fit the local request before passing it to the OpenAI-compatible transport. */
 function fitPhoenixLocalHeadroom(
   options: GenerateOptions,
@@ -504,11 +538,10 @@ export function fitPhoenixLocalTextTurn(
     if (current < 0) return fitPhoenixLocalHeadroom(options, contextWindow, desiredMaxOutput, false)
     const retained = options.messages.slice(current)
     const prior = options.messages.slice(0, current)
-    const runtime = prior.findLast(message => message.source.kind === 'plugin'
-      && message.source.plugin === '@phoenix-ai/dsh-system-prompt')
-    const suffixHasRuntime = retained.some(message => message.source.kind === 'plugin'
-      && message.source.plugin === '@phoenix-ai/dsh-system-prompt')
-    const messages = runtime !== undefined && !suffixHasRuntime ? [runtime, ...retained] : retained
+    const messages = [...localAgentPrefix(prior, retained), ...retained]
+    // Preserve loaded skills, checkpoints and policy. Fail closed if these
+    // essential messages cannot fit rather than claiming a capable agent
+    // succeeded after silently erasing them.
     const projected = compactAuxiliaryContextForPressure({ ...options, messages })
     const projectedFit = fitPhoenixLocalHeadroom(projected, contextWindow, desiredMaxOutput, true)
     if (projectedFit.estimatedTokens <= projectedFit.inputBudgetTokens) return projectedFit

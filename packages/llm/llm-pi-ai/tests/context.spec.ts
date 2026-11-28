@@ -955,3 +955,56 @@ describe('cross-provider recoverable reality pressure', () => {
     expect(unavailable.options.messages[0]).toBe(snapshot)
   })
 })
+
+describe('safe pressure schema projection', () => {
+  it('never deletes real argument names, defaults, enum values or nested const data', () => {
+    const huge = 'documentation '.repeat(20_000)
+    const value = { title: 'real title', description: 'real description', default: 3 }
+    const properties = {
+      title: { type: 'string', description: huge },
+      description: { type: 'string', default: 'keep this default' },
+      default: { type: 'integer', enum: [1, 2], default: 2 },
+      payload: { type: 'object', const: value },
+    }
+    const parameters = { type: 'object', properties, required: Object.keys(properties), additionalProperties: false }
+    const task = createUserMessage({ content: [{ type: 'text', text: 'Use exact arguments' }], source: { kind: 'user' } })
+    const options = { ...request([task]), tools: [{ name: 'lookup', description: 'Lookup', parameters }] }
+    const fitted = fitGenerateOptionsToContext(options, 8192, 1024)
+    expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+    expect(fitted.options.tools?.[0]?.parameters).toEqual({
+      type: 'object', additionalProperties: false, required: Object.keys(properties),
+      properties: { ...properties, title: { type: 'string' } },
+    })
+    expect(options.tools[0]?.parameters.properties.title.description).toBe(huge)
+  })
+})
+
+describe('local agent protected memory projection', () => {
+  it('retains prior compaction checkpoints, active instructions and the current task while dropping bulk chat', () => {
+    const checkpoint = createUserMessage({ content: [{ type: 'text', text: 'Prior verified decision: keep the original implementation.' }],
+      source: { kind: 'plugin', plugin: 'compact' } })
+    const rules = createUserMessage({ content: [{ type: 'text', text: 'Workspace instructions: do not modify the production configuration.' }],
+      source: { kind: 'plugin', plugin: 'workspace-rules', form: 'instructions' } })
+    const old = createUserMessage({ content: [{ type: 'text', text: 'bulk '.repeat(50_000) }], source: { kind: 'user' } })
+    const task = createUserMessage({ content: [{ type: 'text', text: 'Continue the previous implementation.' }], source: { kind: 'user' } })
+    const tools = [{ name: 'tool_search', description: 'Discover', parameters: { type: 'object' } }]
+    const options: GenerateOptions = { ...request([checkpoint, rules, old, task]), provider: 'phoenix-local', model: 'phoenix-local', tools }
+    const fitted = fitPhoenixLocalTextTurn(options, 8192, 1024)
+    expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+    expect(fitted.options.messages).toEqual([checkpoint, rules, task])
+    expect(fitted.options.tools?.map(tool => tool.name)).toContain('tool_search')
+    expect(options.messages).toEqual([checkpoint, rules, old, task])
+  })
+
+  it('fails explicitly rather than discarding protected prior instructions that exceed the window', () => {
+    const rules = createUserMessage({ content: [{ type: 'text', text: 'Mandatory rule '.repeat(50_000) }],
+      source: { kind: 'plugin', plugin: 'workspace-rules', form: 'instructions' } })
+    const task = createUserMessage({ content: [{ type: 'text', text: 'Continue.' }], source: { kind: 'user' } })
+    const options = { ...request([rules, task]), provider: 'phoenix-local',
+      tools: [{ name: 'tool_search', description: 'Discover', parameters: { type: 'object' } }] }
+    const fitted = fitPhoenixLocalTextTurn(options, 8192, 1024)
+    expect(fitted.estimatedTokens).toBeGreaterThan(fitted.inputBudgetTokens)
+    expect(fitted.options.messages).toContain(rules)
+    expect(fitted.options.messages).toContain(task)
+  })
+})
