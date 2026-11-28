@@ -20,8 +20,8 @@ describe('local companion admission', () => {
 
 describe('Finix live capability selection', () => {
   it('does not fail when optional diagnostics are absent or expose unauthorized tools', () => {
-    expect(companionAvailableTools(['read', 'bash', 'mcp__mail__send']).allow).toEqual(['read'])
-    expect(companionAvailableTools(['phoenix_self_assess', 'system_runtime_inspect']).allow).toEqual(['system_runtime_inspect', 'phoenix_self_assess'])
-    expect(companionAvailableTools([]).allow).toEqual([])
+    expect(companionAvailableTools(['read', 'bash', 'mcp__mail__send']).allow).toEqual(['tool_search', 'read'])
+    expect(companionAvailableTools(['phoenix_self_assess', 'system_runtime_inspect']).allow).toEqual(['tool_search', 'system_runtime_inspect', 'phoenix_self_assess'])
+    expect(companionAvailableTools([]).allow).toEqual(['tool_search'])
   })
 })
