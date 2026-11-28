@@ -1,6 +1,7 @@
 /** Active KIRA Team mention picker surfaced while the composer ends in an @token. */
 import type { InjectFace, PropsLocale, PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
 import type { TeamChatParticipant } from '@phoenix-ai/dsh-agent-team/chat-types'
+import { LivingMascot, readCompanionName } from '@phoenix-ai/dsh-client-ui-conversation/client'
 import { KIRA_ROSTER } from './KiraTeamsDock.tsx'
 import { ModelActivityAvatar } from './ModelActivityAvatar.tsx'
 import { teamIdentityOf } from './TeamChatMessage.tsx'
@@ -73,12 +74,14 @@ export function TeamMentionDock({ input, sessionId, useProjection, setDraft, t }
       avatar: 'kira',
     })
   }
+  const companionName = readCompanionName()
+  const showFinix = input.draft.slice(0, query.start).trim() === '' && (query.text === '' || [companionName, 'finix', 'fénix', 'phoenix'].some(name => name.toLocaleLowerCase().includes(query.text)))
   const filtered = rows
     .filter((row, index, all) => all.findIndex(candidate => candidate.name.toLocaleLowerCase() === row.name.toLocaleLowerCase()) === index)
     .filter(row => query.text === '' || row.name.toLocaleLowerCase().includes(query.text))
     .sort((left, right) => left.avatar === 'kira' ? -1 : right.avatar === 'kira' ? 1 : left.name.localeCompare(right.name))
     .slice(0, 8)
-  if (filtered.length === 0) return null
+  if (filtered.length === 0 && !showFinix) return null
 
   const choose = (name: string): void => {
     const token = name.includes(' ') ? `@"${name}"` : `@${name}`
@@ -87,6 +90,9 @@ export function TeamMentionDock({ input, sessionId, useProjection, setDraft, t }
 
   return (
     <div className={css.mentionMenu} data-team-mention-picker role="listbox" aria-label={t('dock.title')}>
+      {showFinix && <button type="button" className={css.mentionRow} role="option" aria-label="@Finix" onMouseDown={event => event.preventDefault()} onClick={() => choose('finix')}>
+        <span className={css.mentionAvatar}><LivingMascot pose="ready" /></span><span className={css.mentionCopy}><strong>{companionName}</strong><span>Compañero autónomo local</span></span>
+      </button>}
       {filtered.map(row => (
         <button
           type="button"
