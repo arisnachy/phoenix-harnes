@@ -156,7 +156,12 @@ export class LearningMemoryService extends Service {
     })
   }
 
-  /** Search only the explicit owning session, without the globally current project fallback. */
+  /** Search only the explicit owning session, without the globally current project fallback.
+   * @param sessionId - Owning session identifier.
+   * @param query - Text to match against cognitive memory.
+   * @param limit - Maximum number of ranked hits.
+   * @returns Ranked active cognitive memory hits scoped to that session.
+   */
   searchCognitiveForSession(sessionId: string, query: string, limit: number = 20): CognitiveMemoryHit[] {
     if (sessionId.trim() === '' || query.trim() === '') return []
     return this.cognitive.search({ sessionId, query, limit, includeHistory: false })
