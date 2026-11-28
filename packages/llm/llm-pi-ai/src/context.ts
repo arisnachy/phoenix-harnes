@@ -239,16 +239,16 @@ function toolNamesUsedInMessages(messages: readonly Message[]): Set<string> {
 }
 
 function latestUserText(messages: readonly Message[]): string {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index]
-    if (message?.role !== 'user' || message.source.kind === 'tool') continue
-    return message.content
-      .filter(block => block.type === 'text')
-      .map(block => block.text)
-      .join(' ')
-      .toLowerCase()
-  }
-  return ''
+  // Runtime snapshots and tool replies must not outrank the human's intent.
+  // Plugin-originated missions can still supply intent when no human turn exists.
+  const latest = messages.findLast(message => message.role === 'user' && message.source.kind === 'user')
+    ?? messages.findLast(message => message.role === 'user' && message.source.kind !== 'tool'
+      && !(message.source.kind === 'plugin' && message.source.plugin === '@phoenix-ai/dsh-system-prompt'))
+  return latest?.content
+    .filter(block => block.type === 'text')
+    .map(block => block.text)
+    .join(' ')
+    .toLowerCase() ?? ''
 }
 
 function selectToolsForPressureBudget(options: GenerateOptions, inputBudgetTokens: number): GenerateOptions {
@@ -475,6 +475,21 @@ export function fitPhoenixLocalTextTurn(
   // only older history from the request projection, never from durable state.
   // Do not degrade a tool-capable agent into the conversational fallback.
   if (gateway !== undefined) {
+    const canReadReality = gateway.name === 'tool_search'
+      || options.tools?.some(tool => tool.name === 'phoenix_reality_now') === true
+    // First remove retrievable bulk, not conversational continuity. Retain
+    // original tool signatures and history whenever the resulting request fits.
+    if (canReadReality) {
+      const messages = options.messages.map(deferLocalRealitySnapshot)
+      if (messages.some((message, index) => message !== options.messages[index])) {
+        const fullHistory = fitPhoenixLocalHeadroom({ ...options, messages }, contextWindow, desiredMaxOutput, true)
+        if (fullHistory.estimatedTokens <= fullHistory.inputBudgetTokens) return fullHistory
+        const compactedHistory = fitPhoenixLocalHeadroom(
+          compactAuxiliaryContextForPressure({ ...options, messages }), contextWindow, desiredMaxOutput, true,
+        )
+        if (compactedHistory.estimatedTokens <= compactedHistory.inputBudgetTokens) return compactedHistory
+      }
+    }
     const current = options.messages.findLastIndex(message => message.role === 'user' && message.source.kind === 'user')
     if (current < 0) return fitPhoenixLocalHeadroom(options, contextWindow, desiredMaxOutput, false)
     const retained = options.messages.slice(current)
@@ -487,8 +502,7 @@ export function fitPhoenixLocalTextTurn(
     const projected = compactAuxiliaryContextForPressure({ ...options, messages })
     const projectedFit = fitPhoenixLocalHeadroom(projected, contextWindow, desiredMaxOutput, true)
     if (projectedFit.estimatedTokens <= projectedFit.inputBudgetTokens) return projectedFit
-    const paged: GenerateOptions = gateway.name === 'tool_search'
-      || options.tools?.some(tool => tool.name === 'phoenix_reality_now')
+    const paged: GenerateOptions = canReadReality
       ? { ...projected, messages: projected.messages.map(deferLocalRealitySnapshot) }
       : projected
     const pagedFit = fitPhoenixLocalHeadroom(paged, contextWindow, desiredMaxOutput, true)
