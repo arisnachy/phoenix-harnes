@@ -72,7 +72,7 @@ import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { CODEX_PROVIDER } from './codex-live-catalog.ts'
 import { codexPlatformFallbackModel, isChatGptAccessJwt, isChatGptAccountJwt } from './codex-platform.ts'
 import { applyMondayCodexMembrane, normalizeCodexToolSchemas, recoverRejectedCodexFunctionSchema, scopeCodexToolsForPaint, normalizeOpenAiFunctionToolPayload, surfaceRejectedCodexSchemaEvent, requiresMondayCodexMembrane, requiresObjectRootFunctionSchemas } from './codex-tool-schema.ts'
-import { fitGenerateOptionsToContext, fitPhoenixLocalTextTurn, resolvePhoenixLocalMaxOutput, toPiContext } from './context.ts'
+import { estimatePhoenixLocalInputTokens, fitGenerateOptionsToContext, fitPhoenixLocalTextTurn, nextLocalContextCalibration, resolvePhoenixLocalMaxOutput, toPiContext } from './context.ts'
 import { toStreamChunks } from './stream.ts'
 import { isNonCodexRecoveryModel } from './provider-recovery.ts'
 
@@ -285,6 +285,8 @@ function requestHeaders(
  */
 export class PiAiAdapter extends LlmAdapter {
   private snapshot: PiAiSnapshot | undefined
+  // Process-local and bounded; no conversation content or credentials retained.
+  private readonly localCalibration = new Map<string, number>()
 
   constructor(private readonly config: PiAiAdapterOptions) {
     super()
@@ -555,8 +557,11 @@ export class PiAiAdapter extends LlmAdapter {
       const desiredMaxOutput = localCompletions
         ? Math.min(options.maxTokens ?? model.maxTokens, model.maxTokens)
         : options.maxTokens ?? model.maxTokens
+      const calibrationKey = localCompletions && localModel != null
+        ? JSON.stringify([localModel.selectedModelId, model.contextWindow]) : undefined
+      const calibrationFactor = calibrationKey === undefined ? 1 : this.localCalibration.get(calibrationKey) ?? 1
       const fitted = localCompletions
-        ? fitPhoenixLocalTextTurn(options, model.contextWindow, desiredMaxOutput)
+        ? fitPhoenixLocalTextTurn(options, model.contextWindow, desiredMaxOutput, calibrationFactor)
         : fitGenerateOptionsToContext(options, model.contextWindow, desiredMaxOutput)
       if (options.provider === 'phoenix-local' && (process.env.PHOENIX_TOKEN_AUDIT === '1'
         || fitted.estimatedTokens > fitted.inputBudgetTokens)) {
@@ -567,6 +572,7 @@ export class PiAiAdapter extends LlmAdapter {
           model: options.model,
           modelContextTokens: model.contextWindow,
           requestedOutputTokens: desiredMaxOutput,
+          calibrationFactor,
           initialSystemChars: options.system?.length ?? 0,
           fittedSystemChars: fitted.options.system?.length ?? 0,
           runtimeSnapshotSections: options.messages.flatMap(message =>
@@ -733,6 +739,19 @@ export class PiAiAdapter extends LlmAdapter {
                 true,
               )
               return
+            }
+          }
+          if (pendingUsage?.type === 'usage' && result.value.type === 'finish'
+            && result.value.reason.kind !== 'error' && calibrationKey !== undefined && !containsImage && !containsFile) {
+            const usage = pendingUsage.usage
+            const observed = usage.inputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0)
+            const previous = this.localCalibration.get(calibrationKey) ?? 1
+            const next = nextLocalContextCalibration(previous, estimatePhoenixLocalInputTokens(requestOptions), observed)
+            this.localCalibration.delete(calibrationKey)
+            this.localCalibration.set(calibrationKey, next)
+            if (this.localCalibration.size > 64) {
+              const oldest = this.localCalibration.keys().next().value
+              if (oldest !== undefined) this.localCalibration.delete(oldest)
             }
           }
           if (pendingUsage !== undefined) {

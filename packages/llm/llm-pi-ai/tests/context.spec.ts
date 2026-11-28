@@ -10,7 +10,7 @@ import type {
 } from '@phoenix-ai/dsh-attachment'
 import { CallId, createMessage, createUserMessage, OFFLOADED_IMAGE_TEXT } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock, GenerateOptions, Message } from '@phoenix-ai/dsh-llm'
-import { estimateGenerateOptionsTokens, fitGenerateOptionsToContext, fitPhoenixLocalTextTurn, toPiContext } from '../src/context.ts'
+import { estimateGenerateOptionsTokens, fitGenerateOptionsToContext, fitPhoenixLocalTextTurn, nextLocalContextCalibration, toPiContext } from '../src/context.ts'
 import { toPiAssistant } from '../src/replay.ts'
 
 const ref: ImageAttachmentRef = {
@@ -1006,5 +1006,26 @@ describe('local agent protected memory projection', () => {
     expect(fitted.estimatedTokens).toBeGreaterThan(fitted.inputBudgetTokens)
     expect(fitted.options.messages).toContain(rules)
     expect(fitted.options.messages).toContain(task)
+  })
+})
+
+describe('conservative local context self-calibration', () => {
+  it('learns underestimation without trusting small, invalid or unusually low usage samples', () => {
+    expect(nextLocalContextCalibration(1, 100, 400)).toBe(1)
+    expect(nextLocalContextCalibration(1, 1000, Number.NaN)).toBe(1)
+    const learned = nextLocalContextCalibration(1, 1000, 1500)
+    expect(learned).toBeGreaterThan(1.5)
+    expect(nextLocalContextCalibration(learned, 1000, 500)).toBe(learned)
+    expect(nextLocalContextCalibration(learned, 1000, 999999)).toBe(3)
+  })
+
+  it('uses the calibrated pressure estimate without modifying the user task or model', () => {
+    const task = createUserMessage({ content: [{ type: 'text', text: 'Keep the exact request.' }], source: { kind: 'user' } })
+    const options = { ...request([task]), provider: 'phoenix-local', model: 'phoenix-local' }
+    const baseline = fitPhoenixLocalTextTurn(options, 8192, 1024)
+    const calibrated = fitPhoenixLocalTextTurn(options, 8192, 1024, 1.5)
+    expect(calibrated.estimatedTokens).toBeGreaterThan(baseline.estimatedTokens)
+    expect(calibrated.inputBudgetTokens).toBe(baseline.inputBudgetTokens)
+    expect(calibrated.options).toBe(options)
   })
 })
