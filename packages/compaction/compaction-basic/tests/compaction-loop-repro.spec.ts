@@ -376,6 +376,45 @@ describe('CBR-001: a real-loop checkpoint is a valid boundary on both sides', ()
 })
 
 describe('context-overflow recovery across the real loop and compaction-basic', () => {
+  it('recovers a pre-dispatch context rejection through durable compaction in the same turn', async () => {
+    const ctx = new Context()
+    class LargeWindowAdapter extends StepwiseToolAdapter {
+      override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+        return Promise.resolve({ provider, id: model, name: model, context: { contextWindow: 1_000_000 } })
+      }
+    }
+    const adapter = new LargeWindowAdapter(0)
+    await mountAgentLoopTestDependencies(ctx)
+    await mountInvariants(ctx)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(TokenMeter)
+    ctx.llm.registerAdapter(['mock'], adapter)
+    await ctx.plugin(ReproCompactionEngine, { auto: true, thresholdRatio: 1, maxOverflowRetries: 1 })
+    let rejected = false
+    ctx.on('agent/request', async ({ turn }, next) => {
+      if (turn === 2 && !rejected) {
+        rejected = true
+        throw new LlmError('router preflight context overflow', CONTEXT_WINDOW_EXCEEDED_CODE)
+      }
+      return next()
+    })
+    try {
+      const agent = ctx.agentLoop.create(SessionId('preflight-overflow-recovery'), { provider: 'mock', model: 'mock' })
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: 'OLD HISTORY ' + 'details '.repeat(200) }], source: { kind: 'user' } }))
+      await agent.whenIdle()
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: 'sí, continúa' }], source: { kind: 'user' } }))
+      await agent.whenIdle()
+      expect(rejected).toBe(true)
+      expect(adapter.calls).toBe(2)
+      expect(agent.session.events.some(event => event.type === 'compaction/summary')).toBe(true)
+      expect(agent.session.surface.replaceGeneration).toBeGreaterThan(0)
+      expect(JSON.stringify(agent.session.deriveMessages())).toContain('sí, continúa')
+      expect(agent.session.events.at(-1)).toMatchObject({ type: 'turn/end', data: { reason: { kind: 'completed' } } })
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it.each(['thrown', 'in-band'] as const)(
     'force-compacts a %s overflow within the retried step',
     async (delivery) => {
