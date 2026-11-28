@@ -81,6 +81,8 @@ const DESCRIPTION_SYSTEM_PROMPT = [
 /** Whether a request needs focused medical-image reading. Empty text is
  * conservatively treated as potentially medical; the specialist still has to
  * recognize the image rather than assuming it is a clinical study.
+ * @param text - User request accompanying the image.
+ * @returns Whether a focused clinical reader is warranted.
  */
 export function requiresFocusedClinicalVision(text:string):boolean {
   const s=text.trim()
@@ -96,6 +98,9 @@ export function requiresFocusedClinicalVision(text:string):boolean {
  * higher effort; never silently use Terra as the ONLY clinical reader.
  * Non-Codex image readers stay eligible if they are the only documented
  * non-Terra vision option, without claiming a clinical validation.
+ * @param models - Provider-advertised model capabilities.
+ * @param current - Model already selected for the turn.
+ * @returns An eligible image reader with supported reasoning effort, if any.
  */
 export function pickFocusedVisionReader(
   models:readonly LlmResolvedModelInfo[],current:ModelSelection,
@@ -131,6 +136,7 @@ export function pickFocusedVisionReader(
  * @param ctx - host context carrying the `llm` service.
  * @param current - the session's active (text-only) selection.
  * @param config - the deployment's fallback configuration.
+ * @param focusedClinical - require discovery of a non-Terra visual reader for clinical sources when no eligible explicit route is pinned.
  * @returns the resolved route, or undefined when fallback is disabled or no
  *   image-capable catalog entry is reachable.
  */
@@ -148,14 +154,10 @@ export async function resolveVisionFallbackRoute(
     ? { provider: config.provider, model: config.model }
     : undefined
   const providers = ctx.llm.listProviders().map(info => info.id)
-  // An explicit pin is honored verbatim: deployments name routes catalogs may
-  // not advertise (adapters accept unlisted ids), and re-validating here would
-  // silently downgrade every pin to discovery.
-  // A legacy deployment may have pinned Terra for every image. That pin is
-  // suitable for nonclinical use, but must not bypass clinical Sol routing.
-  // Resolve a verifiable non-Terra visual reader for clinical sources instead.
-  if (explicit !== undefined && (!focusedClinical
-    || !/-terra(?:$|-)/iu.test(explicit.model))) return explicit
+  // Preserve legacy explicit pins for ordinary images. Clinical sources must
+  // never trust an unverified pin: catalog discovery below validates image
+  // support and ranks compatible reasoning capabilities instead.
+  if (explicit !== undefined && !focusedClinical) return explicit
   // Discovery order: the current provider first (same-vendor eyes), then the rest.
   const ordered = [
     ...providers.filter(provider => provider === current.provider),
@@ -178,12 +180,17 @@ export async function resolveVisionFallbackRoute(
     for(const model of matching){
       try {
         const info=await ctx.llm.resolveModelInfo(candidate,model.id)
-        resolvedClinical.push(info)
+        // A catalog advertisement alone is not enough for a clinical source.
+        // Require the resolved identity and image capability to agree before
+        // dispatching patient-derived content to this route.
+        if(info.provider===candidate && info.id===model.id
+          && info.inputModalities?.includes('image')===true){
+          resolvedClinical.push(info)
+        }
       }catch{
-        // Advertised image input remains useful even when detailed capability
-        // resolution fails; never assume High effort from a bare model name.
-        resolvedClinical.push({provider:candidate,id:model.id,name:model.id,
-          inputModalities:['image']})
+        // Fail closed when detailed clinical image capabilities cannot be
+        // verified; do not synthesize a visual capability from a catalog hint.
+        continue
       }
     }
   }
