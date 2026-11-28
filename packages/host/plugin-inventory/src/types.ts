@@ -472,6 +472,9 @@ export interface PhoenixLocalModelCatalogEntry {
   readonly estimatedRamBytes: number
   readonly contextWindow: number
   readonly nativeContextWindow?: number
+  readonly capabilities?: readonly string[]
+  readonly quantization?: string
+  readonly parameterSize?: string
   readonly maxTokens: number
   readonly recommended: boolean
 }
