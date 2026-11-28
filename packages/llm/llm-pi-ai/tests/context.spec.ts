@@ -894,3 +894,40 @@ describe('Phoenix Local reality context deferral', () => {
     expect(fitted.options.messages).toContain(task)
   })
 })
+
+describe('Context pressure continuity and intent', () => {
+  it('defers recoverable reality data before dropping earlier conversation or tool signatures', () => {
+    const previous = createUserMessage({ content: [{ type: 'text', text: 'Keep the original project requirements.' }], source: { kind: 'user' } })
+    const answer = history('assistant', [{ type: 'text', text: 'I will preserve the requirements.' }])
+    const task = createUserMessage({ content: [{ type: 'text', text: 'Continue the project.' }], source: { kind: 'user' } })
+    const huge = 'telemetry '.repeat(25_000)
+    const snapshot = createUserMessage({
+      content: [{ type: 'text', text: huge }],
+      source: { kind: 'plugin', plugin: '@phoenix-ai/dsh-system-prompt', form: 'snapshot',
+        sections: [{ name: 'hardness:reality-context', text: huge }] },
+    })
+    const tools = [{ name: 'tool_search', description: 'Discover tools', parameters: { type: 'object' } },
+      { name: 'project_edit', description: 'Edit project', parameters: { type: 'object' } }]
+    const options: GenerateOptions = { ...request([previous, answer, task, snapshot]), provider: 'phoenix-local', model: 'phoenix-local', tools }
+    const fitted = fitPhoenixLocalTextTurn(options, 8192, 1024)
+    expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+    expect(fitted.options.messages.slice(0, 3)).toEqual([previous, answer, task])
+    expect(fitted.options.tools).toEqual(tools)
+    expect(options.messages[3]).toBe(snapshot)
+  })
+
+  it('ranks tools by the human request instead of a later runtime snapshot across providers', () => {
+    const task = createUserMessage({ content: [{ type: 'text', text: 'Use customer_records to find Ana.' }], source: { kind: 'user' } })
+    const telemetry = createUserMessage({ content: [{ type: 'text', text: 'device_metrics '.repeat(5) }], source: { kind: 'plugin', plugin: '@phoenix-ai/dsh-system-prompt' } })
+    const properties = Object.fromEntries(Array.from({ length: 40 }, (_, i) => ['argument_' + i, { type: 'string', enum: ['one', 'two', 'three'] }]))
+    const tools = Array.from({ length: 60 }, (_, i) => ({
+      name: i === 59 ? 'customer_records' : 'device_metrics_' + i,
+      description: i === 59 ? 'Customer records' : 'Device metrics',
+      parameters: { type: 'object', properties },
+    }))
+    const fitted = fitGenerateOptionsToContext({ ...request([task, telemetry]), tools }, 4096, 512)
+    expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+    expect(fitted.options.tools?.map(tool => tool.name)).toContain('customer_records')
+    expect(fitted.options.messages).toEqual([task, telemetry])
+  })
+})

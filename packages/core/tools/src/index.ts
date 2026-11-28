@@ -1325,6 +1325,17 @@ export class ToolRuntime extends Service {
       const haystack = `${definition.name} ${definition.description}`.toLocaleLowerCase()
       return queryTerms.every(term => haystack.includes(term))
     })
+    // Small models can inspect only a few schemas at a time. Rank exact
+    // names and name matches above incidental mentions in descriptions.
+    // Cloud ordering is unchanged; matching and authorization are unchanged.
+    if (local && queryTerms.length > 0) {
+      const score = (definition: ToolDefinition): number => {
+        const name = definition.name.toLocaleLowerCase()
+        return (name === query ? 10_000 : 0)
+          + queryTerms.filter(term => name.includes(term)).length * 100
+      }
+      matched.sort((left, right) => score(right) - score(left))
+    }
     let discovered = this.discoveredMcpTools.get(scope)
     if (discovered === undefined) {
       discovered = new Set<string>()
