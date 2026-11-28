@@ -397,7 +397,7 @@ export function ConversationRoot({
         ? { blocked: composerBlock, placeholder: composerBlock.reason }
         : hero ? { placeholder: t('placeholder.hero') } : {}),
     overlay: renderSlot('conversation.input.overlay', {}),
-    leftItems: zone === undefined ? null : renderSlot('conversation.input.left', zone),
+    leftItems: zone === undefined ? null : <>{renderSlot('conversation.input.left', zone)}{finixRecipient && sessionId !== undefined && <button type="button" className={css.finixRecipient} data-finix-recipient="" onClick={() => setFinixRecipient(String(sessionId), false)} aria-label="Volver a Kira" title="Conversando con Finix · pulsar para volver a Kira"><LivingMascot pose="ready" /><span>{readCompanionName()}</span><span aria-hidden="true">×</span></button>}</>,
     rightItems: zone === undefined ? null : renderSlot('conversation.input.right', zone),
     // Stats band under the card, inside the bar's width column so both
     // share one constraint (composer.dock = stats-line family).
@@ -410,7 +410,6 @@ export function ConversationRoot({
       {hero && <HeroShell t={t} renderSlot={renderSlot} preferredName={preferredName} profile={heroProfile} attention={proactiveAttention} blocked={composerBlock !== undefined} />}
       {hero && heroWorkspaceRow}
       {zone !== undefined && renderSlot('conversation.input.dock', zone)}
-      {finixRecipient && sessionId !== undefined && <div className={css.finixRecipient} data-finix-recipient=""><span><LivingMascot pose="ready" /> Conversando con {readCompanionName()}</span><button type="button" onClick={() => setFinixRecipient(String(sessionId), false)} aria-label="Volver a Kira">Volver a Kira ×</button></div>}
       {inputBar}
       {hero && <HeroAttentionList attention={proactiveAttention} onSelect={selectAttention} onDismiss={(item) => { void recordAttention(item, 'dismissed') }} />}
       {hero && !inert && !blocked && proactiveAttention.length === 0
