@@ -861,3 +861,12 @@ it('fits a 16K local agent request with a large observed inventory without dropp
   expect(fitted.options.tools?.some(tool => tool.name === 'tool_search')).toBe(true)
   expect(snapshot.content[0]).toMatchObject({type:'text',text:sections.map(section => section.text).join('\n')})
 })
+
+it('preserves argument names and literal JSON values when compacting tool schemas', () => {
+  const message = createUserMessage({content:[{type:'text',text:'edit the description'}],source:{kind:'user'}})
+  const parameters = {type:'object',description:'x'.repeat(50000),properties:{description:{type:'string'},title:{type:'string'},payload:{type:'object',const:{description:'retain this'},default:{title:'retain this too'}}},required:['description','title']}
+  const options: GenerateOptions = {provider:'phoenix-local',model:'phoenix-local',messages:[message],tools:[{name:'edit',description:'edit',parameters}]}
+  const fitted = fitGenerateOptionsToContext(options,8192,512)
+  expect(fitted.options.tools?.[0]?.parameters).toEqual({type:'object',properties:parameters.properties,required:parameters.required})
+  expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+})
