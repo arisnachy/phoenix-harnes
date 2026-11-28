@@ -100,6 +100,9 @@ export interface OllamaDiscoveredModel {
   estimatedRamBytes: number
   contextWindow: number
   nativeContextWindow?: number
+  capabilities?: string[]
+  quantization?: string
+  parameterSize?: string
   maxTokens: number
 }
 
@@ -110,9 +113,18 @@ export function validOllamaTag(tag: string): boolean {
     && /^[a-zA-Z0-9][a-zA-Z0-9._-]*(?:\/[a-zA-Z0-9][a-zA-Z0-9._-]*)*(?::[a-zA-Z0-9][a-zA-Z0-9._-]*)?$/u.test(tag)
 }
 
+/** Normalize the default tag and registry casing only for identity comparison.
+ * @param tag - Valid Ollama model tag.
+ * @returns Comparable model identity.
+ */
+export function comparableOllamaTag(tag: string): string {
+  const normalized = tag.toLowerCase()
+  return normalized.slice(normalized.lastIndexOf('/') + 1).includes(':') ? normalized : normalized + ':latest'
+}
+
 export function registerOllamaCandidate(tag: string, metadata?: OllamaDiscoveredModel): LocalModelCatalogEntry {
   if (!validOllamaTag(tag)) throw new Error('Invalid local Ollama model tag')
-  const existing = LOCAL_MODEL_CATALOG.find(entry => entry.backend === 'ollama' && entry.ollamaModel === tag)
+  const existing = LOCAL_MODEL_CATALOG.find(entry => entry.backend === 'ollama' && comparableOllamaTag(entry.ollamaModel) === comparableOllamaTag(tag))
   const id = existing?.id ?? `ollama:${tag}`
   const previous = ollamaDiscovered.get(id)
   const capacity = metadata?.contextWindow ?? previous?.contextWindow ?? existing?.contextWindow ?? 4_096
@@ -127,6 +139,9 @@ export function registerOllamaCandidate(tag: string, metadata?: OllamaDiscovered
         ? existing?.nativeContextWindow === undefined ? {} : { nativeContextWindow: existing.nativeContextWindow }
         : { nativeContextWindow: previous.nativeContextWindow }
       : { nativeContextWindow: metadata.nativeContextWindow }),
+    ...(metadata?.capabilities === undefined ? {} : { capabilities: metadata.capabilities }),
+    ...(metadata?.quantization === undefined ? {} : { quantization: metadata.quantization }),
+    ...(metadata?.parameterSize === undefined ? {} : { parameterSize: metadata.parameterSize }),
     maxTokens: metadata?.maxTokens ?? previous?.maxTokens ?? existing?.maxTokens ?? 512,
     recommended: existing?.recommended ?? false,
   }

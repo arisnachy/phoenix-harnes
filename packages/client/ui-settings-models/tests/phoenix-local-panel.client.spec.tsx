@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PhoenixLocalPanel } from '../src/client/PhoenixLocalPanel.tsx'
 import type { PhoenixLocalModelClient, PhoenixLocalModelSnapshot } from '../src/client/PhoenixLocalPanel.tsx'
@@ -209,4 +209,22 @@ describe('PhoenixLocalPanel', () => {
     await waitFor(() => { expect(removeFromOllama).toHaveBeenCalledWith(id) })
     expect(local.calls.uninstall).not.toHaveBeenCalled()
   })
+})
+
+it('discovers a public GGUF repository and installs only after explicit confirmation', async () => {
+  const local = client()
+  local.searchLibrary = vi.fn(async () => ({ fetchedAt: '2026-11-28T12:00:00Z', entries: [{name:'owner/model-GGUF', url:'https://huggingface.co/owner/model-GGUF', installId:'ollama:hf.co/owner/model-GGUF'}] }))
+  render(<PhoenixLocalPanel client={local} t={t} />)
+  await screen.findByText(localEn.title)
+  fireEvent.click(screen.getByRole('button', {name:'Hugging Face'}))
+  fireEvent.change(screen.getByLabelText(localEn.studioSearch), {target:{value:'model'}})
+  fireEvent.click(screen.getByRole('button', {name:localEn.studioSearchAction}))
+  await screen.findByText('owner/model-GGUF')
+  expect(local.searchLibrary).toHaveBeenCalledWith({source:'huggingface',query:'model',sort:'popular'})
+  expect(local.calls.install).not.toHaveBeenCalled()
+  const library = screen.getByRole('region', {name:localEn.studioLibrary})
+  fireEvent.click(within(library).getByRole('button', {name:localEn.install}))
+  fireEvent.change(screen.getByLabelText(localEn.studioQuant), {target:{value:'Q4_K_M'}})
+  fireEvent.click(screen.getByRole('button', {name:localEn.studioConfirm}))
+  await waitFor(() => expect(local.calls.install).toHaveBeenCalledWith('ollama:hf.co/owner/model-GGUF:Q4_K_M'))
 })

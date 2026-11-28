@@ -19,6 +19,7 @@ import {
   type LocalModelRuntimeManager,
   type LocalModelRuntimeSnapshot,
 } from './local-model/index.ts'
+import { searchLocalLibrary } from './local-model/library.ts'
 import { searchOfficialMcpRegistry } from './mcp-registry.ts'
 import { readBlenderLocalState } from './blender-local.ts'
 import { readAnatomyConnectors, installAnatomyConnector } from './anatomy-connectors.ts'
@@ -76,6 +77,7 @@ import type {
   PhoenixLocalThinkingRequest,
   PhoenixLocalModelRequest,
   PhoenixLocalModelSnapshot,
+  LocalLibraryRequest, LocalLibrarySnapshot,
   PhoenixUpdateRestartReceipt,
   PhoenixUpdateRefreshReceipt,
   PhoenixUpdateSnapshot,
@@ -141,6 +143,9 @@ function publicLocalSnapshot(snapshot: LocalModelRuntimeSnapshot): PhoenixLocalM
       estimatedRamBytes: model.estimatedRamBytes,
       contextWindow: model.contextWindow,
       ...(model.nativeContextWindow === undefined ? {} : { nativeContextWindow: model.nativeContextWindow }),
+      ...(model.capabilities === undefined ? {} : { capabilities: [...model.capabilities] }),
+      ...(model.quantization === undefined ? {} : { quantization: model.quantization }),
+      ...(model.parameterSize === undefined ? {} : { parameterSize: model.parameterSize }),
       maxTokens: model.maxTokens,
       recommended: model.recommended,
     })),
@@ -385,6 +390,15 @@ export class PluginInventoryGateway extends TypertRemoteService {
   @Remote('businessLibrary')
   async businessLibrary(): Promise<BusinessLibrarySnapshot> {
     return readBusinessLibrarySnapshot()
+  }
+
+  /** Search public model metadata without downloading or executing a model.
+   * @param request - Public model library query.
+   * @returns Timestamped directory results.
+   */
+  @Remote('searchLocalModelLibrary')
+  async searchLocalModelLibrary(request: LocalLibraryRequest): Promise<LocalLibrarySnapshot> {
+    return searchLocalLibrary(request)
   }
 
   @Remote('localModelState')
