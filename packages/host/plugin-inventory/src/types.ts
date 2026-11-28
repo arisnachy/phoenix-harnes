@@ -638,3 +638,26 @@ export interface AnatomyConnectorInstallReceipt {
   readonly status:'started'|'running'|'blocked'|'error'
   readonly detail:string
 }
+
+/** Public model-library discovery; no credentials or local machine data. */
+export interface LocalLibraryRequest {
+  readonly source: 'ollama' | 'huggingface'
+  readonly query: string
+  /** Exact Ollama family to enumerate instead of searching families. */
+  readonly family?: string
+  readonly sort?: 'popular' | 'recent'
+}
+/** Public directory entry; metadata is not proof of runtime compatibility. */
+export interface LocalLibraryEntry {
+  readonly name: string
+  readonly url: string
+  readonly family?: string
+  readonly installId?: string
+  readonly downloads?: number
+  readonly updatedAt?: string
+}
+/** Bounded, timestamped search results. */
+export interface LocalLibrarySnapshot {
+  readonly entries: readonly LocalLibraryEntry[]
+  readonly fetchedAt: string
+}
