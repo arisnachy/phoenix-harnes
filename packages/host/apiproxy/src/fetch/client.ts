@@ -24,6 +24,7 @@ import {
   sessionDeleteValueSchema,
   sessionForkValueSchema,
   sessionHistoryValueSchema,
+  sessionObserveLocationValueSchema,
   sessionListValueSchema,
   sessionModelsValueSchema,
   sessionPromptValueSchema,
@@ -95,6 +96,7 @@ export interface IApiClient {
     search(payload: RequestPayload<'session.search'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.search'>>>
     create(payload: RequestPayload<'session.create'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.create'>>>
     history(payload: RequestPayload<'session.history'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.history'>>>
+    observeLocation?(payload: RequestPayload<'session.observeLocation'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.observeLocation'>>>
     models(payload: RequestPayload<'session.models'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.models'>>>
     selectModel(payload: RequestPayload<'session.selectModel'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.selectModel'>>>
     rename(payload: RequestPayload<'session.rename'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.rename'>>>
@@ -188,6 +190,7 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'session.search': sessionSearchValueSchema,
   'session.create': sessionCreateValueSchema,
   'session.history': sessionHistoryValueSchema,
+  'session.observeLocation': sessionObserveLocationValueSchema,
   'session.models': sessionModelsValueSchema,
   'session.selectModel': sessionSelectModelValueSchema,
   'session.rename': sessionRenameValueSchema,
@@ -431,6 +434,7 @@ export abstract class AbstractApiClient implements IApiClient {
     search: (payload, signal) => this.callUnary('session.search', payload, signal),
     create: (payload, signal) => this.callUnary('session.create', payload, signal),
     history: (payload, signal) => this.callUnary('session.history', payload, signal),
+    observeLocation: (payload, signal) => this.callUnary('session.observeLocation', payload, signal),
     models: (payload, signal) => this.callUnary('session.models', payload, signal),
     selectModel: (payload, signal) => this.callUnary('session.selectModel', payload, signal),
     rename: (payload, signal) => this.callUnary('session.rename', payload, signal),

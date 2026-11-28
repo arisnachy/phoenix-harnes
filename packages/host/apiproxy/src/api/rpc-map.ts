@@ -27,6 +27,7 @@ export interface RpcMethodMap {
   'session.search': SessionsApi['search']
   'session.create': SessionsApi['create']
   'session.history': SessionsApi['history']
+  'session.observeLocation': NonNullable<SessionsApi['observeLocation']>
   'session.models': SessionsApi['models']
   'session.selectModel': SessionsApi['selectModel']
   'session.rename': SessionsApi['rename']

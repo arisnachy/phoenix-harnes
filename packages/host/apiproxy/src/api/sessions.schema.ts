@@ -313,6 +313,17 @@ export const clientLocationSchema = z.object({
   observedAt: z.number().int().nonnegative(),
 })
 
+/** Ephemeral position update; null clears the session cache. */
+export const sessionObserveLocationRequestSchema = z.object({
+  sessionId: sessionIdSchema,
+  location: clientLocationSchema.nullable(),
+}) satisfies z.ZodType<Wire<RequestPayload<'session.observeLocation'>>>
+
+/** Position update acknowledgement. */
+export const sessionObserveLocationValueSchema = z.object({
+  accepted: z.literal(true),
+}) satisfies z.ZodType<Wire<ResponseValue<'session.observeLocation'>>>
+
 /** session.prompt request payload, including optional browser-local request provenance. */
 export const sessionPromptRequestSchema = z.object({
   sessionId: sessionIdSchema,
