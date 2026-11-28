@@ -956,3 +956,31 @@ it('prioritizes the newly discovered schema over an older completed tool within 
   expect(fitted.options.tools?.map(tool => tool.name)).toEqual(['tool_search','next_operation'])
   expect(fitted.options.messages).toEqual(options.messages)
 })
+
+
+it('projects the observed runtime and skill injection before admission while keeping authorization and discovery', () => {
+  const task = createUserMessage({ content: [{ type: 'text', text: 'puedes navegar en internet?' }], source: { kind: 'user' } })
+  const sections = [
+    { name: 'hardness:reality-context', text: 'environment '.repeat(780) },
+    { name: 'hardness:humanos-self-model', text: 'registry '.repeat(220) },
+    { name: 'hardness:initiative-context', text: 'initiative '.repeat(245) },
+    { name: 'windows:free-capabilities', text: 'windows '.repeat(120) },
+    { name: 'approval:policy', text: 'Approval-required actions are rejected.' },
+  ]
+  const snapshot = createUserMessage({ content: [{ type: 'text', text: sections.map(section => section.text).join('\n') }],
+    source: { kind: 'plugin', plugin: '@phoenix-ai/dsh-system-prompt', form: 'snapshot', sections } as never })
+  const catalog = createUserMessage({ content: [{ type: 'text', text: 'catalog '.repeat(2100) }],
+    source: { kind: 'skill-catalog', form: 'catalog', entries: Array.from({ length: 70 }, (_, i) => ({ name: 'skill-' + i, description: 'summary' })) } as never })
+  const tools = ['tool_search', 'skill_search', 'web_search'].map(name => ({ name, description: 'Authorized capability', parameters: { type: 'object' } }))
+  const options: GenerateOptions = { provider: 'phoenix-local', model: 'phoenix-local', system: 'Keep the user intent and authorization.', messages: [task, snapshot, catalog], tools }
+  const fitted = fitPhoenixLocalTextTurn(options, 16384, 2048)
+  expect(fitted.estimatedTokens).toBeLessThan(1500)
+  expect(fitted.options.tools).toEqual(tools)
+  const visible = JSON.stringify(fitted.options.messages.map(message => message.content))
+  expect(visible).toContain('Approval-required actions are rejected.')
+  expect(visible).toContain('phoenix_reality_now')
+  expect(visible).toContain('skill_search')
+  expect(visible).toContain('puedes navegar en internet?')
+  expect(visible).not.toContain('catalog '.repeat(100))
+  expect(snapshot.content[0]).toMatchObject({ type: 'text', text: sections.map(section => section.text).join('\n') })
+})
