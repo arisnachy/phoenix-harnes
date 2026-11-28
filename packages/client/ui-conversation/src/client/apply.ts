@@ -49,7 +49,6 @@ import { registerChatNodeRenderers } from './chat/register-node-renderers.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, type ConversationSettings } from '../submission-settings.ts'
 import {
   configureVoiceAssistantRemote, configureVoiceModelRouteResolver, refreshVoiceAssistantRemote,
-  speakVoiceAssistantAttention,
 } from './voice.ts'
 
 declare module '@phoenix-ai/dsh-client-ui-slots' {
@@ -228,30 +227,13 @@ export function apply(ctx: Context): void {
   )
 
   const proactivityAttention = createSnapshotStore<readonly ProactivityAttentionItem[]>([])
-  const spokenAttention = new Set<string>()
-  const speakingAttention = new Set<string>()
+  // Welcome and periodic attention refreshes are visual-only. Agent-initiated
+  // speech belongs to the conversational voice tool, not a UI timer.
   const refreshAttention = async (): Promise<void> => {
     await refreshProactivityAttention(
       ctx.get('connection') as ConnectionHandle | undefined,
       proactivityAttention,
     )
-    const rows = proactivityAttention.getSnapshot()
-    const liveKeys = new Set(rows.map(item => `${item.id}:${item.revision}`))
-    for (const key of spokenAttention) {
-      if (!liveKeys.has(key)) spokenAttention.delete(key)
-    }
-    const pending = rows.find(item => !spokenAttention.has(`${item.id}:${item.revision}`)
-      && !speakingAttention.has(`${item.id}:${item.revision}`))
-    if (pending === undefined) return
-    const key = `${pending.id}:${pending.revision}`
-    speakingAttention.add(key)
-    try {
-      if (await speakVoiceAssistantAttention(pending.title, pending.detail, userProfile.getSnapshot().preferredName)) {
-        spokenAttention.add(key)
-      }
-    } finally {
-      speakingAttention.delete(key)
-    }
   }
   void refreshAttention()
   ctx.effect(() => {
