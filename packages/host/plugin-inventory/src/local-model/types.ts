@@ -30,6 +30,9 @@ interface LocalModelMetadata {
   contextWindow: number
   /** Native architecture limit, if independently known. */
   nativeContextWindow?: number
+  capabilities?: string[]
+  quantization?: string
+  parameterSize?: string
   maxTokens: number
   recommended: boolean
 }
