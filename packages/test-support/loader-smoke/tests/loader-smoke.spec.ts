@@ -33,12 +33,14 @@ describe('runLoaderSmoke', () => {
       dshHome: string
       agentsHome: string
       marker: string
+      fastsdEnabled: string
       input: string
     }
     expect(output).toMatchObject({
       configPath,
       args: [configPath],
       marker: 'present',
+      fastsdEnabled: '0',
       input: '',
     })
     expect(canonicalTempPath(output.dshHome)).toBe(canonicalTempPath(join(output.cwd, '.dsh')))
