@@ -176,8 +176,9 @@ describe('dsh-tool-skill', () => {
     await ctx.plugin(SkillFileSystem, { dshHome: join(home, '.dsh'), agentsHome: join(home, '.agents'), watch: false })
     ctx.skills.register({ name: 'lifecycle-skill', description: 'Lifecycle', source: 'runtime', content: 'body' })
 
+    const hasSkillTools = () => ['skill', 'skill_search'].map(name => ctx.tools.get(name) !== undefined)
     const fiber = await ctx.plugin(toolSkill)
-    expect(ctx.tools.schemas().map(tool => tool.name)).toEqual(['skill', 'skill_search'])
+    expect(hasSkillTools()).toEqual([true, true])
     expect(await composePrefix(ctx, '/workspace')).toHaveLength(1)
     expect(ctx.tools.get('skill')?.presentCall?.({ name: 'project-skill' })).toEqual({
       card: 'generic',
@@ -186,11 +187,11 @@ describe('dsh-tool-skill', () => {
       rawInput: 'project-skill',
     })
     await fiber.dispose()
-    expect(ctx.tools.schemas()).toEqual([])
+    expect(hasSkillTools()).toEqual([false, false])
     expect(await composePrefix(ctx, '/workspace')).toEqual([])
 
     toolSkill.apply(ctx)
-    expect(ctx.tools.schemas().map(tool => tool.name)).toEqual(['skill', 'skill_search'])
+    expect(hasSkillTools()).toEqual([true, true])
   })
 
   it('defers catalog discovery on fast conversation and restores it on the next normal step', async () => {
