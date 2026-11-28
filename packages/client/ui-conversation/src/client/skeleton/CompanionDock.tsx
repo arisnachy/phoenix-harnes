@@ -55,6 +55,10 @@ export function CompanionDock({ open, hero = false, onToggle, loadOutput }: Prop
   const running = !error && rows.some(row => row.status === 'running')
   const pose: MascotPose = running ? 'plan' : !error && rows.some(row => row.status === 'failed') ? 'tools' : 'ready'
   const alias = name.toLowerCase().replace(/ /g, '-')
+  const notice = !error ? rows.find(row => row.resident && row.initiative !== undefined)?.initiative : undefined
+  const [acknowledged, setAcknowledged] = useState<string | undefined>()
+  useEffect(() => { if (open && notice !== undefined) setAcknowledged(notice) }, [open, notice])
+  const showNotice = !open && notice !== undefined && notice !== acknowledged
   return <aside className={css.dock} data-finix-dock="" data-open={open ? 'true' : 'false'} data-hero={hero ? 'true' : 'false'} aria-label="Compañero Finix">
     {open && <section id={id} className={css.panel} aria-label="Salida de Finix">
       <div className={css.heading}>
@@ -81,8 +85,9 @@ export function CompanionDock({ open, hero = false, onToggle, loadOutput }: Prop
           <span className={css.state}>{error ? 'Estado anterior · sin conexión actual' : row.resident && row.status === 'scheduled' ? 'Próxima comprobación pendiente' : statusText[row.status] ?? row.status}</span>
         </article>)}
       </div>
-      <p className={css.hint}>Escríbeme en el input principal: @finix{alias !== 'finix' && <> o @{alias}</>}.</p>
+      <p className={css.hint}>Elige @finix{alias !== 'finix' && <> o @{alias}</>} una vez; luego continúa desde el mismo input.</p>
     </section>}
+    {showNotice && <div className={css.speech} role="status" data-finix-initiative-bubble=""><button type="button" className={css.speechText} onClick={onToggle}><strong>{name}</strong><span>{notice}</span></button><button type="button" className={css.speechClose} aria-label="Descartar aviso de Finix" onClick={() => setAcknowledged(notice)}>×</button></div>}
     <button type="button" className={css.launcher} aria-label={open ? 'Ocultar Finix' : 'Abrir Finix'} aria-expanded={open} aria-controls={open ? id : undefined} onClick={onToggle} title={name}>
       <LivingMascot pose={pose} />{running && <span className={css.dot} aria-label="Trabajando" />}
     </button>
