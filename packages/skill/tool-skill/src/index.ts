@@ -194,7 +194,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     description: 'Find available task skills by exact name or keywords. Returns a small page of names and summaries; use skill to load instructions.',
     parameters: {
       query: { type: 'string', description: 'Skill name or task keywords. Empty lists the next page.' },
-      offset: { type: 'integer', minimum: 0, description: 'Page offset (default 0).' },
+      offset: { type: 'integer', description: 'Page offset (default 0).' },
     },
     output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text' as const, text: value }] },
     async execute(args, exec) {
