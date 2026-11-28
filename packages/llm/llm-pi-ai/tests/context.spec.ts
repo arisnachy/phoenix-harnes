@@ -870,3 +870,43 @@ it('preserves argument names and literal JSON values when compacting tool schema
   expect(fitted.options.tools?.[0]?.parameters).toEqual({type:'object',properties:parameters.properties,required:parameters.required})
   expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
 })
+
+
+describe('Phoenix Local budgeted tool replay', () => {
+  it('fits a 16K turn after an evicted completed tool and keeps discovery plus the complete call/result', () => {
+    const task = createUserMessage({ content: [{ type: 'text', text: '¿Puedes usar herramientas?' }], source: { kind: 'user' } })
+    const callId = CallId('already-completed')
+    const call = history('assistant', [{ type: 'tool-call', id: callId, name: 'old_discovered_tool', arguments: '{}' }])
+    const result = user([{ type: 'tool-result', toolCallId: callId, content: [{ type: 'text', text: 'Verified result' }] }])
+    const tools = [
+      { name: 'tool_search', description: 'Discover authorized tools', parameters: { type: 'object' } },
+      ...Array.from({ length: 100 }, (_, i) => ({
+        name: 'inventory_' + i, description: 'Inventory tool', parameters: { type: 'object', properties: { value: { type: 'string', enum: Array.from({ length: 80 }, (_, n) => 'value_' + i + '_' + n) } } },
+      })),
+    ]
+    const options: GenerateOptions = { provider: 'phoenix-local', model: 'phoenix-local', system: 'Respect approvals and preserve tool results.', messages: [task, call, result], tools }
+    expect(estimateGenerateOptionsTokens(options)).toBeGreaterThan(20_000)
+    const fitted = fitPhoenixLocalTextTurn(options, 16_384, 2048)
+    expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+    expect(fitted.inputBudgetTokens).toBe(9728)
+    expect(fitted.options.messages).toEqual([task, call, result])
+    expect(fitted.options.tools?.some(tool => tool.name === 'tool_search')).toBe(true)
+    expect(fitted.options.system).toBe(options.system)
+    expect(options.tools).toHaveLength(101)
+  })
+
+  it('preserves text outside known large observation sections', () => {
+    const task = createUserMessage({ content: [{ type: 'text', text: '¿Puedes usar herramientas?' }], source: { kind: 'user' } })
+    const observation = 'runtime '.repeat(20000)
+    const text = 'Do not perform writes without approval.\n' + observation + '\nRetain this independent policy.'
+    const snapshot = createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'plugin', plugin: '@phoenix-ai/dsh-system-prompt', form: 'snapshot', sections: [{ name: 'hardness:reality-context', text: observation }] } as never })
+    const options: GenerateOptions = { provider: 'phoenix-local', model: 'phoenix-local', messages: [task, snapshot], tools: [{ name: 'tool_search', description: 'Discover authorized tools', parameters: { type: 'object' } }] }
+    const fitted = fitPhoenixLocalTextTurn(options, 16_384, 2048)
+    expect(fitted.estimatedTokens).toBeLessThanOrEqual(fitted.inputBudgetTokens)
+    const serialized = JSON.stringify(fitted.options.messages.map(message => message.content))
+    expect(serialized).toContain('Do not perform writes without approval.')
+    expect(serialized).toContain('Retain this independent policy.')
+    expect(serialized).toContain('phoenix_reality_now')
+    expect(snapshot.content[0]).toMatchObject({ type: 'text', text })
+  })
+})
