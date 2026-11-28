@@ -16,6 +16,7 @@ import { ModelsWithLocalSection } from './ModelsWithLocalSection.tsx'
 import type { ModelsWithLocalSectionInjected } from './ModelsWithLocalSection.tsx'
 import { EclipseRoutingPanel } from './EclipseRoutingPanel.tsx'
 import type { EclipseCatalogChoice } from './EclipseRoutingPanel.tsx'
+import type { LocalLibraryRequest, LocalLibrarySnapshot } from './LocalLibraryExplorer.tsx'
 import type {
   PhoenixLocalModelClient,
   PhoenixLocalModelMode,
@@ -249,6 +250,7 @@ function telegramBotClient(ctx: ClientContext): TelegramBotClient {
 }
 
 type PluginInventoryLocalRemote = {
+  searchLocalModelLibrary(request: LocalLibraryRequest): Promise<PluginInventoryRemoteResult<LocalLibrarySnapshot>>
   localModelState(): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
   installLocalModel(request: { modelId: string }): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
   startLocalModel(): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
@@ -370,6 +372,7 @@ function localModelClient(ctx: ClientContext): PhoenixLocalModelClient {
   const remote = (): PluginInventoryLocalRemote => pluginInventoryLocalRemote(ctx)
   return {
     state: async () => unwrapPluginInventory('localModelState', await remote().localModelState()),
+    searchLibrary: async request => unwrapPluginInventory('searchLocalModelLibrary', await remote().searchLocalModelLibrary(request)),
     install: async modelId => unwrapPluginInventory('installLocalModel', await remote().installLocalModel({ modelId })),
     start: async () => unwrapPluginInventory('startLocalModel', await remote().startLocalModel()),
     stop: async () => unwrapPluginInventory('stopLocalModel', await remote().stopLocalModel()),
