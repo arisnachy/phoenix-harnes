@@ -451,12 +451,29 @@ function localAgentPrefix(prior: readonly Message[], retained: readonly Message[
   })
 }
 
+/** Baseline conservative estimate; not a provider tokenizer. */
+export function estimatePhoenixLocalInputTokens(options: GenerateOptions): number {
+  return Math.ceil(estimateGenerateOptionsTokens(options) * (ESTIMATED_CHARS_PER_TOKEN / 3.5))
+}
+
+/** Learn a bounded, conservative correction from successful model usage.
+ * Never reduce protection based on an unusually short or cached request.
+ * Small samples are too sensitive to fixed template overhead.
+ */
+export function nextLocalContextCalibration(previous: number, estimate: number, observed: number): number {
+  const current = Number.isFinite(previous) ? Math.min(3, Math.max(1, previous)) : 1
+  if (!Number.isFinite(estimate) || estimate < 256 || !Number.isFinite(observed) || observed <= 0) return current
+  const ratio = observed / estimate
+  return ratio > current ? Math.min(3, Math.max(current, ratio * 1.05)) : current
+}
+
 /** Fit the local request before passing it to the OpenAI-compatible transport. */
 function fitPhoenixLocalHeadroom(
   options: GenerateOptions,
   contextWindow: number,
   desiredMaxOutput: number,
   compacted: boolean,
+  factor = 1,
 ): ContextBudgetFit {
   const capacity = Math.max(1, Math.floor(contextWindow))
   const responseTokens = resolvePhoenixLocalMaxOutput(capacity, desiredMaxOutput)
@@ -464,7 +481,7 @@ function fitPhoenixLocalHeadroom(
   const framingReserve = Math.min(512, Math.floor(capacity / 8))
   return {
     options,
-    estimatedTokens: Math.ceil(estimateGenerateOptionsTokens(options) * (ESTIMATED_CHARS_PER_TOKEN / 3.5)),
+    estimatedTokens: Math.ceil(estimatePhoenixLocalInputTokens(options) * factor),
     inputBudgetTokens: Math.max(1, capacity - safetyReserve - framingReserve - responseTokens),
     compacted,
   }
@@ -501,15 +518,20 @@ function deferLocalRealitySnapshot(message: Message): Message {
  * @param options - Fully assembled request including the latest user message.
  * @param contextWindow - Effective context limit of the selected local model.
  * @param desiredMaxOutput - Response budget requested for the turn.
+ * @param calibrationFactor - Conservative route-specific correction from observed usage.
  * @returns The fitted request and the safe input budget.
  */
 export function fitPhoenixLocalTextTurn(
   options: GenerateOptions,
   contextWindow: number,
   desiredMaxOutput: number,
+  calibrationFactor = 1,
 ): ContextBudgetFit {
+  const factor = nextLocalContextCalibration(calibrationFactor, 0, 0)
+  const headroom = (candidate: GenerateOptions, window: number, output: number, compacted: boolean): ContextBudgetFit =>
+    fitPhoenixLocalHeadroom(candidate, window, output, compacted, factor)
   const regular = fitGenerateOptionsToContext(options, contextWindow, desiredMaxOutput)
-  const localRegular = fitPhoenixLocalHeadroom(regular.options, contextWindow, desiredMaxOutput, regular.compacted)
+  const localRegular = headroom(regular.options, contextWindow, desiredMaxOutput, regular.compacted)
   const gateway = options.tools?.find(tool => tool.name === 'tool_search')
     ?? options.tools?.find(tool => tool.name === 'run_code')
   if (localRegular.estimatedTokens <= localRegular.inputBudgetTokens
@@ -526,16 +548,16 @@ export function fitPhoenixLocalTextTurn(
     if (canReadReality) {
       const messages = options.messages.map(deferLocalRealitySnapshot)
       if (messages.some((message, index) => message !== options.messages[index])) {
-        const fullHistory = fitPhoenixLocalHeadroom({ ...options, messages }, contextWindow, desiredMaxOutput, true)
+        const fullHistory = headroom({ ...options, messages }, contextWindow, desiredMaxOutput, true)
         if (fullHistory.estimatedTokens <= fullHistory.inputBudgetTokens) return fullHistory
-        const compactedHistory = fitPhoenixLocalHeadroom(
+        const compactedHistory = headroom(
           compactAuxiliaryContextForPressure({ ...options, messages }), contextWindow, desiredMaxOutput, true,
         )
         if (compactedHistory.estimatedTokens <= compactedHistory.inputBudgetTokens) return compactedHistory
       }
     }
     const current = options.messages.findLastIndex(message => message.role === 'user' && message.source.kind === 'user')
-    if (current < 0) return fitPhoenixLocalHeadroom(options, contextWindow, desiredMaxOutput, false)
+    if (current < 0) return headroom(options, contextWindow, desiredMaxOutput, false)
     const retained = options.messages.slice(current)
     const prior = options.messages.slice(0, current)
     const messages = [...localAgentPrefix(prior, retained), ...retained]
@@ -543,16 +565,16 @@ export function fitPhoenixLocalTextTurn(
     // essential messages cannot fit rather than claiming a capable agent
     // succeeded after silently erasing them.
     const projected = compactAuxiliaryContextForPressure({ ...options, messages })
-    const projectedFit = fitPhoenixLocalHeadroom(projected, contextWindow, desiredMaxOutput, true)
+    const projectedFit = headroom(projected, contextWindow, desiredMaxOutput, true)
     if (projectedFit.estimatedTokens <= projectedFit.inputBudgetTokens) return projectedFit
     const paged: GenerateOptions = canReadReality
       ? { ...projected, messages: projected.messages.map(deferLocalRealitySnapshot) }
       : projected
-    const pagedFit = fitPhoenixLocalHeadroom(paged, contextWindow, desiredMaxOutput, true)
+    const pagedFit = headroom(paged, contextWindow, desiredMaxOutput, true)
     if (pagedFit.estimatedTokens <= pagedFit.inputBudgetTokens) return pagedFit
     const selected = selectToolsForPressureBudget(paged,
-      Math.max(1, Math.floor(pagedFit.inputBudgetTokens * 3.5 / ESTIMATED_CHARS_PER_TOKEN)))
-    const fitted = fitPhoenixLocalHeadroom(selected, contextWindow, desiredMaxOutput, true)
+      Math.max(1, Math.floor(pagedFit.inputBudgetTokens * 3.5 / (ESTIMATED_CHARS_PER_TOKEN * factor))))
+    const fitted = headroom(selected, contextWindow, desiredMaxOutput, true)
     if (fitted.options.tools?.some(tool => tool.name === gateway.name)) return fitted
     // Explicit context error rather than a misleading tool-free success.
     return pagedFit
@@ -571,9 +593,9 @@ export function fitPhoenixLocalTextTurn(
     ? condensed
     : selectToolsForPressureBudget(
       condensed,
-      Math.max(1, Math.floor(localRegular.inputBudgetTokens * 3.5 / ESTIMATED_CHARS_PER_TOKEN)),
+      Math.max(1, Math.floor(localRegular.inputBudgetTokens * 3.5 / (ESTIMATED_CHARS_PER_TOKEN * factor))),
     )
-  const localCompacted = fitPhoenixLocalHeadroom(selected, contextWindow, desiredMaxOutput, true)
+  const localCompacted = headroom(selected, contextWindow, desiredMaxOutput, true)
   if (localCompacted.estimatedTokens <= localCompacted.inputBudgetTokens) return localCompacted
 
   const messages = options.messages
@@ -612,7 +634,7 @@ export function fitPhoenixLocalTextTurn(
     messages: [currentUser],
     tools: [],
   }
-  let fit = fitPhoenixLocalHeadroom(reduced, contextWindow, desiredMaxOutput, true)
+  let fit = headroom(reduced, contextWindow, desiredMaxOutput, true)
   // The current human message is never clipped; if it cannot fit alone,
   // return the original oversized error instead.
   if (fit.estimatedTokens > fit.inputBudgetTokens) return localCompacted
@@ -627,7 +649,7 @@ export function fitPhoenixLocalTextTurn(
       ...reduced,
       messages: [previous, ...recent, currentUser],
     }
-    const evaluated = fitPhoenixLocalHeadroom(candidate, contextWindow, desiredMaxOutput, true)
+    const evaluated = headroom(candidate, contextWindow, desiredMaxOutput, true)
     if (evaluated.estimatedTokens > Math.min(evaluated.inputBudgetTokens, LOCAL_LITE_HISTORY_BUDGET_TOKENS)) break
     recent.unshift(previous)
     fit = evaluated
