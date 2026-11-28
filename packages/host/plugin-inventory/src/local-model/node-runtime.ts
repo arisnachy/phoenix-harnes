@@ -5,7 +5,7 @@ import path from 'node:path'
 import net from 'node:net'
 import type { LocalThinkingCapabilities } from './types.js'
 import { createLocalModelPaths } from './paths.js'
-import { validOllamaTag, type OllamaDiscoveredModel } from './catalog.js'
+import { comparableOllamaTag, validOllamaTag, type OllamaDiscoveredModel } from './catalog.js'
 import { createLocalModelStateStore } from './state.js'
 import { downloadVerifiedArtifact } from './download.js'
 import { extractArchiveWithTar } from './extract.js'
@@ -141,9 +141,9 @@ async function probeInstalledOllamaModel(modelTag: string): Promise<void> {
     throw new LocalModelRuntimeFault('ollama-unavailable', `Ollama respondió HTTP ${String(response.status)}.`)
   }
   const payload = await response.json() as { models?: Array<{ name?: string; model?: string }> }
-  const wanted = modelTag.toLowerCase()
+  const wanted = comparableOllamaTag(modelTag)
   const installed = Array.isArray(payload.models) && payload.models.some(entry =>
-    entry.name?.toLowerCase() === wanted || entry.model?.toLowerCase() === wanted
+    (typeof entry.name === 'string' && comparableOllamaTag(entry.name) === wanted) || (typeof entry.model === 'string' && comparableOllamaTag(entry.model) === wanted)
   )
   if (!installed) {
     throw new LocalModelRuntimeFault(
@@ -194,6 +194,9 @@ export async function listInstalledOllamaModels(): Promise<OllamaDiscoveredModel
   for (let index = 0; index < candidates.length; index += 6) {
     const group = await Promise.all(candidates.slice(index, index + 6).map(async entry => {
       let nativeContextWindow: number | undefined
+      let capabilities: string[] | undefined
+      let quantization: string | undefined
+      let parameterSize: string | undefined
       try {
         const response = await fetch('http://127.0.0.1:11434/api/show', {
           method: 'POST',
@@ -202,7 +205,10 @@ export async function listInstalledOllamaModels(): Promise<OllamaDiscoveredModel
           signal: AbortSignal.timeout(3_000),
         })
         if (response.ok) {
-          const metadata = await response.json() as { model_info?: Record<string, unknown> }
+          const metadata = await response.json() as { model_info?: Record<string, unknown>; capabilities?: unknown; details?: { quantization_level?: unknown; parameter_size?: unknown } }
+          if (Array.isArray(metadata.capabilities)) capabilities = metadata.capabilities.filter((value): value is string => typeof value === 'string' && /^[a-zA-Z0-9_-]{1,40}$/u.test(value)).slice(0, 20)
+          if (typeof metadata.details?.quantization_level === 'string') quantization = metadata.details.quantization_level.slice(0, 40)
+          if (typeof metadata.details?.parameter_size === 'string') parameterSize = metadata.details.parameter_size.slice(0, 40)
           const capacities = Object.entries(metadata.model_info ?? {})
             .filter(([key, value]) => key.endsWith('.context_length')
               && typeof value === 'number' && Number.isSafeInteger(value) && value > 0)
@@ -221,6 +227,9 @@ export async function listInstalledOllamaModels(): Promise<OllamaDiscoveredModel
         estimatedRamBytes: sizeBytes + 1_000_000_000,
         contextWindow,
         ...(nativeContextWindow === undefined ? {} : { nativeContextWindow }),
+        ...(capabilities === undefined ? {} : { capabilities }),
+        ...(quantization === undefined ? {} : { quantization }),
+        ...(parameterSize === undefined ? {} : { parameterSize }),
         maxTokens: Math.min(2_048, Math.max(256, Math.floor(contextWindow / 8))),
       }
     }))
