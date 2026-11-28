@@ -165,8 +165,14 @@ describe('Metallic welcome and aligned Session log controls', () => {
 })
 
 describe('Centered new-session identity', () => {
-  it('keeps the hero column symmetric even with the browser scroll rail visible', () => {
-    expect(css).toContain('scrollbar-gutter: stable both-edges;')
+  it('keeps the hero column symmetric with invisible native scrolling', () => {
+    expect(css).toContain('scrollbar-gutter: auto;')
+    expect(css).toContain('.scrollBody { scrollbar-width: none; }')
+    expect(css).toContain('.scrollBody::-webkit-scrollbar { display: none; }')
+    expect(declarations('.scrollBody')?.get('overflow-y')).toBe('auto')
+    const chatCss = readFileSync(new URL('../src/client/chat/ChatView.module.css', import.meta.url), 'utf8')
+    expect(chatCss).toContain('.scroll { scrollbar-width: none; }')
+    expect(chatCss).toContain('.scroll::-webkit-scrollbar { display: none; }')
     expect(css).toContain('align-items: center;')
     expect(css).toContain('margin-inline: auto;')
     expect(css).toContain('min-height: 100%;')

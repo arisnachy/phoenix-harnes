@@ -228,7 +228,7 @@
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-gutter: stable;
+  scrollbar-gutter: auto;
 }
 
 .root:is([data-phase='active'], [data-phase='settling']) .viewArea {
@@ -281,7 +281,7 @@
 
 .scrollBody:has([data-conversation-composer-overlay]) > .composerSeat {
   position: absolute;
-  right: var(--dsh-scrollbar-width);
+  right: 0;
   bottom: 0;
   left: 0;
 }
@@ -434,8 +434,8 @@
 .root[data-phase='hero'] .scrollBody {
   justify-content: flex-start;
   padding: 12px 0 clamp(12px, 3vh, 32px);
-  /* The chat rail must not pull the identity to the left of the compositor. */
-  scrollbar-gutter: stable both-edges;
+  /* Invisible scrollbars leave symmetric room without a reserved gutter. */
+  scrollbar-gutter: auto;
 }
 .root[data-phase='hero'] .composerSeat {
   box-sizing: border-box;
@@ -977,7 +977,7 @@
 /* Live Studio changes only the transcript row, never the shell or composer. */
 .studioInlineHost{display:none}
 .studioInlineHost:has(> [data-phoenix-space]):not(:has(> [data-space-with-chat='true'])){display:contents}
-.root .scrollBody:has(> .studioInlineHost > [data-live-studio], > .studioInlineHost > [data-space-with-chat='true']):not(:has(> .adaptiveInlineHost > *)){display:grid;grid-template-columns:minmax(0,1.85fr) minmax(280px,.95fr);grid-template-rows:minmax(0,1fr) auto;gap:0;min-height:0;overflow:hidden;scrollbar-gutter:stable;align-items:stretch}
+.root .scrollBody:has(> .studioInlineHost > [data-live-studio], > .studioInlineHost > [data-space-with-chat='true']):not(:has(> .adaptiveInlineHost > *)){display:grid;grid-template-columns:minmax(0,1.85fr) minmax(280px,.95fr);grid-template-rows:minmax(0,1fr) auto;gap:0;min-height:0;overflow:hidden;scrollbar-gutter: auto;align-items:stretch}
 .root .scrollBody:has(> .studioInlineHost > [data-live-studio], > .studioInlineHost > [data-space-with-chat='true']):not(:has(> .adaptiveInlineHost > *))>.studioInlineHost{display:flex;grid-column:1;grid-row:1;min-height:0;min-width:0;overflow:hidden;border-right:1px solid var(--dsw-alias-border-l1)}
 .root .scrollBody:has(> .studioInlineHost > [data-live-studio], > .studioInlineHost > [data-space-with-chat='true']):not(:has(> .adaptiveInlineHost > *))>:global([data-slot='conversation.session'])>.viewArea{grid-column:2;grid-row:1;width:100%;height:100%;min-height:0;min-width:0;overflow:hidden}
 .root .scrollBody:has(> .studioInlineHost > [data-live-studio], > .studioInlineHost > [data-space-with-chat='true']):not(:has(> .adaptiveInlineHost > *))>.composerSeat{position:relative;bottom:auto;grid-column:1/-1;grid-row:2;align-self:end;width:100%;min-width:0;margin:0;padding-bottom:env(safe-area-inset-bottom)}
@@ -1005,3 +1005,7 @@
 /* The shared activity seat moves above the scrollport only on narrow workspaces. */
 .finixWorkspace > .scrollBody { flex: 1 1 0; min-width: 0; min-height: 0; }
 @container conversation-root (max-width: 849px) { .finixWorkspace { flex-direction: column; } }
+
+/* Hide only conversation chrome; preserve native wheel/touch/keyboard scrolling. */
+.scrollBody { scrollbar-width: none; }
+.scrollBody::-webkit-scrollbar { display: none; }
