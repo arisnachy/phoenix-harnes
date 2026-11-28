@@ -87,3 +87,30 @@ test('invalid config or repeated event IDs still fails validation',()=>{
   assert.throws(()=>auditTicketDecisions([sample('A',.7),sample('A',.8)],policy),
     /duplicado/)
 })
+
+test('incomplete NBA injury dossier cannot enter final scenario or pass readiness',()=>{
+  const audit=auditTicketDecisions([
+    sample('NBA-pending',.57,{specialistStatus:'incomplete',
+      checklistComplete:false,criticalPending:['Parte oficial de lesiones pendiente']}),
+    sample('NBA-ready',.6),
+  ],policy)
+  assert.deepEqual(audit.legs.map(x=>x.verdict),['caution','candidate'])
+  assert.deepEqual(audit.scenarios[0].eventIds,['NBA-ready'])
+  assert.equal(ticketIsReadyForReview(audit),false)
+  assert.equal(audit.approvedForBetting,false)
+})
+test('NHL goalie uncertainty, bilateral missing odds and pregame flags block review',()=>{
+  const audit=auditTicketDecisions([
+    sample('NHL',.55,{sport:'hockey',checklistComplete:false,
+      criticalPending:['Portero titular no confirmado']}),
+    sample('no-odds',null,{quotedPrice:null}),
+    sample('review',.55,{pregameReviewRequired:true}),
+  ],policy)
+  assert.deepEqual(audit.scenarios[0].eventIds,[])
+  assert.equal(ticketIsReadyForReview(audit),false)
+})
+test('complete priced candidates can be reviewed without approving a bet',()=>{
+  const audit=auditTicketDecisions([sample('A',.55),sample('B',.6)],policy)
+  assert.equal(ticketIsReadyForReview(audit),true)
+  assert.equal(audit.approvedForBetting,false)
+})

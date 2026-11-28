@@ -71,9 +71,9 @@ export function SportsOddsDisplay({ title, source, subtitle, note, rows }: Props
       {subtitle && <p className={css.subtitle}>{subtitle}</p>}
       <div className={css.formats} role="group" aria-label="Formato de cuotas">
         <button type="button" aria-pressed={format === 'american'}
-          onClick={() => setFormat('american')}>Americano</button>
+          onClick={() => { setFormat('american') }}>Americano</button>
         <button type="button" aria-pressed={format === 'decimal'}
-          onClick={() => setFormat('decimal')}>Decimal</button>
+          onClick={() => { setFormat('decimal') }}>Decimal</button>
       </div>
     </header>
     <div className={css.fixtures}>
@@ -82,7 +82,7 @@ export function SportsOddsDisplay({ title, source, subtitle, note, rows }: Props
         const winnerMarket = /^(h2h|ml|moneyline|1x2)$/iu.test(group.market.trim())
         const prices = group.rows.map(row => decimalValue(row.price))
         const allPriced = group.rows.length >= 2 && prices.every(value => value !== null)
-        const lowest = allPriced ? Math.min(...prices as number[]) : null
+        const lowest = allPriced ? Math.min(...prices) : null
         const uniqueLowest = lowest !== null && prices.filter(value => value === lowest).length === 1
         return <div className={css.fixture} key={key}>
           {showEvent && <h4 className={css.fixtureName}>{group.event}</h4>}
