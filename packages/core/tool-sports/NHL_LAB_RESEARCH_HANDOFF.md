@@ -5,8 +5,8 @@ Se añadió `src/nhl-lab-research-handoff.ts`, contrato NHL análogo al de NBA (
 ## Uso nativo
 
 ```ts
-import {collectNhlResearchHandoff,readNhlResearchHandoff}
-  from './src/nhl-lab-research-handoff.ts'
+import { collectNhlResearchHandoff, readNhlResearchHandoff }
+  from '@phoenix-ai/dsh-tool-sports'
 
 // La fecha y el gameId vienen de la cartelera NHL oficial, no de texto libre.
 // El recolector ya usa investigateNhl() y probeNhlOfficialStarters().
