@@ -5,6 +5,7 @@ import {
   arch,
   cpus,
   freemem,
+  homedir,
   networkInterfaces,
   platform,
   release,
@@ -479,6 +480,7 @@ async function windowsCimJson(script: string): Promise<Record<string, unknown>[]
     '-Command',
     script,
   ], {
+    cwd: homedir(),
     timeout: 4_000,
     windowsHide: true,
     maxBuffer: 512 * 1024,
@@ -572,7 +574,7 @@ async function probeOllamaPlacement(): Promise<{ value: OllamaPlacement | null; 
     }
     const payload = asRecord(JSON.parse(Buffer.concat(chunks).toString('utf8')))
     if (!Array.isArray(payload?.models)) throw new Error('Invalid Ollama status')
-    const models = payload.models.slice(0, 32).flatMap(item => {
+    const models = payload.models.slice(0, 32).flatMap((item) => {
       const row = asRecord(item)
       const name = row?.name
       const size = row?.size
@@ -592,16 +594,16 @@ async function probeOllamaPlacement(): Promise<{ value: OllamaPlacement | null; 
 async function probePhysicalTelemetry(): Promise<{ value: PhysicalTelemetry | null; source: string; confidence: number }> {
   if (platform() !== 'win32') return { value: null, source: 'unsupported-platform', confidence: 0 }
   const [zones, links, nvidia] = await Promise.all([
-    windowsCimJson("$items = @(Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction Stop | Select-Object CurrentTemperature -First 16); ConvertTo-Json -InputObject $items -Compress").catch(() => []),
-    windowsCimJson("$items = @(Get-NetAdapter -ErrorAction Stop | Where-Object Status -eq Up | Select-Object ReceiveLinkSpeed,TransmitLinkSpeed -First 16); ConvertTo-Json -InputObject $items -Compress").catch(() => []),
+    windowsCimJson('$items = @(Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction Stop | Select-Object CurrentTemperature -First 16); ConvertTo-Json -InputObject $items -Compress').catch(() => []),
+    windowsCimJson('$items = @(Get-NetAdapter -ErrorAction Stop | Where-Object Status -eq Up | Select-Object ReceiveLinkSpeed,TransmitLinkSpeed -First 16); ConvertTo-Json -InputObject $items -Compress').catch(() => []),
     (async () => {
       const root = process.env.SystemRoot || 'C:\\Windows'
       const paths = [join(root, 'System32', 'nvidia-smi.exe'), join(process.env.ProgramFiles || 'C:\\Program Files', 'NVIDIA Corporation', 'NVSMI', 'nvidia-smi.exe')]
       for (const executable of paths) {
         if (!existsSync(executable)) continue
         try {
-          const { stdout } = await execFileAsync(executable, ['--query-gpu=temperature.gpu,utilization.gpu', '--format=csv,noheader,nounits'], { timeout: 3_000, windowsHide: true, maxBuffer: 16_384 })
-          return String(stdout).trim().split(/\r?\n/u).slice(0, 16).flatMap(line => {
+          const { stdout } = await execFileAsync(executable, ['--query-gpu=temperature.gpu,utilization.gpu', '--format=csv,noheader,nounits'], { cwd: homedir(), timeout: 3_000, windowsHide: true, maxBuffer: 16_384 })
+          return String(stdout).trim().split(/\r?\n/u).slice(0, 16).flatMap((line) => {
             const parts = line.split(',').map(v => v.trim())
             if (parts.length !== 2) return []
             const metric = (v: string, minimum: number, maximum: number) => {
@@ -618,7 +620,7 @@ async function probePhysicalTelemetry(): Promise<{ value: PhysicalTelemetry | nu
       return []
     })(),
   ])
-  const thermalZones = zones.flatMap(row => {
+  const thermalZones = zones.flatMap((row) => {
     const raw = numericValue(row.CurrentTemperature)
     const c = raw === null ? NaN : raw / 10 - 273.15
     return Number.isFinite(c) && c >= -20 && c <= 130 ? [{ temperatureC: Math.round(c * 10) / 10, kind: 'acpi-zone' as const }] : []
@@ -627,7 +629,7 @@ async function probePhysicalTelemetry(): Promise<{ value: PhysicalTelemetry | nu
     const n = numericValue(value)
     return n !== null && n > 0 && Number.isSafeInteger(n) ? n / 1_000_000 : null
   }
-  const linkRates = links.flatMap(row => {
+  const linkRates = links.flatMap((row) => {
     const receiveMbps = rate(row.ReceiveLinkSpeed)
     const transmitMbps = rate(row.TransmitLinkSpeed)
     return receiveMbps === null && transmitMbps === null ? [] : [{ receiveMbps, transmitMbps }]
@@ -680,6 +682,7 @@ public static class PhoenixLastInput {
       '-Command',
       script,
     ], {
+      cwd: homedir(),
       timeout: 4_000,
       windowsHide: true,
       maxBuffer: 64 * 1024,
@@ -871,8 +874,8 @@ export function quotaBudgetSnapshot(
   nowMs: number,
   stale: boolean,
 ): Record<string, unknown>[] {
-  return limits.slice(0, 16).flatMap(account => {
-    const windows = (['primaryLimit', 'secondaryLimit'] as const).flatMap(key => {
+  return limits.slice(0, 16).flatMap((account) => {
+    const windows = (['primaryLimit', 'secondaryLimit'] as const).flatMap((key) => {
       const raw = asRecord(account[key])
       const used = numericValue(raw?.usedPercent)
       if (used === null || used < 0 || used > 100) return []
@@ -927,7 +930,10 @@ export function lastRecordedResponseRoute(session: unknown): Record<string, unkn
     if (source?.kind !== 'model' || typeof source.provider !== 'string' || typeof source.model !== 'string'
       || !source.provider || !source.model || source.provider.length > 256 || source.model.length > 512) continue
     const time = numericValue(event.time)
-    return { provider: source.provider, model: source.model, observedAt: time !== null && time >= 0 && time <= 8.64e15 ? new Date(time).toISOString() : null,
+    return {
+      provider: source.provider,
+      model: source.model,
+      observedAt: time !== null && time >= 0 && time <= 8.64e15 ? new Date(time).toISOString() : null,
       turn: numericValue(data.turn), step: numericValue(data.step), source: 'session-assistant-message', underlyingProviderVerified: false,
       rule: 'historical recorded response route; an adaptive router may conceal the underlying provider model' }
   }
@@ -1229,6 +1235,7 @@ async function probeClockSync(): Promise<{ value: boolean | null; source: string
   try {
     if (platform() === 'win32') {
       const { stdout } = await execFileAsync(join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'w32tm.exe'), ['/query', '/status'], {
+        cwd: homedir(),
         timeout: 2_000,
         windowsHide: true,
       })
@@ -1516,8 +1523,12 @@ export class RealityContextEngine {
     const timezone = intl.timeZone || 'UTC'
     const dst = daylightSavings(now)
     const location = effectiveLocation(ctx, this.config, assembly, this.windowsLocation)
-    const localCivic = location === undefined ? undefined : resolveCivicLocation(this.civicCatalog, location.latitude, location.longitude, location.accuracyMeters)
-    const mapped = location === undefined ? undefined : this.gazetteer.resolve(location.latitude, location.longitude, location.accuracyMeters)
+    const localCivic = location === undefined
+      ? undefined
+      : resolveCivicLocation(this.civicCatalog, location.latitude, location.longitude, location.accuracyMeters)
+    const mapped = location === undefined
+      ? undefined
+      : this.gazetteer.resolve(location.latitude, location.longitude, location.accuracyMeters)
     const civic = localCivic?.city ? localCivic : mapped ?? localCivic
     if (location !== undefined && location.kind !== 'configured') void this.refreshBrowserWeather(ctx, assembly)
     const weather = location !== undefined && location.kind !== 'configured'
@@ -1652,10 +1663,11 @@ export class RealityContextEngine {
         gpu,
         temperature: {
           ...physical,
-          value: physical.stale || physical.value === null || (physical.value.thermalZones.length === 0 && !physical.value.nvidia.some(g => g.temperatureC !== null)) ? null : {
-            acpiZones: physical.value.thermalZones,
-            nvidiaGpu: physical.value.nvidia.map(g => g.temperatureC),
-          },
+          value: physical.stale || physical.value === null
+            || (physical.value.thermalZones.length === 0 && !physical.value.nvidia.some(g => g.temperatureC !== null)) ? null : {
+              acpiZones: physical.value.thermalZones,
+              nvidiaGpu: physical.value.nvidia.map(g => g.temperatureC),
+            },
           rule: 'ACPI thermal zones are not CPU die temperatures; unavailable values remain unknown',
         },
         localModelPlacement: {
@@ -1665,7 +1677,9 @@ export class RealityContextEngine {
         },
         gpuUtilization: {
           ...physical,
-          value: physical.stale || !physical.value?.nvidia.some(g => g.utilizationPercent !== null) ? null : physical.value.nvidia.map(g => g.utilizationPercent),
+          value: physical.stale || !physical.value?.nvidia.some(g => g.utilizationPercent !== null)
+            ? null
+            : physical.value.nvidia.map(g => g.utilizationPercent),
           inferenceVerified: false,
           rule: 'driver GPU utilization does not identify inference workloads',
         },
